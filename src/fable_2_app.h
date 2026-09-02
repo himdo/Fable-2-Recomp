@@ -1,0 +1,51 @@
+// fable_2 - ReXGlue Recompiled Project
+//
+// Customize your app by overriding virtual hooks from rex::ReXApp.
+
+#pragma once
+
+#include <rex/filesystem.h>
+
+#include <rex/rex_app.h>
+
+class Fable2App : public rex::ReXApp {
+ public:
+  using rex::ReXApp::ReXApp;
+
+  static std::unique_ptr<rex::ui::WindowedApp> Create(
+      rex::ui::WindowedAppContext& ctx) {
+    return std::unique_ptr<Fable2App>(new Fable2App(ctx, "fable_2",
+        PPCImageConfig));
+  }
+
+  // Override virtual hooks for customization:
+  // void OnPostInitLogging() override {}
+  // void OnPreSetup(rex::RuntimeConfig& config) override {}
+  // void OnLoadXexImage(std::string& xex_image) override {}
+  // void OnPostLoadXexImage() override {}
+
+  // Content root (mounted as game:/ in the guest VFS). Resolved relative to
+  // the executable's own location: the content (default.xex, data/, ...) is
+  // expected next to the exe or in an ancestor directory (the exe lives in
+  // out/build/<preset>/, the content at the project root). Override on the
+  // command line with --game_data_root=<path>.
+  void OnConfigurePaths(rex::PathConfig& paths) override {
+    if (!paths.game_data_root.empty()) return;
+    auto dir = rex::filesystem::GetExecutableFolder();
+    for (int i = 0; i < 5; ++i) {
+      if (std::filesystem::is_regular_file(dir / "default.xex")) {
+        paths.game_data_root = dir;
+        return;
+      }
+      if (!dir.has_parent_path() || dir.parent_path() == dir) break;
+      dir = dir.parent_path();
+    }
+  }
+  // void OnPostSetup() override {}
+  // void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {}
+  // std::unique_ptr<rex::ui::ImGuiDialog> CreateAchievementsOverlay() override;
+  // std::unique_ptr<rex::ui::AchievementNotificationDialog>
+  // CreateAchievementNotificationDialog() override;
+  // void OnShutdown() override {}
+  // void OnConfigurePaths(rex::PathConfig& paths) override {}
+};
