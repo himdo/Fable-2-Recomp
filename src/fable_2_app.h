@@ -18,9 +18,17 @@ class Fable2App : public rex::ReXApp {
         PPCImageConfig));
   }
 
+  // Emulate the Xbox 360 Xenos GPU. The plugin DLL (rexgpu-xenos[d].dll) is
+  // staged next to the exe by CMake (GPU_PLUGINS xenos). Override on the
+  // command line with --gpu_plugin <name> (empty disables GPU emulation).
+  void OnPreSetup(rex::RuntimeConfig& config) override {
+    if (config.gpu_plugin.empty()) {
+      config.gpu_plugin = "xenos";
+    }
+  }
+
   // Override virtual hooks for customization:
   // void OnPostInitLogging() override {}
-  // void OnPreSetup(rex::RuntimeConfig& config) override {}
   // void OnLoadXexImage(std::string& xex_image) override {}
   // void OnPostLoadXexImage() override {}
 
