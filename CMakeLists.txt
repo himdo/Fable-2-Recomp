@@ -21,4 +21,4 @@ else()
     add_executable(fable_2 ${FABLE2_SOURCES})
 endif()
 
-rexglue_setup_target(fable_2 GPU_PLUGINS xenos)
+rexglue_setup_target(fable_2)
