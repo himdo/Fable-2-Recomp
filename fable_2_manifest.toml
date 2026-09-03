@@ -90,8 +90,16 @@ size = 0x00F0
 [entrypoint.functions."0x8274B778"]
 [entrypoint.functions."0x822D6678"]
 
+# After new game video plays
+[entrypoint.functions."0x82988EC8"]
 
-# end of loading screen functions
+# After new game after "look little sparrow" LT button
+[entrypoint.functions."0x82988F48"]
+
+#talking to camera man in child scene
+[entrypoint.functions."0x82988F38"]
+
+# Existing Functions
 [entrypoint.functions."0x8222B3C8"]
 size = 0x00F8
 
