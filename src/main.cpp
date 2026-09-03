@@ -32,4 +32,16 @@ REXCVAR_DEFINE_INT32(mouse_look_scale, 256, "Input",
                      "mouse movement (larger = more sensitive).")
     .range(1, 4096);
 
+// Key that toggles the debug menu (F4). While the menu is open the mouse lock
+// is released (free cursor); closing it re-locks. This key is excluded from
+// the gamepad map so it doesn't double as a button. Set empty to always lock
+// while focused (no menu-based unlock).
+REXCVAR_DEFINE_STRING(
+    mouse_unlock_key,
+    "F4",
+    "Input",
+    "Key that toggles the debug menu; while the menu is open the mouse lock is "
+    "released (free cursor) and re-engaged when it closes. Empty = always lock "
+    "while focused. This key is excluded from the gamepad map.");
+
 REX_DEFINE_APP(fable_2, Fable2App::Create)

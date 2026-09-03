@@ -47,6 +47,7 @@
 REXCVAR_DECLARE(std::string, keyboard_gamepad_map);
 REXCVAR_DECLARE(bool, mouse_look);
 REXCVAR_DECLARE(int32_t, mouse_look_scale);
+REXCVAR_DECLARE(std::string, mouse_unlock_key);
 
 namespace fable2 {
 
@@ -215,8 +216,29 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     int32_t rx = 0;
     int32_t ry = 0;
 #ifdef _WIN32
-    if (is_active()) {
+    rex::ui::Window* win = GameWindow();
+    HWND hwnd = win ? reinterpret_cast<HWND>(win->GetNativeWindowHandle()) : nullptr;
+    // Focus: the game window is the foreground (top-level) window. Gates all
+    // host input so nothing fires while alt-tabbed away.
+    bool focused = hwnd != nullptr &&
+                   (GetForegroundWindow() == GetAncestor(hwnd, GA_ROOT));
+
+    // Debug-console toggle key (default F4). Pressing it opens/closes the menu;
+    // while the menu is open we release the mouse lock (free cursor for the
+    // menu) and re-engage it when the menu closes. It's excluded from the
+    // gamepad map so it doesn't also act as a button (F4 was the d-pad Right).
+    uint16_t unlock_vk = static_cast<uint16_t>(
+        rex::ui::ParseVirtualKey(REXCVAR_GET(mouse_unlock_key)));
+    bool has_unlock_key = unlock_vk != 0;
+    if (focused) {
+      bool unlock_down = has_unlock_key && (GetAsyncKeyState(unlock_vk) & 0x8000);
+      if (unlock_down && !unlock_down_prev_) console_open_ = !console_open_;
+      unlock_down_prev_ = unlock_down;
+    }
+
+    if (focused) {
       for (const auto& m : bindings_) {
+        if (has_unlock_key && m.vk == unlock_vk) continue;  // not gamepad input
         if ((GetAsyncKeyState(m.vk) & 0x8000) == 0) continue;  // not held
         if (m.button != 0) {
           buttons |= m.button;
@@ -238,13 +260,11 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     // Mouse -> right stick (camera look) with cursor recentering + hiding:
     // the cursor is pinned to the window center each poll (that frame's
     // movement is consumed, so the camera rotates continuously and never hits
-    // the screen edge). We gate on the game window actually being the
-    // foreground window (GetForegroundWindow) so alt-tabbing away releases the
-    // lock. Fable 2 inverts Y, so mouse-up (dy<0) maps to +ry (look up).
-    rex::ui::Window* win = GameWindow();
-    HWND hwnd = win ? reinterpret_cast<HWND>(win->GetNativeWindowHandle()) : nullptr;
-    bool looking = hwnd != nullptr && REXCVAR_GET(mouse_look) &&
-                   (GetForegroundWindow() == GetAncestor(hwnd, GA_ROOT));
+    // the screen edge). We gate on the game window being focused (so alt-tabbing
+    // away releases the lock) and on the debug menu being closed (F4) so the
+    // cursor is free while the menu is open. Fable 2 inverts Y, so mouse-up
+    // (dy<0) maps to +ry (look up).
+    bool looking = focused && REXCVAR_GET(mouse_look) && !console_open_;
 
     // Hide/restore the cursor via the SDK Window. This is a thread-safe
     // "desired state" that the UI thread applies, so it actually takes effect
@@ -330,6 +350,8 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
   uint32_t packet_number_ = 0;
   bool mouse_centered_ = false;  // set once the cursor is first pinned
   bool cursor_hidden_ = false;   // set while the SDK window cursor is hidden
+  bool console_open_ = false;    // debug menu open -> mouse lock released
+  bool unlock_down_prev_ = false;  // prev-poll state of the unlock key
   // The game window (from the runtime's display window), used for recentering
   // and cursor visibility.
   rex::ui::Window* GameWindow() {
