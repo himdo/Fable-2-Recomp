@@ -1,0 +1,49 @@
+diff --git a/src/system/xmemory.cpp b/src/system/xmemory.cpp
+index 76cc877..52b74e9 100644
+--- a/src/system/xmemory.cpp
++++ b/src/system/xmemory.cpp
+@@ -1317,16 +1317,25 @@ bool BaseHeap::AllocFixed(uint32_t base_address, uint32_t size, uint32_t alignme
+   auto global_lock = AcquireHostPageReconcileLock();
+   std::lock_guard<std::recursive_mutex> heap_lock(heap_mutex_);
+ 
+-  // - If we are reserving the entire range requested must not be already
+-  //   reserved.
++  // - A pure reserve over a range that is ALREADY FULLY reserved is a no-op
++  //   success on real Xbox 360 XMem (idempotent re-reservation). Fable 2
++  //   relies on this: it re-reserves ~3856 fixed ranges during startup, and
++  //   failing them (as the original Xenia-derived check did) spams
++  //   [error] BaseHeap::AllocFixed and diverges from hardware behavior.
++  // - A pure reserve that PARTIALLY overlaps existing reservations fails,
++  //   matching hardware.
+   // - If we are committing it's ok for pages within the range to already be
+   //   committed.
++  bool pure_reserve = (allocation_type == memory::kMemoryAllocationReserve);
++  bool all_reserved = pure_reserve;
+   for (uint32_t page_number = start_page_number; page_number <= end_page_number; ++page_number) {
+     uint32_t state = page_table_[page_number].state;
+-    if ((allocation_type == memory::kMemoryAllocationReserve) && state) {
+-      // Already reserved.
++    if (pure_reserve && !state) {
++      all_reserved = false;
++    } else if (pure_reserve && !all_reserved) {
++      // Mixed: some pages reserved, some not - partial overlap.
+       REXSYS_ERROR(
+-          "BaseHeap::AllocFixed attempting to reserve an already reserved "
++          "BaseHeap::AllocFixed attempting to reserve a partially reserved "
+           "range");
+       return false;
+     }
+@@ -1339,6 +1348,13 @@ bool BaseHeap::AllocFixed(uint32_t base_address, uint32_t size, uint32_t alignme
+       break;
+     }
+   }
++  if (all_reserved && pure_reserve) {
++    // Entire range already reserved: no-op success (reservation unchanged).
++    REXSYS_DEBUG(
++        "BaseHeap::AllocFixed {:08X}+0x{:X} already fully reserved; no-op",
++        base_address, size);
++    return true;
++  }
+ 
+   // Allocate from host.
+   if (allocation_type == memory::kMemoryAllocationReserve) {

@@ -38,15 +38,25 @@ class Fable2App : public rex::ReXApp {
   // out/build/<preset>/, the content at the project root). Override on the
   // command line with --game_data_root=<path>.
   void OnConfigurePaths(rex::PathConfig& paths) override {
-    if (!paths.game_data_root.empty()) return;
-    auto dir = rex::filesystem::GetExecutableFolder();
-    for (int i = 0; i < 5; ++i) {
-      if (std::filesystem::is_regular_file(dir / "default.xex")) {
-        paths.game_data_root = dir;
-        return;
+    if (paths.game_data_root.empty()) {
+      auto dir = rex::filesystem::GetExecutableFolder();
+      for (int i = 0; i < 5; ++i) {
+        if (std::filesystem::is_regular_file(dir / "default.xex")) {
+          paths.game_data_root = dir;
+          break;
+        }
+        if (!dir.has_parent_path() || dir.parent_path() == dir) break;
+        dir = dir.parent_path();
       }
-      if (!dir.has_parent_path() || dir.parent_path() == dir) break;
-      dir = dir.parent_path();
+    }
+    // Mount the $SystemUpdate folder (next to the game content) as update:\
+    // so VdSetGraphicsInterruptCallback-era update partition lookups resolve
+    // instead of failing with "device not found".
+    if (paths.update_data_root.empty() && !paths.game_data_root.empty()) {
+      auto update_dir = paths.game_data_root / "$SystemUpdate";
+      if (std::filesystem::is_directory(update_dir)) {
+        paths.update_data_root = update_dir;
+      }
     }
   }
   // void OnPostSetup() override {}
