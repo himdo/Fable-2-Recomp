@@ -23,4 +23,13 @@ REXCVAR_DEFINE_STRING(
     "(Key:Button,...; targets: A/B/X/Y, LB/RB, LT/RT, Up/Down/Left/Right, "
     "Pause, Select, L3/R3, StickUp/StickDown/StickLeft/StickRight)");
 
+// Mouse -> right stick (camera look). See src/keyboard_gamepad.h.
+REXCVAR_DEFINE_BOOL(mouse_look, true, "Input",
+                    "Map mouse movement to the guest right stick (camera "
+                    "look): sweep to look, stop to stop.");
+REXCVAR_DEFINE_INT32(mouse_look_scale, 256, "Input",
+                     "Mouse-look sensitivity: right-stick units per pixel of "
+                     "mouse movement (larger = more sensitive).")
+    .range(1, 4096);
+
 REX_DEFINE_APP(fable_2, Fable2App::Create)

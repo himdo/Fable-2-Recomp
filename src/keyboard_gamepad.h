@@ -12,14 +12,16 @@
 // device_assignment.h). The physical pad keeps working; the keyboard just
 // adds buttons.
 //
-// The mapping is data-driven via the `keyboard_gamepad_map` cvar
+// The keyboard mapping is data-driven via the `keyboard_gamepad_map` cvar
 // (defined in main.cpp): "Key:Button,Key:Button,..." where Key is a host key
 // name understood by rex::ui::ParseVirtualKey ("E", "Space", "LeftShift", ...)
 // and Button is a guest gamepad button name (A/B/X/Y/LB/RB/LT/RT/Up/Down/
-// Left/Right/Start/Back/L3/R3).
+// Left/Right/Start/Back/L3/R3/StickUp/StickDown/StickLeft/StickRight).
 //
-// This is the first step of porting the game to keyboard OR gamepad control:
-// today it maps only E -> A. Adding more keys is a cvar change, no rebuild.
+// The mouse is mapped to the right stick (camera look) via the `mouse_look`
+// and `mouse_look_scale` cvars. The cursor is recentered to the window center
+// every poll and that frame's movement is consumed, so the camera rotates
+// continuously and the cursor never wanders or hits the screen edge.
 
 #pragma once
 
@@ -33,6 +35,7 @@
 #include <rex/input/input.h>
 #include <rex/input/input_driver.h>
 #include <rex/input/input_system.h>
+#include <rex/runtime.h>
 #include <rex/ui/virtual_key.h>
 #include <rex/ui/keybinds.h>
 
@@ -42,6 +45,8 @@
 
 // Declared here, defined in main.cpp (REXCVAR_DEFINE_* must live in a .cpp).
 REXCVAR_DECLARE(std::string, keyboard_gamepad_map);
+REXCVAR_DECLARE(bool, mouse_look);
+REXCVAR_DECLARE(int32_t, mouse_look_scale);
 
 namespace fable2 {
 
@@ -62,6 +67,12 @@ namespace input_detail {
 
 // Full thumbstick deflection (XInput range is -32768..32767).
 constexpr int32_t kStickMax = 32767;
+
+inline int32_t ClampStick(int32_t v) {
+  if (v > kStickMax) return kStickMax;
+  if (v < -kStickMax) return -kStickMax;
+  return v;
+}
 
 // One host-key -> guest-input binding. Exactly one of button/trigger/axis
 // is set.
@@ -171,14 +182,22 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
   KeyboardGamepadDriver(rex::ui::Window* window, size_t window_z_order)
       : rex::input::InputDriver(window, window_z_order) {}
 
+  ~KeyboardGamepadDriver() override {
+    if (cursor_hidden_) {
+      if (rex::ui::Window* w = GameWindow())
+        w->SetCursorVisibility(rex::ui::Window::CursorVisibility::kVisible);
+      cursor_hidden_ = false;
+    }
+  }
+
   X_STATUS Setup() override { return X_STATUS_SUCCESS; }
 
   void EnumerateDevices(std::vector<DeviceInfo>& out) override {
     RefreshBindings();
-    if (bindings_.empty()) return;  // nothing mapped -> no device
+    if (bindings_.empty() && !REXCVAR_GET(mouse_look)) return;  // nothing to do
     DeviceInfo info;
     info.id = kDeviceId;
-    info.name = "Keyboard (gamepad)";
+    info.name = "Keyboard/Mouse (gamepad)";
     info.guid = "fable2-keyboard-gamepad";
     info.synthetic = true;  // routed to guest user 0 by the default assignment
     out.push_back(info);
@@ -193,6 +212,8 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     uint8_t right_trigger = 0;
     int32_t lx = 0;
     int32_t ly = 0;
+    int32_t rx = 0;
+    int32_t ry = 0;
 #ifdef _WIN32
     if (is_active()) {
       for (const auto& m : bindings_) {
@@ -211,10 +232,52 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
       }
     }
     // Clamp (opposing keys cancel; two same-direction keys can't exceed it).
-    if (lx > input_detail::kStickMax) lx = input_detail::kStickMax;
-    if (lx < -input_detail::kStickMax) lx = -input_detail::kStickMax;
-    if (ly > input_detail::kStickMax) ly = input_detail::kStickMax;
-    if (ly < -input_detail::kStickMax) ly = -input_detail::kStickMax;
+    lx = input_detail::ClampStick(lx);
+    ly = input_detail::ClampStick(ly);
+
+    // Mouse -> right stick (camera look) with cursor recentering + hiding:
+    // the cursor is pinned to the window center each poll (that frame's
+    // movement is consumed, so the camera rotates continuously and never hits
+    // the screen edge). We gate on the game window actually being the
+    // foreground window (GetForegroundWindow) so alt-tabbing away releases the
+    // lock. Fable 2 inverts Y, so mouse-up (dy<0) maps to +ry (look up).
+    rex::ui::Window* win = GameWindow();
+    HWND hwnd = win ? reinterpret_cast<HWND>(win->GetNativeWindowHandle()) : nullptr;
+    bool looking = hwnd != nullptr && REXCVAR_GET(mouse_look) &&
+                   (GetForegroundWindow() == GetAncestor(hwnd, GA_ROOT));
+
+    // Hide/restore the cursor via the SDK Window. This is a thread-safe
+    // "desired state" that the UI thread applies, so it actually takes effect
+    // (raw ShowCursor from this guest thread was overwritten by the SDK's own
+    // cursor management).
+    if (looking && !cursor_hidden_) {
+      win->SetCursorVisibility(rex::ui::Window::CursorVisibility::kHidden);
+      cursor_hidden_ = true;
+    } else if (!looking && cursor_hidden_ && win) {
+      win->SetCursorVisibility(rex::ui::Window::CursorVisibility::kVisible);
+      cursor_hidden_ = false;
+    }
+
+    if (looking) {
+      RECT rc;
+      POINT p;
+      POINT c;
+      if (GetClientRect(hwnd, &rc) && GetCursorPos(&p)) {
+        c.x = rc.left + rc.right / 2;
+        c.y = rc.top + rc.bottom / 2;
+        if (ClientToScreen(hwnd, &c)) {
+          if (mouse_centered_) {
+            int32_t scale = REXCVAR_GET(mouse_look_scale);
+            rx = input_detail::ClampStick((p.x - c.x) * scale);
+            ry = input_detail::ClampStick(-(p.y - c.y) * scale);
+          }
+          SetCursorPos(c.x, c.y);  // recenter: consume this frame's movement
+          mouse_centered_ = true;
+        }
+      }
+    } else {
+      mouse_centered_ = false;  // re-prime on (re)focus to avoid a jump
+    }
 #endif
 
     out_state->packet_number.set(packet_number_++);
@@ -223,8 +286,8 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     out_state->gamepad.right_trigger = right_trigger;
     out_state->gamepad.thumb_lx.set(static_cast<int16_t>(lx));
     out_state->gamepad.thumb_ly.set(static_cast<int16_t>(ly));
-    out_state->gamepad.thumb_rx.set(0);
-    out_state->gamepad.thumb_ry.set(0);
+    out_state->gamepad.thumb_rx.set(static_cast<int16_t>(rx));
+    out_state->gamepad.thumb_ry.set(static_cast<int16_t>(ry));
     return X_ERROR_SUCCESS;
   }
 
@@ -265,6 +328,15 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
   std::vector<input_detail::Mapping> bindings_;
   std::string cached_text_;
   uint32_t packet_number_ = 0;
+  bool mouse_centered_ = false;  // set once the cursor is first pinned
+  bool cursor_hidden_ = false;   // set while the SDK window cursor is hidden
+  // The game window (from the runtime's display window), used for recentering
+  // and cursor visibility.
+  rex::ui::Window* GameWindow() {
+    auto* rt = rex::Runtime::instance();
+    if (!rt) return nullptr;
+    return rt->display_window();
+  }
 };
 
 }  // namespace fable2

@@ -99,7 +99,22 @@ Extend or remap at launch without recompiling, e.g.
 fable_2.exe --keyboard_gamepad_map "E:A,B:B,Space:L3,Enter:Start"
 ```
 
-The cvar is hot-reloadable, so it can also be changed from the in-game console.
+### Mouse look (right stick)
+
+Mouse movement is mapped to the guest **right stick** for camera control. The
+movement since the previous poll is converted into stick deflection, so you
+**sweep the mouse to look and stop to stop**. Two cvars control it:
+
+| Argument | Effect |
+|---|---|
+| `--mouse_look <bool>` | Enable/disable mouse look (default `true`) |
+| `--mouse_look_scale <n>` | Sensitivity: right-stick units per pixel of mouse movement (default `256`; larger = more sensitive) |
+
+Example: `fable_2.exe --mouse_look_scale 512` for a more sensitive camera.
+Both cvars are hot-reloadable from the in-game console, so you can dial in the
+sensitivity live.
+
+All cvars above are hot-reloadable, so they can also be changed from the in-game console.
 
 ## Building
 
