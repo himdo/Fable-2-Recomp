@@ -80,6 +80,8 @@ size = 740
 [entrypoint.functions."0x8217F250"]
 size = 0x00F0
 
+[entrypoint.functions."0x822142D0"]
+
 [entrypoint.functions."0x8222B3C8"]
 size = 0x00F8
 
