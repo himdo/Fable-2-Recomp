@@ -99,6 +99,21 @@ size = 0x00F0
 #talking to camera man in child scene
 [entrypoint.functions."0x82988F38"]
 
+# First Combat childhood fight
+[entrypoint.functions."0x8297EB48"]
+
+# Interacting with sister after first fight
+[entrypoint.functions."0x8274B788"]
+
+# Entering the warehouse as child
+[entrypoint.functions."0x8274B738"]
+
+# Shooting Beetle in the warehouse as child
+[entrypoint.functions."0x82DDC4D8"]
+
+# Swimming
+[entrypoint.functions."0x8297EB28"]
+
 # Existing Functions
 [entrypoint.functions."0x8222B3C8"]
 size = 0x00F8

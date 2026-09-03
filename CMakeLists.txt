@@ -21,4 +21,7 @@ else()
     add_executable(fable_2 ${FABLE2_SOURCES})
 endif()
 
-rexglue_setup_target(fable_2)
+# Stage the Xenos GPU emulation plugin next to the exe (rexglue picks the
+# per-configuration variant: rexgpu-xenosd.dll for Debug, rexgpu-xenos.dll
+# for Release). Without it the game runs with no GPU emulation.
+rexglue_setup_target(fable_2 GPU_PLUGINS xenos)

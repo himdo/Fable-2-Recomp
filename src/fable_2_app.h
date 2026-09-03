@@ -8,6 +8,8 @@
 
 #include <rex/rex_app.h>
 
+#include "keyboard_gamepad.h"
+
 class Fable2App : public rex::ReXApp {
  public:
   using rex::ReXApp::ReXApp;
@@ -25,6 +27,18 @@ class Fable2App : public rex::ReXApp {
     if (config.gpu_plugin.empty()) {
       config.gpu_plugin = "xenos";
     }
+
+    // Build on top of the default input system (SDL gamepad + NOP) and add a
+    // synthetic "keyboard gamepad" driver so host keys can drive the guest.
+    // The mapping is the `keyboard_gamepad_map` cvar (default "E:A"). See
+    // src/keyboard_gamepad.h.
+    config.input_factory = [](bool tool_mode) ->
+        std::unique_ptr<rex::system::IInputSystem> {
+      auto system = rex::input::CreateDefaultInputSystem(tool_mode);
+      system->AddDriver(
+          std::make_unique<fable2::KeyboardGamepadDriver>(system->window(), 0));
+      return system;  // C++14 unique_ptr<Derived> -> unique_ptr<Base>
+    };
   }
 
   // Override virtual hooks for customization:
