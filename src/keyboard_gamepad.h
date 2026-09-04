@@ -344,7 +344,12 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     bindings_ = input_detail::ParseMap(cached_text_);
   }
 
-  static constexpr DeviceId kDeviceId{1};
+  // Device id for this synthetic pad. MUST NOT collide with the SDL driver's
+  // sequential ids (they start at 1): InputSystem::DriverForDevice() resolves
+  // an id by first match, so sharing id 1 with the first physical pad
+  // connected silently shadows this driver -- the guest only sees the real
+  // pad and this driver is never polled (dead keyboard, no mouse lock).
+  static constexpr DeviceId kDeviceId{1ull << 60};
   std::vector<input_detail::Mapping> bindings_;
   std::string cached_text_;
   uint32_t packet_number_ = 0;

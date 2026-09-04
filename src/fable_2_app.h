@@ -52,16 +52,31 @@ class Fable2App : public rex::ReXApp {
   // out/build/<preset>/, the content at the project root). Override on the
   // command line with --game_data_root=<path>.
   void OnConfigurePaths(rex::PathConfig& paths) override {
+    std::filesystem::path content_dir;
     if (paths.game_data_root.empty()) {
       auto dir = rex::filesystem::GetExecutableFolder();
       for (int i = 0; i < 5; ++i) {
         if (std::filesystem::is_regular_file(dir / "default.xex")) {
-          paths.game_data_root = dir;
+          content_dir = dir;
           break;
         }
         if (!dir.has_parent_path() || dir.parent_path() == dir) break;
         dir = dir.parent_path();
       }
+      paths.game_data_root = content_dir;
+    } else {
+      content_dir = paths.game_data_root;
+    }
+
+    // Keep user data (save files, settings, profiles) in the game's own
+    // folder (the folder containing default.xex) instead of the SDK's
+    // default per-user platform location, which caused save corruption.
+    // NOTE: set unconditionally because the SDK default is non-empty, so an
+    // empty-check would never trigger (overrides this cvar/CLI default).
+    if (!content_dir.empty()) {
+      paths.user_data_root = content_dir;
+      std::error_code ec;
+      std::filesystem::create_directories(content_dir, ec);
     }
     // Mount the $SystemUpdate folder (next to the game content) as update:\
     // so VdSetGraphicsInterruptCallback-era update partition lookups resolve

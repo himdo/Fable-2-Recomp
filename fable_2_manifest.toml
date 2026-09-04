@@ -113,6 +113,11 @@ size = 0x00F0
 
 # Swimming
 [entrypoint.functions."0x8297EB28"]
+name = "Swimming"
+
+# Interacting with job sign (blacksmith)
+[entrypoint.functions."0x823A1810"]
+
 
 # Existing Functions
 [entrypoint.functions."0x8222B3C8"]
