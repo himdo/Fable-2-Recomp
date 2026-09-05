@@ -17,6 +17,7 @@
 #include <windows.h>
 
 #include "alloc_watch.h"
+#include "fps_probe.h"
 #include "keyboard_gamepad.h"
 
 class Fable2App : public rex::ReXApp {
@@ -61,12 +62,16 @@ class Fable2App : public rex::ReXApp {
     };
   }
 
-  // Feed the F3 debug overlay with guest FPS. The GPU plugin records
-  // per-guest-swap frame timing into the shared perf registry (rex::perf,
-  // state lives in rexruntime.dll and is shared with the plugin); read the
-  // last snapshot and expose it as FrameStats so the overlay's
-  // "Guest: X FPS (Y ms)" line works on every runtime build.
   void OnPostSetup() override {
+    // TEMP: 30fps-cap instrumentation is active via the strong symbol
+    // overrides in fps_probe.h (writes fps_probe.log next to the exe).
+
+    // Feed the F3 debug overlay with guest FPS (below). The GPU plugin
+    // records per-guest-swap frame timing into the shared perf registry
+    // (rex::perf, state lives in rexruntime.dll and is shared with the
+    // plugin); read the last snapshot and expose it as FrameStats so the
+    // overlay's "Guest: X FPS (Y ms)" line works on every runtime build.
+
     // Background monitor for the table-zeroing / init-ordering bug. Runs on a
     // SEPARATE OS thread with hardcoded stable addresses (no recompiled probe
     // dependency), so it does not perturb the recompiled hot path that the
