@@ -1,0 +1,285 @@
+diff --git a/src/core/exception_handler_win.cpp b/src/core/exception_handler_win.cpp
+index 4a9b1ee..00c37fa 100644
+--- a/src/core/exception_handler_win.cpp
++++ b/src/core/exception_handler_win.cpp
+@@ -15,8 +15,17 @@
+ 
+ #include "platform_win.h"
+ 
++#include <psapi.h>
++
++#include <string>
++#include <vector>
++
+ #include <rex/assert.h>
++#include <rex/logging.h>
+ #include <rex/math.h>
++#include <rex/thread.h>
++
++#pragma comment(lib, "psapi")
+ 
+ namespace rex::arch {
+ 
+@@ -34,6 +43,223 @@ constexpr size_t kMaxHandlerCount = 8;
+ // Executed in order.
+ std::pair<ExceptionHandler::Handler, void*> handlers_[kMaxHandlerCount];
+ 
++// Logs fatal-looking exceptions that no custom handler took, so a crash
++// (unhandled guest AV, int3 from a recompiled "unreachable" path, illegal
++// instruction) records the faulting host PC in the game log. The PC resolves
++// to the recompiled guest function (sub_<guest_address>) via the exe PDB.
++static void LogUnhostedException(PEXCEPTION_POINTERS ex_info, uint64_t rip) {
++  uint32_t code = ex_info->ExceptionRecord->ExceptionCode;
++  if (code != STATUS_ACCESS_VIOLATION && code != STATUS_BREAKPOINT &&
++      code != STATUS_ILLEGAL_INSTRUCTION) {
++    return;
++  }
++  CONTEXT* ctx = ex_info->ContextRecord;
++  // Log the exe-module-relative offset: absolute PCs are ASLR-shifted per
++  // launch, but the offset resolves stably against the exe image (and its
++  // PDB) with `cdb -z fable_2.exe -c "ln +<offset>"`.
++  uint64_t pc_offset = 0;
++  HMODULE module = ::GetModuleHandleW(nullptr);
++  if (module && rip >= reinterpret_cast<uint64_t>(module)) {
++    pc_offset = rip - reinterpret_cast<uint64_t>(module);
++  }
++  REXSYS_ERROR(
++      "Unhosted exception: code 0x{:08X} at host PC 0x{:16X} (exe offset "
++      "+0x{:X}, info1 0x{:16X}) on thread 0x{:X}",
++      code, static_cast<uint64_t>(rip), pc_offset,
++      reinterpret_cast<uint64_t>(ex_info->ExceptionRecord->ExceptionInformation[1]),
++      rex::thread::current_thread_id());
++  // Every recompiled guest function takes PPCContext& as its first arg
++  // (x64 rcx). The PPCContext layout is fixed (r3@0x0 .. r31@0xC0, lr@0xC8),
++  // so we can dump the guest register file + guest PC (lr) to identify the
++  // true faulting guest function even when PDB alias symbols are unreliable.
++  uint64_t ppc_ctx = ctx->Rcx;
++  REXSYS_ERROR(
++      "  guest ctx @ 0x{:16X}  host: rax=0x{:016X} rcx=0x{:016X} rdx=0x{:016X} "
++      "r8=0x{:016X} r9=0x{:016X} r10=0x{:016X} r11=0x{:016X} r12=0x{:016X}",
++      ppc_ctx, ctx->Rax, ctx->Rcx, ctx->Rdx, ctx->R8, ctx->R9, ctx->R10,
++      ctx->R11, ctx->R12);
++  // rcx is the PPCContext only while the codegen keeps it live; validate by
++  // checking r1 (guest stack, 0x70000000-0x7FFFFFFF) and lr (guest code) look
++  // plausible before trusting the dump.
++  bool ctx_valid = ppc_ctx > 0x10000 && ppc_ctx < 0x70000000000ull;
++  uint32_t g_r1 = 0, g_lr = 0;
++  if (ctx_valid) {
++    const uint64_t* g = reinterpret_cast<const uint64_t*>(ppc_ctx);
++    g_r1 = static_cast<uint32_t>(g[2]);
++    g_lr = static_cast<uint32_t>(g[32]);
++    ctx_valid = (g_r1 >= 0x70000000u && g_r1 < 0x80000000u);
++  }
++  if (ctx_valid) {
++    const uint64_t* g = reinterpret_cast<const uint64_t*>(ppc_ctx);
++    // g[0]=r3 g[1]=r0 g[2]=r1 g[3]=r2 g[4]=r4 ... g[31]=r31 g[32]=lr
++    REXSYS_ERROR(
++        "  gpr: r0=0x{:08X} r1=0x{:08X} r2=0x{:08X} r3=0x{:08X} r4=0x{:08X} "
++        "r5=0x{:08X} r6=0x{:08X} r7=0x{:08X}",
++        static_cast<uint32_t>(g[1]), static_cast<uint32_t>(g[2]),
++        static_cast<uint32_t>(g[3]), static_cast<uint32_t>(g[0]),
++        static_cast<uint32_t>(g[4]), static_cast<uint32_t>(g[5]),
++        static_cast<uint32_t>(g[6]), static_cast<uint32_t>(g[7]));
++    REXSYS_ERROR(
++        "      r8=0x{:08X} r9=0x{:08X} r10=0x{:08X} r11=0x{:08X} r12=0x{:08X} "
++        "r13=0x{:08X} r14=0x{:08X} r15=0x{:08X}",
++        static_cast<uint32_t>(g[8]), static_cast<uint32_t>(g[9]),
++        static_cast<uint32_t>(g[10]), static_cast<uint32_t>(g[11]),
++        static_cast<uint32_t>(g[12]), static_cast<uint32_t>(g[13]),
++        static_cast<uint32_t>(g[14]), static_cast<uint32_t>(g[15]));
++    REXSYS_ERROR(
++        "      r16=0x{:08X} r17=0x{:08X} r18=0x{:08X} r19=0x{:08X} r20=0x{:08X} "
++        "r21=0x{:08X} r22=0x{:08X} r23=0x{:08X}",
++        static_cast<uint32_t>(g[16]), static_cast<uint32_t>(g[17]),
++        static_cast<uint32_t>(g[18]), static_cast<uint32_t>(g[19]),
++        static_cast<uint32_t>(g[20]), static_cast<uint32_t>(g[21]),
++        static_cast<uint32_t>(g[22]), static_cast<uint32_t>(g[23]));
++    REXSYS_ERROR(
++        "      r24=0x{:08X} r25=0x{:08X} r26=0x{:08X} r27=0x{:08X} r28=0x{:08X} "
++        "r29=0x{:08X} r30=0x{:08X} r31=0x{:08X}",
++        static_cast<uint32_t>(g[24]), static_cast<uint32_t>(g[25]),
++        static_cast<uint32_t>(g[26]), static_cast<uint32_t>(g[27]),
++        static_cast<uint32_t>(g[28]), static_cast<uint32_t>(g[29]),
++        static_cast<uint32_t>(g[30]), static_cast<uint32_t>(g[31]));
++    REXSYS_ERROR(
++        "      lr=0x{:08X}  (guest return address; the bl just before it is "
++        "the call site)",
++        g_lr);
++    // Targeted: the menu-load null-list crash. sub_83231BE8 (lr 0x83231C3C) does
++    //   r11 = *global@0x834969E4 ; r4 = *(r11+12) ; sub_832304E8(r4)
++    // and sub_832304E8 faults on *(r4+0x1C) because r4 (the list head) is null
++    // while r11 (the subobject) is valid. Dump the subobject + the guard flag
++    // so we can tell "never initialized" (all zero) from "lost store / race"
++    // (partially written). rdx is the guest arena base (REX base) at the fault.
++    if (g_lr == 0x83231C3Cu) {
++      uint64_t arena = ctx->Rdx;
++      uint32_t subobj = static_cast<uint32_t>(g[11]);  // r11
++      // Guest memory is lazily mapped/committed, so any read here can itself
++      // fault and mask the original crash. Only touch a page after confirming
++      // it is committed on the host.
++      auto host_committed = [](void* p) -> bool {
++        MEMORY_BASIC_INFORMATION mbi{};
++        if (::VirtualQuery(p, &mbi, sizeof(mbi)) == 0) return false;
++        return mbi.State == MEM_COMMIT &&
++               !(mbi.Protect & (PAGE_NOACCESS | 0x100 /*PAGE_GUARD*/));
++      };
++      auto gaddr = [&](uint32_t ga) -> void* {
++        uint64_t off = static_cast<uint64_t>(ga) +
++                       (ga >= 0xE0000000u ? 0x100000000ull : 0ull);
++        return reinterpret_cast<void*>(arena + off);
++      };
++      // Safe 32-bit guest read (big-endian value). Returns ok=false if the
++      // backing host page is not committed, so we never raise a second fault.
++      auto gread_be = [&](uint32_t ga, uint32_t* out) -> bool {
++        void* hp = gaddr(ga);
++        if (!host_committed(hp)) return false;
++        *out = static_cast<uint32_t>(__builtin_bswap32(
++            *reinterpret_cast<const volatile uint32_t*>(hp)));
++        return true;
++      };
++      if (subobj != 0) {
++        uint32_t guard = 0, tbl = 0, tbl2 = 0, tbl3 = 0;
++        {
++          void* hp = gaddr(0x83496BCB);
++          if (host_committed(hp))
++            guard = *reinterpret_cast<const volatile uint8_t*>(hp);
++        }
++        gread_be(0x83496BD4, &tbl);
++        gread_be(0x83496BD8, &tbl2);
++        gread_be(0x83496BDC, &tbl3);
++        REXSYS_ERROR(
++            "      [alloc diag] flag@83496BCB=0x{:02X}  tbl@0x83496BD4=0x{:08X} "
++            "tbl2@0x83496BD8=0x{:08X} tbl3@0x83496BDC=0x{:08X}",
++            guard, tbl, tbl2, tbl3);
++        auto dump_block = [&](const char* label, uint32_t p) {
++          if (p == 0) { REXSYS_ERROR("      [alloc diag] {} @ 0: (null)", label); return; }
++          void* hp = gaddr(p);
++          if (!host_committed(hp)) {
++            REXSYS_ERROR("      [alloc diag] {} @ guest 0x{:08X}: (unmapped)", label, p);
++            return;
++          }
++          const uint32_t* so = reinterpret_cast<const uint32_t*>(hp);
++          REXSYS_ERROR("      [alloc diag] {} @ guest 0x{:08X}:", label, p);
++          for (int i = 0; i < 8; ++i) {
++            // 32 words = 128 bytes; stop if a later page is unmapped.
++            void* wp = reinterpret_cast<void*>(
++                reinterpret_cast<uintptr_t>(hp) + i * 16);
++            if (!host_committed(wp)) break;
++            REXSYS_ERROR("        +0x{:02X}=0x{:08X} +0x{:02X}=0x{:08X} +0x{:02X}=0x{:08X} +0x{:02X}=0x{:08X}",
++                         i*16, so[i*4+0], i*16+4, so[i*4+1],
++                         i*16+8, so[i*4+2], i*16+12, so[i*4+3]);
++          }
++        };
++        dump_block("size-table", tbl);   // the bucket descriptor (r11 at fault)
++        if (tbl != 0) {
++          void* hp = gaddr(tbl);
++          if (host_committed(hp)) {
++            uint32_t head = static_cast<uint32_t>(
++                __builtin_bswap32(*reinterpret_cast<const volatile uint32_t*>(
++                    reinterpret_cast<uintptr_t>(hp) + 12)));
++            if (head != 0) dump_block("head-node", head);
++          }
++        }
++      }
++    }
++  } else {
++    REXSYS_ERROR(
++        "  guest ctx pointer 0x{:16X} not a valid PPCContext (r1 would be "
++        "0x{:08X}); register dump skipped",
++        ppc_ctx, g_r1);
++  }
++  // If the PC is NOT in the exe (e.g. the GPU plugin or a mapped guest-code
++  // arena), identify the single containing module so it can be matched offline
++  // against the DLLs staged next to the exe.
++  bool in_exe = false;
++  if (module) {
++    MODULEINFO exe_info{};
++    if (::GetModuleInformation(::GetCurrentProcess(), module, &exe_info,
++                               sizeof(exe_info))) {
++      in_exe = rip >= reinterpret_cast<uint64_t>(exe_info.lpBaseOfDll) &&
++               rip < reinterpret_cast<uint64_t>(exe_info.lpBaseOfDll) +
++                         exe_info.SizeOfImage;
++    }
++  }
++  if (!in_exe) {
++    DWORD needed = 0;
++    ::EnumProcessModulesEx(
++        ::GetCurrentProcess(), nullptr, 0, &needed, LIST_MODULES_ALL);
++    if (needed > 0) {
++      std::vector<HMODULE> modules(needed / sizeof(HMODULE));
++      if (::EnumProcessModulesEx(::GetCurrentProcess(), modules.data(), needed,
++                                  &needed, LIST_MODULES_ALL)) {
++        for (HMODULE base : modules) {
++          MODULEINFO info{};
++          if (::GetModuleInformation(::GetCurrentProcess(), base, &info,
++                                     sizeof(info)) && info.lpBaseOfDll &&
++              rip >= reinterpret_cast<uint64_t>(info.lpBaseOfDll) &&
++              rip < reinterpret_cast<uint64_t>(info.lpBaseOfDll) +
++                        info.SizeOfImage) {
++            wchar_t name[MAX_PATH]{};
++            ::GetModuleBaseNameW(::GetCurrentProcess(), base, name, MAX_PATH);
++            std::wstring wide(name);
++            int len = ::WideCharToMultiByte(CP_UTF8, 0, wide.c_str(),
++                                            static_cast<int>(wide.size()),
++                                            nullptr, 0, nullptr, nullptr);
++            std::string narrow(len, '\0');
++            if (len > 0) {
++              ::WideCharToMultiByte(CP_UTF8, 0, wide.c_str(),
++                                    static_cast<int>(wide.size()), &narrow[0],
++                                    len, nullptr, nullptr);
++            }
++            REXSYS_ERROR(
++                "  containing module: {} [0x{:12X}-0x{:12X})",
++                narrow,
++                reinterpret_cast<uint64_t>(info.lpBaseOfDll),
++                reinterpret_cast<uint64_t>(info.lpBaseOfDll) + info.SizeOfImage);
++            break;
++          }
++        }
++      }
++    }
++  }
++}
++
+ LONG CALLBACK ExceptionHandlerCallback(PEXCEPTION_POINTERS ex_info) {
+   // Visual Studio SetThreadName.
+   if (ex_info->ExceptionRecord->ExceptionCode == 0x406D1388) {
+@@ -74,6 +300,7 @@ LONG CALLBACK ExceptionHandlerCallback(PEXCEPTION_POINTERS ex_info) {
+     } break;
+     default:
+       // Unknown/unhandled type.
++      LogUnhostedException(ex_info, thread_context.rip);
+       return EXCEPTION_CONTINUE_SEARCH;
+   }
+ 
+@@ -98,6 +325,7 @@ LONG CALLBACK ExceptionHandlerCallback(PEXCEPTION_POINTERS ex_info) {
+       return EXCEPTION_CONTINUE_EXECUTION;
+     }
+   }
++  LogUnhostedException(ex_info, thread_context.rip);
+   return EXCEPTION_CONTINUE_SEARCH;
+ }
+ 
+diff --git a/src/system/xmemory.cpp b/src/system/xmemory.cpp
+index 76cc877..9308f35 100644
+--- a/src/system/xmemory.cpp
++++ b/src/system/xmemory.cpp
+@@ -1321,6 +1321,18 @@ bool BaseHeap::AllocFixed(uint32_t base_address, uint32_t size, uint32_t alignme
+   //   reserved.
+   // - If we are committing it's ok for pages within the range to already be
+   //   committed.
++  //
++  // NOTE (Fable 2): a re-reserve of an already-reserved range MUST fail.
++  // Fable 2 re-reserves ~3856 fixed ranges during startup and branches on
++  // the result: X_STATUS_SUCCESS is treated as a *fresh* allocation, which
++  // re-initializes the game's own memory pools on top of the range. Making
++  // the re-reserve a no-op success (as an earlier local patch attempted,
++  // claiming hardware treats it as idempotent) left the pools' free-list
++  // head NULL and crashed the game at the main menu with a null-deref in
++  // sub_83231BE8 -> sub_832304E8 (*(r4+0x1C) with r4=0). Failing the
++  // re-reserve (the behavior below, matching the v0.10.0 prebuilt that runs
++  // the game correctly) makes the game keep its existing pool state. The
++  // resulting [error] spam at startup is expected and harmless.
+   for (uint32_t page_number = start_page_number; page_number <= end_page_number; ++page_number) {
+     uint32_t state = page_table_[page_number].state;
+     if ((allocation_type == memory::kMemoryAllocationReserve) && state) {

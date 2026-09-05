@@ -1,3 +1,16 @@
+================================================================================
+SUPERSEDED / DO NOT APPLY (2026-09-05)
+--------------------------------------------------------------------------------
+This "AllocFixed re-reserve = no-op success" patch was REVERTED because it is
+the root cause of the D3D12/Vulkan main-menu crash. Fable 2 branches on the
+re-reserve result: success re-initializes its memory pools and NULLs the
+free-list head, crashing at the main menu (sub_83231BE8 -> sub_832304E8).
+The stock v0.10.0 behavior (re-reserve fails -> X_STATUS_NO_MEMORY) is what
+the game needs. See docs/main_menu_crash_fix.md and
+sdk_mainmenu_crash_fix.patch (the current, correct state of the SDK).
+The diff below is kept only as a historical record of the bad change.
+================================================================================
+
 diff --git a/src/system/xmemory.cpp b/src/system/xmemory.cpp
 index 76cc877..52b74e9 100644
 --- a/src/system/xmemory.cpp
