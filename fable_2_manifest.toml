@@ -118,6 +118,11 @@ name = "Swimming"
 # Interacting with job sign (blacksmith)
 [entrypoint.functions."0x823A1810"]
 
+# Aiming range weapon (skill)
+[entrypoint.functions."0x82988EE8"]
+
+# Tatter spire right after you get there when the man says "Get Moving"
+[entrypoint.functions."0x8274B768"]
 
 # Existing Functions
 [entrypoint.functions."0x8222B3C8"]

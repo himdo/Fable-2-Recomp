@@ -397,7 +397,6 @@ struct VulkanApp {
   }
 
   bool CreateRenderPassAndCommands() {
-    LOG("  [rp] start\n");
     VkAttachmentDescription att{};
     att.format = format;
     att.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -427,7 +426,6 @@ struct VulkanApp {
     rpci.pSubpasses = &subpass;
     rpci.dependencyCount = 1;
     rpci.pDependencies = &dep;
-    LOG("  [rp] vkCreateRenderPass\n");
     if (fns.create_render_pass(device, &rpci, nullptr, &render_pass) != VK_SUCCESS) {
       LOG("FAIL: create_render_pass\n");
       return false;
@@ -437,7 +435,6 @@ struct VulkanApp {
     cpci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     cpci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     cpci.queueFamilyIndex = queue_family;
-    LOG("  [rp] vkCreateCommandPool\n");
     if (fns.create_command_pool(device, &cpci, nullptr, &command_pool) != VK_SUCCESS) {
       LOG("FAIL: create_command_pool\n");
       return false;
@@ -454,7 +451,6 @@ struct VulkanApp {
       ivci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
       // Keep the image view alive (the framebuffer references it); destroyed in
       // Shutdown after the framebuffers.
-      LOG("  [rp] vkCreateImageView %u\n", i);
       if (fns.create_image_view(device, &ivci, nullptr, &image_views[i]) != VK_SUCCESS) {
         LOG("FAIL: create_image_view %u\n", i);
         return false;
@@ -467,7 +463,6 @@ struct VulkanApp {
       fci.width = extent.width;
       fci.height = extent.height;
       fci.layers = 1;
-      LOG("  [rp] vkCreateFramebuffer %u\n", i);
       if (fns.create_framebuffer(device, &fci, nullptr, &framebuffers[i]) != VK_SUCCESS) {
         LOG("FAIL: create_framebuffer %u\n", i);
         return false;
@@ -478,7 +473,6 @@ struct VulkanApp {
       abci.commandPool = command_pool;
       abci.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
       abci.commandBufferCount = 1;
-      LOG("  [rp] vkAllocateCommandBuffers %u\n", i);
       if (fns.allocate_command_buffers(device, &abci, &command_buffers[i]) != VK_SUCCESS) {
         LOG("FAIL: allocate_command_buffers %u\n", i);
         return false;
@@ -494,19 +488,15 @@ struct VulkanApp {
 
       VkCommandBufferBeginInfo bci{};
       bci.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-      LOG("  [rp] vkBeginCommandBuffer %u\n", i);
       if (fns.begin_command_buffer(command_buffers[i], &bci) != VK_SUCCESS) {
         LOG("FAIL: begin_command_buffer %u\n", i);
         return false;
       }
-      LOG("  [rp] vkCmdBeginRenderPass %u\n", i);
       fns.cmd_begin_render_pass(command_buffers[i], &rpb, VK_SUBPASS_CONTENTS_INLINE);
       fns.cmd_end_render_pass(command_buffers[i]);
-      LOG("  [rp] vkEndCommandBuffer %u\n", i);
       fns.end_command_buffer(command_buffers[i]);
     }
 
-    LOG("  [rp] creating sync objects\n");
     for (int i = 0; i < kFrames; ++i) {
       VkSemaphoreCreateInfo sci{};
       sci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -613,7 +603,6 @@ struct VulkanApp {
 // Win32 window + message loop.
 // ---------------------------------------------------------------------------
 static VulkanApp g_app;
-static bool g_running = false;
 
 // (window proc removed — the window is created by SDL, which provides its own proc)
 

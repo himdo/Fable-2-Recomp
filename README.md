@@ -139,6 +139,63 @@ build.cmd -release [t]  # build as Release (-O3) instead of Debug (-r is short f
 - Codegen runs as part of the build and re-runs automatically when `fable_2_manifest.toml` or `default.xex` change (tracked via the generated DEPFILE).
 - A full clean build recompiles ~291 generated translation units (60,462 guest functions).
 
+## Vulkan renderer
+
+The goal is a Vulkan rendering path for the game (the SDK's Windows GPU plugin only ships a
+D3D12 Xenos backend; the SDK's own Vulkan backend lives in `rexglue-sdk-src/src/graphics/vulkan/`
+but is not compiled into the shipped plugin). Per the project constraint, all Vulkan work lives in
+this repo — the SDK is not modified (its Vulkan source is used only as a reference).
+
+**Stage 1 — foundation (DONE, verified).** A self-contained Vulkan pipeline that creates a window,
+inits Vulkan, and presents a clear color, proving the whole stack on a real GPU:
+
+```
+build.cmd -release fable_2_vulkan_smoke
+out\build\win-amd64-release\fable_2_vulkan_smoke.exe   # -> stable blue window
+```
+
+Pipeline: dynamic `vulkan-1.dll` loader (no import lib needed) → `VkInstance` → Win32 surface →
+device (graphics+present queue) → swapchain (3 images) → render pass → per-image framebuffers +
+command buffers (clear-color subpass) → semaphores/fences → present loop. Logs to
+`vulkan_smoke.log` next to the exe.
+
+Key implementation notes (hard-won):
+- **Window via the SDK's UI framework, not raw Win32/SDL.** The window is created with
+  `rex::ui::SDLWindowedAppContext` + `rex::ui::Window` from the *shared* `rexruntime.dll` — the
+  same mechanism the game uses. Raw `CreateWindowExW` and the *static* SDL build both fail to
+  create/init a window here; only the shared-SDL path (the `rex::ui::*` exports) works. The target
+  links the `rexruntime.lib` import lib and stages `rexruntime.dll` next to the exe.
+- `#define NOMINMAX` before `<windows.h>` is required (the SDK's `math.h` uses `std::min` /
+  `std::numeric_limits::max`, which the Windows `min`/`max` macros would break).
+- Image views backing the swapchain **must outlive the framebuffers** (destroying them early makes
+  the driver fault in `vkCmdBeginRenderPass`).
+- Vendored Khronos headers live in `thirdparty/vulkan` + `thirdparty/vk_video` (Vulkan 1.3.282).
+
+**Stage 2 — render the game via Vulkan (in progress).** The SDK's Vulkan backend is a complete,
+~1.4 MB renderer compiled into `rexgpu-xenos` only when `REXGLUE_USE_VULKAN=ON` (OFF by default on
+Windows). Rather than re-implementing it, we build the SDK's **unmodified source** into a Vulkan GPU
+plugin and load it via the `gpu_plugin` mechanism, so the renderer can be **swapped at launch, no
+rebuild of the game**:
+
+```
+tools\build_sdk_vulkan.cmd     # builds ..\rexglue-sdk-src with REXGLUE_USE_VULKAN=ON
+                               # -> out\build\win-amd64-vulkan\Release\rexgpu-xenos.dll
+```
+
+Two plugins are staged next to the exe, selected by the `gpu_plugin` argument:
+
+```
+out\build\win-amd64-release\fable_2.exe --gpu_plugin=xenos           # D3D12 (default; prebuilt plugin)
+out\build\win-amd64-release\fable_2.exe --gpu_plugin=xenos-vulkan    # Vulkan (source-built plugin)
+```
+
+- `rexgpu-xenos.dll` is the prebuilt D3D12 plugin (staged by `GPU_PLUGINS xenos`).
+- `rexgpu-xenos-vulkan.dll` is the source-built plugin (staged by CMake from the SDK build tree,
+  Release-only). `Fable2App::OnPreSetup` loads it with `LoadGpuPlugin("xenos-vulkan", "vulkan")`,
+  forcing the Vulkan backend (the plugin is compiled with both; the default `"any"` would pick D3D12).
+- The source plugin must match the game's runtime: the Release source plugin imports `rexruntime.dll`,
+  so it is staged for the Release game only (the Debug game links `rexruntimed.dll`).
+
 ## Manifest highlights (fable_2_manifest.toml)
 
 Migrated from the XenonRecomp config (`XenonRecomp/fable2.toml`):
