@@ -1,0 +1,7160 @@
+[
+ {
+  "addr": 2182607440,
+  "hex": "8217F250",
+  "insns": 35,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r4,-4",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_8217F250",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2183217872,
+  "hex": "822142D0",
+  "insns": 3,
+  "cat": "global",
+  "detail": {
+   "target": 2201064716
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lis r11,-31950",
+  "last": "blr",
+  "baseline_name": "GetGlobal_822142D0",
+  "struct_desc": "[game code] Global getter: returns the pointer stored at data address 0x8331950C."
+ },
+ {
+  "addr": 2191036120,
+  "hex": "82988ED8",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 43,
+   "off": 172
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot43_82988ED8",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 43 (byte offset 172), and tail-calls it."
+ },
+ {
+  "addr": 2191036200,
+  "hex": "82988F28",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 48,
+   "off": 192
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot48_82988F28",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 48 (byte offset 192), and tail-calls it."
+ },
+ {
+  "addr": 2188687176,
+  "hex": "8274B748",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 42,
+   "off": 168
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot42_8274B748",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 42 (byte offset 168), and tail-calls it."
+ },
+ {
+  "addr": 2196416896,
+  "hex": "82EAA980",
+  "insns": 9,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 36,
+   "off": 144
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r11,r4",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX36_82EAA980",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 36 (offset 144) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2188687192,
+  "hex": "8274B758",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 39,
+   "off": 156
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot39_8274B758",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 39 (byte offset 156), and tail-calls it."
+ },
+ {
+  "addr": 2188687224,
+  "hex": "8274B778",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 28,
+   "off": 112
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot28_8274B778",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 28 (byte offset 112), and tail-calls it."
+ },
+ {
+  "addr": 2184013432,
+  "hex": "822D6678",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2183835104
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_822AADE0"
+  ],
+  "first": "lis r11,-31926",
+  "last": "b 0x822aade0",
+  "baseline_name": "TailCall_822D6678",
+  "struct_desc": "[game code] Small trampoline (6 insns) that sets up a value and tail-calls 0x822AADE0."
+ },
+ {
+  "addr": 2191036104,
+  "hex": "82988EC8",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 19,
+   "off": 76
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot19_82988EC8",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 19 (byte offset 76), and tail-calls it."
+ },
+ {
+  "addr": 2191036232,
+  "hex": "82988F48",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 45,
+   "off": 180
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot45_82988F48",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 45 (byte offset 180), and tail-calls it."
+ },
+ {
+  "addr": 2191036216,
+  "hex": "82988F38",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 17,
+   "off": 68
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot17_82988F38",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 17 (byte offset 68), and tail-calls it."
+ },
+ {
+  "addr": 2190994248,
+  "hex": "8297EB48",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 25,
+   "off": 100
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot25_8297EB48",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 25 (byte offset 100), and tail-calls it."
+ },
+ {
+  "addr": 2188687240,
+  "hex": "8274B788",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 37,
+   "off": 148
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot37_8274B788",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 37 (byte offset 148), and tail-calls it."
+ },
+ {
+  "addr": 2188687160,
+  "hex": "8274B738",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 38,
+   "off": 152
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot38_8274B738",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 38 (byte offset 152), and tail-calls it."
+ },
+ {
+  "addr": 2195571928,
+  "hex": "82DDC4D8",
+  "insns": 7,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 9,
+   "off": 36
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r11,r4",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX9_82DDC4D8",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 9 (offset 36) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2190994216,
+  "hex": "8297EB28",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 23,
+   "off": 92
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot23_8297EB28",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 23 (byte offset 92), and tail-calls it."
+ },
+ {
+  "addr": 2184845328,
+  "hex": "823A1810",
+  "insns": 4,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2183757704
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82297F88"
+  ],
+  "first": "lis r11,-31927",
+  "last": "b 0x82297f88",
+  "baseline_name": "TailCall_823A1810",
+  "struct_desc": "[game code] Small trampoline (4 insns) that sets up a value and tail-calls 0x82297F88."
+ },
+ {
+  "addr": 2191036136,
+  "hex": "82988EE8",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 23,
+   "off": 92
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r4)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot23_82988EE8",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 23 (byte offset 92), and tail-calls it."
+ },
+ {
+  "addr": 2188687208,
+  "hex": "8274B768",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 20,
+   "off": 80
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot20_8274B768",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 20 (byte offset 80), and tail-calls it."
+ },
+ {
+  "addr": 2183312328,
+  "hex": "8222B3C8",
+  "insns": 31,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r11,r3",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_8222B3C8",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2183801520,
+  "hex": "822A2AB0",
+  "insns": 59,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 3173,
+   "off": 12692
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r11,r3",
+  "last": "blr",
+  "baseline_name": "VtableSlotX3173_822A2AB0",
+  "struct_desc": "[game code] Variant virtual dispatch: selects vtable slot 3173 (offset 12692) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2184019024,
+  "hex": "822D7C50",
+  "insns": 18,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "cmplwi cr6,r3,4",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_822D7C50",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2184019120,
+  "hex": "822D7CB0",
+  "insns": 23,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,1788(r4)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_822D7CB0",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2184019288,
+  "hex": "822D7D58",
+  "insns": 31,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "cmplwi cr6,r4,7",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_822D7D58",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2184019448,
+  "hex": "822D7DF8",
+  "insns": 30,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "cmplwi cr6,r3,10",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_822D7DF8",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2184019616,
+  "hex": "822D7EA0",
+  "insns": 21,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,20(r3)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_822D7EA0",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2184096408,
+  "hex": "822EAA98",
+  "insns": 24,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lbz r11,2(r3)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_822EAA98",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2184862248,
+  "hex": "823A5A28",
+  "insns": 66,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r3,-1",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_823A5A28",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2185257904,
+  "hex": "824063B0",
+  "insns": 56,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r10,r4,-1",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_824063B0",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2185320992,
+  "hex": "82415A20",
+  "insns": 105,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,16(r3)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82415A20",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2185345704,
+  "hex": "8241BAA8",
+  "insns": 67,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "cmplwi cr6,r4,3",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_8241BAA8",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2185414112,
+  "hex": "8242C5E0",
+  "insns": 25,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lis r11,-32246",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_8242C5E0",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2185985648,
+  "hex": "824B7E70",
+  "insns": 32,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_824B7560",
+   "sub_824B7B40",
+   "sub_824B7BF0",
+   "sub_824B7C98"
+  ],
+  "first": "mr r10,r3",
+  "last": "b 0x824b7c98",
+  "baseline_name": "SwitchDispatch_824B7E70",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2186010208,
+  "hex": "824BDE60",
+  "insns": 34,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "li r11,0",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_824BDE60",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2186062992,
+  "hex": "824CAC90",
+  "insns": 82,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "rlwinm r9,r5,1,0,30",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_824CAC90",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2186094592,
+  "hex": "824D2800",
+  "insns": 27,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "cmplwi cr6,r4,3",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_824D2800",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2186327928,
+  "hex": "8250B778",
+  "insns": 15,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r3,-2",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_8250B778",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2186415104,
+  "hex": "82520C00",
+  "insns": 22,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lbz r11,8(r3)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82520C00",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2186423832,
+  "hex": "82522E18",
+  "insns": 83,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,48(r3)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82522E18",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2186882176,
+  "hex": "82592C80",
+  "insns": 21,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82583140",
+   "sub_825832B0",
+   "sub_828CE240"
+  ],
+  "first": "addi r11,r4,-26",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82592C80",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2186915656,
+  "hex": "8259AF48",
+  "insns": 26,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_823F7678"
+  ],
+  "first": "lis r11,-32246",
+  "last": "b 0x823f7678",
+  "baseline_name": "SwitchDispatch_8259AF48",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2186939224,
+  "hex": "825A0B58",
+  "insns": 24,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82583140",
+   "sub_825A0BE8",
+   "sub_828CE240"
+  ],
+  "first": "cmplwi cr6,r5,1",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_825A0B58",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2187469664,
+  "hex": "82622360",
+  "insns": 39,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82275368"
+  ],
+  "first": "addi r11,r4,1",
+  "last": "b 0x82275368",
+  "baseline_name": "SwitchDispatch_82622360",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2187470008,
+  "hex": "826224B8",
+  "insns": 35,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82275368"
+  ],
+  "first": "cmplwi cr6,r4,7",
+  "last": "b 0x82275368",
+  "baseline_name": "SwitchDispatch_826224B8",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2188554944,
+  "hex": "8272B2C0",
+  "insns": 79,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,36(r4)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_8272B2C0",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2188841552,
+  "hex": "82771250",
+  "insns": 24,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "cmplwi cr6,r4,3",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82771250",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2189242560,
+  "hex": "827D30C0",
+  "insns": 135,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r3,-1",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_827D30C0",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2189664264,
+  "hex": "8283A008",
+  "insns": 25,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r3,-7",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_8283A008",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2189688728,
+  "hex": "8283FF98",
+  "insns": 23,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r10,r3",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_8283FF98",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2190080832,
+  "hex": "8289FB40",
+  "insns": 146,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r5,-1",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_8289FB40",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2191128168,
+  "hex": "8299F668",
+  "insns": 32,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "cmplwi cr6,r3,3",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_8299F668",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2191717352,
+  "hex": "82A2F3E8",
+  "insns": 65,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,4(r4)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82A2F3E8",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2191738496,
+  "hex": "82A34680",
+  "insns": 41,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r3,-37",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82A34680",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2192802416,
+  "hex": "82B38270",
+  "insns": 47,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,0(r3)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82B38270",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2192929096,
+  "hex": "82B57148",
+  "insns": 24,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r4,-2",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82B57148",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2193099240,
+  "hex": "82B809E8",
+  "insns": 133,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lis r11,-32246",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82B809E8",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2193159656,
+  "hex": "82B8F5E8",
+  "insns": 30,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lis r11,-31950",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82B8F5E8",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2193392224,
+  "hex": "82BC8260",
+  "insns": 27,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,4(r3)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82BC8260",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2193398568,
+  "hex": "82BC9B28",
+  "insns": 70,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,4(r4)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82BC9B28",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2193490176,
+  "hex": "82BE0100",
+  "insns": 13,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r3,-260",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82BE0100",
+  "struct_desc": "[game code] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2193528424,
+  "hex": "82BE9668",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2193528448
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82BE9680"
+  ],
+  "first": "mr r11,r6",
+  "last": "b 0x82be9680",
+  "baseline_name": "TailCall_82BE9668",
+  "struct_desc": "[game code] Small trampoline (6 insns) that sets up a value and tail-calls 0x82BE9680."
+ },
+ {
+  "addr": 2193528448,
+  "hex": "82BE9680",
+  "insns": 559,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 1,
+   "off": 4
+  },
+  "region": "game",
+  "prologue": true,
+  "imports": [],
+  "subs": [
+   "sub_82BE9F3C",
+   "sub_82BEA25C",
+   "sub_82BEA3D0",
+   "sub_82BEA438",
+   "sub_82BEA698",
+   "sub_82BEA6E8",
+   "sub_82BEA860"
+  ],
+  "first": "mflr r12",
+  "last": "b 0x82bea25c",
+  "baseline_name": "VtableSlotX1_82BE9680",
+  "struct_desc": "[game code] Variant virtual dispatch: selects vtable slot 1 (offset 4) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2193975336,
+  "hex": "82C56828",
+  "insns": 25,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lis r11,-31949",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C56828",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194184256,
+  "hex": "82C89840",
+  "insns": 22,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C89638",
+   "sub_82C898B8",
+   "sub_82C89A0C"
+  ],
+  "first": "cmplw cr6,r4,r5",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C89840",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194184376,
+  "hex": "82C898B8",
+  "insns": 24,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C89960"
+  ],
+  "first": "addi r11,r4,1",
+  "last": "stw r11,0(r6)",
+  "baseline_name": "SwitchDispatch_82C898B8",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194184544,
+  "hex": "82C89960",
+  "insns": 21,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r10,r11,1",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C89960",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194196976,
+  "hex": "82C8C9F0",
+  "insns": 64,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C8A698"
+  ],
+  "first": "cmplw cr6,r4,r5",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C8C9F0",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194198272,
+  "hex": "82C8CF00",
+  "insns": 37,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r10,r4,1",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C8CF00",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194199536,
+  "hex": "82C8D3F0",
+  "insns": 72,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lbz r11,0(r4)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C8D3F0",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194200112,
+  "hex": "82C8D630",
+  "insns": 28,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lbz r11,0(r4)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C8D630",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194200400,
+  "hex": "82C8D750",
+  "insns": 46,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "cmplw cr6,r4,r5",
+  "last": "b 0x82c8d7d0",
+  "baseline_name": "SwitchDispatch_82C8D750",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194201320,
+  "hex": "82C8DAE8",
+  "insns": 22,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "clrlwi r11,r3,24",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C8DAE8",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194239776,
+  "hex": "82C97120",
+  "insns": 13,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r3,-9",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C97120",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194250936,
+  "hex": "82C99CB8",
+  "insns": 49,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C99E38"
+  ],
+  "first": "lbz r10,2(r4)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C99CB8",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194251472,
+  "hex": "82C99ED0",
+  "insns": 49,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C9A060"
+  ],
+  "first": "lbz r10,5(r4)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C99ED0",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194252056,
+  "hex": "82C9A118",
+  "insns": 49,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C9A2A8"
+  ],
+  "first": "lbz r10,4(r4)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C9A118",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194256928,
+  "hex": "82C9B420",
+  "insns": 33,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r4,-11",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C9B420",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194264704,
+  "hex": "82C9D280",
+  "insns": 78,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r10,r4,-15",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C9D280",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194266880,
+  "hex": "82C9DB00",
+  "insns": 49,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r10,r4,-15",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C9DB00",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194270328,
+  "hex": "82C9E878",
+  "insns": 29,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r4,-15",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C9E878",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194270648,
+  "hex": "82C9E9B8",
+  "insns": 43,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r10,r4,-15",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82C9E9B8",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194283008,
+  "hex": "82CA1A00",
+  "insns": 42,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r4,-15",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82CA1A00",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2194284184,
+  "hex": "82CA1E98",
+  "insns": 41,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA1C38"
+  ],
+  "first": "addi r10,r4,4",
+  "last": "b 0x82ca1c38",
+  "baseline_name": "SwitchDispatch_82CA1E98",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2195191216,
+  "hex": "82D7F5B0",
+  "insns": 76,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r4,-1",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82D7F5B0",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2195204936,
+  "hex": "82D82B48",
+  "insns": 78,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r10,4(r3)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82D82B48",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2195288216,
+  "hex": "82D97098",
+  "insns": 225,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "li r10,0",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82D97098",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2195319192,
+  "hex": "82D9E998",
+  "insns": 17,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lhz r11,0(r3)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82D9E998",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2195319280,
+  "hex": "82D9E9F0",
+  "insns": 25,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r9,r3",
+  "last": "b 0x82d9e9f8",
+  "baseline_name": "SwitchDispatch_82D9E9F0",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2195349680,
+  "hex": "82DA60B0",
+  "insns": 184,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82DA8888"
+  ],
+  "first": "mr r11,r5",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82DA60B0",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2195571208,
+  "hex": "82DDC208",
+  "insns": 113,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r3,1",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82DDC208",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2195606544,
+  "hex": "82DE4C10",
+  "insns": 118,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lbz r11,8(r3)",
+  "last": "bctr",
+  "baseline_name": "SwitchDispatch_82DE4C10",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2195613520,
+  "hex": "82DE6750",
+  "insns": 57,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r9,r3,16",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82DE6750",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2195780520,
+  "hex": "82E0F3A8",
+  "insns": 44,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "std r4,24(r1)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82E0F3A8",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2195930000,
+  "hex": "82E33B90",
+  "insns": 36,
+  "cat": "switchdisp",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r10,80(r3)",
+  "last": "blr",
+  "baseline_name": "SwitchDispatch_82E33B90",
+  "struct_desc": "[SDK runtime] Switch / jump-table dispatcher: indexes a table by an integer argument and tail-calls the selected case."
+ },
+ {
+  "addr": 2197715024,
+  "hex": "82FE7850",
+  "insns": 66,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 2,
+   "off": 8
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,0(r4)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX2_82FE7850",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 2 (offset 8) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2198105064,
+  "hex": "83046BE8",
+  "insns": 69,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 2,
+   "off": 8
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,0(r3)",
+  "last": "blr",
+  "baseline_name": "VtableSlotX2_83046BE8",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 2 (offset 8) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2198427792,
+  "hex": "83095890",
+  "insns": 68,
+  "cat": "indirect",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "cmpw cr6,r4,r5",
+  "last": "b 0x83095930",
+  "baseline_name": "IndirectCall_83095890",
+  "struct_desc": "[SDK runtime] Indirect-call thunk: computes a target and jumps via mtctr/bctr."
+ },
+ {
+  "addr": 2198928488,
+  "hex": "8310FC68",
+  "insns": 32,
+  "cat": "indirect",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r10,r5,11",
+  "last": "blr",
+  "baseline_name": "IndirectCall_8310FC68",
+  "struct_desc": "[SDK runtime] Indirect-call thunk: computes a target and jumps via mtctr/bctr."
+ },
+ {
+  "addr": 2199597496,
+  "hex": "831B31B8",
+  "insns": 30,
+  "cat": "indirect",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "li r11,0",
+  "last": "blr",
+  "baseline_name": "IndirectCall_831B31B8",
+  "struct_desc": "[SDK runtime] Indirect-call thunk: computes a target and jumps via mtctr/bctr."
+ },
+ {
+  "addr": 2199894624,
+  "hex": "831FBA60",
+  "insns": 26,
+  "cat": "indirect",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "cmplwi cr6,r3,61",
+  "last": "blr",
+  "baseline_name": "IndirectCall_831FBA60",
+  "struct_desc": "[SDK runtime] Indirect-call thunk: computes a target and jumps via mtctr/bctr."
+ },
+ {
+  "addr": 2199894728,
+  "hex": "831FBAC8",
+  "insns": 25,
+  "cat": "indirect",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r3,-2",
+  "last": "blr",
+  "baseline_name": "IndirectCall_831FBAC8",
+  "struct_desc": "[SDK runtime] Indirect-call thunk: computes a target and jumps via mtctr/bctr."
+ },
+ {
+  "addr": 2199894832,
+  "hex": "831FBB30",
+  "insns": 23,
+  "cat": "indirect",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r11,r3,-2",
+  "last": "blr",
+  "baseline_name": "IndirectCall_831FBB30",
+  "struct_desc": "[SDK runtime] Indirect-call thunk: computes a target and jumps via mtctr/bctr."
+ },
+ {
+  "addr": 2199894928,
+  "hex": "831FBB90",
+  "insns": 102,
+  "cat": "indirect",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r11,r3",
+  "last": "blr",
+  "baseline_name": "IndirectCall_831FBB90",
+  "struct_desc": "[SDK runtime] Indirect-call thunk: computes a target and jumps via mtctr/bctr."
+ },
+ {
+  "addr": 2193531484,
+  "hex": "82BEA25C",
+  "insns": 5,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287644
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82BEA3D0"
+  ],
+  "first": "mr r3,r31",
+  "last": "b 0x82ca2c1c",
+  "baseline_name": "TailCall_82BEA25C",
+  "struct_desc": "[game code] Small trampoline (5 insns) that sets up a value and tail-calls 0x82CA2C1C."
+ },
+ {
+  "addr": 2194504008,
+  "hex": "82CD7948",
+  "insns": 4,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,12(r3)",
+  "last": "blr",
+  "baseline_name": "Func_82CD7948",
+  "struct_desc": "[SDK runtime] Body function, 4 insns, no prologue (mid-function target or leaf). First: `lwz r11,12(r3)`; last: `blr`."
+ },
+ {
+  "addr": 2193621240,
+  "hex": "82C000F8",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2193688232
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C106A8"
+  ],
+  "first": "lwz r3,12(r3)",
+  "last": "b 0x82c106a8",
+  "baseline_name": "TailCall_82C000F8",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82C106A8."
+ },
+ {
+  "addr": 2193621256,
+  "hex": "82C00108",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2193667680
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C0B660"
+  ],
+  "first": "lwz r3,12(r3)",
+  "last": "b 0x82c0b660",
+  "baseline_name": "TailCall_82C00108",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82C0B660."
+ },
+ {
+  "addr": 2193621272,
+  "hex": "82C00118",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2193667712
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C0B680"
+  ],
+  "first": "lwz r3,12(r3)",
+  "last": "b 0x82c0b680",
+  "baseline_name": "TailCall_82C00118",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82C0B680."
+ },
+ {
+  "addr": 2193706328,
+  "hex": "82C14D58",
+  "insns": 5,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2193742760
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C1DBA8"
+  ],
+  "first": "lwz r11,76(r3)",
+  "last": "b 0x82c1dba8",
+  "baseline_name": "TailCall_82C14D58",
+  "struct_desc": "[SDK runtime] Small trampoline (5 insns) that sets up a value and tail-calls 0x82C1DBA8."
+ },
+ {
+  "addr": 2196928984,
+  "hex": "82F279D8",
+  "insns": 2,
+  "cat": "retimm",
+  "detail": {
+   "value": 1
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "li r3,1",
+  "last": "blr",
+  "baseline_name": "RetConst1_82F279D8",
+  "struct_desc": "[SDK runtime] Returns the immediate constant 1 in r3."
+ },
+ {
+  "addr": 2196235512,
+  "hex": "82E7E4F8",
+  "insns": 4,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2196235144
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82E7E388"
+  ],
+  "first": "lis r11,-32252",
+  "last": "b 0x82e7e388",
+  "baseline_name": "TailCall_82E7E4F8",
+  "struct_desc": "[SDK runtime] Small trampoline (4 insns) that sets up a value and tail-calls 0x82E7E388."
+ },
+ {
+  "addr": 2193667712,
+  "hex": "82C0B680",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2193921648
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C49670"
+  ],
+  "first": "addi r3,r3,96",
+  "last": "b 0x82c49670",
+  "baseline_name": "TailCall_82C0B680",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82C49670."
+ },
+ {
+  "addr": 2193621280,
+  "hex": "82C00120",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2193667720
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C0B688"
+  ],
+  "first": "lwz r3,12(r3)",
+  "last": "b 0x82c0b688",
+  "baseline_name": "TailCall_82C00120",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82C0B688."
+ },
+ {
+  "addr": 2193621264,
+  "hex": "82C00110",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2193667704
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C0B678"
+  ],
+  "first": "lwz r3,12(r3)",
+  "last": "b 0x82c0b678",
+  "baseline_name": "TailCall_82C00110",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82C0B678."
+ },
+ {
+  "addr": 2193621288,
+  "hex": "82C00128",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2193667728
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C0B690"
+  ],
+  "first": "lwz r3,12(r3)",
+  "last": "b 0x82c0b690",
+  "baseline_name": "TailCall_82C00128",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82C0B690."
+ },
+ {
+  "addr": 2193667720,
+  "hex": "82C0B688",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2193931736
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C4BDD8"
+  ],
+  "first": "addi r3,r3,96",
+  "last": "b 0x82c4bdd8",
+  "baseline_name": "TailCall_82C0B688",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82C4BDD8."
+ },
+ {
+  "addr": 2183366696,
+  "hex": "82238828",
+  "insns": 495,
+  "cat": "body",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [
+   "__imp__NtAllocateVirtualMemory",
+   "__imp__RtlEnterCriticalSection",
+   "__imp__RtlLeaveCriticalSection",
+   "__imp__RtlRaiseException"
+  ],
+  "subs": [
+   "sub_82238FCC",
+   "sub_8223900C",
+   "sub_82CA3190",
+   "sub_82CBE800",
+   "sub_82CBF130"
+  ],
+  "first": "clrlwi. r11,r23,31",
+  "last": "b 0x82ca2c20",
+  "baseline_name": "MemAlloc_82238828",
+  "struct_desc": "[game code] Body function, 495 insns, no prologue (mid-function target or leaf). Calls imports: __imp__NtAllocateVirtualMemory, __imp__RtlEnterCriticalSection, __imp__RtlLeaveCriticalSection, __imp__RtlRaiseException. Calls: sub_82238FCC, sub_8223900C, sub_82CA3190, sub_82CBE800, sub_82CBF130. First: `clrlwi. r11,r23,31`; last: `b 0x82ca2c20`."
+ },
+ {
+  "addr": 2183368652,
+  "hex": "82238FCC",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287648
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_8223900C"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c20",
+  "baseline_name": "TailCall_82238FCC",
+  "struct_desc": "[game code] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C20."
+ },
+ {
+  "addr": 2183369968,
+  "hex": "822394F0",
+  "insns": 124,
+  "cat": "body",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [
+   "__imp__NtFreeVirtualMemory",
+   "__imp__RtlEnterCriticalSection",
+   "__imp__RtlLeaveCriticalSection"
+  ],
+  "subs": [
+   "sub_82239058",
+   "sub_822396C8",
+   "sub_82239708",
+   "sub_82CBE800",
+   "sub_82CBF370"
+  ],
+  "first": "clrlwi. r11,r11,31",
+  "last": "b 0x82ca2c2c",
+  "baseline_name": "MemFree_822394F0",
+  "struct_desc": "[game code] Body function, 124 insns, no prologue (mid-function target or leaf). Calls imports: __imp__NtFreeVirtualMemory, __imp__RtlEnterCriticalSection, __imp__RtlLeaveCriticalSection. Calls: sub_82239058, sub_822396C8, sub_82239708, sub_82CBE800, sub_82CBF370. First: `clrlwi. r11,r11,31`; last: `b 0x82ca2c2c`."
+ },
+ {
+  "addr": 2183370440,
+  "hex": "822396C8",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287660
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82239708"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c2c",
+  "baseline_name": "TailCall_822396C8",
+  "struct_desc": "[game code] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C2C."
+ },
+ {
+  "addr": 2191510272,
+  "hex": "829FCB00",
+  "insns": 6,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 3,
+   "off": 12
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r3,4(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX3_829FCB00",
+  "struct_desc": "[game code] Variant virtual dispatch: selects vtable slot 3 (offset 12) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2192803792,
+  "hex": "82B387D0",
+  "insns": 14,
+  "cat": "body",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CC0D58"
+  ],
+  "first": "addi r6,r31,80",
+  "last": "blr",
+  "baseline_name": "Func_82B387D0",
+  "struct_desc": "[game code] Body function, 14 insns, no prologue (mid-function target or leaf). Calls: sub_82CC0D58. First: `addi r6,r31,80`; last: `blr`."
+ },
+ {
+  "addr": 2192803816,
+  "hex": "82B387E8",
+  "insns": 8,
+  "cat": "body",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_82B387E8",
+  "struct_desc": "[game code] Body function, 8 insns, no prologue (mid-function target or leaf). First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2193987224,
+  "hex": "82C59698",
+  "insns": 7,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C597F0"
+  ],
+  "first": "bl 0x82c597f0",
+  "last": "blr",
+  "baseline_name": "Func_82C59698",
+  "struct_desc": "[SDK runtime] Body function, 7 insns, no prologue (mid-function target or leaf). Calls: sub_82C597F0. First: `bl 0x82c597f0`; last: `blr`."
+ },
+ {
+  "addr": 2193992780,
+  "hex": "82C5AC4C",
+  "insns": 10,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA8210"
+  ],
+  "first": "bl 0x82ca8210",
+  "last": "b 0x82ca2c34",
+  "baseline_name": "Func_82C5AC4C",
+  "struct_desc": "[SDK runtime] Body function, 10 insns, no prologue (mid-function target or leaf). Calls: sub_82CA8210. First: `bl 0x82ca8210`; last: `b 0x82ca2c34`."
+ },
+ {
+  "addr": 2194001852,
+  "hex": "82C5CFBC",
+  "insns": 1,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287668
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "b 0x82ca2c34",
+  "last": "b 0x82ca2c34",
+  "baseline_name": "TailCall_82C5CFBC",
+  "struct_desc": "[SDK runtime] Small trampoline (1 insns) that sets up a value and tail-calls 0x82CA2C34."
+ },
+ {
+  "addr": 2194004584,
+  "hex": "82C5DA68",
+  "insns": 18,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C60BD8",
+   "sub_82C60E18",
+   "sub_82C61080"
+  ],
+  "first": "bl 0x82c60e18",
+  "last": "blr",
+  "baseline_name": "Func_82C5DA68",
+  "struct_desc": "[SDK runtime] Body function, 18 insns, no prologue (mid-function target or leaf). Calls: sub_82C60BD8, sub_82C60E18, sub_82C61080. First: `bl 0x82c60e18`; last: `blr`."
+ },
+ {
+  "addr": 2194004628,
+  "hex": "82C5DA94",
+  "insns": 7,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C60BD8"
+  ],
+  "first": "bl 0x82c60bd8",
+  "last": "blr",
+  "baseline_name": "Func_82C5DA94",
+  "struct_desc": "[SDK runtime] Body function, 7 insns, no prologue (mid-function target or leaf). Calls: sub_82C60BD8. First: `bl 0x82c60bd8`; last: `blr`."
+ },
+ {
+  "addr": 2194184716,
+  "hex": "82C89A0C",
+  "insns": 3,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "stw r4,0(r6)",
+  "last": "blr",
+  "baseline_name": "Func_82C89A0C",
+  "struct_desc": "[SDK runtime] Body function, 3 insns, no prologue (mid-function target or leaf). First: `stw r4,0(r6)`; last: `blr`."
+ },
+ {
+  "addr": 2194289580,
+  "hex": "82CA33AC",
+  "insns": 20,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA97A8",
+   "sub_82CAC520",
+   "sub_82CBBF60",
+   "sub_82CC0728"
+  ],
+  "first": "lwz r3,88(r11)",
+  "last": "blr",
+  "baseline_name": "Func_82CA33AC",
+  "struct_desc": "[SDK runtime] Body function, 20 insns, no prologue (mid-function target or leaf). Calls: sub_82CA97A8, sub_82CAC520, sub_82CBBF60, sub_82CC0728. First: `lwz r3,88(r11)`; last: `blr`."
+ },
+ {
+  "addr": 2194289636,
+  "hex": "82CA33E4",
+  "insns": 6,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA97A8"
+  ],
+  "first": "bl 0x82ca97a8",
+  "last": "blr",
+  "baseline_name": "Func_82CA33E4",
+  "struct_desc": "[SDK runtime] Body function, 6 insns, no prologue (mid-function target or leaf). Calls: sub_82CA97A8. First: `bl 0x82ca97a8`; last: `blr`."
+ },
+ {
+  "addr": 2194290196,
+  "hex": "82CA3614",
+  "insns": 50,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA36C4",
+   "sub_82CA36DC",
+   "sub_82CA8570",
+   "sub_82CAACD0"
+  ],
+  "first": "lis r24,-31921",
+  "last": "b 0x82ca2c24",
+  "baseline_name": "Func_82CA3614",
+  "struct_desc": "[SDK runtime] Body function, 50 insns, no prologue (mid-function target or leaf). Calls: sub_82CA36C4, sub_82CA36DC, sub_82CA8570, sub_82CAACD0. First: `lis r24,-31921`; last: `b 0x82ca2c24`."
+ },
+ {
+  "addr": 2194290372,
+  "hex": "82CA36C4",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287652
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA36DC"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c24",
+  "baseline_name": "TailCall_82CA36C4",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C24."
+ },
+ {
+  "addr": 2194294724,
+  "hex": "82CA47C4",
+  "insns": 28,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA4854",
+   "sub_82CAB770",
+   "sub_82CAF038",
+   "sub_82CAF450"
+  ],
+  "first": "lbz r11,0(r30)",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "Func_82CA47C4",
+  "struct_desc": "[SDK runtime] Body function, 28 insns, no prologue (mid-function target or leaf). Calls: sub_82CA4854, sub_82CAB770, sub_82CAF038, sub_82CAF450. First: `lbz r11,0(r30)`; last: `b 0x82ca2c30`."
+ },
+ {
+  "addr": 2194294804,
+  "hex": "82CA4814",
+  "insns": 7,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA4854"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "Func_82CA4814",
+  "struct_desc": "[SDK runtime] Body function, 7 insns, no prologue (mid-function target or leaf). Calls: sub_82CA4854. First: `mr r8,r8`; last: `b 0x82ca2c30`."
+ },
+ {
+  "addr": 2194295396,
+  "hex": "82CA4A64",
+  "insns": 13,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA4920",
+   "sub_82CA4AB8"
+  ],
+  "first": "mr r3,r30",
+  "last": "blr",
+  "baseline_name": "Func_82CA4A64",
+  "struct_desc": "[SDK runtime] Body function, 13 insns, no prologue (mid-function target or leaf). Calls: sub_82CA4920, sub_82CA4AB8. First: `mr r3,r30`; last: `blr`."
+ },
+ {
+  "addr": 2194295408,
+  "hex": "82CA4A70",
+  "insns": 10,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA4AB8"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_82CA4A70",
+  "struct_desc": "[SDK runtime] Body function, 10 insns, no prologue (mid-function target or leaf). Calls: sub_82CA4AB8. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2194296292,
+  "hex": "82CA4DE4",
+  "insns": 11,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA4AF0",
+   "sub_82CA4E30"
+  ],
+  "first": "mr r6,r30",
+  "last": "b 0x82ca4dd0",
+  "baseline_name": "Func_82CA4DE4",
+  "struct_desc": "[SDK runtime] Body function, 11 insns, no prologue (mid-function target or leaf). Calls: sub_82CA4AF0, sub_82CA4E30. First: `mr r6,r30`; last: `b 0x82ca4dd0`."
+ },
+ {
+  "addr": 2194296316,
+  "hex": "82CA4DFC",
+  "insns": 5,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194296272
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA4E30"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca4dd0",
+  "baseline_name": "TailCall_82CA4DFC",
+  "struct_desc": "[SDK runtime] Small trampoline (5 insns) that sets up a value and tail-calls 0x82CA4DD0."
+ },
+ {
+  "addr": 2194296752,
+  "hex": "82CA4FB0",
+  "insns": 51,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA4F00",
+   "sub_82CA5064",
+   "sub_82CA507C",
+   "sub_82CA50F4",
+   "sub_82CA88E0"
+  ],
+  "first": "lis r11,-31921",
+  "last": "b 0x82ca4fc0",
+  "baseline_name": "Func_82CA4FB0",
+  "struct_desc": "[SDK runtime] Body function, 51 insns, no prologue (mid-function target or leaf). Calls: sub_82CA4F00, sub_82CA5064, sub_82CA507C, sub_82CA50F4, sub_82CA88E0. First: `lis r11,-31921`; last: `b 0x82ca4fc0`."
+ },
+ {
+  "addr": 2194296836,
+  "hex": "82CA5004",
+  "insns": 30,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA4F00",
+   "sub_82CA5064",
+   "sub_82CA50F4"
+  ],
+  "first": "lwz r11,0(r29)",
+  "last": "b 0x82ca4fc0",
+  "baseline_name": "Func_82CA5004",
+  "struct_desc": "[SDK runtime] Body function, 30 insns, no prologue (mid-function target or leaf). Calls: sub_82CA4F00, sub_82CA5064, sub_82CA50F4. First: `lwz r11,0(r29)`; last: `b 0x82ca4fc0`."
+ },
+ {
+  "addr": 2194296932,
+  "hex": "82CA5064",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194296768
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA50F4"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca4fc0",
+  "baseline_name": "TailCall_82CA5064",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA4FC0."
+ },
+ {
+  "addr": 2194296956,
+  "hex": "82CA507C",
+  "insns": 10,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA50A4"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c34",
+  "baseline_name": "Func_82CA507C",
+  "struct_desc": "[SDK runtime] Body function, 10 insns, no prologue (mid-function target or leaf). Calls: sub_82CA50A4. First: `mr r8,r8`; last: `b 0x82ca2c34`."
+ },
+ {
+  "addr": 2194297280,
+  "hex": "82CA51C0",
+  "insns": 14,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA4F00",
+   "sub_82CA521C"
+  ],
+  "first": "mr r3,r30",
+  "last": "blr",
+  "baseline_name": "Func_82CA51C0",
+  "struct_desc": "[SDK runtime] Body function, 14 insns, no prologue (mid-function target or leaf). Calls: sub_82CA4F00, sub_82CA521C. First: `mr r3,r30`; last: `blr`."
+ },
+ {
+  "addr": 2194297292,
+  "hex": "82CA51CC",
+  "insns": 11,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA521C"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_82CA51CC",
+  "struct_desc": "[SDK runtime] Body function, 11 insns, no prologue (mid-function target or leaf). Calls: sub_82CA521C. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2194297788,
+  "hex": "82CA53BC",
+  "insns": 11,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA5260",
+   "sub_82CA5408"
+  ],
+  "first": "mr r5,r29",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "Func_82CA53BC",
+  "struct_desc": "[SDK runtime] Body function, 11 insns, no prologue (mid-function target or leaf). Calls: sub_82CA5260, sub_82CA5408. First: `mr r5,r29`; last: `b 0x82ca2c38`."
+ },
+ {
+  "addr": 2194297808,
+  "hex": "82CA53D0",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287672
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA5408"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "TailCall_82CA53D0",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C38."
+ },
+ {
+  "addr": 2194298588,
+  "hex": "82CA56DC",
+  "insns": 13,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA5440",
+   "sub_82CA5730"
+  ],
+  "first": "mr r3,r30",
+  "last": "blr",
+  "baseline_name": "Func_82CA56DC",
+  "struct_desc": "[SDK runtime] Body function, 13 insns, no prologue (mid-function target or leaf). Calls: sub_82CA5440, sub_82CA5730. First: `mr r3,r30`; last: `blr`."
+ },
+ {
+  "addr": 2194298600,
+  "hex": "82CA56E8",
+  "insns": 10,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA5730"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_82CA56E8",
+  "struct_desc": "[SDK runtime] Body function, 10 insns, no prologue (mid-function target or leaf). Calls: sub_82CA5730. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2194305480,
+  "hex": "82CA71C8",
+  "insns": 84,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_8223F990",
+   "sub_82CA7300",
+   "sub_82CA7318",
+   "sub_82CAB4E0",
+   "sub_82CAB5B8",
+   "sub_82CAB630",
+   "sub_82CAB770",
+   "sub_82CAF6C8"
+  ],
+  "first": "lwz r11,12(r30)",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "Func_82CA71C8",
+  "struct_desc": "[SDK runtime] Body function, 84 insns, no prologue (mid-function target or leaf). Calls: sub_8223F990, sub_82CA7300, sub_82CA7318, sub_82CAB4E0, sub_82CAB5B8. First: `lwz r11,12(r30)`; last: `b 0x82ca2c30`."
+ },
+ {
+  "addr": 2194305792,
+  "hex": "82CA7300",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287664
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA7318"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "TailCall_82CA7300",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C30."
+ },
+ {
+  "addr": 2194308208,
+  "hex": "82CA7C70",
+  "insns": 14,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAC610"
+  ],
+  "first": "bl 0x82cac610",
+  "last": "b 0x82ca2c3c",
+  "baseline_name": "Func_82CA7C70",
+  "struct_desc": "[SDK runtime] Body function, 14 insns, no prologue (mid-function target or leaf). Calls: sub_82CAC610. First: `bl 0x82cac610`; last: `b 0x82ca2c3c`."
+ },
+ {
+  "addr": 2194308240,
+  "hex": "82CA7C90",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287676
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c3c",
+  "baseline_name": "TailCall_82CA7C90",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C3C."
+ },
+ {
+  "addr": 2194308252,
+  "hex": "82CA7C9C",
+  "insns": 3,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287676
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r3,80(r31)",
+  "last": "b 0x82ca2c3c",
+  "baseline_name": "TailCall_82CA7C9C",
+  "struct_desc": "[SDK runtime] Small trampoline (3 insns) that sets up a value and tail-calls 0x82CA2C3C."
+ },
+ {
+  "addr": 2194309176,
+  "hex": "82CA8038",
+  "insns": 10,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA8060"
+  ],
+  "first": "addic. r27,r27,-1",
+  "last": "b 0x82ca8038",
+  "baseline_name": "Func_82CA8038",
+  "struct_desc": "[SDK runtime] Body function, 10 insns, no prologue (mid-function target or leaf). Calls: sub_82CA8060. First: `addic. r27,r27,-1`; last: `b 0x82ca8038`."
+ },
+ {
+  "addr": 2194309216,
+  "hex": "82CA8060",
+  "insns": 5,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287668
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c34",
+  "baseline_name": "TailCall_82CA8060",
+  "struct_desc": "[SDK runtime] Small trampoline (5 insns) that sets up a value and tail-calls 0x82CA2C34."
+ },
+ {
+  "addr": 2194309228,
+  "hex": "82CA806C",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287668
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r1,r31,144",
+  "last": "b 0x82ca2c34",
+  "baseline_name": "TailCall_82CA806C",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82CA2C34."
+ },
+ {
+  "addr": 2194309416,
+  "hex": "82CA8128",
+  "insns": 16,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA81A0"
+  ],
+  "first": "addic. r28,r28,-1",
+  "last": "b 0x82ca2c34",
+  "baseline_name": "Func_82CA8128",
+  "struct_desc": "[SDK runtime] Body function, 16 insns, no prologue (mid-function target or leaf). Calls: sub_82CA81A0. First: `addic. r28,r28,-1`; last: `b 0x82ca2c34`."
+ },
+ {
+  "addr": 2194309460,
+  "hex": "82CA8154",
+  "insns": 5,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287668
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA81A0"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c34",
+  "baseline_name": "TailCall_82CA8154",
+  "struct_desc": "[SDK runtime] Small trampoline (5 insns) that sets up a value and tail-calls 0x82CA2C34."
+ },
+ {
+  "addr": 2194309704,
+  "hex": "82CA8248",
+  "insns": 18,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA82C0"
+  ],
+  "first": "stw r28,80(r31)",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "Func_82CA8248",
+  "struct_desc": "[SDK runtime] Body function, 18 insns, no prologue (mid-function target or leaf). Calls: sub_82CA82C0. First: `stw r28,80(r31)`; last: `b 0x82ca2c30`."
+ },
+ {
+  "addr": 2194309756,
+  "hex": "82CA827C",
+  "insns": 5,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287664
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA82C0"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "TailCall_82CA827C",
+  "struct_desc": "[SDK runtime] Small trampoline (5 insns) that sets up a value and tail-calls 0x82CA2C30."
+ },
+ {
+  "addr": 2194311956,
+  "hex": "82CA8B14",
+  "insns": 23,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA4AF0",
+   "sub_82CA8B90",
+   "sub_82CAB4E0",
+   "sub_82CAB5B8"
+  ],
+  "first": "mr r3,r30",
+  "last": "b 0x82ca2c34",
+  "baseline_name": "Func_82CA8B14",
+  "struct_desc": "[SDK runtime] Body function, 23 insns, no prologue (mid-function target or leaf). Calls: sub_82CA4AF0, sub_82CA8B90, sub_82CAB4E0, sub_82CAB5B8. First: `mr r3,r30`; last: `b 0x82ca2c34`."
+ },
+ {
+  "addr": 2194312004,
+  "hex": "82CA8B44",
+  "insns": 11,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA8B90"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c34",
+  "baseline_name": "Func_82CA8B44",
+  "struct_desc": "[SDK runtime] Body function, 11 insns, no prologue (mid-function target or leaf). Calls: sub_82CA8B90. First: `mr r8,r8`; last: `b 0x82ca2c34`."
+ },
+ {
+  "addr": 2194313316,
+  "hex": "82CA9064",
+  "insns": 103,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA91E8",
+   "sub_82CA9220",
+   "sub_82CAB630",
+   "sub_82CAB770",
+   "sub_82CAF6C8",
+   "sub_82CB5958"
+  ],
+  "first": "lwz r11,12(r30)",
+  "last": "b 0x82ca2c24",
+  "baseline_name": "Func_82CA9064",
+  "struct_desc": "[SDK runtime] Body function, 103 insns, no prologue (mid-function target or leaf). Calls: sub_82CA91E8, sub_82CA9220, sub_82CAB630, sub_82CAB770, sub_82CAF6C8. First: `lwz r11,12(r30)`; last: `b 0x82ca2c24`."
+ },
+ {
+  "addr": 2194313704,
+  "hex": "82CA91E8",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287652
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA9220"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c24",
+  "baseline_name": "TailCall_82CA91E8",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C24."
+ },
+ {
+  "addr": 2194314848,
+  "hex": "82CA9660",
+  "insns": 54,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__KeBugCheck"
+  ],
+  "subs": [
+   "sub_82CA95D8",
+   "sub_82CA9710",
+   "sub_82CA9758"
+  ],
+  "first": "lis r11,-31949",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "BugCheck_82CA9660",
+  "struct_desc": "[SDK runtime] Body function, 54 insns, no prologue (mid-function target or leaf). Calls imports: __imp__KeBugCheck. Calls: sub_82CA95D8, sub_82CA9710, sub_82CA9758. First: `lis r11,-31949`; last: `b 0x82ca2c38`."
+ },
+ {
+  "addr": 2194315024,
+  "hex": "82CA9710",
+  "insns": 10,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__KeBugCheck"
+  ],
+  "subs": [
+   "sub_82CA9758"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "BugCheck_82CA9710",
+  "struct_desc": "[SDK runtime] Body function, 10 insns, no prologue (mid-function target or leaf). Calls imports: __imp__KeBugCheck. Calls: sub_82CA9758. First: `mr r8,r8`; last: `b 0x82ca2c38`."
+ },
+ {
+  "addr": 2194322104,
+  "hex": "82CAB2B8",
+  "insns": 12,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAAF88",
+   "sub_82CAB308"
+  ],
+  "first": "mr r7,r30",
+  "last": "b 0x82cab2a4",
+  "baseline_name": "Func_82CAB2B8",
+  "struct_desc": "[SDK runtime] Body function, 12 insns, no prologue (mid-function target or leaf). Calls: sub_82CAAF88, sub_82CAB308. First: `mr r7,r30`; last: `b 0x82cab2a4`."
+ },
+ {
+  "addr": 2194322132,
+  "hex": "82CAB2D4",
+  "insns": 5,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194322084
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAB308"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82cab2a4",
+  "baseline_name": "TailCall_82CAB2D4",
+  "struct_desc": "[SDK runtime] Small trampoline (5 insns) that sets up a value and tail-calls 0x82CAB2A4."
+ },
+ {
+  "addr": 2194338496,
+  "hex": "82CAF2C0",
+  "insns": 89,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__RtlEnterCriticalSection"
+  ],
+  "subs": [
+   "sub_82CA3C68",
+   "sub_82CA5DC0",
+   "sub_82CA88E0",
+   "sub_82CA8970",
+   "sub_82CAF40C",
+   "sub_82CAF424",
+   "sub_82CAFE08",
+   "sub_82CB5B78"
+  ],
+  "first": "mr r30,r25",
+  "last": "b 0x82ca2c2c",
+  "baseline_name": "Sync_82CAF2C0",
+  "struct_desc": "[SDK runtime] Body function, 89 insns, no prologue (mid-function target or leaf). Calls imports: __imp__RtlEnterCriticalSection. Calls: sub_82CA3C68, sub_82CA5DC0, sub_82CA88E0, sub_82CA8970, sub_82CAF40C. First: `mr r30,r25`; last: `b 0x82ca2c2c`."
+ },
+ {
+  "addr": 2194338828,
+  "hex": "82CAF40C",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287660
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAF424"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c2c",
+  "baseline_name": "TailCall_82CAF40C",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C2C."
+ },
+ {
+  "addr": 2194339360,
+  "hex": "82CAF620",
+  "insns": 20,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAB770",
+   "sub_82CAF478",
+   "sub_82CAF658",
+   "sub_82CAF690"
+  ],
+  "first": "lwzx r11,r27,r28",
+  "last": "b 0x82ca2c34",
+  "baseline_name": "Func_82CAF620",
+  "struct_desc": "[SDK runtime] Body function, 20 insns, no prologue (mid-function target or leaf). Calls: sub_82CAB770, sub_82CAF478, sub_82CAF658, sub_82CAF690. First: `lwzx r11,r27,r28`; last: `b 0x82ca2c34`."
+ },
+ {
+  "addr": 2194339416,
+  "hex": "82CAF658",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287668
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAF690"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c34",
+  "baseline_name": "TailCall_82CAF658",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C34."
+ },
+ {
+  "addr": 2194340528,
+  "hex": "82CAFAB0",
+  "insns": 25,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAB770",
+   "sub_82CAB7A8",
+   "sub_82CAF788",
+   "sub_82CAFAFC",
+   "sub_82CAFB34"
+  ],
+  "first": "lwzx r11,r27,r28",
+  "last": "b 0x82ca2c2c",
+  "baseline_name": "Func_82CAFAB0",
+  "struct_desc": "[SDK runtime] Body function, 25 insns, no prologue (mid-function target or leaf). Calls: sub_82CAB770, sub_82CAB7A8, sub_82CAF788, sub_82CAFAFC, sub_82CAFB34. First: `lwzx r11,r27,r28`; last: `b 0x82ca2c2c`."
+ },
+ {
+  "addr": 2194340604,
+  "hex": "82CAFAFC",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287660
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAFB34"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c2c",
+  "baseline_name": "TailCall_82CAFAFC",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C2C."
+ },
+ {
+  "addr": 2194340904,
+  "hex": "82CAFC28",
+  "insns": 30,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAB770",
+   "sub_82CAB7A8",
+   "sub_82CAFC88",
+   "sub_82CAFCC0",
+   "sub_82CB8C28",
+   "sub_82CC0758",
+   "sub_82CC1130"
+  ],
+  "first": "lwzx r11,r28,r29",
+  "last": "b 0x82ca2c34",
+  "baseline_name": "Func_82CAFC28",
+  "struct_desc": "[SDK runtime] Body function, 30 insns, no prologue (mid-function target or leaf). Calls: sub_82CAB770, sub_82CAB7A8, sub_82CAFC88, sub_82CAFCC0, sub_82CB8C28. First: `lwzx r11,r28,r29`; last: `b 0x82ca2c34`."
+ },
+ {
+  "addr": 2194341000,
+  "hex": "82CAFC88",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287668
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAFCC0"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c34",
+  "baseline_name": "TailCall_82CAFC88",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C34."
+ },
+ {
+  "addr": 2194341528,
+  "hex": "82CAFE98",
+  "insns": 25,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA5DC0",
+   "sub_82CAB770",
+   "sub_82CAFEE4",
+   "sub_82CAFF18",
+   "sub_82CB5B78"
+  ],
+  "first": "lwzx r11,r29,r30",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "Func_82CAFE98",
+  "struct_desc": "[SDK runtime] Body function, 25 insns, no prologue (mid-function target or leaf). Calls: sub_82CA5DC0, sub_82CAB770, sub_82CAFEE4, sub_82CAFF18, sub_82CB5B78. First: `lwzx r11,r29,r30`; last: `b 0x82ca2c38`."
+ },
+ {
+  "addr": 2194341604,
+  "hex": "82CAFEE4",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287672
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAFF18"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "TailCall_82CAFEE4",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C38."
+ },
+ {
+  "addr": 2194342200,
+  "hex": "82CB0138",
+  "insns": 25,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAB770",
+   "sub_82CAB7A8",
+   "sub_82CAFFA8",
+   "sub_82CB0184",
+   "sub_82CB01BC"
+  ],
+  "first": "lwzx r11,r27,r28",
+  "last": "b 0x82ca2c2c",
+  "baseline_name": "Func_82CB0138",
+  "struct_desc": "[SDK runtime] Body function, 25 insns, no prologue (mid-function target or leaf). Calls: sub_82CAB770, sub_82CAB7A8, sub_82CAFFA8, sub_82CB0184, sub_82CB01BC. First: `lwzx r11,r27,r28`; last: `b 0x82ca2c2c`."
+ },
+ {
+  "addr": 2194342276,
+  "hex": "82CB0184",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287660
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB01BC"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c2c",
+  "baseline_name": "TailCall_82CB0184",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C2C."
+ },
+ {
+  "addr": 2194345904,
+  "hex": "82CB0FB0",
+  "insns": 68,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB1040",
+   "sub_82CB10E0"
+  ],
+  "first": "cmpwi cr6,r29,8",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "Func_82CB0FB0",
+  "struct_desc": "[SDK runtime] Body function, 68 insns, no prologue (mid-function target or leaf). Calls: sub_82CB1040, sub_82CB10E0. First: `cmpwi cr6,r29,8`; last: `b 0x82ca2c30`."
+ },
+ {
+  "addr": 2194346048,
+  "hex": "82CB1040",
+  "insns": 32,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB10E0"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "Func_82CB1040",
+  "struct_desc": "[SDK runtime] Body function, 32 insns, no prologue (mid-function target or leaf). Calls: sub_82CB10E0. First: `mr r8,r8`; last: `b 0x82ca2c30`."
+ },
+ {
+  "addr": 2194346896,
+  "hex": "82CB1390",
+  "insns": 32,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA5DC0",
+   "sub_82CB13EC",
+   "sub_82CB1410"
+  ],
+  "first": "lwz r10,4(r30)",
+  "last": "blr",
+  "baseline_name": "Func_82CB1390",
+  "struct_desc": "[SDK runtime] Body function, 32 insns, no prologue (mid-function target or leaf). Calls: sub_82CA5DC0, sub_82CB13EC, sub_82CB1410. First: `lwz r10,4(r30)`; last: `blr`."
+ },
+ {
+  "addr": 2194346988,
+  "hex": "82CB13EC",
+  "insns": 9,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB1410"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_82CB13EC",
+  "struct_desc": "[SDK runtime] Body function, 9 insns, no prologue (mid-function target or leaf). Calls: sub_82CB1410. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2194360632,
+  "hex": "82CB4938",
+  "insns": 36,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB4748",
+   "sub_82CB49B0",
+   "sub_82CB49DC",
+   "sub_82CB5800",
+   "sub_82CBA3E0"
+  ],
+  "first": "cmpw cr6,r28,r27",
+  "last": "b 0x82cb4934",
+  "baseline_name": "Func_82CB4938",
+  "struct_desc": "[SDK runtime] Body function, 36 insns, no prologue (mid-function target or leaf). Calls: sub_82CB4748, sub_82CB49B0, sub_82CB49DC, sub_82CB5800, sub_82CBA3E0. First: `cmpw cr6,r28,r27`; last: `b 0x82cb4934`."
+ },
+ {
+  "addr": 2194360692,
+  "hex": "82CB4974",
+  "insns": 21,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB4748",
+   "sub_82CB49B0",
+   "sub_82CBA3E0"
+  ],
+  "first": "lwz r11,4(r11)",
+  "last": "b 0x82cb4934",
+  "baseline_name": "Func_82CB4974",
+  "struct_desc": "[SDK runtime] Body function, 21 insns, no prologue (mid-function target or leaf). Calls: sub_82CB4748, sub_82CB49B0, sub_82CBA3E0. First: `lwz r11,4(r11)`; last: `b 0x82cb4934`."
+ },
+ {
+  "addr": 2194360752,
+  "hex": "82CB49B0",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194360628
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r8,r8",
+  "last": "b 0x82cb4934",
+  "baseline_name": "TailCall_82CB49B0",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CB4934."
+ },
+ {
+  "addr": 2194360768,
+  "hex": "82CB49C0",
+  "insns": 7,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r27,204(r31)",
+  "last": "b 0x82cb4934",
+  "baseline_name": "Func_82CB49C0",
+  "struct_desc": "[SDK runtime] Body function, 7 insns, no prologue (mid-function target or leaf). First: `lwz r27,204(r31)`; last: `b 0x82cb4934`."
+ },
+ {
+  "addr": 2194360796,
+  "hex": "82CB49DC",
+  "insns": 15,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB4748",
+   "sub_82CB4A18",
+   "sub_82CB5800"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c2c",
+  "baseline_name": "Func_82CB49DC",
+  "struct_desc": "[SDK runtime] Body function, 15 insns, no prologue (mid-function target or leaf). Calls: sub_82CB4748, sub_82CB4A18, sub_82CB5800. First: `mr r8,r8`; last: `b 0x82ca2c2c`."
+ },
+ {
+  "addr": 2194361116,
+  "hex": "82CB4B1C",
+  "insns": 12,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r3,24(r3)",
+  "last": "blr",
+  "baseline_name": "Func_82CB4B1C",
+  "struct_desc": "[SDK runtime] Body function, 12 insns, no prologue (mid-function target or leaf). First: `lwz r3,24(r3)`; last: `blr`."
+ },
+ {
+  "addr": 2194361128,
+  "hex": "82CB4B28",
+  "insns": 9,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_82CB4B28",
+  "struct_desc": "[SDK runtime] Body function, 9 insns, no prologue (mid-function target or leaf). First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2194361144,
+  "hex": "82CB4B38",
+  "insns": 6,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB57A0"
+  ],
+  "first": "bl 0x82cb57a0",
+  "last": "blr",
+  "baseline_name": "Func_82CB4B38",
+  "struct_desc": "[SDK runtime] Body function, 6 insns, no prologue (mid-function target or leaf). Calls: sub_82CB57A0. First: `bl 0x82cb57a0`; last: `blr`."
+ },
+ {
+  "addr": 2194361528,
+  "hex": "82CB4CB8",
+  "insns": 129,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAA2E0",
+   "sub_82CB4E9C",
+   "sub_82CB5800",
+   "sub_82CBA500"
+  ],
+  "first": "rlwinm. r11,r10,0,28,28",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "Func_82CB4CB8",
+  "struct_desc": "[SDK runtime] Body function, 129 insns, no prologue (mid-function target or leaf). Calls: sub_82CAA2E0, sub_82CB4E9C, sub_82CB5800, sub_82CBA500. First: `rlwinm. r11,r10,0,28,28`; last: `b 0x82ca2c38`."
+ },
+ {
+  "addr": 2194362012,
+  "hex": "82CB4E9C",
+  "insns": 8,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "Func_82CB4E9C",
+  "struct_desc": "[SDK runtime] Body function, 8 insns, no prologue (mid-function target or leaf). First: `mr r8,r8`; last: `b 0x82ca2c38`."
+ },
+ {
+  "addr": 2194362028,
+  "hex": "82CB4EAC",
+  "insns": 5,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287672
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB57A0"
+  ],
+  "first": "bl 0x82cb57a0",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "TailCall_82CB4EAC",
+  "struct_desc": "[SDK runtime] Small trampoline (5 insns) that sets up a value and tail-calls 0x82CA2C38."
+ },
+ {
+  "addr": 2194362136,
+  "hex": "82CB4F18",
+  "insns": 55,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB4C48",
+   "sub_82CB4FDC"
+  ],
+  "first": "mr r6,r29",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "Func_82CB4F18",
+  "struct_desc": "[SDK runtime] Body function, 55 insns, no prologue (mid-function target or leaf). Calls: sub_82CB4C48, sub_82CB4FDC. First: `mr r6,r29`; last: `b 0x82ca2c38`."
+ },
+ {
+  "addr": 2194362332,
+  "hex": "82CB4FDC",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287672
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "TailCall_82CB4FDC",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C38."
+ },
+ {
+  "addr": 2194362348,
+  "hex": "82CB4FEC",
+  "insns": 3,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287672
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB57A0"
+  ],
+  "first": "bl 0x82cb57a0",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "TailCall_82CB4FEC",
+  "struct_desc": "[SDK runtime] Small trampoline (3 insns) that sets up a value and tail-calls 0x82CA2C38."
+ },
+ {
+  "addr": 2194364080,
+  "hex": "82CB56B0",
+  "insns": 15,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r3,0(r30)",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "Func_82CB56B0",
+  "struct_desc": "[SDK runtime] Body function, 15 insns, no prologue (mid-function target or leaf). First: `lwz r3,0(r30)`; last: `b 0x82ca2c30`."
+ },
+ {
+  "addr": 2194364092,
+  "hex": "82CB56BC",
+  "insns": 12,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "Func_82CB56BC",
+  "struct_desc": "[SDK runtime] Body function, 12 insns, no prologue (mid-function target or leaf). First: `mr r8,r8`; last: `b 0x82ca2c30`."
+ },
+ {
+  "addr": 2194364108,
+  "hex": "82CB56CC",
+  "insns": 11,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB57A0"
+  ],
+  "first": "bl 0x82cb57a0",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "Func_82CB56CC",
+  "struct_desc": "[SDK runtime] Body function, 11 insns, no prologue (mid-function target or leaf). Calls: sub_82CB57A0. First: `bl 0x82cb57a0`; last: `b 0x82ca2c30`."
+ },
+ {
+  "addr": 2194364364,
+  "hex": "82CB57CC",
+  "insns": 11,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__KeBugCheck"
+  ],
+  "subs": [],
+  "first": "mtctr r11",
+  "last": "blr",
+  "baseline_name": "BugCheck_82CB57CC",
+  "struct_desc": "[SDK runtime] Body function, 11 insns, no prologue (mid-function target or leaf). Calls imports: __imp__KeBugCheck. First: `mtctr r11`; last: `blr`."
+ },
+ {
+  "addr": 2194364372,
+  "hex": "82CB57D4",
+  "insns": 9,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__KeBugCheck"
+  ],
+  "subs": [],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "BugCheck_82CB57D4",
+  "struct_desc": "[SDK runtime] Body function, 9 insns, no prologue (mid-function target or leaf). Calls imports: __imp__KeBugCheck. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2194364384,
+  "hex": "82CB57E0",
+  "insns": 6,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__KeBugCheck"
+  ],
+  "subs": [],
+  "first": "lis r3,-16384",
+  "last": "blr",
+  "baseline_name": "BugCheck_82CB57E0",
+  "struct_desc": "[SDK runtime] Body function, 6 insns, no prologue (mid-function target or leaf). Calls imports: __imp__KeBugCheck. First: `lis r3,-16384`; last: `blr`."
+ },
+ {
+  "addr": 2194364460,
+  "hex": "82CB582C",
+  "insns": 9,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB57A0"
+  ],
+  "first": "mtctr r11",
+  "last": "blr",
+  "baseline_name": "Func_82CB582C",
+  "struct_desc": "[SDK runtime] Body function, 9 insns, no prologue (mid-function target or leaf). Calls: sub_82CB57A0. First: `mtctr r11`; last: `blr`."
+ },
+ {
+  "addr": 2194364468,
+  "hex": "82CB5834",
+  "insns": 7,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB57A0"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_82CB5834",
+  "struct_desc": "[SDK runtime] Body function, 7 insns, no prologue (mid-function target or leaf). Calls: sub_82CB57A0. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2194364480,
+  "hex": "82CB5840",
+  "insns": 4,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB57A0"
+  ],
+  "first": "bl 0x82cb57a0",
+  "last": "blr",
+  "baseline_name": "Func_82CB5840",
+  "struct_desc": "[SDK runtime] Body function, 4 insns, no prologue (mid-function target or leaf). Calls: sub_82CB57A0. First: `bl 0x82cb57a0`; last: `blr`."
+ },
+ {
+  "addr": 2194364564,
+  "hex": "82CB5894",
+  "insns": 33,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA49D8",
+   "sub_82CA5DC0",
+   "sub_82CB5918"
+  ],
+  "first": "li r28,3",
+  "last": "b 0x82cb58a0",
+  "baseline_name": "Func_82CB5894",
+  "struct_desc": "[SDK runtime] Body function, 33 insns, no prologue (mid-function target or leaf). Calls: sub_82CA49D8, sub_82CA5DC0, sub_82CB5918. First: `li r28,3`; last: `b 0x82cb58a0`."
+ },
+ {
+  "addr": 2194364696,
+  "hex": "82CB5918",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287664
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB5930"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "TailCall_82CB5918",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C30."
+ },
+ {
+  "addr": 2194365364,
+  "hex": "82CB5BB4",
+  "insns": 12,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mtctr r11",
+  "last": "blr",
+  "baseline_name": "Func_82CB5BB4",
+  "struct_desc": "[SDK runtime] Body function, 12 insns, no prologue (mid-function target or leaf). First: `mtctr r11`; last: `blr`."
+ },
+ {
+  "addr": 2194365376,
+  "hex": "82CB5BC0",
+  "insns": 9,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_82CB5BC0",
+  "struct_desc": "[SDK runtime] Body function, 9 insns, no prologue (mid-function target or leaf). First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2194365392,
+  "hex": "82CB5BD0",
+  "insns": 13,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CC0750"
+  ],
+  "first": "lis r11,-16384",
+  "last": "blr",
+  "baseline_name": "Func_82CB5BD0",
+  "struct_desc": "[SDK runtime] Body function, 13 insns, no prologue (mid-function target or leaf). Calls: sub_82CC0750. First: `lis r11,-16384`; last: `blr`."
+ },
+ {
+  "addr": 2194368680,
+  "hex": "82CB68A8",
+  "insns": 25,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAB770",
+   "sub_82CAB7A8",
+   "sub_82CB6168",
+   "sub_82CB68F4",
+   "sub_82CB692C"
+  ],
+  "first": "lwzx r11,r27,r28",
+  "last": "b 0x82ca2c2c",
+  "baseline_name": "Func_82CB68A8",
+  "struct_desc": "[SDK runtime] Body function, 25 insns, no prologue (mid-function target or leaf). Calls: sub_82CAB770, sub_82CAB7A8, sub_82CB6168, sub_82CB68F4, sub_82CB692C. First: `lwzx r11,r27,r28`; last: `b 0x82ca2c2c`."
+ },
+ {
+  "addr": 2194368756,
+  "hex": "82CB68F4",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287660
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB692C"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c2c",
+  "baseline_name": "TailCall_82CB68F4",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C2C."
+ },
+ {
+  "addr": 2194369608,
+  "hex": "82CB6C48",
+  "insns": 24,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAB770",
+   "sub_82CAB7A8",
+   "sub_82CB6AA0",
+   "sub_82CB6C90",
+   "sub_82CB6CC8"
+  ],
+  "first": "lwzx r11,r27,r28",
+  "last": "b 0x82ca2c28",
+  "baseline_name": "Func_82CB6C48",
+  "struct_desc": "[SDK runtime] Body function, 24 insns, no prologue (mid-function target or leaf). Calls: sub_82CAB770, sub_82CAB7A8, sub_82CB6AA0, sub_82CB6C90, sub_82CB6CC8. First: `lwzx r11,r27,r28`; last: `b 0x82ca2c28`."
+ },
+ {
+  "addr": 2194369680,
+  "hex": "82CB6C90",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287656
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB6CC8"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c28",
+  "baseline_name": "TailCall_82CB6C90",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C28."
+ },
+ {
+  "addr": 2194377192,
+  "hex": "82CB89E8",
+  "insns": 23,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB8428",
+   "sub_82CB8A64"
+  ],
+  "first": "mr r8,r6",
+  "last": "blr",
+  "baseline_name": "Func_82CB89E8",
+  "struct_desc": "[SDK runtime] Body function, 23 insns, no prologue (mid-function target or leaf). Calls: sub_82CB8428, sub_82CB8A64. First: `mr r8,r6`; last: `blr`."
+ },
+ {
+  "addr": 2194377224,
+  "hex": "82CB8A08",
+  "insns": 15,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB8A64"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_82CB8A08",
+  "struct_desc": "[SDK runtime] Body function, 15 insns, no prologue (mid-function target or leaf). Calls: sub_82CB8A64. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2194378056,
+  "hex": "82CB8D48",
+  "insns": 28,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__RtlEnterCriticalSection"
+  ],
+  "subs": [
+   "sub_82CB5B78",
+   "sub_82CB8D7C",
+   "sub_82CB8DB8"
+  ],
+  "first": "lwz r11,8(r30)",
+  "last": "b 0x82ca2c3c",
+  "baseline_name": "Sync_82CB8D48",
+  "struct_desc": "[SDK runtime] Body function, 28 insns, no prologue (mid-function target or leaf). Calls imports: __imp__RtlEnterCriticalSection. Calls: sub_82CB5B78, sub_82CB8D7C, sub_82CB8DB8. First: `lwz r11,8(r30)`; last: `b 0x82ca2c3c`."
+ },
+ {
+  "addr": 2194378108,
+  "hex": "82CB8D7C",
+  "insns": 15,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__RtlEnterCriticalSection"
+  ],
+  "subs": [
+   "sub_82CB8DB8"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c3c",
+  "baseline_name": "Sync_82CB8D7C",
+  "struct_desc": "[SDK runtime] Body function, 15 insns, no prologue (mid-function target or leaf). Calls imports: __imp__RtlEnterCriticalSection. Calls: sub_82CB8DB8. First: `mr r8,r8`; last: `b 0x82ca2c3c`."
+ },
+ {
+  "addr": 2194378340,
+  "hex": "82CB8E64",
+  "insns": 115,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__RtlEnterCriticalSection",
+   "__imp__RtlLeaveCriticalSection"
+  ],
+  "subs": [
+   "sub_82CAAE18",
+   "sub_82CAFF48",
+   "sub_82CB5B78",
+   "sub_82CB8CF8",
+   "sub_82CB8F00",
+   "sub_82CB9018",
+   "sub_82CB9030",
+   "sub_82CB9054"
+  ],
+  "first": "lis r11,-31921",
+  "last": "b 0x82ca2c28",
+  "baseline_name": "Sync_82CB8E64",
+  "struct_desc": "[SDK runtime] Body function, 115 insns, no prologue (mid-function target or leaf). Calls imports: __imp__RtlEnterCriticalSection, __imp__RtlLeaveCriticalSection. Calls: sub_82CAAE18, sub_82CAFF48, sub_82CB5B78, sub_82CB8CF8, sub_82CB8F00. First: `lis r11,-31921`; last: `b 0x82ca2c28`."
+ },
+ {
+  "addr": 2194378444,
+  "hex": "82CB8ECC",
+  "insns": 50,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__RtlEnterCriticalSection",
+   "__imp__RtlLeaveCriticalSection"
+  ],
+  "subs": [
+   "sub_82CB5B78",
+   "sub_82CB8F00",
+   "sub_82CB9018",
+   "sub_82CB9054"
+  ],
+  "first": "lwz r11,8(r30)",
+  "last": "b 0x82cb8e74",
+  "baseline_name": "Sync_82CB8ECC",
+  "struct_desc": "[SDK runtime] Body function, 50 insns, no prologue (mid-function target or leaf). Calls imports: __imp__RtlEnterCriticalSection, __imp__RtlLeaveCriticalSection. Calls: sub_82CB5B78, sub_82CB8F00, sub_82CB9018, sub_82CB9054. First: `lwz r11,8(r30)`; last: `b 0x82cb8e74`."
+ },
+ {
+  "addr": 2194378496,
+  "hex": "82CB8F00",
+  "insns": 37,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__RtlEnterCriticalSection",
+   "__imp__RtlLeaveCriticalSection"
+  ],
+  "subs": [
+   "sub_82CB9018",
+   "sub_82CB9054"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82cb8e74",
+  "baseline_name": "Sync_82CB8F00",
+  "struct_desc": "[SDK runtime] Body function, 37 insns, no prologue (mid-function target or leaf). Calls imports: __imp__RtlEnterCriticalSection, __imp__RtlLeaveCriticalSection. Calls: sub_82CB9018, sub_82CB9054. First: `mr r8,r8`; last: `b 0x82cb8e74`."
+ },
+ {
+  "addr": 2194378776,
+  "hex": "82CB9018",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287656
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CB9030"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c28",
+  "baseline_name": "TailCall_82CB9018",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C28."
+ },
+ {
+  "addr": 2194383712,
+  "hex": "82CBA360",
+  "insns": 10,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CBA120",
+   "sub_82CBA3A8"
+  ],
+  "first": "mr r4,r30",
+  "last": "b 0x82ca2c3c",
+  "baseline_name": "Func_82CBA360",
+  "struct_desc": "[SDK runtime] Body function, 10 insns, no prologue (mid-function target or leaf). Calls: sub_82CBA120, sub_82CBA3A8. First: `mr r4,r30`; last: `b 0x82ca2c3c`."
+ },
+ {
+  "addr": 2194383728,
+  "hex": "82CBA370",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287676
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CBA3A8"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c3c",
+  "baseline_name": "TailCall_82CBA370",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C3C."
+ },
+ {
+  "addr": 2194384748,
+  "hex": "82CBA76C",
+  "insns": 94,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA5DC0",
+   "sub_82CAB678",
+   "sub_82CBA8E4",
+   "sub_82CBAF58",
+   "sub_82CBAFC0",
+   "sub_82CBB028",
+   "sub_82CBB090",
+   "sub_82CBB0A0",
+   "sub_82CBB0B0",
+   "sub_82CBB0C0",
+   "sub_82CBB0E0",
+   "sub_82CC1808"
+  ],
+  "first": "bl 0x82cbb0c0",
+  "last": "b 0x82ca2c3c",
+  "baseline_name": "Func_82CBA76C",
+  "struct_desc": "[SDK runtime] Body function, 94 insns, no prologue (mid-function target or leaf). Calls: sub_82CA5DC0, sub_82CAB678, sub_82CBA8E4, sub_82CBAF58, sub_82CBAFC0. First: `bl 0x82cbb0c0`; last: `b 0x82ca2c3c`."
+ },
+ {
+  "addr": 2194385104,
+  "hex": "82CBA8D0",
+  "insns": 5,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287676
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CBA8E4"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c3c",
+  "baseline_name": "TailCall_82CBA8D0",
+  "struct_desc": "[SDK runtime] Small trampoline (5 insns) that sets up a value and tail-calls 0x82CA2C3C."
+ },
+ {
+  "addr": 2194386540,
+  "hex": "82CBAE6C",
+  "insns": 16,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CBA740",
+   "sub_82CBAE88",
+   "sub_82CBAEAC"
+  ],
+  "first": "lwz r11,27636(r30)",
+  "last": "blr",
+  "baseline_name": "Func_82CBAE6C",
+  "struct_desc": "[SDK runtime] Body function, 16 insns, no prologue (mid-function target or leaf). Calls: sub_82CBA740, sub_82CBAE88, sub_82CBAEAC. First: `lwz r11,27636(r30)`; last: `blr`."
+ },
+ {
+  "addr": 2194386568,
+  "hex": "82CBAE88",
+  "insns": 9,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CBAEAC"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_82CBAE88",
+  "struct_desc": "[SDK runtime] Body function, 9 insns, no prologue (mid-function target or leaf). Calls: sub_82CBAEAC. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2194386688,
+  "hex": "82CBAF00",
+  "insns": 13,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CBAB80",
+   "sub_82CBAF34"
+  ],
+  "first": "mr r3,r30",
+  "last": "blr",
+  "baseline_name": "Func_82CBAF00",
+  "struct_desc": "[SDK runtime] Body function, 13 insns, no prologue (mid-function target or leaf). Calls: sub_82CBAB80, sub_82CBAF34. First: `mr r3,r30`; last: `blr`."
+ },
+ {
+  "addr": 2194386700,
+  "hex": "82CBAF0C",
+  "insns": 10,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CBAF34"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_82CBAF0C",
+  "struct_desc": "[SDK runtime] Body function, 10 insns, no prologue (mid-function target or leaf). Calls: sub_82CBAF34. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2194389388,
+  "hex": "82CBB98C",
+  "insns": 115,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__DbgPrint",
+   "__imp__XamLoaderTerminateTitle"
+  ],
+  "subs": [
+   "sub_822EA8C0",
+   "sub_82CA97B8",
+   "sub_82CAC798",
+   "sub_82CBB570",
+   "sub_82CBB788",
+   "sub_82CBBED0",
+   "sub_82CC16C0",
+   "sub_82CC1990",
+   "sub_82CC1A70",
+   "sub_82CC1BC0"
+  ],
+  "first": "lis r9,-31921",
+  "last": "blr",
+  "baseline_name": "FatalError_82CBB98C",
+  "struct_desc": "[SDK runtime] Body function, 115 insns, no prologue (mid-function target or leaf). Calls imports: __imp__DbgPrint, __imp__XamLoaderTerminateTitle. Calls: sub_822EA8C0, sub_82CA97B8, sub_82CAC798, sub_82CBB570, sub_82CBB788. First: `lis r9,-31921`; last: `blr`."
+ },
+ {
+  "addr": 2194389796,
+  "hex": "82CBBB24",
+  "insns": 13,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__XamLoaderTerminateTitle"
+  ],
+  "subs": [
+   "sub_82CBBED0"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "FatalError_82CBBB24",
+  "struct_desc": "[SDK runtime] Body function, 13 insns, no prologue (mid-function target or leaf). Calls imports: __imp__XamLoaderTerminateTitle. Calls: sub_82CBBED0. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2194389808,
+  "hex": "82CBBB30",
+  "insns": 10,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__XamLoaderTerminateTitle"
+  ],
+  "subs": [
+   "sub_82CBBED0"
+  ],
+  "first": "bl 0x832b230c",
+  "last": "blr",
+  "baseline_name": "FatalError_82CBBB30",
+  "struct_desc": "[SDK runtime] Body function, 10 insns, no prologue (mid-function target or leaf). Calls imports: __imp__XamLoaderTerminateTitle. Calls: sub_82CBBED0. First: `bl 0x832b230c`; last: `blr`."
+ },
+ {
+  "addr": 2194393120,
+  "hex": "82CBC820",
+  "insns": 81,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__NtQueryVolumeInformationFile"
+  ],
+  "subs": [
+   "sub_82CAA2E0",
+   "sub_82CBC930",
+   "sub_82CBC97C",
+   "sub_82CBC9C4",
+   "sub_82CC0750",
+   "sub_82CC1C18"
+  ],
+  "first": "cmplwi cr6,r28,0",
+  "last": "b 0x82ca2c14",
+  "baseline_name": "FsVolume_82CBC820",
+  "struct_desc": "[SDK runtime] Body function, 81 insns, no prologue (mid-function target or leaf). Calls imports: __imp__NtQueryVolumeInformationFile. Calls: sub_82CAA2E0, sub_82CBC930, sub_82CBC97C, sub_82CBC9C4, sub_82CC0750. First: `cmplwi cr6,r28,0`; last: `b 0x82ca2c14`."
+ },
+ {
+  "addr": 2194393224,
+  "hex": "82CBC888",
+  "insns": 55,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAA2E0",
+   "sub_82CBC930",
+   "sub_82CBC97C",
+   "sub_82CBC9C4",
+   "sub_82CC0750"
+  ],
+  "first": "cmplwi cr6,r26,0",
+  "last": "b 0x82ca2c14",
+  "baseline_name": "Func_82CBC888",
+  "struct_desc": "[SDK runtime] Body function, 55 insns, no prologue (mid-function target or leaf). Calls: sub_82CAA2E0, sub_82CBC930, sub_82CBC97C, sub_82CBC9C4, sub_82CC0750. First: `cmplwi cr6,r26,0`; last: `b 0x82ca2c14`."
+ },
+ {
+  "addr": 2194393392,
+  "hex": "82CBC930",
+  "insns": 13,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CBC9C4"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c14",
+  "baseline_name": "Func_82CBC930",
+  "struct_desc": "[SDK runtime] Body function, 13 insns, no prologue (mid-function target or leaf). Calls: sub_82CBC9C4. First: `mr r8,r8`; last: `b 0x82ca2c14`."
+ },
+ {
+  "addr": 2194393408,
+  "hex": "82CBC940",
+  "insns": 16,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAF450",
+   "sub_82CC1C18"
+  ],
+  "first": "lis r3,-16384",
+  "last": "b 0x82ca2c14",
+  "baseline_name": "Func_82CBC940",
+  "struct_desc": "[SDK runtime] Body function, 16 insns, no prologue (mid-function target or leaf). Calls: sub_82CAF450, sub_82CC1C18. First: `lis r3,-16384`; last: `b 0x82ca2c14`."
+ },
+ {
+  "addr": 2194393468,
+  "hex": "82CBC97C",
+  "insns": 7,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CBC9C4"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c14",
+  "baseline_name": "Func_82CBC97C",
+  "struct_desc": "[SDK runtime] Body function, 7 insns, no prologue (mid-function target or leaf). Calls: sub_82CBC9C4. First: `mr r8,r8`; last: `b 0x82ca2c14`."
+ },
+ {
+  "addr": 2194405184,
+  "hex": "82CBF740",
+  "insns": 325,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__KeGetCurrentProcessType",
+   "__imp__NtAllocateVirtualMemory",
+   "__imp__NtFreeVirtualMemory",
+   "__imp__NtQueryVirtualMemory",
+   "__imp__RtlInitializeCriticalSection"
+  ],
+  "subs": [
+   "sub_82CA3190",
+   "sub_82CAA2E0",
+   "sub_82CBEFC8",
+   "sub_82CBF760"
+  ],
+  "first": "lwz r11,0(r8)",
+  "last": "b 0x82ca2c1c",
+  "baseline_name": "MemMgr_82CBF740",
+  "struct_desc": "[SDK runtime] Body function, 325 insns, no prologue (mid-function target or leaf). Calls imports: __imp__KeGetCurrentProcessType, __imp__NtAllocateVirtualMemory, __imp__NtFreeVirtualMemory, __imp__NtQueryVirtualMemory, __imp__RtlInitializeCriticalSection. Calls: sub_82CA3190, sub_82CAA2E0, sub_82CBEFC8, sub_82CBF760. First: `lwz r11,0(r8)`; last: `b 0x82ca2c1c`."
+ },
+ {
+  "addr": 2194405216,
+  "hex": "82CBF760",
+  "insns": 317,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__KeGetCurrentProcessType",
+   "__imp__NtAllocateVirtualMemory",
+   "__imp__NtFreeVirtualMemory",
+   "__imp__NtQueryVirtualMemory",
+   "__imp__RtlInitializeCriticalSection"
+  ],
+  "subs": [
+   "sub_82CA3190",
+   "sub_82CBEFC8"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c1c",
+  "baseline_name": "MemMgr_82CBF760",
+  "struct_desc": "[SDK runtime] Body function, 317 insns, no prologue (mid-function target or leaf). Calls imports: __imp__KeGetCurrentProcessType, __imp__NtAllocateVirtualMemory, __imp__NtFreeVirtualMemory, __imp__NtQueryVirtualMemory, __imp__RtlInitializeCriticalSection. Calls: sub_82CA3190, sub_82CBEFC8. First: `mr r8,r8`; last: `b 0x82ca2c1c`."
+ },
+ {
+  "addr": 2194405232,
+  "hex": "82CBF770",
+  "insns": 319,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__KeGetCurrentProcessType",
+   "__imp__NtAllocateVirtualMemory",
+   "__imp__NtFreeVirtualMemory",
+   "__imp__NtQueryVirtualMemory",
+   "__imp__RtlInitializeCriticalSection"
+  ],
+  "subs": [
+   "sub_82CA3190",
+   "sub_82CBEFC8"
+  ],
+  "first": "mr r30,r3",
+  "last": "b 0x82ca2c1c",
+  "baseline_name": "MemMgr_82CBF770",
+  "struct_desc": "[SDK runtime] Body function, 319 insns, no prologue (mid-function target or leaf). Calls imports: __imp__KeGetCurrentProcessType, __imp__NtAllocateVirtualMemory, __imp__NtFreeVirtualMemory, __imp__NtQueryVirtualMemory, __imp__RtlInitializeCriticalSection. Calls: sub_82CA3190, sub_82CBEFC8. First: `mr r30,r3`; last: `b 0x82ca2c1c`."
+ },
+ {
+  "addr": 2194406772,
+  "hex": "82CBFD74",
+  "insns": 446,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__NtFreeVirtualMemory",
+   "__imp__RtlCompareMemoryUlong",
+   "__imp__RtlEnterCriticalSection",
+   "__imp__RtlRaiseException"
+  ],
+  "subs": [
+   "sub_82238790",
+   "sub_82239468",
+   "sub_82CA3190",
+   "sub_82CAA2E0",
+   "sub_82CBE800",
+   "sub_82CBEA48",
+   "sub_82CC031C",
+   "sub_82CC0494",
+   "sub_82CC04B0"
+  ],
+  "first": "clrlwi. r11,r23,31",
+  "last": "b 0x82cc04b0",
+  "baseline_name": "MemFree_82CBFD74",
+  "struct_desc": "[SDK runtime] Body function, 446 insns, no prologue (mid-function target or leaf). Calls imports: __imp__NtFreeVirtualMemory, __imp__RtlCompareMemoryUlong, __imp__RtlEnterCriticalSection, __imp__RtlRaiseException. Calls: sub_82238790, sub_82239468, sub_82CA3190, sub_82CAA2E0, sub_82CBE800. First: `clrlwi. r11,r23,31`; last: `b 0x82cc04b0`."
+ },
+ {
+  "addr": 2194406812,
+  "hex": "82CBFD9C",
+  "insns": 436,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__NtFreeVirtualMemory",
+   "__imp__RtlCompareMemoryUlong",
+   "__imp__RtlRaiseException"
+  ],
+  "subs": [
+   "sub_82238790",
+   "sub_82239468",
+   "sub_82CA3190",
+   "sub_82CAA2E0",
+   "sub_82CBE800",
+   "sub_82CBEA48",
+   "sub_82CC031C",
+   "sub_82CC0494",
+   "sub_82CC04B0"
+  ],
+  "first": "addi r30,r20,-16",
+  "last": "b 0x82cc04b0",
+  "baseline_name": "MemFree_82CBFD9C",
+  "struct_desc": "[SDK runtime] Body function, 436 insns, no prologue (mid-function target or leaf). Calls imports: __imp__NtFreeVirtualMemory, __imp__RtlCompareMemoryUlong, __imp__RtlRaiseException. Calls: sub_82238790, sub_82239468, sub_82CA3190, sub_82CAA2E0, sub_82CBE800. First: `addi r30,r20,-16`; last: `b 0x82cc04b0`."
+ },
+ {
+  "addr": 2194408188,
+  "hex": "82CC02FC",
+  "insns": 86,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__RtlRaiseException"
+  ],
+  "subs": [
+   "sub_82238790",
+   "sub_82239468",
+   "sub_82CA3190",
+   "sub_82CAA2E0",
+   "sub_82CC031C",
+   "sub_82CC0494",
+   "sub_82CC04B0"
+  ],
+  "first": "lhz r11,2(r11)",
+  "last": "b 0x82cc04b0",
+  "baseline_name": "Exception_82CC02FC",
+  "struct_desc": "[SDK runtime] Body function, 86 insns, no prologue (mid-function target or leaf). Calls imports: __imp__RtlRaiseException. Calls: sub_82238790, sub_82239468, sub_82CA3190, sub_82CAA2E0, sub_82CC031C. First: `lhz r11,2(r11)`; last: `b 0x82cc04b0`."
+ },
+ {
+  "addr": 2194408220,
+  "hex": "82CC031C",
+  "insns": 78,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__RtlRaiseException"
+  ],
+  "subs": [
+   "sub_82238790",
+   "sub_82239468",
+   "sub_82CA3190",
+   "sub_82CAA2E0",
+   "sub_82CC0494",
+   "sub_82CC04B0"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82cc04b0",
+  "baseline_name": "Exception_82CC031C",
+  "struct_desc": "[SDK runtime] Body function, 78 insns, no prologue (mid-function target or leaf). Calls imports: __imp__RtlRaiseException. Calls: sub_82238790, sub_82239468, sub_82CA3190, sub_82CAA2E0, sub_82CC0494. First: `mr r8,r8`; last: `b 0x82cc04b0`."
+ },
+ {
+  "addr": 2194408236,
+  "hex": "82CC032C",
+  "insns": 88,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__RtlRaiseException"
+  ],
+  "subs": [
+   "sub_82238790",
+   "sub_82239468",
+   "sub_82CA3190",
+   "sub_82CAA2E0",
+   "sub_82CC0494",
+   "sub_82CC04B0"
+  ],
+  "first": "lwz r30,124(r31)",
+  "last": "b 0x82cc04b0",
+  "baseline_name": "Exception_82CC032C",
+  "struct_desc": "[SDK runtime] Body function, 88 insns, no prologue (mid-function target or leaf). Calls imports: __imp__RtlRaiseException. Calls: sub_82238790, sub_82239468, sub_82CA3190, sub_82CAA2E0, sub_82CC0494. First: `lwz r30,124(r31)`; last: `b 0x82cc04b0`."
+ },
+ {
+  "addr": 2194408596,
+  "hex": "82CC0494",
+  "insns": 4,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194408624
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CC04B0"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82cc04b0",
+  "baseline_name": "TailCall_82CC0494",
+  "struct_desc": "[SDK runtime] Small trampoline (4 insns) that sets up a value and tail-calls 0x82CC04B0."
+ },
+ {
+  "addr": 2194408612,
+  "hex": "82CC04A4",
+  "insns": 9,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CC04E8"
+  ],
+  "first": "li r11,0",
+  "last": "b 0x82ca2c14",
+  "baseline_name": "Func_82CC04A4",
+  "struct_desc": "[SDK runtime] Body function, 9 insns, no prologue (mid-function target or leaf). Calls: sub_82CC04E8. First: `li r11,0`; last: `b 0x82ca2c14`."
+ },
+ {
+  "addr": 2194408624,
+  "hex": "82CC04B0",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287636
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CC04E8"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c14",
+  "baseline_name": "TailCall_82CC04B0",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C14."
+ },
+ {
+  "addr": 2194449448,
+  "hex": "82CCA428",
+  "insns": 22,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__ExTerminateThread"
+  ],
+  "subs": [
+   "sub_82CBBED0",
+   "sub_82CC16C0"
+  ],
+  "first": "li r3,1",
+  "last": "blr",
+  "baseline_name": "Thread_82CCA428",
+  "struct_desc": "[SDK runtime] Body function, 22 insns, no prologue (mid-function target or leaf). Calls imports: __imp__ExTerminateThread. Calls: sub_82CBBED0, sub_82CC16C0. First: `li r3,1`; last: `blr`."
+ },
+ {
+  "addr": 2194449480,
+  "hex": "82CCA448",
+  "insns": 14,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__ExTerminateThread"
+  ],
+  "subs": [
+   "sub_82CBBED0"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Thread_82CCA448",
+  "struct_desc": "[SDK runtime] Body function, 14 insns, no prologue (mid-function target or leaf). Calls imports: __imp__ExTerminateThread. Calls: sub_82CBBED0. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2194449492,
+  "hex": "82CCA454",
+  "insns": 11,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [
+   "__imp__ExTerminateThread"
+  ],
+  "subs": [
+   "sub_82CBBED0"
+  ],
+  "first": "lwz r3,80(r31)",
+  "last": "blr",
+  "baseline_name": "Thread_82CCA454",
+  "struct_desc": "[SDK runtime] Body function, 11 insns, no prologue (mid-function target or leaf). Calls imports: __imp__ExTerminateThread. Calls: sub_82CBBED0. First: `lwz r3,80(r31)`; last: `blr`."
+ },
+ {
+  "addr": 2194478736,
+  "hex": "82CD1690",
+  "insns": 1,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287672
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "b 0x82ca2c38",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "TailCall_82CD1690",
+  "struct_desc": "[SDK runtime] Small trampoline (1 insns) that sets up a value and tail-calls 0x82CA2C38."
+ },
+ {
+  "addr": 2194479148,
+  "hex": "82CD182C",
+  "insns": 8,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_822F2020"
+  ],
+  "first": "bl 0x822f2020",
+  "last": "blr",
+  "baseline_name": "Func_82CD182C",
+  "struct_desc": "[SDK runtime] Body function, 8 insns, no prologue (mid-function target or leaf). Calls: sub_822F2020. First: `bl 0x822f2020`; last: `blr`."
+ },
+ {
+  "addr": 2194479276,
+  "hex": "82CD18AC",
+  "insns": 14,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_822F1DB0",
+   "sub_82CD1608"
+  ],
+  "first": "bl 0x82cd1608",
+  "last": "blr",
+  "baseline_name": "Func_82CD18AC",
+  "struct_desc": "[SDK runtime] Body function, 14 insns, no prologue (mid-function target or leaf). Calls: sub_822F1DB0, sub_82CD1608. First: `bl 0x82cd1608`; last: `blr`."
+ },
+ {
+  "addr": 2197817432,
+  "hex": "83000858",
+  "insns": 103,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82170CC8",
+   "sub_82CA3C68",
+   "sub_82CAB678",
+   "sub_82CAB770",
+   "sub_82CAC520",
+   "sub_830005D8",
+   "sub_83000728",
+   "sub_830009AC",
+   "sub_830009F4",
+   "sub_830034F8"
+  ],
+  "first": "cmpwi cr6,r27,0",
+  "last": "b 0x82ca2c28",
+  "baseline_name": "Func_83000858",
+  "struct_desc": "[SDK runtime] Body function, 103 insns, no prologue (mid-function target or leaf). Calls: sub_82170CC8, sub_82CA3C68, sub_82CAB678, sub_82CAB770, sub_82CAC520. First: `cmpwi cr6,r27,0`; last: `b 0x82ca2c28`."
+ },
+ {
+  "addr": 2197817772,
+  "hex": "830009AC",
+  "insns": 18,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAB770",
+   "sub_830009F4"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c28",
+  "baseline_name": "Func_830009AC",
+  "struct_desc": "[SDK runtime] Body function, 18 insns, no prologue (mid-function target or leaf). Calls: sub_82CAB770, sub_830009F4. First: `mr r8,r8`; last: `b 0x82ca2c28`."
+ },
+ {
+  "addr": 2197818096,
+  "hex": "83000AF0",
+  "insns": 140,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82170CC8",
+   "sub_8221EE38",
+   "sub_82CA6CF8",
+   "sub_82CAB678",
+   "sub_82CAB770",
+   "sub_82CAF298",
+   "sub_82CAF558",
+   "sub_82CB8AE8",
+   "sub_83000728",
+   "sub_83000CF4",
+   "sub_83000D40",
+   "sub_83003358",
+   "sub_830035C0"
+  ],
+  "first": "lis r11,-31946",
+  "last": "b 0x82ca2c2c",
+  "baseline_name": "Func_83000AF0",
+  "struct_desc": "[SDK runtime] Body function, 140 insns, no prologue (mid-function target or leaf). Calls: sub_82170CC8, sub_8221EE38, sub_82CA6CF8, sub_82CAB678, sub_82CAB770. First: `lis r11,-31946`; last: `b 0x82ca2c2c`."
+ },
+ {
+  "addr": 2197818612,
+  "hex": "83000CF4",
+  "insns": 11,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAB770",
+   "sub_83000D40"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c2c",
+  "baseline_name": "Func_83000CF4",
+  "struct_desc": "[SDK runtime] Body function, 11 insns, no prologue (mid-function target or leaf). Calls: sub_82CAB770, sub_83000D40. First: `mr r8,r8`; last: `b 0x82ca2c2c`."
+ },
+ {
+  "addr": 2197819488,
+  "hex": "83001060",
+  "insns": 79,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAB630",
+   "sub_82CAB770",
+   "sub_82CAF6C8",
+   "sub_83001184",
+   "sub_830011BC"
+  ],
+  "first": "lwz r11,12(r30)",
+  "last": "b 0x82ca2c24",
+  "baseline_name": "Func_83001060",
+  "struct_desc": "[SDK runtime] Body function, 79 insns, no prologue (mid-function target or leaf). Calls: sub_82CAB630, sub_82CAB770, sub_82CAF6C8, sub_83001184, sub_830011BC. First: `lwz r11,12(r30)`; last: `b 0x82ca2c24`."
+ },
+ {
+  "addr": 2197819780,
+  "hex": "83001184",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287652
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_830011BC"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c24",
+  "baseline_name": "TailCall_83001184",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C24."
+ },
+ {
+  "addr": 2197820184,
+  "hex": "83001318",
+  "insns": 42,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA3C68",
+   "sub_82CA4E68",
+   "sub_82CAF720",
+   "sub_830013A8",
+   "sub_830013C0"
+  ],
+  "first": "mr r3,r30",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "Func_83001318",
+  "struct_desc": "[SDK runtime] Body function, 42 insns, no prologue (mid-function target or leaf). Calls: sub_82CA3C68, sub_82CA4E68, sub_82CAF720, sub_830013A8, sub_830013C0. First: `mr r3,r30`; last: `b 0x82ca2c30`."
+ },
+ {
+  "addr": 2197820328,
+  "hex": "830013A8",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287664
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_830013C0"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "TailCall_830013A8",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C30."
+ },
+ {
+  "addr": 2197820692,
+  "hex": "83001514",
+  "insns": 84,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAB630",
+   "sub_82CAB770",
+   "sub_82CAF6C8",
+   "sub_82CB5958",
+   "sub_8300164C",
+   "sub_83001684"
+  ],
+  "first": "lwz r11,12(r30)",
+  "last": "b 0x82ca2c34",
+  "baseline_name": "Func_83001514",
+  "struct_desc": "[SDK runtime] Body function, 84 insns, no prologue (mid-function target or leaf). Calls: sub_82CAB630, sub_82CAB770, sub_82CAF6C8, sub_82CB5958, sub_8300164C. First: `lwz r11,12(r30)`; last: `b 0x82ca2c34`."
+ },
+ {
+  "addr": 2197821004,
+  "hex": "8300164C",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287668
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_83001684"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c34",
+  "baseline_name": "TailCall_8300164C",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C34."
+ },
+ {
+  "addr": 2197821228,
+  "hex": "8300172C",
+  "insns": 35,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAF6C8",
+   "sub_830017D8"
+  ],
+  "first": "lwz r11,12(r30)",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "Func_8300172C",
+  "struct_desc": "[SDK runtime] Body function, 35 insns, no prologue (mid-function target or leaf). Calls: sub_82CAF6C8, sub_830017D8. First: `lwz r11,12(r30)`; last: `b 0x82ca2c38`."
+ },
+ {
+  "addr": 2197821344,
+  "hex": "830017A0",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287672
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_830017D8"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "TailCall_830017A0",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C38."
+ },
+ {
+  "addr": 2197825908,
+  "hex": "83002974",
+  "insns": 12,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA97A8",
+   "sub_82CC0728"
+  ],
+  "first": "lwz r3,88(r11)",
+  "last": "blr",
+  "baseline_name": "Func_83002974",
+  "struct_desc": "[SDK runtime] Body function, 12 insns, no prologue (mid-function target or leaf). Calls: sub_82CA97A8, sub_82CC0728. First: `lwz r3,88(r11)`; last: `blr`."
+ },
+ {
+  "addr": 2197825932,
+  "hex": "8300298C",
+  "insns": 6,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA97A8"
+  ],
+  "first": "bl 0x82ca97a8",
+  "last": "blr",
+  "baseline_name": "Func_8300298C",
+  "struct_desc": "[SDK runtime] Body function, 6 insns, no prologue (mid-function target or leaf). Calls: sub_82CA97A8. First: `bl 0x82ca97a8`; last: `blr`."
+ },
+ {
+  "addr": 2197827204,
+  "hex": "83002E84",
+  "insns": 42,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA4E68",
+   "sub_82CB0068",
+   "sub_83002F18",
+   "sub_83002F2C"
+  ],
+  "first": "mr r3,r30",
+  "last": "b 0x82ca2c3c",
+  "baseline_name": "Func_83002E84",
+  "struct_desc": "[SDK runtime] Body function, 42 insns, no prologue (mid-function target or leaf). Calls: sub_82CA4E68, sub_82CB0068, sub_83002F18, sub_83002F2C. First: `mr r3,r30`; last: `b 0x82ca2c3c`."
+ },
+ {
+  "addr": 2197827352,
+  "hex": "83002F18",
+  "insns": 5,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287676
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_83002F2C"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c3c",
+  "baseline_name": "TailCall_83002F18",
+  "struct_desc": "[SDK runtime] Small trampoline (5 insns) that sets up a value and tail-calls 0x82CA2C3C."
+ },
+ {
+  "addr": 2197828492,
+  "hex": "8300338C",
+  "insns": 40,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA4920",
+   "sub_82CA88E0",
+   "sub_83003414",
+   "sub_8300342C",
+   "sub_83003494"
+  ],
+  "first": "lis r11,-31921",
+  "last": "b 0x8300339c",
+  "baseline_name": "Func_8300338C",
+  "struct_desc": "[SDK runtime] Body function, 40 insns, no prologue (mid-function target or leaf). Calls: sub_82CA4920, sub_82CA88E0, sub_83003414, sub_8300342C, sub_83003494. First: `lis r11,-31921`; last: `b 0x8300339c`."
+ },
+ {
+  "addr": 2197828576,
+  "hex": "830033E0",
+  "insns": 19,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA4920",
+   "sub_83003414",
+   "sub_83003494"
+  ],
+  "first": "lwz r11,0(r30)",
+  "last": "b 0x8300339c",
+  "baseline_name": "Func_830033E0",
+  "struct_desc": "[SDK runtime] Body function, 19 insns, no prologue (mid-function target or leaf). Calls: sub_82CA4920, sub_83003414, sub_83003494. First: `lwz r11,0(r30)`; last: `b 0x8300339c`."
+ },
+ {
+  "addr": 2197828628,
+  "hex": "83003414",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2197828508
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_83003494"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x8300339c",
+  "baseline_name": "TailCall_83003414",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x8300339C."
+ },
+ {
+  "addr": 2197828652,
+  "hex": "8300342C",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287672
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_83003444"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "TailCall_8300342C",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C38."
+ },
+ {
+  "addr": 2197833396,
+  "hex": "830046B4",
+  "insns": 13,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_830043D0",
+   "sub_83004708"
+  ],
+  "first": "mr r3,r30",
+  "last": "blr",
+  "baseline_name": "Func_830046B4",
+  "struct_desc": "[SDK runtime] Body function, 13 insns, no prologue (mid-function target or leaf). Calls: sub_830043D0, sub_83004708. First: `mr r3,r30`; last: `blr`."
+ },
+ {
+  "addr": 2197833408,
+  "hex": "830046C0",
+  "insns": 10,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_83004708"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_830046C0",
+  "struct_desc": "[SDK runtime] Body function, 10 insns, no prologue (mid-function target or leaf). Calls: sub_83004708. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2198081516,
+  "hex": "83040FEC",
+  "insns": 224,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82B56750",
+   "sub_82C43198",
+   "sub_8301DE30",
+   "sub_83026048",
+   "sub_8302D8A8"
+  ],
+  "first": "lwz r3,8(r30)",
+  "last": "b 0x83040db8",
+  "baseline_name": "Func_83040FEC",
+  "struct_desc": "[SDK runtime] Body function, 224 insns, no prologue (mid-function target or leaf). Calls: sub_82B56750, sub_82C43198, sub_8301DE30, sub_83026048, sub_8302D8A8. First: `lwz r3,8(r30)`; last: `b 0x83040db8`."
+ },
+ {
+  "addr": 2198081548,
+  "hex": "8304100C",
+  "insns": 216,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82B56750",
+   "sub_82C43198",
+   "sub_8301DE30",
+   "sub_83026048",
+   "sub_8302D8A8"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x83040db8",
+  "baseline_name": "Func_8304100C",
+  "struct_desc": "[SDK runtime] Body function, 216 insns, no prologue (mid-function target or leaf). Calls: sub_82B56750, sub_82C43198, sub_8301DE30, sub_83026048, sub_8302D8A8. First: `mr r8,r8`; last: `b 0x83040db8`."
+ },
+ {
+  "addr": 2198081564,
+  "hex": "8304101C",
+  "insns": 227,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82B56750",
+   "sub_82C43198",
+   "sub_8301DE30",
+   "sub_83026048",
+   "sub_8302D8A8"
+  ],
+  "first": "lwz r30,676(r31)",
+  "last": "b 0x83040db8",
+  "baseline_name": "Func_8304101C",
+  "struct_desc": "[SDK runtime] Body function, 227 insns, no prologue (mid-function target or leaf). Calls: sub_82B56750, sub_82C43198, sub_8301DE30, sub_83026048, sub_8302D8A8. First: `lwz r30,676(r31)`; last: `b 0x83040db8`."
+ },
+ {
+  "addr": 2198800296,
+  "hex": "830F07A8",
+  "insns": 28,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CAB770",
+   "sub_82CAF450",
+   "sub_830F0838",
+   "sub_830F09F0"
+  ],
+  "first": "lhz r11,0(r30)",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "Func_830F07A8",
+  "struct_desc": "[SDK runtime] Body function, 28 insns, no prologue (mid-function target or leaf). Calls: sub_82CAB770, sub_82CAF450, sub_830F0838, sub_830F09F0. First: `lhz r11,0(r30)`; last: `b 0x82ca2c30`."
+ },
+ {
+  "addr": 2198800376,
+  "hex": "830F07F8",
+  "insns": 7,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_830F0838"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "Func_830F07F8",
+  "struct_desc": "[SDK runtime] Body function, 7 insns, no prologue (mid-function target or leaf). Calls: sub_830F0838. First: `mr r8,r8`; last: `b 0x82ca2c30`."
+ },
+ {
+  "addr": 2198800660,
+  "hex": "830F0914",
+  "insns": 33,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82240578",
+   "sub_82CB7DA0",
+   "sub_82CC1798",
+   "sub_830F0980",
+   "sub_830F09B8"
+  ],
+  "first": "bl 0x82240578",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "Func_830F0914",
+  "struct_desc": "[SDK runtime] Body function, 33 insns, no prologue (mid-function target or leaf). Calls: sub_82240578, sub_82CB7DA0, sub_82CC1798, sub_830F0980, sub_830F09B8. First: `bl 0x82240578`; last: `b 0x82ca2c38`."
+ },
+ {
+  "addr": 2198800768,
+  "hex": "830F0980",
+  "insns": 6,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194287672
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_830F09B8"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "TailCall_830F0980",
+  "struct_desc": "[SDK runtime] Small trampoline (6 insns) that sets up a value and tail-calls 0x82CA2C38."
+ },
+ {
+  "addr": 2198802952,
+  "hex": "830F1208",
+  "insns": 23,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_830F0C48",
+   "sub_830F1284"
+  ],
+  "first": "mr r8,r6",
+  "last": "blr",
+  "baseline_name": "Func_830F1208",
+  "struct_desc": "[SDK runtime] Body function, 23 insns, no prologue (mid-function target or leaf). Calls: sub_830F0C48, sub_830F1284. First: `mr r8,r6`; last: `blr`."
+ },
+ {
+  "addr": 2198802984,
+  "hex": "830F1228",
+  "insns": 15,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_830F1284"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_830F1228",
+  "struct_desc": "[SDK runtime] Body function, 15 insns, no prologue (mid-function target or leaf). Calls: sub_830F1284. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2198844476,
+  "hex": "830FB43C",
+  "insns": 28,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_830FA9D8",
+   "sub_830FB490"
+  ],
+  "first": "lwz r11,236(r31)",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "Func_830FB43C",
+  "struct_desc": "[SDK runtime] Body function, 28 insns, no prologue (mid-function target or leaf). Calls: sub_830FA9D8, sub_830FB490. First: `lwz r11,236(r31)`; last: `b 0x82ca2c38`."
+ },
+ {
+  "addr": 2198844560,
+  "hex": "830FB490",
+  "insns": 7,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "Func_830FB490",
+  "struct_desc": "[SDK runtime] Body function, 7 insns, no prologue (mid-function target or leaf). First: `mr r8,r8`; last: `b 0x82ca2c38`."
+ },
+ {
+  "addr": 2198844576,
+  "hex": "830FB4A0",
+  "insns": 14,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lis r11,-32248",
+  "last": "b 0x82ca2c38",
+  "baseline_name": "Func_830FB4A0",
+  "struct_desc": "[SDK runtime] Body function, 14 insns, no prologue (mid-function target or leaf). First: `lis r11,-32248`; last: `b 0x82ca2c38`."
+ },
+ {
+  "addr": 2198853512,
+  "hex": "830FD788",
+  "insns": 41,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_821F5F18",
+   "sub_82B96C90",
+   "sub_830FD3B0",
+   "sub_830FD478",
+   "sub_830FD7A8",
+   "sub_830FD7E4"
+  ],
+  "first": "lwz r3,772(r30)",
+  "last": "blr",
+  "baseline_name": "Func_830FD788",
+  "struct_desc": "[SDK runtime] Body function, 41 insns, no prologue (mid-function target or leaf). Calls: sub_821F5F18, sub_82B96C90, sub_830FD3B0, sub_830FD478, sub_830FD7A8. First: `lwz r3,772(r30)`; last: `blr`."
+ },
+ {
+  "addr": 2198853544,
+  "hex": "830FD7A8",
+  "insns": 33,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_821F5F18",
+   "sub_82B96C90",
+   "sub_830FD478",
+   "sub_830FD7E4"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_830FD7A8",
+  "struct_desc": "[SDK runtime] Body function, 33 insns, no prologue (mid-function target or leaf). Calls: sub_821F5F18, sub_82B96C90, sub_830FD478, sub_830FD7E4. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2198853560,
+  "hex": "830FD7B8",
+  "insns": 30,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_821F5F18",
+   "sub_82B96C90",
+   "sub_830FD478",
+   "sub_830FD7E4"
+  ],
+  "first": "lwz r30,132(r31)",
+  "last": "blr",
+  "baseline_name": "Func_830FD7B8",
+  "struct_desc": "[SDK runtime] Body function, 30 insns, no prologue (mid-function target or leaf). Calls: sub_821F5F18, sub_82B96C90, sub_830FD478, sub_830FD7E4. First: `lwz r30,132(r31)`; last: `blr`."
+ },
+ {
+  "addr": 2198853576,
+  "hex": "830FD7C8",
+  "insns": 26,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_821F5F18",
+   "sub_82B96C90",
+   "sub_830FD478",
+   "sub_830FD7E4"
+  ],
+  "first": "lwz r3,768(r30)",
+  "last": "blr",
+  "baseline_name": "Func_830FD7C8",
+  "struct_desc": "[SDK runtime] Body function, 26 insns, no prologue (mid-function target or leaf). Calls: sub_821F5F18, sub_82B96C90, sub_830FD478, sub_830FD7E4. First: `lwz r3,768(r30)`; last: `blr`."
+ },
+ {
+  "addr": 2198853604,
+  "hex": "830FD7E4",
+  "insns": 19,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_821F5F18",
+   "sub_830FD478"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_830FD7E4",
+  "struct_desc": "[SDK runtime] Body function, 19 insns, no prologue (mid-function target or leaf). Calls: sub_821F5F18, sub_830FD478. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2198853620,
+  "hex": "830FD7F4",
+  "insns": 16,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_821F5F18",
+   "sub_830FD478"
+  ],
+  "first": "lwz r30,132(r31)",
+  "last": "blr",
+  "baseline_name": "Func_830FD7F4",
+  "struct_desc": "[SDK runtime] Body function, 16 insns, no prologue (mid-function target or leaf). Calls: sub_821F5F18, sub_830FD478. First: `lwz r30,132(r31)`; last: `blr`."
+ },
+ {
+  "addr": 2198854892,
+  "hex": "830FDCEC",
+  "insns": 20,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82D0DAE0",
+   "sub_830FD760"
+  ],
+  "first": "lwz r4,140(r31)",
+  "last": "blr",
+  "baseline_name": "Func_830FDCEC",
+  "struct_desc": "[SDK runtime] Body function, 20 insns, no prologue (mid-function target or leaf). Calls: sub_82D0DAE0, sub_830FD760. First: `lwz r4,140(r31)`; last: `blr`."
+ },
+ {
+  "addr": 2198854908,
+  "hex": "830FDCFC",
+  "insns": 16,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82D0DAE0"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_830FDCFC",
+  "struct_desc": "[SDK runtime] Body function, 16 insns, no prologue (mid-function target or leaf). Calls: sub_82D0DAE0. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2198854920,
+  "hex": "830FDD08",
+  "insns": 13,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82D0DAE0"
+  ],
+  "first": "lwz r11,132(r31)",
+  "last": "blr",
+  "baseline_name": "Func_830FDD08",
+  "struct_desc": "[SDK runtime] Body function, 13 insns, no prologue (mid-function target or leaf). Calls: sub_82D0DAE0. First: `lwz r11,132(r31)`; last: `blr`."
+ },
+ {
+  "addr": 2198856040,
+  "hex": "830FE168",
+  "insns": 58,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_830FCE20",
+   "sub_830FDBD8",
+   "sub_830FDCB8",
+   "sub_830FDD48",
+   "sub_830FDE28",
+   "sub_830FE220"
+  ],
+  "first": "lwz r5,260(r31)",
+  "last": "blr",
+  "baseline_name": "Func_830FE168",
+  "struct_desc": "[SDK runtime] Body function, 58 insns, no prologue (mid-function target or leaf). Calls: sub_830FCE20, sub_830FDBD8, sub_830FDCB8, sub_830FDD48, sub_830FDE28. First: `lwz r5,260(r31)`; last: `blr`."
+ },
+ {
+  "addr": 2198856224,
+  "hex": "830FE220",
+  "insns": 12,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_830FDCB8"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_830FE220",
+  "struct_desc": "[SDK runtime] Body function, 12 insns, no prologue (mid-function target or leaf). Calls: sub_830FDCB8. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2198856240,
+  "hex": "830FE230",
+  "insns": 12,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_830FCEA8",
+   "sub_830FDCB8"
+  ],
+  "first": "lwz r4,244(r31)",
+  "last": "blr",
+  "baseline_name": "Func_830FE230",
+  "struct_desc": "[SDK runtime] Body function, 12 insns, no prologue (mid-function target or leaf). Calls: sub_830FCEA8, sub_830FDCB8. First: `lwz r4,244(r31)`; last: `blr`."
+ },
+ {
+  "addr": 2198856424,
+  "hex": "830FE2E8",
+  "insns": 50,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_830FCE20",
+   "sub_830FDBD8",
+   "sub_830FDCB8",
+   "sub_830FDD48",
+   "sub_830FE010",
+   "sub_830FE380"
+  ],
+  "first": "lwz r5,88(r31)",
+  "last": "blr",
+  "baseline_name": "Func_830FE2E8",
+  "struct_desc": "[SDK runtime] Body function, 50 insns, no prologue (mid-function target or leaf). Calls: sub_830FCE20, sub_830FDBD8, sub_830FDCB8, sub_830FDD48, sub_830FE010. First: `lwz r5,88(r31)`; last: `blr`."
+ },
+ {
+  "addr": 2198856576,
+  "hex": "830FE380",
+  "insns": 12,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_830FDCB8"
+  ],
+  "first": "mr r8,r8",
+  "last": "blr",
+  "baseline_name": "Func_830FE380",
+  "struct_desc": "[SDK runtime] Body function, 12 insns, no prologue (mid-function target or leaf). Calls: sub_830FDCB8. First: `mr r8,r8`; last: `blr`."
+ },
+ {
+  "addr": 2198856592,
+  "hex": "830FE390",
+  "insns": 12,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_830FCEA8",
+   "sub_830FDCB8"
+  ],
+  "first": "li r4,0",
+  "last": "blr",
+  "baseline_name": "Func_830FE390",
+  "struct_desc": "[SDK runtime] Body function, 12 insns, no prologue (mid-function target or leaf). Calls: sub_830FCEA8, sub_830FDCB8. First: `li r4,0`; last: `blr`."
+ },
+ {
+  "addr": 2198961884,
+  "hex": "83117EDC",
+  "insns": 61,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_821F5F18",
+   "sub_831176A0",
+   "sub_831178D8",
+   "sub_83117BA0"
+  ],
+  "first": "mr r6,r30",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "Func_83117EDC",
+  "struct_desc": "[SDK runtime] Body function, 61 insns, no prologue (mid-function target or leaf). Calls: sub_821F5F18, sub_831176A0, sub_831178D8, sub_83117BA0. First: `mr r6,r30`; last: `b 0x82ca2c30`."
+ },
+ {
+  "addr": 2198962056,
+  "hex": "83117F88",
+  "insns": 12,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_821F5F18"
+  ],
+  "first": "mr r8,r8",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "Func_83117F88",
+  "struct_desc": "[SDK runtime] Body function, 12 insns, no prologue (mid-function target or leaf). Calls: sub_821F5F18. First: `mr r8,r8`; last: `b 0x82ca2c30`."
+ },
+ {
+  "addr": 2198962068,
+  "hex": "83117F94",
+  "insns": 10,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_821F5F18"
+  ],
+  "first": "lwz r30,84(r31)",
+  "last": "b 0x82ca2c30",
+  "baseline_name": "Func_83117F94",
+  "struct_desc": "[SDK runtime] Body function, 10 insns, no prologue (mid-function target or leaf). Calls: sub_821F5F18. First: `lwz r30,84(r31)`; last: `b 0x82ca2c30`."
+ },
+ {
+  "addr": 2183558504,
+  "hex": "82267568",
+  "insns": 3,
+  "cat": "const",
+  "detail": {
+   "target": 2202636656
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lis r11,-31926",
+  "last": "blr",
+  "baseline_name": "RetAddr_82267568",
+  "struct_desc": "[game code] Const thunk: builds and returns the data address 0x83499170."
+ },
+ {
+  "addr": 2183560328,
+  "hex": "82267C88",
+  "insns": 3,
+  "cat": "const",
+  "detail": {
+   "target": 2201281236
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lis r11,-31947",
+  "last": "blr",
+  "baseline_name": "RetAddr_82267C88",
+  "struct_desc": "[game code] Const thunk: builds and returns the data address 0x8334E2D4."
+ },
+ {
+  "addr": 2186106568,
+  "hex": "824D56C8",
+  "insns": 15,
+  "cat": "body",
+  "detail": {},
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lis r11,-31950",
+  "last": "blr",
+  "baseline_name": "Func_824D56C8",
+  "struct_desc": "[game code] Body function, 15 insns, no prologue (mid-function target or leaf). First: `lis r11,-31950`; last: `blr`."
+ },
+ {
+  "addr": 2186216960,
+  "hex": "824F0600",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 29,
+   "off": 116
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot29_824F0600",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 29 (byte offset 116), and tail-calls it."
+ },
+ {
+  "addr": 2187261288,
+  "hex": "825EF568",
+  "insns": 7,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 6922,
+   "off": 27688
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "cmplwi cr6,r4,0",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX6922_825EF568",
+  "struct_desc": "[game code] Variant virtual dispatch: selects vtable slot 6922 (offset 27688) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2188687256,
+  "hex": "8274B798",
+  "insns": 2,
+  "cat": "retimm",
+  "detail": {
+   "value": 67
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "li r3,67",
+  "last": "blr",
+  "baseline_name": "RetConst67_8274B798",
+  "struct_desc": "[game code] Returns the immediate constant 67 in r3."
+ },
+ {
+  "addr": 2190491504,
+  "hex": "82903F70",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 5,
+   "off": 20
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot5_82903F70",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 5 (byte offset 20), and tail-calls it."
+ },
+ {
+  "addr": 2190491520,
+  "hex": "82903F80",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 2,
+   "off": 8
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot2_82903F80",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 2 (byte offset 8), and tail-calls it."
+ },
+ {
+  "addr": 2191090264,
+  "hex": "82996258",
+  "insns": 2,
+  "cat": "retimm",
+  "detail": {
+   "value": 173
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "li r3,173",
+  "last": "blr",
+  "baseline_name": "RetConst173_82996258",
+  "struct_desc": "[game code] Returns the immediate constant 173 in r3."
+ },
+ {
+  "addr": 2192926832,
+  "hex": "82B56870",
+  "insns": 14,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 4,
+   "off": 16
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r11,r3",
+  "last": "blr",
+  "baseline_name": "VtableSlotX4_82B56870",
+  "struct_desc": "[game code] Variant virtual dispatch: selects vtable slot 4 (offset 16) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2193113936,
+  "hex": "82B84350",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2183119344
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_821FC1F0"
+  ],
+  "first": "addi r3,r3,8",
+  "last": "b 0x821fc1f0",
+  "baseline_name": "TailCall_82B84350",
+  "struct_desc": "[game code] Small trampoline (2 insns) that sets up a value and tail-calls 0x821FC1F0."
+ },
+ {
+  "addr": 2193344664,
+  "hex": "82BBC898",
+  "insns": 8,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 4765,
+   "off": 19060
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lis r10,-31951",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX4765_82BBC898",
+  "struct_desc": "[game code] Variant virtual dispatch: selects vtable slot 4765 (offset 19060) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2193597608,
+  "hex": "82BFA4A8",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 1,
+   "off": 4
+  },
+  "region": "game",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r12,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot1_82BFA4A8",
+  "struct_desc": "[game code] Virtual-call thunk: reads the vtable pointer from the object, selects slot 1 (byte offset 4), and tail-calls it."
+ },
+ {
+  "addr": 2193658248,
+  "hex": "82C09188",
+  "insns": 9,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 17,
+   "off": 68
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,8(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX17_82C09188",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 17 (offset 68) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2193667072,
+  "hex": "82C0B400",
+  "insns": 8,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 7,
+   "off": 28
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,4(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX7_82C0B400",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 7 (offset 28) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2193742928,
+  "hex": "82C1DC50",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 7,
+   "off": 28
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot7_82C1DC50",
+  "struct_desc": "[SDK runtime] Virtual-call thunk: reads the vtable pointer from the object, selects slot 7 (byte offset 28), and tail-calls it."
+ },
+ {
+  "addr": 2193742944,
+  "hex": "82C1DC60",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 6,
+   "off": 24
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot6_82C1DC60",
+  "struct_desc": "[SDK runtime] Virtual-call thunk: reads the vtable pointer from the object, selects slot 6 (byte offset 24), and tail-calls it."
+ },
+ {
+  "addr": 2193742976,
+  "hex": "82C1DC80",
+  "insns": 6,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 3,
+   "off": 12
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r3,4(r4)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX3_82C1DC80",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 3 (offset 12) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2193743000,
+  "hex": "82C1DC98",
+  "insns": 13,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CA6320"
+  ],
+  "first": "lis r10,-32247",
+  "last": "b 0x82ca6320",
+  "baseline_name": "Func_82C1DC98",
+  "struct_desc": "[SDK runtime] Body function, 13 insns, no prologue (mid-function target or leaf). Calls: sub_82CA6320. First: `lis r10,-32247`; last: `b 0x82ca6320`."
+ },
+ {
+  "addr": 2193814784,
+  "hex": "82C2F500",
+  "insns": 6,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 12,
+   "off": 48
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r3,4(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX12_82C2F500",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 12 (offset 48) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2193933000,
+  "hex": "82C4C2C8",
+  "insns": 8,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 10,
+   "off": 40
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,4(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX10_82C4C2C8",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 10 (offset 40) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2193933032,
+  "hex": "82C4C2E8",
+  "insns": 6,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 11,
+   "off": 44
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,4(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX11_82C4C2E8",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 11 (offset 44) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2193933056,
+  "hex": "82C4C300",
+  "insns": 8,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 6,
+   "off": 24
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,4(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX6_82C4C300",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 6 (offset 24) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2193933088,
+  "hex": "82C4C320",
+  "insns": 7,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 2,
+   "off": 8
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,4(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX2_82C4C320",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 2 (offset 8) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2193933736,
+  "hex": "82C4C5A8",
+  "insns": 8,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 2,
+   "off": 8
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,4(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX2_82C4C5A8",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 2 (offset 8) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2193933768,
+  "hex": "82C4C5C8",
+  "insns": 8,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 1,
+   "off": 4
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,4(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX1_82C4C5C8",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 1 (offset 4) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2193933800,
+  "hex": "82C4C5E8",
+  "insns": 9,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 1,
+   "off": 4
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,4(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX1_82C4C5E8",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 1 (offset 4) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2194171880,
+  "hex": "82C867E8",
+  "insns": 3,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194170856
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82C863E8"
+  ],
+  "first": "lwz r5,16(r3)",
+  "last": "b 0x82c863e8",
+  "baseline_name": "TailCall_82C867E8",
+  "struct_desc": "[SDK runtime] Small trampoline (3 insns) that sets up a value and tail-calls 0x82C863E8."
+ },
+ {
+  "addr": 2194200608,
+  "hex": "82C8D820",
+  "insns": 30,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r10,0(r6)",
+  "last": "blr",
+  "baseline_name": "Func_82C8D820",
+  "struct_desc": "[SDK runtime] Body function, 30 insns, no prologue (mid-function target or leaf). First: `lwz r10,0(r6)`; last: `blr`."
+ },
+ {
+  "addr": 2194507344,
+  "hex": "82CD8650",
+  "insns": 6,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "li r11,6",
+  "last": "blr",
+  "baseline_name": "Func_82CD8650",
+  "struct_desc": "[SDK runtime] Body function, 6 insns, no prologue (mid-function target or leaf). First: `li r11,6`; last: `blr`."
+ },
+ {
+  "addr": 2194520800,
+  "hex": "82CDBAE0",
+  "insns": 5,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "mr r10,r3",
+  "last": "blr",
+  "baseline_name": "Func_82CDBAE0",
+  "struct_desc": "[SDK runtime] Body function, 5 insns, no prologue (mid-function target or leaf). First: `mr r10,r3`; last: `blr`."
+ },
+ {
+  "addr": 2194543888,
+  "hex": "82CE1510",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194541672
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CE0C68"
+  ],
+  "first": "addi r3,r3,-16",
+  "last": "b 0x82ce0c68",
+  "baseline_name": "TailCall_82CE1510",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82CE0C68."
+ },
+ {
+  "addr": 2194543904,
+  "hex": "82CE1520",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194543072
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CE11E0"
+  ],
+  "first": "addi r3,r3,-16",
+  "last": "b 0x82ce11e0",
+  "baseline_name": "TailCall_82CE1520",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82CE11E0."
+ },
+ {
+  "addr": 2194543944,
+  "hex": "82CE1548",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194541600
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CE0C20"
+  ],
+  "first": "addi r3,r3,-16",
+  "last": "b 0x82ce0c20",
+  "baseline_name": "TailCall_82CE1548",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82CE0C20."
+ },
+ {
+  "addr": 2194552656,
+  "hex": "82CE3750",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194551808
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CE3400"
+  ],
+  "first": "addi r3,r3,-16",
+  "last": "b 0x82ce3400",
+  "baseline_name": "TailCall_82CE3750",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82CE3400."
+ },
+ {
+  "addr": 2194552672,
+  "hex": "82CE3760",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194551328
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CE3220"
+  ],
+  "first": "addi r3,r3,-16",
+  "last": "b 0x82ce3220",
+  "baseline_name": "TailCall_82CE3760",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82CE3220."
+ },
+ {
+  "addr": 2194552680,
+  "hex": "82CE3768",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194551352
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CE3238"
+  ],
+  "first": "addi r3,r3,-16",
+  "last": "b 0x82ce3238",
+  "baseline_name": "TailCall_82CE3768",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82CE3238."
+ },
+ {
+  "addr": 2194552688,
+  "hex": "82CE3770",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194551904
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CE3460"
+  ],
+  "first": "addi r3,r3,-16",
+  "last": "b 0x82ce3460",
+  "baseline_name": "TailCall_82CE3770",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82CE3460."
+ },
+ {
+  "addr": 2194552728,
+  "hex": "82CE3798",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194541544
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CE0BE8"
+  ],
+  "first": "addi r3,r3,-4",
+  "last": "b 0x82ce0be8",
+  "baseline_name": "TailCall_82CE3798",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82CE0BE8."
+ },
+ {
+  "addr": 2194552736,
+  "hex": "82CE37A0",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194551336
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CE3228"
+  ],
+  "first": "addi r3,r3,-16",
+  "last": "b 0x82ce3228",
+  "baseline_name": "TailCall_82CE37A0",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82CE3228."
+ },
+ {
+  "addr": 2194552744,
+  "hex": "82CE37A8",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2194552384
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82CE3640"
+  ],
+  "first": "addi r3,r3,-16",
+  "last": "b 0x82ce3640",
+  "baseline_name": "TailCall_82CE37A8",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82CE3640."
+ },
+ {
+  "addr": 2194562384,
+  "hex": "82CE5D50",
+  "insns": 18,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 4,
+   "off": 16
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lbz r10,60(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX4_82CE5D50",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 4 (offset 16) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2194562456,
+  "hex": "82CE5D98",
+  "insns": 14,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lbz r10,60(r3)",
+  "last": "blr",
+  "baseline_name": "Func_82CE5D98",
+  "struct_desc": "[SDK runtime] Body function, 14 insns, no prologue (mid-function target or leaf). First: `lbz r10,60(r3)`; last: `blr`."
+ },
+ {
+  "addr": 2196267400,
+  "hex": "82E86188",
+  "insns": 17,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r9,8(r3)",
+  "last": "blr",
+  "baseline_name": "Func_82E86188",
+  "struct_desc": "[SDK runtime] Body function, 17 insns, no prologue (mid-function target or leaf). First: `lwz r9,8(r3)`; last: `blr`."
+ },
+ {
+  "addr": 2196273680,
+  "hex": "82E87A10",
+  "insns": 6,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lis r11,-32256",
+  "last": "blr",
+  "baseline_name": "Func_82E87A10",
+  "struct_desc": "[SDK runtime] Body function, 6 insns, no prologue (mid-function target or leaf). First: `lis r11,-32256`; last: `blr`."
+ },
+ {
+  "addr": 2196306408,
+  "hex": "82E8F9E8",
+  "insns": 3,
+  "cat": "const",
+  "detail": {
+   "target": 2201246636
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lis r11,-31948",
+  "last": "blr",
+  "baseline_name": "RetAddr_82E8F9E8",
+  "struct_desc": "[SDK runtime] Const thunk: builds and returns the data address 0x83345BAC."
+ },
+ {
+  "addr": 2196471504,
+  "hex": "82EB7ED0",
+  "insns": 3,
+  "cat": "const",
+  "detail": {
+   "target": 2201275692
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lis r11,-31947",
+  "last": "blr",
+  "baseline_name": "RetAddr_82EB7ED0",
+  "struct_desc": "[SDK runtime] Const thunk: builds and returns the data address 0x8334CD2C."
+ },
+ {
+  "addr": 2196511000,
+  "hex": "82EC1918",
+  "insns": 3,
+  "cat": "const",
+  "detail": {
+   "target": 2201280960
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lis r11,-31947",
+  "last": "blr",
+  "baseline_name": "RetAddr_82EC1918",
+  "struct_desc": "[SDK runtime] Const thunk: builds and returns the data address 0x8334E1C0."
+ },
+ {
+  "addr": 2196524632,
+  "hex": "82EC4E58",
+  "insns": 3,
+  "cat": "const",
+  "detail": {
+   "target": 2201282892
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lis r11,-31947",
+  "last": "blr",
+  "baseline_name": "RetAddr_82EC4E58",
+  "struct_desc": "[SDK runtime] Const thunk: builds and returns the data address 0x8334E94C."
+ },
+ {
+  "addr": 2196718040,
+  "hex": "82EF41D8",
+  "insns": 6,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 3,
+   "off": 12
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,4(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX3_82EF41D8",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 3 (offset 12) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2196718064,
+  "hex": "82EF41F0",
+  "insns": 6,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 4,
+   "off": 16
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,4(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX4_82EF41F0",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 4 (offset 16) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2196737312,
+  "hex": "82EF8D20",
+  "insns": 5,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "li r11,-1",
+  "last": "blr",
+  "baseline_name": "Func_82EF8D20",
+  "struct_desc": "[SDK runtime] Body function, 5 insns, no prologue (mid-function target or leaf). First: `li r11,-1`; last: `blr`."
+ },
+ {
+  "addr": 2196784160,
+  "hex": "82F04420",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 26,
+   "off": 104
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot26_82F04420",
+  "struct_desc": "[SDK runtime] Virtual-call thunk: reads the vtable pointer from the object, selects slot 26 (byte offset 104), and tail-calls it."
+ },
+ {
+  "addr": 2196784176,
+  "hex": "82F04430",
+  "insns": 2,
+  "cat": "retimm",
+  "detail": {
+   "value": 0
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "li r3,0",
+  "last": "blr",
+  "baseline_name": "RetConst0_82F04430",
+  "struct_desc": "[SDK runtime] Returns the immediate constant 0 in r3."
+ },
+ {
+  "addr": 2196814584,
+  "hex": "82F0BAF8",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2196832528
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82F10110"
+  ],
+  "first": "addi r3,r3,-128",
+  "last": "b 0x82f10110",
+  "baseline_name": "TailCall_82F0BAF8",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82F10110."
+ },
+ {
+  "addr": 2196814600,
+  "hex": "82F0BB08",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2196832528
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82F10110"
+  ],
+  "first": "addi r3,r3,-16",
+  "last": "b 0x82f10110",
+  "baseline_name": "TailCall_82F0BB08",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82F10110."
+ },
+ {
+  "addr": 2196886792,
+  "hex": "82F1D508",
+  "insns": 6,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 10,
+   "off": 40
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,32(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX10_82F1D508",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 10 (offset 40) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2196886816,
+  "hex": "82F1D520",
+  "insns": 6,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 4,
+   "off": 16
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,32(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX4_82F1D520",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 4 (offset 16) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2196886840,
+  "hex": "82F1D538",
+  "insns": 6,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 11,
+   "off": 44
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,32(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX11_82F1D538",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 11 (offset 44) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2196886864,
+  "hex": "82F1D550",
+  "insns": 6,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 5,
+   "off": 20
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,32(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX5_82F1D550",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 5 (offset 20) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2196886888,
+  "hex": "82F1D568",
+  "insns": 6,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 6,
+   "off": 24
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,32(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX6_82F1D568",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 6 (offset 24) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2196886912,
+  "hex": "82F1D580",
+  "insns": 6,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 7,
+   "off": 28
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,32(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX7_82F1D580",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 7 (offset 28) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2196886936,
+  "hex": "82F1D598",
+  "insns": 6,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 8,
+   "off": 32
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,32(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX8_82F1D598",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 8 (offset 32) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2196886960,
+  "hex": "82F1D5B0",
+  "insns": 6,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 9,
+   "off": 36
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,32(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX9_82F1D5B0",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 9 (offset 36) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2196947688,
+  "hex": "82F2C2E8",
+  "insns": 5,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,28(r3)",
+  "last": "blr",
+  "baseline_name": "Func_82F2C2E8",
+  "struct_desc": "[SDK runtime] Body function, 5 insns, no prologue (mid-function target or leaf). First: `lwz r11,28(r3)`; last: `blr`."
+ },
+ {
+  "addr": 2196947880,
+  "hex": "82F2C3A8",
+  "insns": 6,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 14,
+   "off": 56
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,28(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX14_82F2C3A8",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 14 (offset 56) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2196947904,
+  "hex": "82F2C3C0",
+  "insns": 6,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,28(r3)",
+  "last": "blr",
+  "baseline_name": "Func_82F2C3C0",
+  "struct_desc": "[SDK runtime] Body function, 6 insns, no prologue (mid-function target or leaf). First: `lwz r11,28(r3)`; last: `blr`."
+ },
+ {
+  "addr": 2196999584,
+  "hex": "82F38DA0",
+  "insns": 4,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2196973784
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82F328D8"
+  ],
+  "first": "mr r5,r4",
+  "last": "b 0x82f328d8",
+  "baseline_name": "TailCall_82F38DA0",
+  "struct_desc": "[SDK runtime] Small trampoline (4 insns) that sets up a value and tail-calls 0x82F328D8."
+ },
+ {
+  "addr": 2197042600,
+  "hex": "82F435A8",
+  "insns": 9,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lfs f0,72(r4)",
+  "last": "blr",
+  "baseline_name": "Func_82F435A8",
+  "struct_desc": "[SDK runtime] Body function, 9 insns, no prologue (mid-function target or leaf). First: `lfs f0,72(r4)`; last: `blr`."
+ },
+ {
+  "addr": 2197120656,
+  "hex": "82F56690",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2197123728
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82F57290"
+  ],
+  "first": "addi r3,r3,-16",
+  "last": "b 0x82f57290",
+  "baseline_name": "TailCall_82F56690",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82F57290."
+ },
+ {
+  "addr": 2197192216,
+  "hex": "82F67E18",
+  "insns": 10,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 3,
+   "off": 12
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,48(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX3_82F67E18",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 3 (offset 12) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2197192256,
+  "hex": "82F67E40",
+  "insns": 10,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 6,
+   "off": 24
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,48(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX6_82F67E40",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 6 (offset 24) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2197192296,
+  "hex": "82F67E68",
+  "insns": 10,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 7,
+   "off": 28
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,48(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX7_82F67E68",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 7 (offset 28) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2197517424,
+  "hex": "82FB7470",
+  "insns": 4,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,24(r4)",
+  "last": "blr",
+  "baseline_name": "Func_82FB7470",
+  "struct_desc": "[SDK runtime] Body function, 4 insns, no prologue (mid-function target or leaf). First: `lwz r11,24(r4)`; last: `blr`."
+ },
+ {
+  "addr": 2197716728,
+  "hex": "82FE7EF8",
+  "insns": 2,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2197733984
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82FEC260"
+  ],
+  "first": "addi r3,r3,8880",
+  "last": "b 0x82fec260",
+  "baseline_name": "TailCall_82FE7EF8",
+  "struct_desc": "[SDK runtime] Small trampoline (2 insns) that sets up a value and tail-calls 0x82FEC260."
+ },
+ {
+  "addr": 2197716736,
+  "hex": "82FE7F00",
+  "insns": 3,
+  "cat": "tailcall",
+  "detail": {
+   "target": 2197734744
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_82FEC558"
+  ],
+  "first": "addi r5,r3,384",
+  "last": "b 0x82fec558",
+  "baseline_name": "TailCall_82FE7F00",
+  "struct_desc": "[SDK runtime] Small trampoline (3 insns) that sets up a value and tail-calls 0x82FEC558."
+ },
+ {
+  "addr": 2198169616,
+  "hex": "83056810",
+  "insns": 4,
+  "cat": "vtable",
+  "detail": {
+   "slot": 95,
+   "off": 380
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlot95_83056810",
+  "struct_desc": "[SDK runtime] Virtual-call thunk: reads the vtable pointer from the object, selects slot 95 (byte offset 380), and tail-calls it."
+ },
+ {
+  "addr": 2198170560,
+  "hex": "83056BC0",
+  "insns": 10,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 133,
+   "off": 532
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX133_83056BC0",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 133 (offset 532) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2198170600,
+  "hex": "83056BE8",
+  "insns": 10,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 134,
+   "off": 536
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX134_83056BE8",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 134 (offset 536) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2198170640,
+  "hex": "83056C10",
+  "insns": 10,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 133,
+   "off": 532
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX133_83056C10",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 133 (offset 532) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2198170680,
+  "hex": "83056C38",
+  "insns": 10,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 134,
+   "off": 536
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX134_83056C38",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 134 (offset 536) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2198171752,
+  "hex": "83057068",
+  "insns": 8,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 151,
+   "off": 604
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,0(r3)",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX151_83057068",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 151 (offset 604) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2198522664,
+  "hex": "830ACB28",
+  "insns": 30,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r6,4(r4)",
+  "last": "blr",
+  "baseline_name": "Func_830ACB28",
+  "struct_desc": "[SDK runtime] Body function, 30 insns, no prologue (mid-function target or leaf). First: `lwz r6,4(r4)`; last: `blr`."
+ },
+ {
+  "addr": 2199674072,
+  "hex": "831C5CD8",
+  "insns": 20,
+  "cat": "vtable_x",
+  "detail": {
+   "slot": 3,
+   "off": 12
+  },
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "clrlwi r10,r5,24",
+  "last": "bctr",
+  "baseline_name": "VtableSlotX3_831C5CD8",
+  "struct_desc": "[SDK runtime] Variant virtual dispatch: selects vtable slot 3 (offset 12) with extra arg shuffling / null checks, then bctr."
+ },
+ {
+  "addr": 2199674152,
+  "hex": "831C5D28",
+  "insns": 8,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "lwz r11,16(r3)",
+  "last": "blr",
+  "baseline_name": "Func_831C5D28",
+  "struct_desc": "[SDK runtime] Body function, 8 insns, no prologue (mid-function target or leaf). First: `lwz r11,16(r3)`; last: `blr`."
+ },
+ {
+  "addr": 2199910920,
+  "hex": "831FFA08",
+  "insns": 11,
+  "cat": "body",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [
+   "sub_831DF3D0"
+  ],
+  "first": "mr r11,r3",
+  "last": "b 0x831df3d0",
+  "baseline_name": "Func_831FFA08",
+  "struct_desc": "[SDK runtime] Body function, 11 insns, no prologue (mid-function target or leaf). Calls: sub_831DF3D0. First: `mr r11,r3`; last: `b 0x831df3d0`."
+ },
+ {
+  "addr": 2199895336,
+  "hex": "831FBD28",
+  "insns": 91,
+  "cat": "indirect",
+  "detail": {},
+  "region": "SDK",
+  "prologue": false,
+  "imports": [],
+  "subs": [],
+  "first": "addi r10,r4,-2",
+  "last": "blr",
+  "baseline_name": "IndirectCall_831FBD28",
+  "struct_desc": "[SDK runtime] Indirect-call thunk: computes a target and jumps via mtctr/bctr."
+ }
+]

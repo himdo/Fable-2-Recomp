@@ -78,38 +78,54 @@ size = 740
 #               calls to internal labels. Original inner entry: size 0x00F0.
 
 [entrypoint.functions."0x8217F250"]
+name = "SwitchDispatch_8217F250"
 size = 0x00F0
 
 # These are the loading screen functions when starting a new game
 [entrypoint.functions."0x822142D0"]
+name = "GetNewGameLoadingGlobal"
 [entrypoint.functions."0x82988ED8"]
+name = "LoadingScreen_Virtual43"
 [entrypoint.functions."0x82988F28"]
+name = "LoadingScreen_Virtual48"
 [entrypoint.functions."0x8274B748"]
+name = "LoadingScreen_Virtual42"
 [entrypoint.functions."0x82EAA980"]
+name = "LoadingScreen_Virtual36"
 [entrypoint.functions."0x8274B758"]
+name = "LoadingScreen_Virtual39"
 [entrypoint.functions."0x8274B778"]
+name = "LoadingScreen_Virtual28"
 [entrypoint.functions."0x822D6678"]
+name = "LoadingScreen_VectorOffset"
 
 # After new game video plays
 [entrypoint.functions."0x82988EC8"]
+name = "Story_AfterNewGameVideo"
 
 # After new game after "look little sparrow" LT button
 [entrypoint.functions."0x82988F48"]
+name = "Story_LookLittleSparrow"
 
 #talking to camera man in child scene
 [entrypoint.functions."0x82988F38"]
+name = "Story_TalkToCameraMan"
 
 # First Combat childhood fight
 [entrypoint.functions."0x8297EB48"]
+name = "Story_FirstChildCombat"
 
 # Interacting with sister after first fight
 [entrypoint.functions."0x8274B788"]
+name = "Story_SisterAfterFirstFight"
 
 # Entering the warehouse as child
 [entrypoint.functions."0x8274B738"]
+name = "Story_EnterWarehouseAsChild"
 
 # Shooting Beetle in the warehouse as child
 [entrypoint.functions."0x82DDC4D8"]
+name = "Story_ShootBeetleInWarehouse"
 
 # Swimming
 [entrypoint.functions."0x8297EB28"]
@@ -117,264 +133,351 @@ name = "Swimming"
 
 # Interacting with job sign (blacksmith)
 [entrypoint.functions."0x823A1810"]
+name = "Story_JobSignBlacksmith"
 
 # Aiming range weapon (skill)
 [entrypoint.functions."0x82988EE8"]
+name = "Skill_AimRangeWeapon"
 
 # Tatter spire right after you get there when the man says "Get Moving"
 [entrypoint.functions."0x8274B768"]
+name = "Story_TatterSpireGetMoving"
 
 # Existing Functions
 [entrypoint.functions."0x8222B3C8"]
+name = "SwitchDispatch_8222B3C8"
 size = 0x00F8
 
 [entrypoint.functions."0x822A2AB0"]
+name = "VtableSlotX3173_822A2AB0"
 size = 0x00F0
 
 [entrypoint.functions."0x822D7C50"]
+name = "SwitchDispatch_822D7C50"
 size = 0x0060
 
 [entrypoint.functions."0x822D7CB0"]
+name = "SwitchDispatch_822D7CB0"
 size = 0x0078
 
 [entrypoint.functions."0x822D7D58"]
+name = "SwitchDispatch_822D7D58"
 size = 0x00A0
 
 [entrypoint.functions."0x822D7DF8"]
+name = "SwitchDispatch_822D7DF8"
 size = 0x00A8
 
 [entrypoint.functions."0x822D7EA0"]
+name = "SwitchDispatch_822D7EA0"
 size = 0x00E8
 
 [entrypoint.functions."0x822EAA98"]
+name = "SwitchDispatch_822EAA98"
 size = 0x0098
 
 [entrypoint.functions."0x823A5A28"]
+name = "SwitchDispatch_823A5A28"
 size = 0x0118
 
 [entrypoint.functions."0x824063B0"]
+name = "SwitchDispatch_824063B0"
 size = 0x00F0
 
 [entrypoint.functions."0x82415A20"]
+name = "SwitchDispatch_82415A20"
 size = 0x01B8
 
 [entrypoint.functions."0x8241BAA8"]
+name = "SwitchDispatch_8241BAA8"
 size = 0x0120
 
 [entrypoint.functions."0x8242C5E0"]
+name = "SwitchDispatch_8242C5E0"
 size = 0x0088
 
 [entrypoint.functions."0x824B7E70"]
+name = "SwitchDispatch_824B7E70"
 size = 0x0090
 
 [entrypoint.functions."0x824BDE60"]
+name = "SwitchDispatch_824BDE60"
 size = 0x00A8
 
 [entrypoint.functions."0x824CAC90"]
+name = "SwitchDispatch_824CAC90"
 size = 0x0158
 
 [entrypoint.functions."0x824D2800"]
+name = "SwitchDispatch_824D2800"
 size = 0x0080
 
 [entrypoint.functions."0x8250B778"]
+name = "SwitchDispatch_8250B778"
 size = 0x0058
 
 [entrypoint.functions."0x82520C00"]
+name = "SwitchDispatch_82520C00"
 size = 0x0070
 
 [entrypoint.functions."0x82522E18"]
+name = "SwitchDispatch_82522E18"
 size = 0x0178
 
 [entrypoint.functions."0x82592C80"]
+name = "SwitchDispatch_82592C80"
 size = 0x0088
 
 [entrypoint.functions."0x8259AF48"]
+name = "SwitchDispatch_8259AF48"
 size = 0x0080
 
 [entrypoint.functions."0x825A0B58"]
+name = "SwitchDispatch_825A0B58"
 size = 0x0090
 
 [entrypoint.functions."0x82622360"]
+name = "SwitchDispatch_82622360"
 size = 0x00C0
 
 [entrypoint.functions."0x826224B8"]
+name = "SwitchDispatch_826224B8"
 size = 0x00B0
 
 [entrypoint.functions."0x8272B2C0"]
+name = "SwitchDispatch_8272B2C0"
 size = 0x0168
 
 [entrypoint.functions."0x82771250"]
+name = "SwitchDispatch_82771250"
 size = 0x0070
 
 [entrypoint.functions."0x827D30C0"]
+name = "SwitchDispatch_827D30C0"
 size = 0x02E0
 
 [entrypoint.functions."0x8283A008"]
+name = "SwitchDispatch_8283A008"
 size = 0x0088
 
 [entrypoint.functions."0x8283FF98"]
+name = "SwitchDispatch_8283FF98"
 size = 0x00D0
 
 [entrypoint.functions."0x8289FB40"]
+name = "SwitchDispatch_8289FB40"
 size = 0x02C8
 
 [entrypoint.functions."0x8299F668"]
+name = "SwitchDispatch_8299F668"
 size = 0x0090
 
 [entrypoint.functions."0x82A2F3E8"]
+name = "SwitchDispatch_82A2F3E8"
 size = 0x0118
 
 [entrypoint.functions."0x82A34680"]
+name = "SwitchDispatch_82A34680"
 size = 0x0480
 
 [entrypoint.functions."0x82B38270"]
+name = "SwitchDispatch_82B38270"
 size = 0x0110
 
 [entrypoint.functions."0x82B57148"]
+name = "SwitchDispatch_82B57148"
 size = 0x02E0
 
 [entrypoint.functions."0x82B809E8"]
+name = "SwitchDispatch_82B809E8"
 size = 0x0230
 
 [entrypoint.functions."0x82B8F5E8"]
+name = "SwitchDispatch_82B8F5E8"
 size = 0x0128
 
 [entrypoint.functions."0x82BC8260"]
+name = "SwitchDispatch_82BC8260"
 size = 0x0080
 
 [entrypoint.functions."0x82BC9B28"]
+name = "SwitchDispatch_82BC9B28"
 size = 0x0128
 
 [entrypoint.functions."0x82BE0100"]
+name = "SwitchDispatch_82BE0100"
 size = 0x00A8
 
 [entrypoint.functions."0x82BE9668"]
+name = "TailCall_82BE9668"
 size = 0x0018  # was 0x08D4 in XenonRecomp; trimmed to avoid overlap with 0x82BE9680
 
 [entrypoint.functions."0x82BE9680"]
+name = "VtableSlotX1_82BE9680"
 size = 0x08BC
 
 [entrypoint.functions."0x82C56828"]
+name = "SwitchDispatch_82C56828"
 size = 0x0078
 
 [entrypoint.functions."0x82C89840"]
+name = "SwitchDispatch_82C89840"
 size = 0x0078  # was 0x01D8 in XenonRecomp; trimmed to avoid overlap with 0x82C898B8
 
 [entrypoint.functions."0x82C898B8"]
+name = "SwitchDispatch_82C898B8"
 size = 0x00A8  # was 0x0154 in XenonRecomp; trimmed to avoid overlap with 0x82C89960
 
 [entrypoint.functions."0x82C89960"]
+name = "SwitchDispatch_82C89960"
 size = 0x00AC
 
 [entrypoint.functions."0x82C8C9F0"]
+name = "SwitchDispatch_82C8C9F0"
 size = 0x0150
 
 [entrypoint.functions."0x82C8CF00"]
+name = "SwitchDispatch_82C8CF00"
 size = 0x0100
 
 [entrypoint.functions."0x82C8D3F0"]
+name = "SwitchDispatch_82C8D3F0"
 size = 0x01E8  # original XenonRecomp size; nested 0x82C8D4E8 entry removed (see comment above)
 
 [entrypoint.functions."0x82C8D630"]
+name = "Str_BoundedCopy_82C8D630"
 size = 0x00D8
 
 [entrypoint.functions."0x82C8D750"]
+name = "SwitchDispatch_82C8D750"
 size = 0x00D0
 
 [entrypoint.functions."0x82C8DAE8"]
+name = "SwitchDispatch_82C8DAE8"
 size = 0x00F8
 
 [entrypoint.functions."0x82C97120"]
+name = "SwitchDispatch_82C97120"
 size = 0x0098
 
 [entrypoint.functions."0x82C99CB8"]
+name = "SwitchDispatch_82C99CB8"
 size = 0x0180
 
 [entrypoint.functions."0x82C99ED0"]
+name = "SwitchDispatch_82C99ED0"
 size = 0x0190
 
 [entrypoint.functions."0x82C9A118"]
+name = "SwitchDispatch_82C9A118"
 size = 0x0190
 
 [entrypoint.functions."0x82C9B420"]
+name = "SwitchDispatch_82C9B420"
 size = 0x00D0
 
 [entrypoint.functions."0x82C9D280"]
+name = "SwitchDispatch_82C9D280"
 size = 0x0198
 
 [entrypoint.functions."0x82C9DB00"]
+name = "SwitchDispatch_82C9DB00"
 size = 0x0130
 
 [entrypoint.functions."0x82C9E878"]
+name = "SwitchDispatch_82C9E878"
 size = 0x00E0
 
 [entrypoint.functions."0x82C9E9B8"]
+name = "SwitchDispatch_82C9E9B8"
 size = 0x0108
 
 [entrypoint.functions."0x82CA1A00"]
+name = "SwitchDispatch_82CA1A00"
 size = 0x0118
 
 [entrypoint.functions."0x82CA1E98"]
+name = "SwitchDispatch_82CA1E98"
 size = 0x0140
 
 [entrypoint.functions."0x82D7F5B0"]
+name = "SwitchDispatch_82D7F5B0"
 size = 0x0158
 
 [entrypoint.functions."0x82D82B48"]
+name = "SwitchDispatch_82D82B48"
 size = 0x01A0
 
 [entrypoint.functions."0x82D97098"]
+name = "SwitchDispatch_82D97098"
 size = 0x03F0
 
 [entrypoint.functions."0x82D9E998"]
+name = "SwitchDispatch_82D9E998"
 size = 0x0058
 
 [entrypoint.functions."0x82D9E9F0"]
+name = "SwitchDispatch_82D9E9F0"
 size = 0x0074
 
 [entrypoint.functions."0x82DA60B0"]
+name = "SwitchDispatch_82DA60B0"
 size = 0x0320
 
 [entrypoint.functions."0x82DDC208"]
+name = "SwitchDispatch_82DDC208"
 size = 0x0250
 
 [entrypoint.functions."0x82DE4C10"]
+name = "SwitchDispatch_82DE4C10"
 size = 0x01E8
 
 [entrypoint.functions."0x82DE6750"]
+name = "SwitchDispatch_82DE6750"
 size = 0x00F8
 
 [entrypoint.functions."0x82E0F3A8"]
+name = "SwitchDispatch_82E0F3A8"
 size = 0x00D0
 
 [entrypoint.functions."0x82E33B90"]
+name = "SwitchDispatch_82E33B90"
 size = 0x00B8
 
 [entrypoint.functions."0x82FE7850"]
+name = "VtableSlotX2_82FE7850"
 size = 0x0108
 
 [entrypoint.functions."0x83046BE8"]
+name = "VtableSlotX2_83046BE8"
 size = 0x0118
 
 [entrypoint.functions."0x83095890"]
+name = "IndirectCall_83095890"
 size = 0x0110
 
 [entrypoint.functions."0x8310FC68"]
+name = "IndirectCall_8310FC68"
 size = 0x0080
 
 [entrypoint.functions."0x831B31B8"]
+name = "IndirectCall_831B31B8"
 size = 0x0078
 
 [entrypoint.functions."0x831FBA60"]
+name = "IndirectCall_831FBA60"
 size = 0x0068
 
 [entrypoint.functions."0x831FBAC8"]
+name = "IndirectCall_831FBAC8"
 size = 0x0068
 
 [entrypoint.functions."0x831FBB30"]
+name = "IndirectCall_831FBB30"
 size = 0x0060
 
 [entrypoint.functions."0x831FBB90"]
+name = "IndirectCall_831FBB90"
 size = 0x0198
 
 # Gap targets: branches from discovered functions land at addresses the
@@ -382,217 +485,424 @@ size = 0x0198
 # the scanner determines the extent (added 2026-09-19 after
 # "Validation failed: 12 unresolved calls").
 [entrypoint.functions."0x82BEA25C"]
+name = "TailCall_82BEA25C"
 [entrypoint.functions."0x82CD7948"]
+name = "Func_82CD7948"
 [entrypoint.functions."0x82C000F8"]
+name = "TailCall_82C000F8"
 [entrypoint.functions."0x82C00108"]
+name = "TailCall_82C00108"
 [entrypoint.functions."0x82C00118"]
+name = "TailCall_82C00118"
 [entrypoint.functions."0x82C14D58"]
+name = "TailCall_82C14D58"
 [entrypoint.functions."0x82F279D8"]
+name = "RetConst1_82F279D8"
 [entrypoint.functions."0x82E7E4F8"]
+name = "TailCall_82E7E4F8"
 [entrypoint.functions."0x82C0B680"]
+name = "TailCall_82C0B680"
 [entrypoint.functions."0x82C00120"]
+name = "TailCall_82C00120"
 [entrypoint.functions."0x82C00110"]
+name = "TailCall_82C00110"
 [entrypoint.functions."0x82C00128"]
+name = "TailCall_82C00128"
 [entrypoint.functions."0x82C0B688"]
+name = "TailCall_82C0B688"
 
 
 # Additional function-pointer-table entries (broader scan: in-body code-range
 # pointers stored within +-20B of >=2 registered starts). Fixes the 0x829FCB00
 # FATAL (2026-09-02) and pre-seeds similar table entries.
 [entrypoint.functions."0x82238828"]
+name = "Heap_AllocateBlock_82238828"
 [entrypoint.functions."0x82238FCC"]
+name = "TailCall_82238FCC"
 [entrypoint.functions."0x822394F0"]
+name = "Heap_FreeBlock_822394F0"
 [entrypoint.functions."0x822396C8"]
+name = "TailCall_822396C8"
 [entrypoint.functions."0x829FCB00"]
+name = "VtableSlotX3_829FCB00"
 [entrypoint.functions."0x82B387D0"]
+name = "Func_82B387D0"
 [entrypoint.functions."0x82B387E8"]
+name = "Func_82B387E8"
 [entrypoint.functions."0x82C59698"]
+name = "Func_82C59698"
 [entrypoint.functions."0x82C5AC4C"]
+name = "Func_82C5AC4C"
 [entrypoint.functions."0x82C5CFBC"]
+name = "TailCall_82C5CFBC"
 [entrypoint.functions."0x82C5DA68"]
+name = "Func_82C5DA68"
 [entrypoint.functions."0x82C5DA94"]
+name = "Func_82C5DA94"
 [entrypoint.functions."0x82C89A0C"]
+name = "Func_82C89A0C"
 [entrypoint.functions."0x82CA33AC"]
+name = "Func_82CA33AC"
 [entrypoint.functions."0x82CA33E4"]
+name = "Func_82CA33E4"
 [entrypoint.functions."0x82CA3614"]
+name = "Func_82CA3614"
 [entrypoint.functions."0x82CA36C4"]
+name = "TailCall_82CA36C4"
 [entrypoint.functions."0x82CA47C4"]
+name = "Func_82CA47C4"
 [entrypoint.functions."0x82CA4814"]
+name = "Func_82CA4814"
 [entrypoint.functions."0x82CA4A64"]
+name = "Func_82CA4A64"
 [entrypoint.functions."0x82CA4A70"]
+name = "Func_82CA4A70"
 [entrypoint.functions."0x82CA4DE4"]
+name = "Func_82CA4DE4"
 [entrypoint.functions."0x82CA4DFC"]
+name = "TailCall_82CA4DFC"
 [entrypoint.functions."0x82CA4FB0"]
+name = "Func_82CA4FB0"
 [entrypoint.functions."0x82CA5004"]
+name = "Func_82CA5004"
 [entrypoint.functions."0x82CA5064"]
+name = "TailCall_82CA5064"
 [entrypoint.functions."0x82CA507C"]
+name = "Func_82CA507C"
 [entrypoint.functions."0x82CA51C0"]
+name = "Func_82CA51C0"
 [entrypoint.functions."0x82CA51CC"]
+name = "Func_82CA51CC"
 [entrypoint.functions."0x82CA53BC"]
+name = "Func_82CA53BC"
 [entrypoint.functions."0x82CA53D0"]
+name = "TailCall_82CA53D0"
 [entrypoint.functions."0x82CA56DC"]
+name = "Func_82CA56DC"
 [entrypoint.functions."0x82CA56E8"]
+name = "Func_82CA56E8"
 [entrypoint.functions."0x82CA71C8"]
+name = "Func_82CA71C8"
 [entrypoint.functions."0x82CA7300"]
+name = "TailCall_82CA7300"
 [entrypoint.functions."0x82CA7C70"]
+name = "Func_82CA7C70"
 [entrypoint.functions."0x82CA7C90"]
+name = "TailCall_82CA7C90"
 [entrypoint.functions."0x82CA7C9C"]
+name = "TailCall_82CA7C9C"
 [entrypoint.functions."0x82CA8038"]
+name = "Func_82CA8038"
 [entrypoint.functions."0x82CA8060"]
+name = "TailCall_82CA8060"
 [entrypoint.functions."0x82CA806C"]
+name = "TailCall_82CA806C"
 [entrypoint.functions."0x82CA8128"]
+name = "Func_82CA8128"
 [entrypoint.functions."0x82CA8154"]
+name = "TailCall_82CA8154"
 [entrypoint.functions."0x82CA8248"]
+name = "Func_82CA8248"
 [entrypoint.functions."0x82CA827C"]
+name = "TailCall_82CA827C"
 [entrypoint.functions."0x82CA8B14"]
+name = "Func_82CA8B14"
 [entrypoint.functions."0x82CA8B44"]
+name = "Func_82CA8B44"
 [entrypoint.functions."0x82CA9064"]
+name = "Func_82CA9064"
 [entrypoint.functions."0x82CA91E8"]
+name = "TailCall_82CA91E8"
 [entrypoint.functions."0x82CA9660"]
+name = "BugCheck_82CA9660"
 [entrypoint.functions."0x82CA9710"]
+name = "BugCheck_82CA9710"
 [entrypoint.functions."0x82CAB2B8"]
+name = "Func_82CAB2B8"
 [entrypoint.functions."0x82CAB2D4"]
+name = "TailCall_82CAB2D4"
 [entrypoint.functions."0x82CAF2C0"]
+name = "Sync_82CAF2C0"
 [entrypoint.functions."0x82CAF40C"]
+name = "TailCall_82CAF40C"
 [entrypoint.functions."0x82CAF620"]
+name = "Func_82CAF620"
 [entrypoint.functions."0x82CAF658"]
+name = "TailCall_82CAF658"
 [entrypoint.functions."0x82CAFAB0"]
+name = "Func_82CAFAB0"
 [entrypoint.functions."0x82CAFAFC"]
+name = "TailCall_82CAFAFC"
 [entrypoint.functions."0x82CAFC28"]
+name = "Func_82CAFC28"
 [entrypoint.functions."0x82CAFC88"]
+name = "TailCall_82CAFC88"
 [entrypoint.functions."0x82CAFE98"]
+name = "Func_82CAFE98"
 [entrypoint.functions."0x82CAFEE4"]
+name = "TailCall_82CAFEE4"
 [entrypoint.functions."0x82CB0138"]
+name = "Func_82CB0138"
 [entrypoint.functions."0x82CB0184"]
+name = "TailCall_82CB0184"
 [entrypoint.functions."0x82CB0FB0"]
+name = "Func_82CB0FB0"
 [entrypoint.functions."0x82CB1040"]
+name = "Func_82CB1040"
 [entrypoint.functions."0x82CB1390"]
+name = "Func_82CB1390"
 [entrypoint.functions."0x82CB13EC"]
+name = "Func_82CB13EC"
 [entrypoint.functions."0x82CB4938"]
+name = "Func_82CB4938"
 [entrypoint.functions."0x82CB4974"]
+name = "Func_82CB4974"
 [entrypoint.functions."0x82CB49B0"]
+name = "TailCall_82CB49B0"
 [entrypoint.functions."0x82CB49C0"]
+name = "Func_82CB49C0"
 [entrypoint.functions."0x82CB49DC"]
+name = "Func_82CB49DC"
 [entrypoint.functions."0x82CB4B1C"]
+name = "Func_82CB4B1C"
 [entrypoint.functions."0x82CB4B28"]
+name = "Func_82CB4B28"
 [entrypoint.functions."0x82CB4B38"]
+name = "Func_82CB4B38"
 [entrypoint.functions."0x82CB4CB8"]
+name = "Func_82CB4CB8"
 [entrypoint.functions."0x82CB4E9C"]
+name = "Func_82CB4E9C"
 [entrypoint.functions."0x82CB4EAC"]
+name = "TailCall_82CB4EAC"
 [entrypoint.functions."0x82CB4F18"]
+name = "Func_82CB4F18"
 [entrypoint.functions."0x82CB4FDC"]
+name = "TailCall_82CB4FDC"
 [entrypoint.functions."0x82CB4FEC"]
+name = "TailCall_82CB4FEC"
 [entrypoint.functions."0x82CB56B0"]
+name = "Func_82CB56B0"
 [entrypoint.functions."0x82CB56BC"]
+name = "Func_82CB56BC"
 [entrypoint.functions."0x82CB56CC"]
+name = "Func_82CB56CC"
 [entrypoint.functions."0x82CB57CC"]
+name = "BugCheck_82CB57CC"
 [entrypoint.functions."0x82CB57D4"]
+name = "BugCheck_82CB57D4"
 [entrypoint.functions."0x82CB57E0"]
+name = "BugCheck_82CB57E0"
 [entrypoint.functions."0x82CB582C"]
+name = "Func_82CB582C"
 [entrypoint.functions."0x82CB5834"]
+name = "Func_82CB5834"
 [entrypoint.functions."0x82CB5840"]
+name = "Func_82CB5840"
 [entrypoint.functions."0x82CB5894"]
+name = "Func_82CB5894"
 [entrypoint.functions."0x82CB5918"]
+name = "TailCall_82CB5918"
 [entrypoint.functions."0x82CB5BB4"]
+name = "Func_82CB5BB4"
 [entrypoint.functions."0x82CB5BC0"]
+name = "Func_82CB5BC0"
 [entrypoint.functions."0x82CB5BD0"]
+name = "Func_82CB5BD0"
 [entrypoint.functions."0x82CB68A8"]
+name = "Func_82CB68A8"
 [entrypoint.functions."0x82CB68F4"]
+name = "TailCall_82CB68F4"
 [entrypoint.functions."0x82CB6C48"]
+name = "Func_82CB6C48"
 [entrypoint.functions."0x82CB6C90"]
+name = "TailCall_82CB6C90"
 [entrypoint.functions."0x82CB89E8"]
+name = "Func_82CB89E8"
 [entrypoint.functions."0x82CB8A08"]
+name = "Func_82CB8A08"
 [entrypoint.functions."0x82CB8D48"]
+name = "Sync_82CB8D48"
 [entrypoint.functions."0x82CB8D7C"]
+name = "Sync_82CB8D7C"
 [entrypoint.functions."0x82CB8E64"]
+name = "Sync_82CB8E64"
 [entrypoint.functions."0x82CB8ECC"]
+name = "Sync_82CB8ECC"
 [entrypoint.functions."0x82CB8F00"]
+name = "Sync_82CB8F00"
 [entrypoint.functions."0x82CB9018"]
+name = "TailCall_82CB9018"
 [entrypoint.functions."0x82CBA360"]
+name = "Func_82CBA360"
 [entrypoint.functions."0x82CBA370"]
+name = "TailCall_82CBA370"
 [entrypoint.functions."0x82CBA76C"]
+name = "Func_82CBA76C"
 [entrypoint.functions."0x82CBA8D0"]
+name = "TailCall_82CBA8D0"
 [entrypoint.functions."0x82CBAE6C"]
+name = "Func_82CBAE6C"
 [entrypoint.functions."0x82CBAE88"]
+name = "Func_82CBAE88"
 [entrypoint.functions."0x82CBAF00"]
+name = "Func_82CBAF00"
 [entrypoint.functions."0x82CBAF0C"]
+name = "Func_82CBAF0C"
 [entrypoint.functions."0x82CBB98C"]
+name = "FatalError_82CBB98C"
 [entrypoint.functions."0x82CBBB24"]
+name = "FatalError_82CBBB24"
 [entrypoint.functions."0x82CBBB30"]
+name = "FatalError_82CBBB30"
 [entrypoint.functions."0x82CBC820"]
+name = "FsVolume_82CBC820"
 [entrypoint.functions."0x82CBC888"]
+name = "Func_82CBC888"
 [entrypoint.functions."0x82CBC930"]
+name = "Func_82CBC930"
 [entrypoint.functions."0x82CBC940"]
+name = "Func_82CBC940"
 [entrypoint.functions."0x82CBC97C"]
+name = "Func_82CBC97C"
 [entrypoint.functions."0x82CBF740"]
+name = "MemMgr_82CBF740"
 [entrypoint.functions."0x82CBF760"]
+name = "MemMgr_82CBF760"
 [entrypoint.functions."0x82CBF770"]
+name = "MemMgr_82CBF770"
 [entrypoint.functions."0x82CBFD74"]
+name = "MemFree_82CBFD74"
 [entrypoint.functions."0x82CBFD9C"]
+name = "MemFree_82CBFD9C"
 [entrypoint.functions."0x82CC02FC"]
+name = "Exception_82CC02FC"
 [entrypoint.functions."0x82CC031C"]
+name = "Exception_82CC031C"
 [entrypoint.functions."0x82CC032C"]
+name = "Exception_82CC032C"
 [entrypoint.functions."0x82CC0494"]
+name = "TailCall_82CC0494"
 [entrypoint.functions."0x82CC04A4"]
+name = "Func_82CC04A4"
 [entrypoint.functions."0x82CC04B0"]
+name = "TailCall_82CC04B0"
 [entrypoint.functions."0x82CCA428"]
+name = "Thread_82CCA428"
 [entrypoint.functions."0x82CCA448"]
+name = "Thread_82CCA448"
 [entrypoint.functions."0x82CCA454"]
+name = "Thread_82CCA454"
 [entrypoint.functions."0x82CD1690"]
+name = "TailCall_82CD1690"
 [entrypoint.functions."0x82CD182C"]
+name = "Func_82CD182C"
 [entrypoint.functions."0x82CD18AC"]
+name = "Func_82CD18AC"
 [entrypoint.functions."0x83000858"]
+name = "Func_83000858"
 [entrypoint.functions."0x830009AC"]
+name = "Func_830009AC"
 [entrypoint.functions."0x83000AF0"]
+name = "Func_83000AF0"
 [entrypoint.functions."0x83000CF4"]
+name = "Func_83000CF4"
 [entrypoint.functions."0x83001060"]
+name = "Func_83001060"
 [entrypoint.functions."0x83001184"]
+name = "TailCall_83001184"
 [entrypoint.functions."0x83001318"]
+name = "Func_83001318"
 [entrypoint.functions."0x830013A8"]
+name = "TailCall_830013A8"
 [entrypoint.functions."0x83001514"]
+name = "Func_83001514"
 [entrypoint.functions."0x8300164C"]
+name = "TailCall_8300164C"
 [entrypoint.functions."0x8300172C"]
+name = "Func_8300172C"
 [entrypoint.functions."0x830017A0"]
+name = "TailCall_830017A0"
 [entrypoint.functions."0x83002974"]
+name = "Func_83002974"
 [entrypoint.functions."0x8300298C"]
+name = "Func_8300298C"
 [entrypoint.functions."0x83002E84"]
+name = "Func_83002E84"
 [entrypoint.functions."0x83002F18"]
+name = "TailCall_83002F18"
 [entrypoint.functions."0x8300338C"]
+name = "Func_8300338C"
 [entrypoint.functions."0x830033E0"]
+name = "Func_830033E0"
 [entrypoint.functions."0x83003414"]
+name = "TailCall_83003414"
 [entrypoint.functions."0x8300342C"]
+name = "TailCall_8300342C"
 [entrypoint.functions."0x830046B4"]
+name = "Func_830046B4"
 [entrypoint.functions."0x830046C0"]
+name = "Func_830046C0"
 [entrypoint.functions."0x83040FEC"]
+name = "Func_83040FEC"
 [entrypoint.functions."0x8304100C"]
+name = "Func_8304100C"
 [entrypoint.functions."0x8304101C"]
+name = "Func_8304101C"
 [entrypoint.functions."0x830F07A8"]
+name = "Func_830F07A8"
 [entrypoint.functions."0x830F07F8"]
+name = "Func_830F07F8"
 [entrypoint.functions."0x830F0914"]
+name = "Func_830F0914"
 [entrypoint.functions."0x830F0980"]
+name = "TailCall_830F0980"
 [entrypoint.functions."0x830F1208"]
+name = "Func_830F1208"
 [entrypoint.functions."0x830F1228"]
+name = "Func_830F1228"
 [entrypoint.functions."0x830FB43C"]
+name = "Func_830FB43C"
 [entrypoint.functions."0x830FB490"]
+name = "Func_830FB490"
 [entrypoint.functions."0x830FB4A0"]
+name = "Func_830FB4A0"
 [entrypoint.functions."0x830FD788"]
+name = "Func_830FD788"
 [entrypoint.functions."0x830FD7A8"]
+name = "Func_830FD7A8"
 [entrypoint.functions."0x830FD7B8"]
+name = "Func_830FD7B8"
 [entrypoint.functions."0x830FD7C8"]
+name = "Func_830FD7C8"
 [entrypoint.functions."0x830FD7E4"]
+name = "Func_830FD7E4"
 [entrypoint.functions."0x830FD7F4"]
+name = "Func_830FD7F4"
 [entrypoint.functions."0x830FDCEC"]
+name = "Func_830FDCEC"
 [entrypoint.functions."0x830FDCFC"]
+name = "Func_830FDCFC"
 [entrypoint.functions."0x830FDD08"]
+name = "Func_830FDD08"
 [entrypoint.functions."0x830FE168"]
+name = "Func_830FE168"
 [entrypoint.functions."0x830FE220"]
+name = "Func_830FE220"
 [entrypoint.functions."0x830FE230"]
+name = "Func_830FE230"
 [entrypoint.functions."0x830FE2E8"]
+name = "Func_830FE2E8"
 [entrypoint.functions."0x830FE380"]
+name = "Func_830FE380"
 [entrypoint.functions."0x830FE390"]
+name = "Func_830FE390"
 [entrypoint.functions."0x83117EDC"]
+name = "Func_83117EDC"
 [entrypoint.functions."0x83117F88"]
+name = "Func_83117F88"
 [entrypoint.functions."0x83117F94"]
+name = "Func_83117F94"
 
 # Function-pointer-table entries (found by scanning the decrypted XEX image for
 # data words in the code range that are not registered function starts). The
@@ -600,92 +910,179 @@ size = 0x0198
 # targets are seeded as functions here (scanner sizes them). First hit:
 # [FATAL] Call to invalid or unregistered function at 0x82CD8650 (2026-09-19).
 [entrypoint.functions."0x82267568"]
+name = "RetAddr_82267568"
 [entrypoint.functions."0x82267C88"]
+name = "RetAddr_82267C88"
 [entrypoint.functions."0x824D56C8"]
+name = "Math_FloatIndexStore_824D56C8"
 [entrypoint.functions."0x824F0600"]
+name = "VtableSlot29_824F0600"
 [entrypoint.functions."0x825EF568"]
+name = "VtableSlotX6922_825EF568"
 [entrypoint.functions."0x8274B798"]
+name = "RetConst67_8274B798"
 [entrypoint.functions."0x82903F70"]
+name = "VtableSlot5_82903F70"
 [entrypoint.functions."0x82903F80"]
+name = "VtableSlot2_82903F80"
 [entrypoint.functions."0x82996258"]
+name = "RetConst173_82996258"
 [entrypoint.functions."0x82B56870"]
+name = "VtableSlotX4_82B56870"
 [entrypoint.functions."0x82B84350"]
+name = "TailCall_82B84350"
 [entrypoint.functions."0x82BBC898"]
+name = "VtableSlotX4765_82BBC898"
 [entrypoint.functions."0x82BFA4A8"]
+name = "VtableSlot1_82BFA4A8"
 [entrypoint.functions."0x82C09188"]
+name = "VtableSlotX17_82C09188"
 [entrypoint.functions."0x82C0B400"]
+name = "VtableSlotX7_82C0B400"
 [entrypoint.functions."0x82C1DC50"]
+name = "VtableSlot7_82C1DC50"
 [entrypoint.functions."0x82C1DC60"]
+name = "VtableSlot6_82C1DC60"
 [entrypoint.functions."0x82C1DC80"]
+name = "VtableSlotX3_82C1DC80"
 [entrypoint.functions."0x82C1DC98"]
+name = "Func_82C1DC98"
 [entrypoint.functions."0x82C2F500"]
+name = "VtableSlotX12_82C2F500"
 [entrypoint.functions."0x82C4C2C8"]
+name = "VtableSlotX10_82C4C2C8"
 [entrypoint.functions."0x82C4C2E8"]
+name = "VtableSlotX11_82C4C2E8"
 [entrypoint.functions."0x82C4C300"]
+name = "VtableSlotX6_82C4C300"
 [entrypoint.functions."0x82C4C320"]
+name = "VtableSlotX2_82C4C320"
 [entrypoint.functions."0x82C4C5A8"]
+name = "VtableSlotX2_82C4C5A8"
 [entrypoint.functions."0x82C4C5C8"]
+name = "VtableSlotX1_82C4C5C8"
 [entrypoint.functions."0x82C4C5E8"]
+name = "VtableSlotX1_82C4C5E8"
 [entrypoint.functions."0x82C867E8"]
+name = "TailCall_82C867E8"
 [entrypoint.functions."0x82C8D820"]
+name = "Func_82C8D820"
 [entrypoint.functions."0x82CD8650"]
+name = "Func_82CD8650"
 [entrypoint.functions."0x82CDBAE0"]
+name = "Func_82CDBAE0"
 [entrypoint.functions."0x82CE1510"]
+name = "TailCall_82CE1510"
 [entrypoint.functions."0x82CE1520"]
+name = "TailCall_82CE1520"
 [entrypoint.functions."0x82CE1548"]
+name = "TailCall_82CE1548"
 [entrypoint.functions."0x82CE3750"]
+name = "TailCall_82CE3750"
 [entrypoint.functions."0x82CE3760"]
+name = "TailCall_82CE3760"
 [entrypoint.functions."0x82CE3768"]
+name = "TailCall_82CE3768"
 [entrypoint.functions."0x82CE3770"]
+name = "TailCall_82CE3770"
 [entrypoint.functions."0x82CE3798"]
+name = "TailCall_82CE3798"
 [entrypoint.functions."0x82CE37A0"]
+name = "TailCall_82CE37A0"
 [entrypoint.functions."0x82CE37A8"]
+name = "TailCall_82CE37A8"
 [entrypoint.functions."0x82CE5D50"]
+name = "VtableSlotX4_82CE5D50"
 [entrypoint.functions."0x82CE5D98"]
+name = "Func_82CE5D98"
 [entrypoint.functions."0x82E86188"]
+name = "Func_82E86188"
 [entrypoint.functions."0x82E87A10"]
+name = "Func_82E87A10"
 [entrypoint.functions."0x82E8F9E8"]
+name = "RetAddr_82E8F9E8"
 [entrypoint.functions."0x82EB7ED0"]
+name = "RetAddr_82EB7ED0"
 [entrypoint.functions."0x82EC1918"]
+name = "RetAddr_82EC1918"
 [entrypoint.functions."0x82EC4E58"]
+name = "RetAddr_82EC4E58"
 [entrypoint.functions."0x82EF41D8"]
+name = "VtableSlotX3_82EF41D8"
 [entrypoint.functions."0x82EF41F0"]
+name = "VtableSlotX4_82EF41F0"
 [entrypoint.functions."0x82EF8D20"]
+name = "Func_82EF8D20"
 [entrypoint.functions."0x82F04420"]
+name = "VtableSlot26_82F04420"
 [entrypoint.functions."0x82F04430"]
+name = "RetConst0_82F04430"
 [entrypoint.functions."0x82F0BAF8"]
+name = "TailCall_82F0BAF8"
 [entrypoint.functions."0x82F0BB08"]
+name = "TailCall_82F0BB08"
 [entrypoint.functions."0x82F1D508"]
+name = "VtableSlotX10_82F1D508"
 [entrypoint.functions."0x82F1D520"]
+name = "VtableSlotX4_82F1D520"
 [entrypoint.functions."0x82F1D538"]
+name = "VtableSlotX11_82F1D538"
 [entrypoint.functions."0x82F1D550"]
+name = "VtableSlotX5_82F1D550"
 [entrypoint.functions."0x82F1D568"]
+name = "VtableSlotX6_82F1D568"
 [entrypoint.functions."0x82F1D580"]
+name = "VtableSlotX7_82F1D580"
 [entrypoint.functions."0x82F1D598"]
+name = "VtableSlotX8_82F1D598"
 [entrypoint.functions."0x82F1D5B0"]
+name = "VtableSlotX9_82F1D5B0"
 [entrypoint.functions."0x82F2C2E8"]
+name = "Func_82F2C2E8"
 [entrypoint.functions."0x82F2C3A8"]
+name = "VtableSlotX14_82F2C3A8"
 [entrypoint.functions."0x82F2C3C0"]
+name = "Func_82F2C3C0"
 [entrypoint.functions."0x82F38DA0"]
+name = "TailCall_82F38DA0"
 [entrypoint.functions."0x82F435A8"]
+name = "Func_82F435A8"
 [entrypoint.functions."0x82F56690"]
+name = "TailCall_82F56690"
 [entrypoint.functions."0x82F67E18"]
+name = "VtableSlotX3_82F67E18"
 [entrypoint.functions."0x82F67E40"]
+name = "VtableSlotX6_82F67E40"
 [entrypoint.functions."0x82F67E68"]
+name = "VtableSlotX7_82F67E68"
 [entrypoint.functions."0x82FB7470"]
+name = "Func_82FB7470"
 [entrypoint.functions."0x82FE7EF8"]
+name = "TailCall_82FE7EF8"
 [entrypoint.functions."0x82FE7F00"]
+name = "TailCall_82FE7F00"
 [entrypoint.functions."0x83056810"]
+name = "VtableSlot95_83056810"
 [entrypoint.functions."0x83056BC0"]
+name = "VtableSlotX133_83056BC0"
 [entrypoint.functions."0x83056BE8"]
+name = "VtableSlotX134_83056BE8"
 [entrypoint.functions."0x83056C10"]
+name = "VtableSlotX133_83056C10"
 [entrypoint.functions."0x83056C38"]
+name = "VtableSlotX134_83056C38"
 [entrypoint.functions."0x83057068"]
+name = "VtableSlotX151_83057068"
 [entrypoint.functions."0x830ACB28"]
+name = "Func_830ACB28"
 [entrypoint.functions."0x831C5CD8"]
+name = "VtableSlotX3_831C5CD8"
 [entrypoint.functions."0x831C5D28"]
+name = "Func_831C5D28"
 [entrypoint.functions."0x831FFA08"]
+name = "Func_831FFA08"
 
 
 [entrypoint.functions."0x831FBD28"]
+name = "IndirectCall_831FBD28"
 size = 0x0170

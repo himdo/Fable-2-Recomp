@@ -1,25 +1,38 @@
+# --- Game content (ripped disc; see README "How to extract") ---------------
 default.xex
 /data/
+/nxeart/
 /$SystemUpdate/
-.pi
+
+# --- Build artifacts --------------------------------------------------------
 out
-XenonRecomp
 generated
+.pi
+
+# --- SDK / runtime artifacts ------------------------------------------------
 .fable2_image.bin
-*.png
+
+# --- Local scratch (old build logs, screenshots, session exports,
+#     stray runtime content folders) ------------------------------------------
+/scratch/
+
+# --- Manifest backup (pre-rename safety copy) --------------------------------
+fable_2_manifest.toml.bak
+
+# --- Helper scripts & images (kept out of the repo) ---------------------------
 *.ps1
 *.py
-rebuild.log
-pi-session-2026-09-02T21-38-08-877Z_01a0640e-d56d-7264-9d4a-49c7ea0d56b1.html
-nxeart
-rebuild2.log
 *.sh
-4D5307F1
-B13EBABEBABEBABE
-achievements
+*.png
 build_*.log
-# Fetched/external toolchain deps (created by tools/setup_sdk*.cmd).
+rebuild.log
+rebuild2.log
+
+# --- Fetched/external toolchain deps (created by tools/setup_sdk*.cmd). -------
 # The tracked files in thirdparty/ (rexglue-sdk-local.patch,
 # rexglue-sdk-submodule-pins.txt, vulkan/, vk_video/) stay in the repo.
 thirdparty/rexglue-sdk/
 thirdparty/rexglue-sdk-src/
+
+# --- Historical reference (pre-ReXGlue XenonRecomp configs) -------------------
+XenonRecomp

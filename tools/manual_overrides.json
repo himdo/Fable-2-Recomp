@@ -1,0 +1,30 @@
+{
+  "82C8D630": {
+    "name": "Str_BoundedCopy_82C8D630",
+    "role": "SDK bounded string copy (strncpy-like)",
+    "desc": "Copies bytes from src to dst up to a maximum length, stopping at a 0x80-high-byte terminator (the SDK's wide/extended string sentinel). On normal copy it stores the resulting length; on the short-init path it writes a 2-byte length header (sth) and a sentinel byte. Classic Xbox 360 SDK string copy with a size field.",
+    "trigger": "Internal SDK string handling (no direct player trigger).",
+    "confidence": "medium"
+  },
+  "82238828": {
+    "name": "Heap_AllocateBlock_82238828",
+    "role": "heap block allocator (game-side memory manager)",
+    "desc": "Large (495-instruction) memory allocator. Guards state with RtlEnter/LeaveCriticalSection, carves blocks out of a region (linked-list free lists at fixed object offsets), and falls back to NtAllocateVirtualMemory when the region is exhausted; raises RtlRaiseException on failure. This is the core block-alloc path of the game's custom heap.",
+    "trigger": "Internal — runs whenever the engine allocates a heap block.",
+    "confidence": "medium"
+  },
+  "822394F0": {
+    "name": "Heap_FreeBlock_822394F0",
+    "role": "heap block free (game-side memory manager)",
+    "desc": "124-instruction companion to the allocator: returns a block to the free list under RtlEnter/LeaveCriticalSection and releases whole regions via NtFreeVirtualMemory when they become empty. Part of the same custom heap as Heap_AllocateBlock_82238828.",
+    "trigger": "Internal — runs whenever the engine frees a heap block.",
+    "confidence": "medium"
+  },
+  "824D56C8": {
+    "name": "Math_FloatIndexStore_824D56C8",
+    "role": "float -> integer index store",
+    "desc": "Loads a float from a global table and a scalar, computes an integer via fcfid/fmadd/fctiwz (round-to-int of a scaled value), then stores that integer at *(r3 + 420). Converts a floating coordinate/parameter into a quantized integer index stored on an object.",
+    "trigger": "Internal math helper (no direct player trigger).",
+    "confidence": "low"
+  }
+}

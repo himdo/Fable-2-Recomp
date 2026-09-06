@@ -1,0 +1,135 @@
+{
+  "8297EB28": {
+    "name": "Swimming",
+    "role": "childhood swimming interaction (vtable slot 23)",
+    "desc": "Virtual-call thunk: loads the vtable pointer from the object in r3, reads slot 23 (byte offset 92), and tail-calls it. Reached when the child character swims.",
+    "trigger": "Swim as the child. (Name already fixed by the user; preserved verbatim.)",
+    "confidence": "high"
+  },
+  "8297EB48": {
+    "name": "Story_FirstChildCombat",
+    "role": "first childhood fight (vtable slot 25)",
+    "desc": "Virtual-call thunk: object in r3 -> vtable slot 25 (offset 100) -> bctr. Triggers the first combat encounter of the childhood (Albion) prologue.",
+    "trigger": "The first fight as the child in the opening Albion sequence.",
+    "confidence": "high"
+  },
+  "8274B788": {
+    "name": "Story_SisterAfterFirstFight",
+    "role": "interacting with sister after first fight (vtable slot 37)",
+    "desc": "Virtual-call thunk: object in r3 -> vtable slot 37 (offset 148) -> bctr. Fires the interaction with the player's sister immediately after the first childhood fight.",
+    "trigger": "Talk to your sister right after the first childhood battle.",
+    "confidence": "high"
+  },
+  "8274B738": {
+    "name": "Story_EnterWarehouseAsChild",
+    "role": "entering the warehouse as child (vtable slot 38)",
+    "desc": "Virtual-call thunk: object in r3 -> vtable slot 38 (offset 152) -> bctr. Triggers the scripted beat for entering the warehouse during the childhood prologue.",
+    "trigger": "Walk into the warehouse as the child in the Albion prologue.",
+    "confidence": "high"
+  },
+  "82DDC4D8": {
+    "name": "Story_ShootBeetleInWarehouse",
+    "role": "shooting the Beetle in the warehouse (vtable slot 9, arg-shuffled)",
+    "desc": "Variant virtual-call thunk: takes an object in r4 (moves it to r3), reads vtable[0] then slot 9 (offset 36) of the nested object, and tail-calls it with a shifted argument set (r4<-r5). Fires the shooting interaction on the Beetle target in the warehouse.",
+    "trigger": "Shoot the Beetle (target) in the warehouse as the child.",
+    "confidence": "high"
+  },
+  "82988F38": {
+    "name": "Story_TalkToCameraMan",
+    "role": "talking to the camera man, child scene (vtable slot 17)",
+    "desc": "Virtual-call thunk: object in r3 -> vtable slot 17 (offset 68) -> bctr. Triggers the conversation with the camera man in the childhood scene.",
+    "trigger": "Talk to the camera man during the child (Albion) scene.",
+    "confidence": "high"
+  },
+  "82988F48": {
+    "name": "Story_LookLittleSparrow",
+    "role": "'Look, little sparrow' LT prompt (vtable slot 45)",
+    "desc": "Virtual-call thunk: object in r3 -> vtable slot 45 (offset 180) -> bctr. Fires after the new-game intro, tied to the 'look, little sparrow' moment gated on the LT button.",
+    "trigger": "After the new-game intro video, at the 'look, little sparrow' LT prompt.",
+    "confidence": "high"
+  },
+  "82988EC8": {
+    "name": "Story_AfterNewGameVideo",
+    "role": "after new-game video plays (vtable slot 19)",
+    "desc": "Virtual-call thunk: object in r3 -> vtable slot 19 (offset 76) -> bctr. Triggers the beat immediately after the new-game intro video finishes.",
+    "trigger": "Right after the new-game intro video plays.",
+    "confidence": "high"
+  },
+  "823A1810": {
+    "name": "Story_JobSignBlacksmith",
+    "role": "interacting with the blacksmith job sign",
+    "desc": "Loads a global object pointer (data at ~0x833xxxxx built from lis r11,-31927; lwz r3,27596(r11)), forwards the incoming r3 as r4, then tail-calls sub_82297F88. Handles the interaction with the job/quest sign for the blacksmith.",
+    "trigger": "Interact with the job sign (blacksmith) in the town.",
+    "confidence": "medium"
+  },
+  "82988EE8": {
+    "name": "Skill_AimRangeWeapon",
+    "role": "aiming a range weapon (skill), vtable slot 23 on r4",
+    "desc": "Virtual-call thunk reading the object from r4 (not r3): vtable slot 23 (offset 92) -> bctr. Same slot as Swimming but dispatched on a different register, used when aiming a ranged weapon (skill).",
+    "trigger": "Aim a ranged weapon / use the aiming skill.",
+    "confidence": "medium"
+  },
+  "8274B768": {
+    "name": "Story_TatterSpireGetMoving",
+    "role": "Tatter Spire 'Get Moving' beat (vtable slot 20)",
+    "desc": "Virtual-call thunk: object in r3 -> vtable slot 20 (offset 80) -> bctr. Fires when arriving at the Tatter Spire and the man says 'Get Moving'.",
+    "trigger": "Arrive at the Tatter Spire when the man says 'Get Moving'.",
+    "confidence": "high"
+  },
+  "82988ED8": {
+    "name": "LoadingScreen_Virtual43",
+    "role": "loading-screen virtual call (vtable slot 43)",
+    "desc": "Virtual-call thunk: object in r3 -> vtable slot 43 (offset 172) -> bctr. Part of the loading-screen function group used when starting a new game.",
+    "trigger": "Loading screen when starting a new game (internal dispatch).",
+    "confidence": "low"
+  },
+  "82988F28": {
+    "name": "LoadingScreen_Virtual48",
+    "role": "loading-screen virtual call (vtable slot 48)",
+    "desc": "Virtual-call thunk: object in r3 -> vtable slot 48 (offset 192) -> bctr. Part of the loading-screen function group used when starting a new game.",
+    "trigger": "Loading screen when starting a new game (internal dispatch).",
+    "confidence": "low"
+  },
+  "8274B748": {
+    "name": "LoadingScreen_Virtual42",
+    "role": "loading-screen virtual call (vtable slot 42)",
+    "desc": "Virtual-call thunk: object in r3 -> vtable slot 42 (offset 168) -> bctr. Part of the loading-screen function group used when starting a new game.",
+    "trigger": "Loading screen when starting a new game (internal dispatch).",
+    "confidence": "low"
+  },
+  "82EAA980": {
+    "name": "LoadingScreen_Virtual36",
+    "role": "loading-screen virtual call (vtable slot 36, null-checked)",
+    "desc": "Null-checked virtual-call thunk: checks r4 for null, swaps args (r4<-r3, r3<-r4), reads vtable slot 36 (offset 144) of the object, and tail-calls it. Part of the new-game loading-screen group.",
+    "trigger": "Loading screen when starting a new game (internal dispatch).",
+    "confidence": "low"
+  },
+  "8274B758": {
+    "name": "LoadingScreen_Virtual39",
+    "role": "loading-screen virtual call (vtable slot 39)",
+    "desc": "Virtual-call thunk: object in r3 -> vtable slot 39 (offset 156) -> bctr. Part of the loading-screen function group used when starting a new game.",
+    "trigger": "Loading screen when starting a new game (internal dispatch).",
+    "confidence": "low"
+  },
+  "8274B778": {
+    "name": "LoadingScreen_Virtual28",
+    "role": "loading-screen virtual call (vtable slot 28)",
+    "desc": "Virtual-call thunk: object in r3 -> vtable slot 28 (offset 112) -> bctr. Part of the loading-screen function group used when starting a new game.",
+    "trigger": "Loading screen when starting a new game (internal dispatch).",
+    "confidence": "low"
+  },
+  "822D6678": {
+    "name": "LoadingScreen_VectorOffset",
+    "role": "loading-screen vector offset add (tails to sub_822AADE0)",
+    "desc": "Loads a 128-bit vector constant from a data table (lis r11,-31926; addi r10,r11,-21152; lvx128), adds it to the in-flight float vectors v1/v2 (vaddfp), then tails into sub_822AADE0. Applies a fixed positional offset, part of the new-game loading-screen group.",
+    "trigger": "Loading screen when starting a new game (internal helper).",
+    "confidence": "low"
+  },
+  "822142D0": {
+    "name": "GetNewGameLoadingGlobal",
+    "role": "returns the new-game loading-screen global pointer",
+    "desc": "Const thunk: builds the data address 0x8331950C (lis r11,-31950; lwz r3,-27380(r11)) and returns the pointer stored there in r3. Head of the 'loading screen when starting a new game' group.",
+    "trigger": "Loading screen when starting a new game (internal getter).",
+    "confidence": "medium"
+  }
+}

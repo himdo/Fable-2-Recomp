@@ -17,7 +17,7 @@ if not defined LLDB (
     exit /b 1
 )
 "%LLDB%" -b ^
-  -o "command script import %~dp0..\crash_bt" ^
+  -o "command script import %~dp0crash_bt" ^
   -o "breakpoint set -n rex::debug::Break()" ^
   -o "run" ^
   -o "echo === STOP REASONS ===" ^
