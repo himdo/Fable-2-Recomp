@@ -107,6 +107,7 @@ if(WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Release")
           COMMAND ${CMAKE_COMMAND} -E copy_if_different "${FABLE2_SDK_ROOT}/bin/rexruntime.dll" "$<TARGET_FILE_DIR:fable_2>/rexruntime-d3d12.dll"
           COMMAND ${CMAKE_COMMAND} -E copy_if_different "${FABLE2_SDK_ROOT}/bin/rexgpu-xenos.dll" "$<TARGET_FILE_DIR:fable_2>/rexgpu-xenos-prebuilt.dll"
           COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/tools/fable2.cmd" "$<TARGET_FILE_DIR:fable_2>/fable2.cmd"
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/tools/fable2-uncapped.cmd" "$<TARGET_FILE_DIR:fable_2>/fable2-uncapped.cmd"
           COMMENT "Staging Vulkan plugin/runtime + D3D12 backups + launcher")
     else()
         message(STATUS "Vulkan SDK not fully built (need rexgpu-xenos.dll + rexruntime.dll under ${FABLE2_SDK_SRC}/out/win-amd64/Release) - run tools/build_sdk_vulkan.cmd to enable 'fable2.cmd vulkan'")

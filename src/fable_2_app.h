@@ -20,7 +20,10 @@
 #include <windows.h>
 
 #include "alloc_watch.h"
-#include "fps_probe.h"
+// 30fps-cap instrumentation (writes fps_probe.log next to the exe). Disabled
+// now that the cap is lifted via REX_VSYNC=0 (see tools/fable2-uncapped.cmd).
+// Re-enable to re-measure the frame pacing:
+// #include "fps_probe.h"
 #include "keyboard_gamepad.h"
 
 class Fable2App : public rex::ReXApp {
@@ -66,9 +69,6 @@ class Fable2App : public rex::ReXApp {
   }
 
   void OnPostSetup() override {
-    // TEMP: 30fps-cap instrumentation is active via the strong symbol
-    // overrides in fps_probe.h (writes fps_probe.log next to the exe).
-
     // Feed the F3 debug overlay with guest FPS (below). The GPU plugin
     // records per-guest-swap frame timing into the shared perf registry
     // (rex::perf, state lives in rexruntime.dll and is shared with the
