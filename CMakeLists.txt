@@ -26,6 +26,13 @@ endif()
 # for Release). Without it the game runs with no GPU emulation.
 rexglue_setup_target(fable_2 GPU_PLUGINS xenos)
 
+# NOTE: the build does NOT copy the game content (default.xex, data/, ...) into
+# the build directory. fable_2.exe looks for its content in its own directory
+# only; to run in place, stage it manually (one-time ~6.5 GB copy):
+#   tools\stage_content.cmd <project root> out\build\<preset>
+# or point the exe at an existing content tree with --game_data_root=<path>.
+# saves/, cache/, logs/, and fable_2.toml are always written next to the exe.
+
 # --- PDB for the Release build (crash debugging) --------------------------
 # The recompiled guest functions are named sub_<guest_address>, so a PDB lets
 # the debugger resolve a crash PC directly to the offending guest function

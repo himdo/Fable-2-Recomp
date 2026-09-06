@@ -8,10 +8,13 @@
 
 #include <rex/perf/counter.h>
 #include <rex/rex_app.h>
+#include <rex/system.h>
 #include <rex/system/gpu_plugin.h>
 
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
+#include <format>
 #include <thread>
 
 #include <windows.h>
@@ -158,39 +161,65 @@ class Fable2App : public rex::ReXApp {
   // void OnLoadXexImage(std::string& xex_image) override {}
   // void OnPostLoadXexImage() override {}
 
-  // Content root (mounted as game:/ in the guest VFS). Resolved relative to
-  // the executable's own location: the content (default.xex, data/, ...) is
-  // expected next to the exe or in an ancestor directory (the exe lives in
-  // out/build/<preset>/, the content at the project root). Override on the
-  // command line with --game_data_root=<path>.
+  // Self-contained layout: everything lives next to the executable.
+  //   <exe>/               <- content root (default.xex, data/, nxeart/,
+  //                           $SystemUpdate/; staged next to the exe by the
+  //                           build, see CMakeLists.txt)
+  //   <exe>/saves/         <- user data: save files, settings, profiles
+  //   <exe>/cache/         <- runtime caches (shader cache, etc.)
+  //   <exe>/fable_2.toml   <- cvar config (SDK default)
+  //   <exe>/logs/          <- game logs (SDK default)
+  // The content root is the exe's own directory ONLY (no ancestor walk), so
+  // the whole build folder is portable as-is: copy it anywhere and it runs.
+  // Override the content location with --game_data_root=<path>.
   void OnConfigurePaths(rex::PathConfig& paths) override {
-    std::filesystem::path content_dir;
+    const std::filesystem::path exe_dir =
+        rex::filesystem::GetExecutableFolder();
+
     if (paths.game_data_root.empty()) {
-      auto dir = rex::filesystem::GetExecutableFolder();
-      for (int i = 0; i < 5; ++i) {
-        if (std::filesystem::is_regular_file(dir / "default.xex")) {
-          content_dir = dir;
-          break;
-        }
-        if (!dir.has_parent_path() || dir.parent_path() == dir) break;
-        dir = dir.parent_path();
+      if (std::filesystem::is_regular_file(exe_dir / "default.xex")) {
+        paths.game_data_root = exe_dir;
+      } else {
+        // The SDK's fallback for an empty game_data_root is the cryptic
+        // "--game_data_root was not provided" dialog; in this
+        // self-contained layout the real problem is the missing content,
+        // so say that and stop before the SDK's dialog can show.
+        // (Logging is not initialized yet at this hook, dialog only.)
+        const std::string msg = std::format(
+            "default.xex was not found next to fable_2.exe ({}).\n\n"
+            "Stage the game content there (the build does this "
+            "automatically) or pass --game_data_root=<path>.",
+            exe_dir.string());
+        rex::ShowSimpleMessageBox(rex::SimpleMessageBoxType::Error, msg);
+        std::exit(1);
       }
-      paths.game_data_root = content_dir;
-    } else {
-      content_dir = paths.game_data_root;
     }
 
-    // Keep user data (save files, settings, profiles) in the game's own
-    // folder (the folder containing default.xex) instead of the SDK's
-    // default per-user platform location, which caused save corruption.
-    // NOTE: set unconditionally because the SDK default is non-empty, so an
-    // empty-check would never trigger (overrides this cvar/CLI default).
-    if (!content_dir.empty()) {
-      paths.user_data_root = content_dir;
-      std::error_code ec;
-      std::filesystem::create_directories(content_dir, ec);
+    // The game content itself must actually be present too (covers both the
+    // exe-dir default and a --game_data_root override): without data/ the
+    // guest fails deep inside content loading with cryptic errors, so fail
+    // fast with the real problem.
+    if (!paths.game_data_root.empty() &&
+        !std::filesystem::is_directory(paths.game_data_root / "data")) {
+      const std::string msg = std::format(
+          "The data folder was not found in {}.",
+          paths.game_data_root.string());
+      rex::ShowSimpleMessageBox(rex::SimpleMessageBoxType::Error, msg);
+      std::exit(1);
     }
-    // Mount the $SystemUpdate folder (next to the game content) as update:\
+
+    // Keep saves and caches inside the exe's own folder (self-contained).
+    // The SDK's default user dir is a per-user platform location, which
+    // caused save corruption. NOTE: set unconditionally because the SDK
+    // defaults are non-empty, so empty-checks would never trigger (this
+    // also overrides the cvar/CLI defaults).
+    std::error_code ec;
+    paths.user_data_root = exe_dir / "saves";
+    std::filesystem::create_directories(paths.user_data_root, ec);
+    paths.cache_root = exe_dir / "cache";
+    std::filesystem::create_directories(paths.cache_root, ec);
+
+    // Mount the $SystemUpdate folder (inside the content root) as update:\
     // so VdSetGraphicsInterruptCallback-era update partition lookups resolve
     // instead of failing with "device not found".
     if (paths.update_data_root.empty() && !paths.game_data_root.empty()) {
