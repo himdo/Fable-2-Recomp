@@ -69,6 +69,8 @@ Fable 2 Rexglue/
 │   ├── rexglue-sdk/                <- (untracked) prebuilt SDK, fetched by tools/setup_sdk.cmd
 │   └── rexglue-sdk-src/            <- (untracked) SDK source, fetched by tools/setup_sdk_src.cmd (Vulkan only)
 ├── tools/
+│   ├── fable2.cmd                  <- launcher: stages runtime/plugin pair, picks backend
+│   ├── fable2-uncapped.cmd         <- launcher wrapper: sets REX_VSYNC=0 (uncaps the 30 fps lock)
 │   ├── setup_sdk.cmd               <- fetch prebuilt SDK v0.10.0 -> thirdparty/rexglue-sdk (auto-run by build.cmd)
 │   ├── setup_sdk_src.cmd           <- fetch + pin + patch SDK source -> thirdparty/rexglue-sdk-src (Vulkan only)
 │   ├── stage_content.cmd           <- copy the game content next to a built exe (manual, incremental)
@@ -107,6 +109,34 @@ Optional command-line overrides (all normal `--cvar value` args):
 | `--update_data_root <path>` | Optional update content root |
 | `--window_width` / `--window_height` / `--fullscreen` | Presentation options |
 | `--keyboard_gamepad_map <map>` | Host keyboard -> guest gamepad button map (see below) |
+
+## Frame rate — 30 fps cap, and how to lift it
+
+The native Xbox 360 build runs at 30 fps. The lock is a **guest-side frame
+gate**: every frame the game waits for the GPU vblank counter (written back by
+the ReXGlue command processor once per vblank) to advance **2 units** — two
+16.6 ms vblanks = 33 ms. The ReXGlue vblank worker paces itself from the
+`vsync` cvar: on = guest refresh rate (60 Hz), off = ~1000 Hz.
+
+**Uncapped launcher (no rebuild, no SDK changes):**
+
+```
+out\build\win-amd64-release\fable2-uncapped.cmd        D3D12, uncapped
+out\build\win-amd64-release\fable2-uncapped.cmd vulkan Vulkan, uncapped
+```
+
+It just sets `REX_VSYNC=0` (the SDK's env-var form of the `vsync` cvar) and
+calls `fable2.cmd`. The vblank counter then advances ~1000x/s, the guest's
+"wait +2 units" gate completes in ~2 ms, and the game runs uncapped (observed
+20-100 fps depending on scene; check the Guest FPS line in the F3 overlay).
+
+Equivalent one-liner: `$env:REX_VSYNC=0; .\fable2.cmd d3d12` (PowerShell), or
+toggle `vsync = false` in the F3 cvar overlay live, or put it in
+`fable_2.toml` next to the exe. To run at the native 30 fps, use `fable2.cmd`
+without the env var.
+
+Full investigation record (what was ruled out, the counter chain, the decisive
+experiments): `FPS_CAP_INVESTIGATION.md` in the repo root.
 
 ## Keyboard controls
 
