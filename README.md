@@ -38,6 +38,7 @@ out/build/win-amd64-debug/
 ├── saves/                        <- save files / settings / profiles (created at runtime)
 ├── cache/                        <- runtime caches (created at runtime)
 ├── logs/ + fable_2.toml          <- logs + cvar config (created at runtime)
+├── README.md                     <- how to run this (staged by the build)
 └── rexruntime.dll, rexgpu-xenos*.dll, ... <- staged runtime + GPU plugins (by the build)
 
 Project root (build sources + the content that gets staged from here):

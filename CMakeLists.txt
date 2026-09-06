@@ -33,6 +33,15 @@ rexglue_setup_target(fable_2 GPU_PLUGINS xenos)
 # or point the exe at an existing content tree with --game_data_root=<path>.
 # saves/, cache/, logs/, and fable_2.toml are always written next to the exe.
 
+# Stage a copy of the README next to the exe so anyone who gets the build
+# folder (without the repo) knows how to run the game.
+add_custom_command(TARGET fable_2 POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          ${CMAKE_CURRENT_SOURCE_DIR}/README.md
+          $<TARGET_FILE_DIR:fable_2>/README.md
+  COMMENT "Staging README.md next to fable_2.exe"
+)
+
 # --- PDB for the Release build (crash debugging) --------------------------
 # The recompiled guest functions are named sub_<guest_address>, so a PDB lets
 # the debugger resolve a crash PC directly to the offending guest function
