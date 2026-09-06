@@ -9,8 +9,9 @@
 #
 # Consuming the SDK via add_subdirectory() makes PROJECT_IS_TOP_LEVEL false,
 # which skips that install step entirely. We only need the built
-# rexgpu-xenos.dll (Vulkan), so skipping install/packaging is fine. The SDK is
-# NOT modified - this just changes how it's consumed.
+# rexgpu-xenos.dll (Vulkan), so skipping install/packaging is fine. The
+# wrapper modifies nothing - the SDK tree it consumes is stock upstream plus
+# this project's tracked local patch (thirdparty/rexglue-sdk-local.patch).
 cmake_minimum_required(VERSION 3.25)
 
 # C/CXX enabled so the SDK's C and C++ dependencies configure. The compiler
@@ -32,8 +33,15 @@ endif()
 set(REXGLUE_USE_VULKAN ON CACHE BOOL "Enable Vulkan graphics backend" FORCE)
 set(REXGLUE_USE_D3D12 ON CACHE BOOL "Enable D3D12 graphics backend" FORCE)
 
-set(REXGLUE_SDK_SOURCE "D:/projects/hacking/Windows/rexglue-sdk-src"
-    CACHE PATH "ReXGlue SDK source" FORCE)
+# SDK source: default to thirdparty/rexglue-sdk-src in this repo (fetched +
+# patched by tools/setup_sdk_src.cmd); override with -DREXGLUE_SDK_SOURCE=...
+if(NOT REXGLUE_SDK_SOURCE OR NOT EXISTS "${REXGLUE_SDK_SOURCE}")
+    set(REXGLUE_SDK_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/../../thirdparty/rexglue-sdk-src")
+endif()
+message(STATUS "REXGLUE_SDK_SOURCE: ${REXGLUE_SDK_SOURCE}")
+if(NOT EXISTS "${REXGLUE_SDK_SOURCE}/CMakeLists.txt")
+    message(FATAL_ERROR "SDK source not found at ${REXGLUE_SDK_SOURCE} - run tools\setup_sdk_src.cmd first")
+endif()
 
 # Add PDB debug info to the Release build so crash dumps can be symbolized with
 # cdb. -g emits CodeView debug info into the objects (does not change the -O3

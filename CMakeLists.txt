@@ -49,8 +49,20 @@ endif()
 # plugin is a Release build (imports rexruntime.dll), which matches only the
 # Release game (the Debug game links rexruntimed.dll). Skipped (with a note) if
 # the source plugin hasn't been built yet.
-set(FABLE2_SDK_SRC "D:/projects/hacking/Windows/rexglue-sdk-src")
-set(FABLE2_SDK_ROOT "D:/projects/hacking/Windows/rexglue-sdk-0.10.0-win-amd64/win-amd64")
+# SDK locations, resolved relative to this repo (no hardcoded paths).
+# Override on the command line with:
+#   -DREXGLUE_SDK_ROOT=<prebuilt SDK root>    (win-amd64 layout: bin/, include/, lib/)
+#   -DREXGLUE_SDK_SOURCE=<SDK source tree>    (optional; Vulkan plugin only)
+# The defaults are created by tools/setup_sdk.cmd (prebuilt, auto-run by
+# build.cmd) and tools/setup_sdk_src.cmd (source, only for the Vulkan path).
+if(NOT DEFINED REXGLUE_SDK_ROOT)
+    set(REXGLUE_SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/rexglue-sdk/win-amd64")
+endif()
+if(NOT DEFINED REXGLUE_SDK_SOURCE)
+    set(REXGLUE_SDK_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/rexglue-sdk-src")
+endif()
+set(FABLE2_SDK_SRC "${REXGLUE_SDK_SOURCE}")
+set(FABLE2_SDK_ROOT "${REXGLUE_SDK_ROOT}")
 if(WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Release")
     # The SDK stages its outputs under its own out/win-amd64/Release/ tree
     # (REXGLUE_ROOT based). We need both the source plugin AND the source
@@ -96,7 +108,6 @@ if(WIN32)
     # GUI (WIN32) subsystem on purpose: a console-subsystem process is blocked
     # from creating top-level windows in this environment (CreateWindowExW
     # returns NULL with error 0), whereas the game (GUI/SDL) works.
-    set(FABLE2_SDK_ROOT "D:/projects/hacking/Windows/rexglue-sdk-0.10.0-win-amd64/win-amd64")
     add_executable(fable_2_vulkan_smoke WIN32 src/vulkan_smoke.cpp)
     target_include_directories(fable_2_vulkan_smoke PRIVATE
       thirdparty/vulkan

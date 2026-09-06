@@ -7,9 +7,13 @@ rem Output: crash_capture_lldb.log next to the exe.
 rem ===========================================================================
 setlocal
 cd /d "%~dp0.."
-set "LLDB=C:\Program Files\LLVM\bin\lldb.exe"
-if not exist "%LLDB%" (
-    echo Error: LLDB not found at %LLDB% 1>&2
+rem lldb: prefer one on PATH, else the default LLVM install location
+set "LLDB="
+for /f "delims=" %%i in ('where lldb 2^>nul') do if not defined LLDB set "LLDB=%%i"
+if not defined LLDB if exist "C:\Program Files\LLVM\bin\lldb.exe" set "LLDB=C:\Program Files\LLVM\bin\lldb.exe"
+if not defined LLDB (
+    echo Error: lldb not found on PATH or at C:\Program Files\LLVM\bin 1>&2
+    echo        Install LLVM - https://llvm.org - or add its bin\ to PATH. 1>&2
     exit /b 1
 )
 "%LLDB%" -b ^

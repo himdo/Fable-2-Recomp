@@ -18,3 +18,8 @@ rebuild2.log
 B13EBABEBABEBABE
 achievements
 build_*.log
+# Fetched/external toolchain deps (created by tools/setup_sdk*.cmd).
+# The tracked files in thirdparty/ (rexglue-sdk-local.patch,
+# rexglue-sdk-submodule-pins.txt, vulkan/, vk_video/) stay in the repo.
+thirdparty/rexglue-sdk/
+thirdparty/rexglue-sdk-src/

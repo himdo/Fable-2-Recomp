@@ -18,11 +18,17 @@ rem                              release rexruntime/rexgpu-xenos plugins)
 setlocal
 cd /d "%~dp0"
 
-set "LLVM=C:\Program Files\LLVM\bin"
-if not exist "%LLVM%\clang++.exe" (
-    echo Error: LLVM not found at %LLVM% 1>&2
-    exit /b 1
+rem LLVM: prefer clang++ already on PATH, else the default install location
+where clang++ >nul 2>nul
+if errorlevel 1 (
+    if exist "C:\Program Files\LLVM\bin\clang++.exe" set "LLVM=C:\Program Files\LLVM\bin"
+    if not defined LLVM (
+        echo Error: LLVM not found on PATH and no clang++.exe at C:\Program Files\LLVM\bin 1>&2
+        echo        Install LLVM - https://llvm.org - or add its bin\ to PATH. 1>&2
+        exit /b 1
+    )
 )
+if defined LLVM set "PATH=%LLVM%;%PATH%"
 rem Ninja: prefer one on PATH, else the user bin, else the WinGet package dir
 where ninja >nul 2>nul
 if errorlevel 1 (
@@ -30,9 +36,18 @@ if errorlevel 1 (
     for %%d in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\Ninja-build.Ninja_*\ninja.exe") do set "NINJADIR=%%~dpd"
     if defined NINJADIR set "PATH=%NINJADIR%;%PATH%"
 )
-set "PATH=%LLVM%;%PATH%"
 
-set "REXSDK=%~dp0..\rexglue-sdk-0.10.0-win-amd64\win-amd64"
+rem ReXGlue SDK: prefer thirdparty\rexglue-sdk in this repo (fetched by
+rem tools\setup_sdk.cmd), then a sibling install, else auto-download.
+set "REXSDK=%~dp0thirdparty\rexglue-sdk\win-amd64"
+if not exist "%REXSDK%\lib\cmake\rexglue\rexglueConfig.cmake" (
+    set "REXSDK=%~dp0..\rexglue-sdk-0.10.0-win-amd64\win-amd64"
+)
+if not exist "%REXSDK%\lib\cmake\rexglue\rexglueConfig.cmake" (
+    echo ReXGlue SDK not found; downloading via tools\setup_sdk.cmd ...
+    call "%~dp0tools\setup_sdk.cmd" || exit /b 1
+    set "REXSDK=%~dp0thirdparty\rexglue-sdk\win-amd64"
+)
 if not exist "%REXSDK%\lib\cmake\rexglue\rexglueConfig.cmake" (
     echo Error: ReXGlue SDK not found under %REXSDK% 1>&2
     exit /b 1
@@ -60,5 +75,14 @@ goto parse_args
 :args_done
 if "%TARGET%"=="" set "TARGET=fable_2_codegen"
 
-cmake --preset %CONFIG% -DCMAKE_PREFIX_PATH="%REXSDK%" || exit /b 1
+rem SDK source (optional, Vulkan plugin): thirdparty, then a sibling install.
+set "SDKSRC=%~dp0thirdparty\rexglue-sdk-src"
+if not exist "%SDKSRC%\CMakeLists.txt" set "SDKSRC=%~dp0..\rexglue-sdk-src"
+rem (inline -D with quotes at the call site: cmd cannot carry a quoted value
+rem in a variable for paths with spaces)
+if exist "%SDKSRC%\CMakeLists.txt" (
+    cmake --preset %CONFIG% -DCMAKE_PREFIX_PATH="%REXSDK%" -DREXGLUE_SDK_ROOT="%REXSDK%" -DREXGLUE_SDK_SOURCE="%SDKSRC%" || exit /b 1
+) else (
+    cmake --preset %CONFIG% -DCMAKE_PREFIX_PATH="%REXSDK%" -DREXGLUE_SDK_ROOT="%REXSDK%" || exit /b 1
+)
 cmake --build out\build\%CONFIG% --target %TARGET%

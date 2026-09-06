@@ -1,0 +1,1277 @@
+diff --git a/include/rex/graphics/vulkan/command_processor.h b/include/rex/graphics/vulkan/command_processor.h
+index 696ff48..5bd7342 100644
+--- a/include/rex/graphics/vulkan/command_processor.h
++++ b/include/rex/graphics/vulkan/command_processor.h
+@@ -268,6 +268,12 @@ class VulkanCommandProcessor : public CommandProcessor {
+   bool IssueCopy() override;
+ 
+  private:
++  // TEMPDIAG: blocking image readback for the Vulkan black-screen diagnosis.
++  void TmpDiagReadbackImage(VkImage image, bool is_10bit, const char* label, uint64_t swap_no);
++  void TmpDiagReadbackBuffer(VkBuffer buffer, uint32_t size_bytes, const char* label,
++                             uint64_t swap_no);
++  uint64_t tmp_diag_swap_count_ = 0;
++
+   struct CommandBuffer {
+     VkCommandPool pool;
+     VkCommandBuffer buffer;
+diff --git a/include/rex/graphics/vulkan/texture_cache.h b/include/rex/graphics/vulkan/texture_cache.h
+index 04856ee..1e303d7 100644
+--- a/include/rex/graphics/vulkan/texture_cache.h
++++ b/include/rex/graphics/vulkan/texture_cache.h
+@@ -120,6 +120,13 @@ class VulkanTextureCache final : public TextureCache {
+                                  uint32_t* height_unscaled_out = nullptr,
+                                  bool* swap_source_needs_rb_swap_out = nullptr);
+ 
++  // TEMPDIAG: access to the last swap source image (for readback).
++  VkImage GetLastSwapImageForDiag() const {
++    return last_swap_texture_for_diag_
++               ? static_cast<VulkanTexture*>(last_swap_texture_for_diag_)->image()
++               : VK_NULL_HANDLE;
++  }
++
+   bool GetScaledResolveRange(uint32_t start_unscaled, uint32_t length_unscaled,
+                              uint32_t length_scaled_alignment_log2, uint64_t& start_scaled_out,
+                              uint64_t& length_scaled_out) const;
+@@ -152,6 +159,9 @@ class VulkanTextureCache final : public TextureCache {
+   void UpdateTextureBindingsImpl(uint32_t fetch_constant_mask) override;
+ 
+  private:
++  // TEMPDIAG: last swap source texture object (for readback).
++  Texture* last_swap_texture_for_diag_ = nullptr;
++
+   enum LoadDescriptorSetIndex {
+     kLoadDescriptorSetIndexDestination,
+     kLoadDescriptorSetIndexSource,
+diff --git a/include/rex/perf/counter.h b/include/rex/perf/counter.h
+index b3947e0..492375a 100644
+--- a/include/rex/perf/counter.h
++++ b/include/rex/perf/counter.h
+@@ -106,8 +106,10 @@ class Profiler {
+       FrameMark;
+     }
+ #endif
+-#ifdef REXGLUE_ENABLE_PERF_COUNTERS
++    // Always snapshot the counters (a handful of atomic ops per frame) so the
++    // F3 debug overlay can read frame timing in every build configuration.
+     ResetFrameCounters();
++#ifdef REXGLUE_ENABLE_PERF_COUNTERS
+     WriteCsvFrame();
+ #endif
+   }
+diff --git a/src/core/exception_handler_win.cpp b/src/core/exception_handler_win.cpp
+index 4a9b1ee..00c37fa 100644
+--- a/src/core/exception_handler_win.cpp
++++ b/src/core/exception_handler_win.cpp
+@@ -15,8 +15,17 @@
+ 
+ #include "platform_win.h"
+ 
++#include <psapi.h>
++
++#include <string>
++#include <vector>
++
+ #include <rex/assert.h>
++#include <rex/logging.h>
+ #include <rex/math.h>
++#include <rex/thread.h>
++
++#pragma comment(lib, "psapi")
+ 
+ namespace rex::arch {
+ 
+@@ -34,6 +43,223 @@ constexpr size_t kMaxHandlerCount = 8;
+ // Executed in order.
+ std::pair<ExceptionHandler::Handler, void*> handlers_[kMaxHandlerCount];
+ 
++// Logs fatal-looking exceptions that no custom handler took, so a crash
++// (unhandled guest AV, int3 from a recompiled "unreachable" path, illegal
++// instruction) records the faulting host PC in the game log. The PC resolves
++// to the recompiled guest function (sub_<guest_address>) via the exe PDB.
++static void LogUnhostedException(PEXCEPTION_POINTERS ex_info, uint64_t rip) {
++  uint32_t code = ex_info->ExceptionRecord->ExceptionCode;
++  if (code != STATUS_ACCESS_VIOLATION && code != STATUS_BREAKPOINT &&
++      code != STATUS_ILLEGAL_INSTRUCTION) {
++    return;
++  }
++  CONTEXT* ctx = ex_info->ContextRecord;
++  // Log the exe-module-relative offset: absolute PCs are ASLR-shifted per
++  // launch, but the offset resolves stably against the exe image (and its
++  // PDB) with `cdb -z fable_2.exe -c "ln +<offset>"`.
++  uint64_t pc_offset = 0;
++  HMODULE module = ::GetModuleHandleW(nullptr);
++  if (module && rip >= reinterpret_cast<uint64_t>(module)) {
++    pc_offset = rip - reinterpret_cast<uint64_t>(module);
++  }
++  REXSYS_ERROR(
++      "Unhosted exception: code 0x{:08X} at host PC 0x{:16X} (exe offset "
++      "+0x{:X}, info1 0x{:16X}) on thread 0x{:X}",
++      code, static_cast<uint64_t>(rip), pc_offset,
++      reinterpret_cast<uint64_t>(ex_info->ExceptionRecord->ExceptionInformation[1]),
++      rex::thread::current_thread_id());
++  // Every recompiled guest function takes PPCContext& as its first arg
++  // (x64 rcx). The PPCContext layout is fixed (r3@0x0 .. r31@0xC0, lr@0xC8),
++  // so we can dump the guest register file + guest PC (lr) to identify the
++  // true faulting guest function even when PDB alias symbols are unreliable.
++  uint64_t ppc_ctx = ctx->Rcx;
++  REXSYS_ERROR(
++      "  guest ctx @ 0x{:16X}  host: rax=0x{:016X} rcx=0x{:016X} rdx=0x{:016X} "
++      "r8=0x{:016X} r9=0x{:016X} r10=0x{:016X} r11=0x{:016X} r12=0x{:016X}",
++      ppc_ctx, ctx->Rax, ctx->Rcx, ctx->Rdx, ctx->R8, ctx->R9, ctx->R10,
++      ctx->R11, ctx->R12);
++  // rcx is the PPCContext only while the codegen keeps it live; validate by
++  // checking r1 (guest stack, 0x70000000-0x7FFFFFFF) and lr (guest code) look
++  // plausible before trusting the dump.
++  bool ctx_valid = ppc_ctx > 0x10000 && ppc_ctx < 0x70000000000ull;
++  uint32_t g_r1 = 0, g_lr = 0;
++  if (ctx_valid) {
++    const uint64_t* g = reinterpret_cast<const uint64_t*>(ppc_ctx);
++    g_r1 = static_cast<uint32_t>(g[2]);
++    g_lr = static_cast<uint32_t>(g[32]);
++    ctx_valid = (g_r1 >= 0x70000000u && g_r1 < 0x80000000u);
++  }
++  if (ctx_valid) {
++    const uint64_t* g = reinterpret_cast<const uint64_t*>(ppc_ctx);
++    // g[0]=r3 g[1]=r0 g[2]=r1 g[3]=r2 g[4]=r4 ... g[31]=r31 g[32]=lr
++    REXSYS_ERROR(
++        "  gpr: r0=0x{:08X} r1=0x{:08X} r2=0x{:08X} r3=0x{:08X} r4=0x{:08X} "
++        "r5=0x{:08X} r6=0x{:08X} r7=0x{:08X}",
++        static_cast<uint32_t>(g[1]), static_cast<uint32_t>(g[2]),
++        static_cast<uint32_t>(g[3]), static_cast<uint32_t>(g[0]),
++        static_cast<uint32_t>(g[4]), static_cast<uint32_t>(g[5]),
++        static_cast<uint32_t>(g[6]), static_cast<uint32_t>(g[7]));
++    REXSYS_ERROR(
++        "      r8=0x{:08X} r9=0x{:08X} r10=0x{:08X} r11=0x{:08X} r12=0x{:08X} "
++        "r13=0x{:08X} r14=0x{:08X} r15=0x{:08X}",
++        static_cast<uint32_t>(g[8]), static_cast<uint32_t>(g[9]),
++        static_cast<uint32_t>(g[10]), static_cast<uint32_t>(g[11]),
++        static_cast<uint32_t>(g[12]), static_cast<uint32_t>(g[13]),
++        static_cast<uint32_t>(g[14]), static_cast<uint32_t>(g[15]));
++    REXSYS_ERROR(
++        "      r16=0x{:08X} r17=0x{:08X} r18=0x{:08X} r19=0x{:08X} r20=0x{:08X} "
++        "r21=0x{:08X} r22=0x{:08X} r23=0x{:08X}",
++        static_cast<uint32_t>(g[16]), static_cast<uint32_t>(g[17]),
++        static_cast<uint32_t>(g[18]), static_cast<uint32_t>(g[19]),
++        static_cast<uint32_t>(g[20]), static_cast<uint32_t>(g[21]),
++        static_cast<uint32_t>(g[22]), static_cast<uint32_t>(g[23]));
++    REXSYS_ERROR(
++        "      r24=0x{:08X} r25=0x{:08X} r26=0x{:08X} r27=0x{:08X} r28=0x{:08X} "
++        "r29=0x{:08X} r30=0x{:08X} r31=0x{:08X}",
++        static_cast<uint32_t>(g[24]), static_cast<uint32_t>(g[25]),
++        static_cast<uint32_t>(g[26]), static_cast<uint32_t>(g[27]),
++        static_cast<uint32_t>(g[28]), static_cast<uint32_t>(g[29]),
++        static_cast<uint32_t>(g[30]), static_cast<uint32_t>(g[31]));
++    REXSYS_ERROR(
++        "      lr=0x{:08X}  (guest return address; the bl just before it is "
++        "the call site)",
++        g_lr);
++    // Targeted: the menu-load null-list crash. sub_83231BE8 (lr 0x83231C3C) does
++    //   r11 = *global@0x834969E4 ; r4 = *(r11+12) ; sub_832304E8(r4)
++    // and sub_832304E8 faults on *(r4+0x1C) because r4 (the list head) is null
++    // while r11 (the subobject) is valid. Dump the subobject + the guard flag
++    // so we can tell "never initialized" (all zero) from "lost store / race"
++    // (partially written). rdx is the guest arena base (REX base) at the fault.
++    if (g_lr == 0x83231C3Cu) {
++      uint64_t arena = ctx->Rdx;
++      uint32_t subobj = static_cast<uint32_t>(g[11]);  // r11
++      // Guest memory is lazily mapped/committed, so any read here can itself
++      // fault and mask the original crash. Only touch a page after confirming
++      // it is committed on the host.
++      auto host_committed = [](void* p) -> bool {
++        MEMORY_BASIC_INFORMATION mbi{};
++        if (::VirtualQuery(p, &mbi, sizeof(mbi)) == 0) return false;
++        return mbi.State == MEM_COMMIT &&
++               !(mbi.Protect & (PAGE_NOACCESS | 0x100 /*PAGE_GUARD*/));
++      };
++      auto gaddr = [&](uint32_t ga) -> void* {
++        uint64_t off = static_cast<uint64_t>(ga) +
++                       (ga >= 0xE0000000u ? 0x100000000ull : 0ull);
++        return reinterpret_cast<void*>(arena + off);
++      };
++      // Safe 32-bit guest read (big-endian value). Returns ok=false if the
++      // backing host page is not committed, so we never raise a second fault.
++      auto gread_be = [&](uint32_t ga, uint32_t* out) -> bool {
++        void* hp = gaddr(ga);
++        if (!host_committed(hp)) return false;
++        *out = static_cast<uint32_t>(__builtin_bswap32(
++            *reinterpret_cast<const volatile uint32_t*>(hp)));
++        return true;
++      };
++      if (subobj != 0) {
++        uint32_t guard = 0, tbl = 0, tbl2 = 0, tbl3 = 0;
++        {
++          void* hp = gaddr(0x83496BCB);
++          if (host_committed(hp))
++            guard = *reinterpret_cast<const volatile uint8_t*>(hp);
++        }
++        gread_be(0x83496BD4, &tbl);
++        gread_be(0x83496BD8, &tbl2);
++        gread_be(0x83496BDC, &tbl3);
++        REXSYS_ERROR(
++            "      [alloc diag] flag@83496BCB=0x{:02X}  tbl@0x83496BD4=0x{:08X} "
++            "tbl2@0x83496BD8=0x{:08X} tbl3@0x83496BDC=0x{:08X}",
++            guard, tbl, tbl2, tbl3);
++        auto dump_block = [&](const char* label, uint32_t p) {
++          if (p == 0) { REXSYS_ERROR("      [alloc diag] {} @ 0: (null)", label); return; }
++          void* hp = gaddr(p);
++          if (!host_committed(hp)) {
++            REXSYS_ERROR("      [alloc diag] {} @ guest 0x{:08X}: (unmapped)", label, p);
++            return;
++          }
++          const uint32_t* so = reinterpret_cast<const uint32_t*>(hp);
++          REXSYS_ERROR("      [alloc diag] {} @ guest 0x{:08X}:", label, p);
++          for (int i = 0; i < 8; ++i) {
++            // 32 words = 128 bytes; stop if a later page is unmapped.
++            void* wp = reinterpret_cast<void*>(
++                reinterpret_cast<uintptr_t>(hp) + i * 16);
++            if (!host_committed(wp)) break;
++            REXSYS_ERROR("        +0x{:02X}=0x{:08X} +0x{:02X}=0x{:08X} +0x{:02X}=0x{:08X} +0x{:02X}=0x{:08X}",
++                         i*16, so[i*4+0], i*16+4, so[i*4+1],
++                         i*16+8, so[i*4+2], i*16+12, so[i*4+3]);
++          }
++        };
++        dump_block("size-table", tbl);   // the bucket descriptor (r11 at fault)
++        if (tbl != 0) {
++          void* hp = gaddr(tbl);
++          if (host_committed(hp)) {
++            uint32_t head = static_cast<uint32_t>(
++                __builtin_bswap32(*reinterpret_cast<const volatile uint32_t*>(
++                    reinterpret_cast<uintptr_t>(hp) + 12)));
++            if (head != 0) dump_block("head-node", head);
++          }
++        }
++      }
++    }
++  } else {
++    REXSYS_ERROR(
++        "  guest ctx pointer 0x{:16X} not a valid PPCContext (r1 would be "
++        "0x{:08X}); register dump skipped",
++        ppc_ctx, g_r1);
++  }
++  // If the PC is NOT in the exe (e.g. the GPU plugin or a mapped guest-code
++  // arena), identify the single containing module so it can be matched offline
++  // against the DLLs staged next to the exe.
++  bool in_exe = false;
++  if (module) {
++    MODULEINFO exe_info{};
++    if (::GetModuleInformation(::GetCurrentProcess(), module, &exe_info,
++                               sizeof(exe_info))) {
++      in_exe = rip >= reinterpret_cast<uint64_t>(exe_info.lpBaseOfDll) &&
++               rip < reinterpret_cast<uint64_t>(exe_info.lpBaseOfDll) +
++                         exe_info.SizeOfImage;
++    }
++  }
++  if (!in_exe) {
++    DWORD needed = 0;
++    ::EnumProcessModulesEx(
++        ::GetCurrentProcess(), nullptr, 0, &needed, LIST_MODULES_ALL);
++    if (needed > 0) {
++      std::vector<HMODULE> modules(needed / sizeof(HMODULE));
++      if (::EnumProcessModulesEx(::GetCurrentProcess(), modules.data(), needed,
++                                  &needed, LIST_MODULES_ALL)) {
++        for (HMODULE base : modules) {
++          MODULEINFO info{};
++          if (::GetModuleInformation(::GetCurrentProcess(), base, &info,
++                                     sizeof(info)) && info.lpBaseOfDll &&
++              rip >= reinterpret_cast<uint64_t>(info.lpBaseOfDll) &&
++              rip < reinterpret_cast<uint64_t>(info.lpBaseOfDll) +
++                        info.SizeOfImage) {
++            wchar_t name[MAX_PATH]{};
++            ::GetModuleBaseNameW(::GetCurrentProcess(), base, name, MAX_PATH);
++            std::wstring wide(name);
++            int len = ::WideCharToMultiByte(CP_UTF8, 0, wide.c_str(),
++                                            static_cast<int>(wide.size()),
++                                            nullptr, 0, nullptr, nullptr);
++            std::string narrow(len, '\0');
++            if (len > 0) {
++              ::WideCharToMultiByte(CP_UTF8, 0, wide.c_str(),
++                                    static_cast<int>(wide.size()), &narrow[0],
++                                    len, nullptr, nullptr);
++            }
++            REXSYS_ERROR(
++                "  containing module: {} [0x{:12X}-0x{:12X})",
++                narrow,
++                reinterpret_cast<uint64_t>(info.lpBaseOfDll),
++                reinterpret_cast<uint64_t>(info.lpBaseOfDll) + info.SizeOfImage);
++            break;
++          }
++        }
++      }
++    }
++  }
++}
++
+ LONG CALLBACK ExceptionHandlerCallback(PEXCEPTION_POINTERS ex_info) {
+   // Visual Studio SetThreadName.
+   if (ex_info->ExceptionRecord->ExceptionCode == 0x406D1388) {
+@@ -74,6 +300,7 @@ LONG CALLBACK ExceptionHandlerCallback(PEXCEPTION_POINTERS ex_info) {
+     } break;
+     default:
+       // Unknown/unhandled type.
++      LogUnhostedException(ex_info, thread_context.rip);
+       return EXCEPTION_CONTINUE_SEARCH;
+   }
+ 
+@@ -98,6 +325,7 @@ LONG CALLBACK ExceptionHandlerCallback(PEXCEPTION_POINTERS ex_info) {
+       return EXCEPTION_CONTINUE_EXECUTION;
+     }
+   }
++  LogUnhostedException(ex_info, thread_context.rip);
+   return EXCEPTION_CONTINUE_SEARCH;
+ }
+ 
+diff --git a/src/graphics/command_processor.cpp b/src/graphics/command_processor.cpp
+index a744375..b117301 100644
+--- a/src/graphics/command_processor.cpp
++++ b/src/graphics/command_processor.cpp
+@@ -930,19 +930,24 @@ bool CommandProcessor::ExecutePacketType3_XE_SWAP(memory::RingBuffer* reader, ui
+                                                   uint32_t count) {
+   SCOPE_profile_cpu_f("gpu");
+ 
+-#ifdef REXGLUE_ENABLE_PERF_COUNTERS
++  // Record per-guest-frame timing into the shared perf registry. Unconditional
++  // (not gated by REXGLUE_ENABLE_PERF_COUNTERS) so the F3 debug overlay can
++  // show guest FPS in every build configuration; the GPU plugin links
++  // rexruntime, so the runtime-side overlay reads the same counters.
+   {
+     static uint64_t last_frame_tick = 0;
+     uint64_t now = rex::chrono::Clock::QueryHostTickCount();
+     if (last_frame_tick) {
+       uint64_t freq = rex::chrono::Clock::QueryHostTickFrequency();
+       int64_t dt_us = static_cast<int64_t>((now - last_frame_tick) * 1000000 / freq);
+-      PROFILE_FRAME_TIME_US(dt_us);
+-      PROFILE_FPS(freq / (now - last_frame_tick));
++      if (dt_us > 0) {
++        rex::perf::SetCounter(rex::perf::CounterId::kFrameTimeUs, dt_us);
++        rex::perf::SetCounter(rex::perf::CounterId::kFps,
++                              static_cast<int64_t>(1000000.0 / dt_us + 0.5));
++      }
+     }
+     last_frame_tick = now;
+   }
+-#endif
+   rex::perf::Profiler::Flip();
+ 
+   // Xenia-specific VdSwap hook.
+diff --git a/src/graphics/vulkan/command_processor.cpp b/src/graphics/vulkan/command_processor.cpp
+index 001f36b..250f137 100644
+--- a/src/graphics/vulkan/command_processor.cpp
++++ b/src/graphics/vulkan/command_processor.cpp
+@@ -15,8 +15,10 @@
+ #include <cstring>
+ #include <iterator>
+ #include <mutex>
++#include <chrono>
+ #include <string>
+ #include <string_view>
++#include <thread>
+ #include <tuple>
+ #include <utility>
+ #include <vector>
+@@ -1106,6 +1108,14 @@ bool VulkanCommandProcessor::SetupContext() {
+   gamma_ramp_256_entry_table_current_frame_ = UINT32_MAX;
+   gamma_ramp_pwl_current_frame_ = UINT32_MAX;
+   // Try to create a device-local host-visible buffer first, to skip copying.
++  // NOTE: Disabled. On NVIDIA Optimus systems (VK_LAYER_NV_optimus), a
++  // host_visible | device_local | host_coherent (bar1) buffer does not
++  // actually behave coherently: CPU writes to the mapped memory are never
++  // seen by the GPU (or even by other CPU threads), and the driver's
++  // vkFlushMappedMemoryRanges is a no-op because the type claims coherent.
++  // This made the gamma ramp stay all-zero on the GPU, producing a black
++  // screen. Use the explicit upload-buffer + CmdCopyBuffer path instead.
++  constexpr bool kTryGammaRampHostVisibleDeviceLocal = false;
+   constexpr uint32_t kGammaRampSize256EntryTable = sizeof(uint32_t) * 256;
+   constexpr uint32_t kGammaRampSizePWL = sizeof(uint16_t) * 2 * 3 * 128;
+   constexpr uint32_t kGammaRampSize = kGammaRampSize256EntryTable + kGammaRampSizePWL;
+@@ -1118,7 +1128,8 @@ bool VulkanCommandProcessor::SetupContext() {
+   gamma_ramp_host_visible_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+   gamma_ramp_host_visible_buffer_create_info.queueFamilyIndexCount = 0;
+   gamma_ramp_host_visible_buffer_create_info.pQueueFamilyIndices = nullptr;
+-  if (dfn.vkCreateBuffer(device, &gamma_ramp_host_visible_buffer_create_info, nullptr,
++  if (kTryGammaRampHostVisibleDeviceLocal &&
++      dfn.vkCreateBuffer(device, &gamma_ramp_host_visible_buffer_create_info, nullptr,
+                          &gamma_ramp_buffer_) == VK_SUCCESS) {
+     bool use_gamma_ramp_host_visible_buffer = false;
+     VkMemoryRequirements gamma_ramp_host_visible_buffer_memory_requirements;
+@@ -1191,13 +1202,74 @@ bool VulkanCommandProcessor::SetupContext() {
+       REXGPU_ERROR("Failed to create the gamma ramp buffer");
+       return false;
+     }
+-    if (!ui::vulkan::util::CreateDedicatedAllocationBuffer(
+-            vulkan_device, kGammaRampSize * kMaxFramesInFlight, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+-            ui::vulkan::util::MemoryPurpose::kUpload, gamma_ramp_upload_buffer_,
+-            gamma_ramp_upload_buffer_memory_, &gamma_ramp_upload_memory_type_,
+-            &gamma_ramp_upload_memory_size_)) {
+-      REXGPU_ERROR("Failed to create the gamma ramp upload buffer");
+-      return false;
++    // The upload buffer must be plain host-visible (system) memory. It must
++    // not be a device-local + host-visible type: the same Optimus driver bug
++    // that breaks the direct buffer above also makes the GPU copy engine read
++    // stale data from such allocations.
++    {
++      VkBufferCreateInfo gamma_ramp_upload_buffer_create_info;
++      gamma_ramp_upload_buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
++      gamma_ramp_upload_buffer_create_info.pNext = nullptr;
++      gamma_ramp_upload_buffer_create_info.flags = 0;
++      gamma_ramp_upload_buffer_create_info.size = kGammaRampSize * kMaxFramesInFlight;
++      gamma_ramp_upload_buffer_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
++      gamma_ramp_upload_buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
++      gamma_ramp_upload_buffer_create_info.queueFamilyIndexCount = 0;
++      gamma_ramp_upload_buffer_create_info.pQueueFamilyIndices = nullptr;
++      if (dfn.vkCreateBuffer(device, &gamma_ramp_upload_buffer_create_info, nullptr,
++                             &gamma_ramp_upload_buffer_) != VK_SUCCESS) {
++        REXGPU_ERROR("Failed to create the gamma ramp upload buffer");
++        return false;
++      }
++      VkMemoryRequirements gamma_ramp_upload_buffer_memory_requirements;
++      dfn.vkGetBufferMemoryRequirements(device, gamma_ramp_upload_buffer_,
++                                        &gamma_ramp_upload_buffer_memory_requirements);
++      uint32_t gamma_ramp_upload_buffer_memory_types =
++          gamma_ramp_upload_buffer_memory_requirements.memoryTypeBits &
++          vulkan_device->memory_types().host_visible & ~vulkan_device->memory_types().device_local;
++      VkMemoryAllocateInfo gamma_ramp_upload_buffer_memory_allocate_info;
++      if (!rex::bit_scan_forward(gamma_ramp_upload_buffer_memory_types,
++                                 &gamma_ramp_upload_buffer_memory_allocate_info.memoryTypeIndex)) {
++        // Fall back to any host-visible type (should not happen in practice).
++        if (!rex::bit_scan_forward(
++                gamma_ramp_upload_buffer_memory_requirements.memoryTypeBits &
++                    vulkan_device->memory_types().host_visible,
++                &gamma_ramp_upload_buffer_memory_allocate_info.memoryTypeIndex)) {
++          dfn.vkDestroyBuffer(device, gamma_ramp_upload_buffer_, nullptr);
++          gamma_ramp_upload_buffer_ = VK_NULL_HANDLE;
++          REXGPU_ERROR("No host-visible memory type for the gamma ramp upload buffer");
++          return false;
++        }
++      }
++      gamma_ramp_upload_buffer_memory_allocate_info.sType =
++          VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
++      gamma_ramp_upload_buffer_memory_allocate_info.pNext = nullptr;
++      gamma_ramp_upload_buffer_memory_allocate_info.allocationSize =
++          gamma_ramp_upload_buffer_memory_requirements.size;
++      VkMemoryDedicatedAllocateInfo gamma_ramp_upload_buffer_memory_dedicated_allocate_info;
++      if (vulkan_device->extensions().ext_1_1_KHR_dedicated_allocation) {
++        gamma_ramp_upload_buffer_memory_allocate_info.pNext =
++            &gamma_ramp_upload_buffer_memory_dedicated_allocate_info;
++        gamma_ramp_upload_buffer_memory_dedicated_allocate_info.sType =
++            VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
++        gamma_ramp_upload_buffer_memory_dedicated_allocate_info.pNext = nullptr;
++        gamma_ramp_upload_buffer_memory_dedicated_allocate_info.image = VK_NULL_HANDLE;
++        gamma_ramp_upload_buffer_memory_dedicated_allocate_info.buffer =
++            gamma_ramp_upload_buffer_;
++      }
++      if (dfn.vkAllocateMemory(device, &gamma_ramp_upload_buffer_memory_allocate_info, nullptr,
++                               &gamma_ramp_upload_buffer_memory_) != VK_SUCCESS ||
++          dfn.vkBindBufferMemory(device, gamma_ramp_upload_buffer_,
++                                 gamma_ramp_upload_buffer_memory_, 0) != VK_SUCCESS) {
++        dfn.vkDestroyBuffer(device, gamma_ramp_upload_buffer_, nullptr);
++        gamma_ramp_upload_buffer_ = VK_NULL_HANDLE;
++        REXGPU_ERROR("Failed to allocate the gamma ramp upload buffer memory");
++        return false;
++      }
++      gamma_ramp_upload_memory_type_ =
++          gamma_ramp_upload_buffer_memory_allocate_info.memoryTypeIndex;
++      gamma_ramp_upload_memory_size_ =
++          gamma_ramp_upload_buffer_memory_allocate_info.allocationSize;
+     }
+     if (dfn.vkMapMemory(device, gamma_ramp_upload_buffer_memory_, 0, VK_WHOLE_SIZE, 0,
+                         &gamma_ramp_upload_mapping_) != VK_SUCCESS) {
+@@ -1237,6 +1309,42 @@ bool VulkanCommandProcessor::SetupContext() {
+     }
+   }
+ 
++  // TEMPDIAG: poll the mapping from a background thread to catch the moment
++  // the uploaded contents change.
++  if (gamma_ramp_upload_mapping_ != nullptr && gamma_ramp_upload_buffer_ == VK_NULL_HANDLE) {
++    void* tmp_map = gamma_ramp_upload_mapping_;
++    std::thread([tmp_map]() {
++      uint32_t prev[6] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF,
++                          0xFFFFFFFF};
++      for (int tick = 0; tick < 400; ++tick) {
++        std::this_thread::sleep_for(std::chrono::milliseconds(250));
++        const auto* m = static_cast<const uint32_t*>(tmp_map);
++        uint32_t cur[6] = {m[448 + 128], m[448 + 193], m[448 + 255], m[896],
++                           m[896 + 128], m[896 + 255]};
++        if (std::memcmp(cur, prev, sizeof(cur)) != 0) {
++          REXGPU_INFO(
++              "TEMPDIAG: ramp mapping CHANGE t={} s1.e128={:08X} s1.e193={:08X} "
++              "s1.e255={:08X} s2.e0={:08X} s2.e128={:08X} s2.e255={:08X}",
++              tick * 250, cur[0], cur[1], cur[2], cur[3], cur[4], cur[5]);
++          std::memcpy(prev, cur, sizeof(cur));
++        }
++      }
++    }).detach();
++  }
++  // TEMPDIAG: which gamma ramp buffer mode is active, and the memory type flags.
++  {
++    uint32_t tmp_type = gamma_ramp_upload_memory_type_;
++    const auto& tmp_mts = vulkan_device->memory_types();
++    REXGPU_INFO(
++        "TEMPDIAG: gamma ramp mode={} (0=host-visible direct, 1=separate upload buffer) "
++        "mem_type={} device_local={} host_visible={} host_coherent={} host_cached={} "
++        "atom={}",
++        gamma_ramp_upload_buffer_ != VK_NULL_HANDLE ? 1 : 0, tmp_type,
++        (tmp_mts.device_local >> tmp_type) & 1, (tmp_mts.host_visible >> tmp_type) & 1,
++        (tmp_mts.host_coherent >> tmp_type) & 1, (tmp_mts.host_cached >> tmp_type) & 1,
++        vulkan_device->properties().nonCoherentAtomSize);
++  }
++
+   // Swap descriptor set layouts.
+   VkDescriptorSetLayoutBinding swap_descriptor_set_layout_binding;
+   swap_descriptor_set_layout_binding.binding = 0;
+@@ -2269,6 +2377,309 @@ void VulkanCommandProcessor::OnGammaRampPWLValueWritten() {
+   gamma_ramp_pwl_current_frame_ = UINT32_MAX;
+ }
+ 
++void VulkanCommandProcessor::TmpDiagReadbackImage(VkImage image, bool is_10bit, const char* label,
++                                                  uint64_t swap_no) {
++  static VkBuffer tmp_staging = VK_NULL_HANDLE;
++  static VkDeviceMemory tmp_staging_mem = VK_NULL_HANDLE;
++  static VkCommandPool tmp_pool = VK_NULL_HANDLE;
++  static VkDeviceSize tmp_staging_size = 0;
++
++  auto* const tmp_vulkan_device = GetVulkanDevice();
++  const auto& tmp_dfn = tmp_vulkan_device->functions();
++  const VkDevice tmp_device = tmp_vulkan_device->device();
++  const uint32_t tmp_copy_w = 1280, tmp_copy_h = 720;
++  if (!tmp_staging) {
++    VkBufferCreateInfo tmp_bci = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
++    tmp_bci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
++    tmp_bci.size = VkDeviceSize(tmp_copy_w) * tmp_copy_h * 4;
++    tmp_staging_size = tmp_bci.size;
++    if (tmp_dfn.vkCreateBuffer(tmp_device, &tmp_bci, nullptr, &tmp_staging) == VK_SUCCESS) {
++      VkMemoryRequirements tmp_req;
++      tmp_dfn.vkGetBufferMemoryRequirements(tmp_device, tmp_staging, &tmp_req);
++      VkMemoryAllocateInfo tmp_mai = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
++      tmp_mai.allocationSize = tmp_req.size;
++      for (uint32_t i = 0; i < 32; ++i) {
++        if ((tmp_req.memoryTypeBits & (1u << i)) &&
++            (tmp_vulkan_device->memory_types().host_visible & (1u << i))) {
++          tmp_mai.memoryTypeIndex = i;
++          break;
++        }
++      }
++      if (tmp_dfn.vkAllocateMemory(tmp_device, &tmp_mai, nullptr, &tmp_staging_mem) == VK_SUCCESS) {
++        tmp_dfn.vkBindBufferMemory(tmp_device, tmp_staging, tmp_staging_mem, 0);
++      } else {
++        tmp_staging = VK_NULL_HANDLE;
++      }
++    }
++    VkCommandPoolCreateInfo tmp_pci = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
++    tmp_pci.queueFamilyIndex = tmp_vulkan_device->queue_family_graphics_compute();
++    tmp_dfn.vkCreateCommandPool(tmp_device, &tmp_pci, nullptr, &tmp_pool);
++  }
++  if (!tmp_staging) {
++    return;
++  }
++  VkCommandBuffer tmp_cb;
++  VkCommandBufferAllocateInfo tmp_cbi = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
++  tmp_cbi.commandPool = tmp_pool;
++  tmp_cbi.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
++  tmp_cbi.commandBufferCount = 1;
++  tmp_dfn.vkAllocateCommandBuffers(tmp_device, &tmp_cbi, &tmp_cb);
++  VkCommandBufferBeginInfo tmp_cbbi = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
++  tmp_cbbi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
++  VkResult tmp_begin_res = tmp_dfn.vkBeginCommandBuffer(tmp_cb, &tmp_cbbi);
++  VkImageSubresourceRange tmp_range = ui::vulkan::util::InitializeSubresourceRange();
++  // The guest output image is left in GENERAL layout by the compute gamma
++  // path; the front buffer is in SHADER_READ_ONLY_OPTIMAL.
++  const bool tmp_is_guest_output = std::string(label) == "guest_output";
++  VkImageMemoryBarrier tmp_imb = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
++  tmp_imb.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
++  tmp_imb.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
++  tmp_imb.oldLayout = tmp_is_guest_output ? VK_IMAGE_LAYOUT_GENERAL
++                                          : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
++  tmp_imb.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
++  tmp_imb.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
++  tmp_imb.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
++  tmp_imb.image = image;
++  tmp_imb.subresourceRange = tmp_range;
++  tmp_dfn.vkCmdPipelineBarrier(tmp_cb, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
++                               VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1,
++                               &tmp_imb);
++  VkBufferImageCopy tmp_bic = {};
++  tmp_bic.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
++  tmp_bic.imageExtent = {tmp_copy_w, tmp_copy_h, 1};
++  tmp_dfn.vkCmdCopyImageToBuffer(tmp_cb, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, tmp_staging,
++                                 1, &tmp_bic);
++  tmp_imb = {};
++  tmp_imb.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
++  tmp_imb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
++  tmp_imb.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
++  tmp_imb.newLayout = tmp_is_guest_output ? VK_IMAGE_LAYOUT_GENERAL
++                                          : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
++  tmp_imb.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
++  tmp_imb.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
++  tmp_imb.image = image;
++  tmp_imb.subresourceRange = tmp_range;
++  tmp_dfn.vkCmdPipelineBarrier(tmp_cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
++                               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr,
++                               1, &tmp_imb);
++  VkResult tmp_end_res = tmp_dfn.vkEndCommandBuffer(tmp_cb);
++  VkFence tmp_fence;
++  VkFenceCreateInfo tmp_fci = {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
++  tmp_dfn.vkCreateFence(tmp_device, &tmp_fci, nullptr, &tmp_fence);
++  VkSubmitInfo tmp_si = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
++  tmp_si.commandBufferCount = 1;
++  tmp_si.pCommandBuffers = &tmp_cb;
++  const auto tmp_queue_acq =
++      tmp_vulkan_device->AcquireQueue(tmp_vulkan_device->queue_family_graphics_compute(), 0);
++  VkResult tmp_submit_res = tmp_dfn.vkQueueSubmit(tmp_queue_acq.queue(), 1, &tmp_si, tmp_fence);
++  VkResult tmp_wait_res = tmp_dfn.vkWaitForFences(tmp_device, 1, &tmp_fence, VK_TRUE, 10000000);
++  static std::array<bool, 4> tmp_res_logged{};
++  uint32_t tmp_li = std::string(label) == "frontbuffer" ? 0 : (std::string(label) == "guest_output" ? 1 : 2);
++  if (!tmp_res_logged[tmp_li]) {
++    tmp_res_logged[tmp_li] = true;
++    REXGPU_INFO(
++        "TEMPDIAG: readback[{}] submit results begin={} end={} submit={} wait={} image={:p}",
++        label, int32_t(tmp_begin_res), int32_t(tmp_end_res), int32_t(tmp_submit_res),
++        int32_t(tmp_wait_res), (void*)image);
++  }
++  void* tmp_mapped = nullptr;
++  if (tmp_dfn.vkMapMemory(tmp_device, tmp_staging_mem, 0, tmp_staging_size, 0, &tmp_mapped) ==
++      VK_SUCCESS) {
++    const auto* tmp_px = static_cast<const uint32_t*>(tmp_mapped);
++    uint32_t tmp_mn = 0xFFFFFF, tmp_mx = 0;
++    uint64_t tmp_sum = 0;
++    uint32_t tmp_n = 0;
++    for (uint32_t y = 0; y < tmp_copy_h; y += 8) {
++      for (uint32_t x = 0; x < tmp_copy_w; x += 8) {
++        const uint32_t v = tmp_px[y * tmp_copy_w + x];
++        uint32_t r, g, b;
++        if (is_10bit) {
++          // A2B10G10R10_UNORM_PACK32: R = bits 0:9, G = bits 10:19, B = bits 20:29.
++          r = v & 0x3FF;
++          g = (v >> 10) & 0x3FF;
++          b = (v >> 20) & 0x3FF;
++        } else {
++          // B8G8R8A8
++          r = (v >> 16) & 0xFF;
++          g = (v >> 8) & 0xFF;
++          b = v & 0xFF;
++        }
++        const uint32_t luma01 =
++            is_10bit ? (r * 19595 + g * 38470 + b * 7471) >> 25
++                     : (r * 19595 + g * 38470 + b * 7471) >> 15;
++        const uint32_t luma = (luma01 * 511) >> 15;
++        tmp_mn = std::min(tmp_mn, luma);
++        tmp_mx = std::max(tmp_mx, luma);
++        tmp_sum += luma;
++        tmp_n++;
++      }
++    }
++    REXGPU_INFO("TEMPDIAG: {} readback swap#{} min={} max={} avg={}", label, swap_no, tmp_mn,
++                tmp_mx, tmp_n ? tmp_sum / tmp_n : 0);
++    // TEMPDIAG: raw words to bypass any stats bug.
++    std::string tmp_raw;
++    for (uint32_t i = 0; i < 8; ++i) {
++      tmp_raw += "w" + std::to_string(i) + "=" + std::to_string(tmp_px[i]) + " ";
++    }
++    REXGPU_INFO("TEMPDIAG: {} raw: {}", label, tmp_raw);
++    tmp_dfn.vkUnmapMemory(tmp_device, tmp_staging_mem);
++  }
++  tmp_dfn.vkDestroyFence(tmp_device, tmp_fence, nullptr);
++  // TEMPDIAG: tmp_cb intentionally leaked (no vkFreeCommandBuffers in the bound
++  // function set; reclaimed with the pool at shutdown).
++}
++
++void VulkanCommandProcessor::TmpDiagReadbackBuffer(VkBuffer buffer, uint32_t size_bytes,
++                                                   const char* label, uint64_t swap_no) {
++  static VkBuffer tmp_staging = VK_NULL_HANDLE;
++  static VkDeviceMemory tmp_staging_mem = VK_NULL_HANDLE;
++  static VkCommandPool tmp_pool = VK_NULL_HANDLE;
++  static VkDeviceSize tmp_staging_size = 0;
++
++  auto* const tmp_vulkan_device = GetVulkanDevice();
++  const auto& tmp_dfn = tmp_vulkan_device->functions();
++  const VkDevice tmp_device = tmp_vulkan_device->device();
++  if (!tmp_staging) {
++    VkBufferCreateInfo tmp_bci = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
++    tmp_bci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
++    tmp_bci.size = VkDeviceSize(size_bytes);
++    tmp_staging_size = tmp_bci.size;
++    if (tmp_dfn.vkCreateBuffer(tmp_device, &tmp_bci, nullptr, &tmp_staging) == VK_SUCCESS) {
++      VkMemoryRequirements tmp_req;
++      tmp_dfn.vkGetBufferMemoryRequirements(tmp_device, tmp_staging, &tmp_req);
++      VkMemoryAllocateInfo tmp_mai = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
++      tmp_mai.allocationSize = tmp_req.size;
++      for (uint32_t i = 0; i < 32; ++i) {
++        if ((tmp_req.memoryTypeBits & (1u << i)) &&
++            (tmp_vulkan_device->memory_types().host_visible & (1u << i))) {
++          tmp_mai.memoryTypeIndex = i;
++          break;
++        }
++      }
++      if (tmp_dfn.vkAllocateMemory(tmp_device, &tmp_mai, nullptr, &tmp_staging_mem) == VK_SUCCESS) {
++        tmp_dfn.vkBindBufferMemory(tmp_device, tmp_staging, tmp_staging_mem, 0);
++      } else {
++        tmp_staging = VK_NULL_HANDLE;
++      }
++    }
++    VkCommandPoolCreateInfo tmp_pci = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
++    tmp_pci.queueFamilyIndex = tmp_vulkan_device->queue_family_graphics_compute();
++    tmp_dfn.vkCreateCommandPool(tmp_device, &tmp_pci, nullptr, &tmp_pool);
++  }
++  if (!tmp_staging) {
++    return;
++  }
++  void* tmp_mapped = nullptr;
++  VkCommandBuffer tmp_cb;
++  VkCommandBufferAllocateInfo tmp_cbi = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
++  tmp_cbi.commandPool = tmp_pool;
++  tmp_cbi.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
++  tmp_cbi.commandBufferCount = 1;
++  tmp_dfn.vkAllocateCommandBuffers(tmp_device, &tmp_cbi, &tmp_cb);
++  VkCommandBufferBeginInfo tmp_cbbi = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
++  tmp_cbbi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
++  tmp_dfn.vkBeginCommandBuffer(tmp_cb, &tmp_cbbi);
++  // TEMPDIAG: one-time visibility tests on this buffer:
++  //  - GPU->CPU: copy a pattern word into the first 4 bytes.
++  //  - CPU->GPU: the CPU writes a pattern into slot1.e128 of the mapping
++  //    right before the readback copy is recorded.
++  static bool tmp_fill_done = false;
++  if (!tmp_fill_done && std::string(label) == "gamma_ramp_full") {
++    tmp_fill_done = true;
++    if (tmp_dfn.vkMapMemory(tmp_device, tmp_staging_mem, 0, 4, 0, &tmp_mapped) == VK_SUCCESS) {
++      *static_cast<uint32_t*>(tmp_mapped) = 0xDEADBEEF;
++      tmp_dfn.vkUnmapMemory(tmp_device, tmp_staging_mem);
++    }
++    VkBufferCopy tmp_bcp = {};
++    tmp_bcp.size = 4;
++    tmp_dfn.vkCmdCopyBuffer(tmp_cb, tmp_staging, buffer, 1, &tmp_bcp);
++    if (gamma_ramp_upload_mapping_ != nullptr &&
++        gamma_ramp_upload_buffer_ == VK_NULL_HANDLE) {
++      auto* tmp_w = reinterpret_cast<uint32_t*>(
++          static_cast<uint8_t*>(gamma_ramp_upload_mapping_) + 1792 + 512);
++      *tmp_w = 0xCAFEBABE;
++      REXGPU_INFO("TEMPDIAG: CPU wrote 0xCAFEBABE to ramp mapping slot1.e128 "
++                  "(mapping+2304) right before GPU readback");
++    }
++  }
++  VkBufferCopy tmp_bc = {};
++  tmp_bc.size = size_bytes;
++  tmp_dfn.vkCmdCopyBuffer(tmp_cb, buffer, tmp_staging, 1, &tmp_bc);
++  tmp_dfn.vkEndCommandBuffer(tmp_cb);
++  VkFence tmp_fence;
++  VkFenceCreateInfo tmp_fci = {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
++  tmp_dfn.vkCreateFence(tmp_device, &tmp_fci, nullptr, &tmp_fence);
++  VkSubmitInfo tmp_si = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
++  tmp_si.commandBufferCount = 1;
++  tmp_si.pCommandBuffers = &tmp_cb;
++  const auto tmp_queue_acq =
++      tmp_vulkan_device->AcquireQueue(tmp_vulkan_device->queue_family_graphics_compute(), 0);
++  tmp_dfn.vkQueueSubmit(tmp_queue_acq.queue(), 1, &tmp_si, tmp_fence);
++  tmp_dfn.vkWaitForFences(tmp_device, 1, &tmp_fence, VK_TRUE, 10000000);
++  if (tmp_dfn.vkMapMemory(tmp_device, tmp_staging_mem, 0, tmp_staging_size, 0, &tmp_mapped) ==
++      VK_SUCCESS) {
++    const auto* tmp_px = static_cast<const uint32_t*>(tmp_mapped);
++    uint32_t tmp_mn = 0xFFFFFF, tmp_mx = 0;
++    uint64_t tmp_sum = 0;
++    uint32_t tmp_n = size_bytes / 4;
++    for (uint32_t i = 0; i < tmp_n; ++i) {
++      const uint32_t v = tmp_px[i];
++      const uint32_t l = ((v & 0x3FF) * 19595 + ((v >> 10) & 0x3FF) * 38470 +
++                          ((v >> 20) & 0x3FF) * 7471) >> 10;
++      tmp_mn = std::min(tmp_mn, l);
++      tmp_mx = std::max(tmp_mx, l);
++      tmp_sum += l;
++    }
++    // TEMPDIAG: if this looks like the ramp buffer, also report per-slot table stats.
++    std::string tmp_slots;
++    if (tmp_n == 5376 / 4) {
++      for (uint32_t slot = 0; slot < 3; ++slot) {
++        const uint32_t* base = tmp_px + slot * (1792 / 4);
++        uint32_t smin = 0xFFFFFF, smax = 0;
++        uint64_t ssum = 0;
++        for (uint32_t i = 0; i < 256; ++i) {
++          const uint32_t v = base[i];
++          const uint32_t l = ((v & 0x3FF) * 19595 + ((v >> 10) & 0x3FF) * 38470 +
++                              ((v >> 20) & 0x3FF) * 7471) >> 10;
++          smin = std::min(smin, l);
++          smax = std::max(smax, l);
++          ssum += l;
++        }
++        uint32_t nonzero = 0;
++        std::string nz_idx;
++        for (uint32_t i = 0; i < 256; ++i) {
++          if (base[i] != 0) {
++            nonzero++;
++            if (nz_idx.size() < 80) {
++              nz_idx += std::to_string(i) + ":" + std::to_string(base[i]) + ";";
++            }
++          }
++        }
++        tmp_slots += " slot" + std::to_string(slot) + "=[nz=" + std::to_string(nonzero) +
++                     ",max=" + std::to_string(smax) + ",idx=" + nz_idx + "]";
++      }
++    }
++    REXGPU_INFO("TEMPDIAG: {} buffer readback swap#{} words={} luma min={} max={} avg={}{}",
++                label, swap_no, tmp_n, tmp_mn, tmp_mx, tmp_sum / std::max<uint32_t>(1, tmp_n),
++                tmp_slots);
++    tmp_dfn.vkUnmapMemory(tmp_device, tmp_staging_mem);
++  }
++  if (tmp_fill_done && std::string(label) == "gamma_ramp_full") {
++    // TEMPDIAG: CPU view of the buffer at readback time (compare with GPU).
++    if (gamma_ramp_upload_mapping_ != nullptr &&
++        gamma_ramp_upload_buffer_ == VK_NULL_HANDLE) {
++      const auto* tmp_cpu0 = static_cast<const uint32_t*>(gamma_ramp_upload_mapping_);
++      REXGPU_INFO(
++          "TEMPDIAG: gamma ramp CPU mapping at readback: w0={:08X} s1.e0={:08X} "
++          "s1.e128={:08X} s1.e193={:08X} s1.e255={:08X} s2.e0={:08X} s2.e128={:08X} "
++          "s2.e255={:08X}",
++          tmp_cpu0[0], tmp_cpu0[448], tmp_cpu0[448 + 128], tmp_cpu0[448 + 193],
++          tmp_cpu0[448 + 255], tmp_cpu0[896], tmp_cpu0[896 + 128], tmp_cpu0[896 + 255]);
++    }
++  }
++  tmp_dfn.vkDestroyFence(tmp_device, tmp_fence, nullptr);
++}
++
+ void VulkanCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbuffer_width,
+                                        uint32_t frontbuffer_height) {
+   SCOPE_profile_cpu_f("gpu");
+@@ -2319,6 +2730,15 @@ void VulkanCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontb
+     REXGPU_ERROR("XELOG_GPU PRESENT: swap_texture_view=NULL");
+     return;
+   }
++
++  // TEMPDIAG: periodic blocking readback of the swap source (frontbuffer).
++  ++tmp_diag_swap_count_;
++  if ((tmp_diag_swap_count_ % 300) == 150) {
++    const VkImage tmp_src_image = texture_cache_->GetLastSwapImageForDiag();
++    if (tmp_src_image != VK_NULL_HANDLE) {
++      TmpDiagReadbackImage(tmp_src_image, false, "frontbuffer", tmp_diag_swap_count_);
++    }
++  }
+   // The swap gamma / FXAA pass samples source texels by pixel index, but swap
+   // textures may be allocation-padded. Prefer the active frontbuffer region
+   // from the swap packet, scaled proportionally to the actual source texture.
+@@ -2512,6 +2932,19 @@ void VulkanCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontb
+           }
+         }
+         bool use_compute_gamma = swap_apply_gamma_compute_pipeline != VK_NULL_HANDLE;
++        // TEMPDIAG: which swap path runs, and with which objects.
++        {
++          static bool tmp_swap_path_logged = false;
++          if (!tmp_swap_path_logged) {
++            tmp_swap_path_logged = true;
++            REXGPU_INFO(
++                "TEMPDIAG: swap path use_compute={} pipeline={:p} guest_output_image={:p} "
++                "swap_source_view={:p} use_pwl={} use_fxaa={} out_size={}x{}",
++                use_compute_gamma, (void*)swap_apply_gamma_compute_pipeline,
++                (void*)vulkan_context.image(), (void*)swap_texture_view, use_pwl_gamma_ramp,
++                use_fxaa, guest_output_width, guest_output_height);
++          }
++        }
+ 
+         // TODO(Triang3l): FXAA can result in more than 8 bits of precision.
+         context.SetIs8bpc(!use_pwl_gamma_ramp && !use_fxaa);
+@@ -2552,7 +2985,53 @@ void VulkanCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontb
+                                            : static_cast<const void*>(gamma_ramp_256_entry_table()),
+                         gamma_ramp_size);
+           }
++          // TEMPDIAG: dump the ramp contents at upload time.
++          if (!use_pwl_gamma_ramp) {
++            const auto* tmp_ramp =
++                reinterpret_cast<const uint32_t*>(gamma_ramp_256_entry_table());
++            uint32_t tmp_rmin = 0xFFFFFF, tmp_rmax = 0;
++            uint64_t tmp_rsum = 0;
++            for (uint32_t tmp_i = 0; tmp_i < 256; ++tmp_i) {
++              const uint32_t tmp_v = tmp_ramp[tmp_i];
++              const uint32_t tmp_l =
++                  ((tmp_v & 0x3FF) * 19595 + ((tmp_v >> 10) & 0x3FF) * 38470 +
++                   ((tmp_v >> 20) & 0x3FF) * 7471) >> 10;
++              tmp_rmin = std::min(tmp_rmin, tmp_l);
++              tmp_rmax = std::max(tmp_rmax, tmp_l);
++              tmp_rsum += tmp_l;
++            }
++            REXGPU_INFO("TEMPDIAG: gamma ramp upload entry0={:08X} entry128={:08X} "
++                        "entry255={:08X} luma min={} max={} avg={}",
++                        tmp_ramp[0], tmp_ramp[128], tmp_ramp[255], tmp_rmin, tmp_rmax,
++                        tmp_rsum / 256);
++          }
+           bool gamma_ramp_has_upload_buffer = gamma_ramp_upload_buffer_memory_ != VK_NULL_HANDLE;
++          // TEMPDIAG: force an explicit flush even if the type claims coherent,
++          // to test whether the coherent flag is lying on this driver.
++          if (!use_pwl_gamma_ramp) {
++            VkMappedMemoryRange tmp_force_range;
++            tmp_force_range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
++            tmp_force_range.pNext = nullptr;
++            tmp_force_range.memory = gamma_ramp_buffer_memory_;
++            tmp_force_range.offset = 0;
++            tmp_force_range.size = VK_WHOLE_SIZE;
++            auto tmp_flush_res = dfn.vkFlushMappedMemoryRanges(
++                device, 1, &tmp_force_range);
++            static bool tmp_flush_logged = false;
++            if (!tmp_flush_logged) {
++              tmp_flush_logged = true;
++              REXGPU_INFO("TEMPDIAG: forced vkFlushMappedMemoryRanges result={}",
++                          int32_t(tmp_flush_res));
++            }
++          }
++          // TEMPDIAG: CPU-side view of the mapped ramp buffer right after upload.
++          if (!use_pwl_gamma_ramp) {
++            const auto* tmp_cpu = reinterpret_cast<const uint32_t*>(
++                static_cast<const uint8_t*>(gamma_ramp_upload_mapping_) + gamma_ramp_upload_offset);
++            REXGPU_INFO("TEMPDIAG: ramp buffer CPU view after upload slot={} e0={:08X} "
++                        "e128={:08X} e255={:08X}",
++                        swap_frame_index, tmp_cpu[0], tmp_cpu[128], tmp_cpu[255]);
++          }
+           VkPipelineStageFlags gamma_ramp_read_stage_mask =
+               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+           ui::vulkan::util::FlushMappedMemoryRange(
+@@ -2921,6 +3400,20 @@ void VulkanCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontb
+         // presenter so it can submit its own commands for displaying it to the
+         // queue, and also need to submit the release barrier.
+         EndSubmission(true);
++
++        // TEMPDIAG: read back the guest output after the swap path's submission
++        // (queue ordering guarantees the copy runs after the write).
++        if ((tmp_diag_swap_count_ % 300) == 150) {
++          TmpDiagReadbackImage(vulkan_context.image(), true, "guest_output",
++                               tmp_diag_swap_count_);
++          if (gamma_ramp_buffer_ != VK_NULL_HANDLE) {
++            // Mode 0: 3 slots; mode B (separate upload buffer): single slot.
++            TmpDiagReadbackBuffer(
++                gamma_ramp_buffer_,
++                1792u * (gamma_ramp_upload_buffer_ == VK_NULL_HANDLE ? 3u : 1u),
++                "gamma_ramp_full", tmp_diag_swap_count_);
++          }
++        }
+         return true;
+       });
+ 
+@@ -3863,6 +4356,11 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type, uint32_t
+                                                 &pipeline_is_placeholder);
+   if (REXCVAR_GET(async_shader_compilation) && pipeline_is_placeholder) {
+     frame_used_async_placeholder_pipeline_ = true;
++    // TEMPDIAG: throttled count of skipped placeholder draws.
++    static uint64_t tmp_skip_count = 0;
++    if ((++tmp_skip_count & 0x3FF) == 1) {
++      REXGPU_INFO("TEMPDIAG: placeholder draw skips so far: {}", tmp_skip_count);
++    }
+     return true;
+   }
+   if (pipeline == VK_NULL_HANDLE || pipeline_layout_provider == nullptr) {
+@@ -4115,6 +4613,11 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type, uint32_t
+       render_target_cache_->last_update_render_pass(),
+       render_target_cache_->last_update_framebuffer());
+ 
++  // TEMPDIAG: count draws that actually reach the command buffer.
++  static uint64_t tmp_issued_draws = 0;
++  if ((++tmp_issued_draws & 0x4FF) == 1) {
++    REXGPU_INFO("TEMPDIAG: issued draws so far: {}", tmp_issued_draws);
++  }
+   // Draw.
+   if (primitive_processing_result.index_buffer_type ==
+           PrimitiveProcessor::ProcessedIndexBufferType::kNone ||
+diff --git a/src/graphics/vulkan/pipeline_cache.cpp b/src/graphics/vulkan/pipeline_cache.cpp
+index 91ac08f..d7a500a 100644
+--- a/src/graphics/vulkan/pipeline_cache.cpp
++++ b/src/graphics/vulkan/pipeline_cache.cpp
+@@ -3508,6 +3508,12 @@ bool VulkanPipelineCache::EnsurePipelineCreated(const PipelineCreationArguments&
+   } else {
+     creation_arguments.pipeline->second.is_placeholder.store(false, std::memory_order_release);
+     if (was_placeholder && old_pipeline != VK_NULL_HANDLE) {
++      // TEMPDIAG: hot-swap completion.
++      uint64_t tmp_ps_hash = creation_arguments.pixel_shader
++                                 ? creation_arguments.pixel_shader->shader().ucode_data_hash()
++                                 : 0;
++      REXGPU_INFO("TEMPDIAG: placeholder hot-swap complete vs={:016X} ps={:016X}",
++                  creation_arguments.vertex_shader->shader().ucode_data_hash(), tmp_ps_hash);
+       std::lock_guard<std::mutex> lock(deferred_destroy_lock_);
+       deferred_destroy_pipelines_.emplace_back(command_processor_.GetCurrentSubmission(),
+                                                old_pipeline);
+@@ -3539,6 +3545,15 @@ void VulkanPipelineCache::CreationThread(size_t thread_index) {
+     }
+ 
+     bool created = EnsurePipelineCreated(creation_arguments);
++    // TEMPDIAG: async creation outcome.
++    uint64_t tmp_vs_hash = creation_arguments.vertex_shader
++                               ? creation_arguments.vertex_shader->shader().ucode_data_hash()
++                               : 0;
++    uint64_t tmp_ps_hash = creation_arguments.pixel_shader
++                               ? creation_arguments.pixel_shader->shader().ucode_data_hash()
++                               : 0;
++    REXGPU_INFO("TEMPDIAG: async creation result={} vs={:016X} ps={:016X}", created, tmp_vs_hash,
++                tmp_ps_hash);
+     if (!created) {
+       bool has_placeholder =
+           creation_arguments.pipeline->second.is_placeholder.load(std::memory_order_acquire);
+diff --git a/src/graphics/vulkan/texture_cache.cpp b/src/graphics/vulkan/texture_cache.cpp
+index ecbd940..f8b0893 100644
+--- a/src/graphics/vulkan/texture_cache.cpp
++++ b/src/graphics/vulkan/texture_cache.cpp
+@@ -997,6 +997,8 @@ VkImageView VulkanTextureCache::RequestSwapTexture(uint32_t& width_scaled_out,
+   if (!texture) {
+     return VK_NULL_HANDLE;
+   }
++  // TEMPDIAG: remember the swap source texture for readback.
++  last_swap_texture_for_diag_ = texture;
+   uint32_t host_swizzle = GuestToHostSwizzle(fetch.swizzle, GetHostFormatSwizzle(key));
+   if (swap_source_needs_rb_swap_out) {
+     auto swizzle_component = [](uint32_t swizzle,
+diff --git a/src/system/xmemory.cpp b/src/system/xmemory.cpp
+index 76cc877..9308f35 100644
+--- a/src/system/xmemory.cpp
++++ b/src/system/xmemory.cpp
+@@ -1321,6 +1321,18 @@ bool BaseHeap::AllocFixed(uint32_t base_address, uint32_t size, uint32_t alignme
+   //   reserved.
+   // - If we are committing it's ok for pages within the range to already be
+   //   committed.
++  //
++  // NOTE (Fable 2): a re-reserve of an already-reserved range MUST fail.
++  // Fable 2 re-reserves ~3856 fixed ranges during startup and branches on
++  // the result: X_STATUS_SUCCESS is treated as a *fresh* allocation, which
++  // re-initializes the game's own memory pools on top of the range. Making
++  // the re-reserve a no-op success (as an earlier local patch attempted,
++  // claiming hardware treats it as idempotent) left the pools' free-list
++  // head NULL and crashed the game at the main menu with a null-deref in
++  // sub_83231BE8 -> sub_832304E8 (*(r4+0x1C) with r4=0). Failing the
++  // re-reserve (the behavior below, matching the v0.10.0 prebuilt that runs
++  // the game correctly) makes the game keep its existing pool state. The
++  // resulting [error] spam at startup is expected and harmless.
+   for (uint32_t page_number = start_page_number; page_number <= end_page_number; ++page_number) {
+     uint32_t state = page_table_[page_number].state;
+     if ((allocation_type == memory::kMemoryAllocationReserve) && state) {
+diff --git a/src/ui/overlay/debug_overlay.cpp b/src/ui/overlay/debug_overlay.cpp
+index 43d6c06..b9624d0 100644
+--- a/src/ui/overlay/debug_overlay.cpp
++++ b/src/ui/overlay/debug_overlay.cpp
+@@ -12,8 +12,8 @@
+ #include <rex/ui/overlay/debug_overlay.h>
+ #include <rex/version.h>
+ #include <imgui.h>
+-#ifdef REXGLUE_ENABLE_PERF_COUNTERS
+ #include <rex/perf/counter.h>
++#ifdef REXGLUE_ENABLE_PERF_COUNTERS
+ #include <cinttypes>
+ #endif
+ 
+@@ -33,12 +33,28 @@ void DebugOverlayDialog::OnDraw(ImGuiIO& io) {
+ #endif
+   ImGui::SetNextWindowBgAlpha(0.5f);
+   if (ImGui::Begin("Debug##overlay", nullptr, ImGuiWindowFlags_NoCollapse)) {
++    // Guest FPS: prefer app-provided stats (ReXApp::SetGuestFrameStats),
++    // falling back to the frame timing recorded on every guest swap in the
++    // shared perf registry (available in all build configurations).
++    double fps = 0.0;
++    double frame_ms = 0.0;
+     if (stats_provider_) {
+       auto stats = stats_provider_();
+       if (stats.frame_count > 0) {
+-        ImGui::Text("Guest: %.1f FPS (%.2f ms)", stats.fps, stats.frame_time_ms);
++        fps = stats.fps;
++        frame_ms = stats.frame_time_ms;
+       }
+     }
++    if (fps <= 0.0) {
++      auto ft_us = rex::perf::GetSnapshotCounter(rex::perf::CounterId::kFrameTimeUs);
++      if (ft_us > 0) {
++        frame_ms = double(ft_us) / 1000.0;
++        fps = 1000000.0 / double(ft_us);
++      }
++    }
++    if (fps > 0.0) {
++      ImGui::Text("Guest: %.1f FPS (%.2f ms)", fps, frame_ms);
++    }
+ #ifdef REXGLUE_ENABLE_PERF_COUNTERS
+     ImGui::Separator();
+ 
+diff --git a/src/ui/vulkan/vulkan_presenter.cpp b/src/ui/vulkan/vulkan_presenter.cpp
+index 23645ef..8c7a04d 100644
+--- a/src/ui/vulkan/vulkan_presenter.cpp
++++ b/src/ui/vulkan/vulkan_presenter.cpp
+@@ -10,6 +10,7 @@
+  */
+ 
+ #include <algorithm>
++#include <chrono>
+ #include <atomic>
+ #include <cstddef>
+ #include <cstdint>
+@@ -1221,6 +1222,18 @@ VkSwapchainKHR VulkanPresenter::PaintContext::CreateSwapchainForVulkanSurface(
+     // specification violation).
+     surface_formats.clear();
+   }
++  // TEMPDIAG: log the full surface format list once.
++  {
++    static bool tmp_fmt_logged = false;
++    if (!tmp_fmt_logged) {
++      tmp_fmt_logged = true;
++      REXGPU_INFO("TEMPDIAG: surface formats ({}):", surface_formats.size());
++      for (const auto& f : surface_formats) {
++        REXGPU_INFO("TEMPDIAG:   format={} colorSpace={}", uint32_t(f.format),
++                    uint32_t(f.colorSpace));
++      }
++    }
++  }
+ #if REX_PLATFORM_ANDROID
+   // Android uses R8G8B8A8.
+   static const VkFormat kFormat8888Primary = VK_FORMAT_R8G8B8A8_UNORM;
+@@ -1316,6 +1329,18 @@ VkSwapchainKHR VulkanPresenter::PaintContext::CreateSwapchainForVulkanSurface(
+     present_modes.clear();
+   }
+ 
++  // TEMPDIAG: log the full present mode list once.
++  {
++    static bool tmp_mode_logged = false;
++    if (!tmp_mode_logged) {
++      tmp_mode_logged = true;
++      REXGPU_INFO("TEMPDIAG: present modes ({}):", present_modes.size());
++      for (const auto& m : present_modes) {
++        REXGPU_INFO("TEMPDIAG:   presentMode={}", uint32_t(m));
++      }
++    }
++  }
++
+   // Create the swapchain.
+   VkSwapchainCreateInfoKHR swapchain_create_info;
+   swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+@@ -1381,6 +1406,10 @@ VkSwapchainKHR VulkanPresenter::PaintContext::CreateSwapchainForVulkanSurface(
+   // interfering with GPU command processing, and also to allow tearing so
+   // variable refresh rate may be used where it's available.
+   // Note: If the priorities here are changes, update the cvar descriptions.
++  REXGPU_INFO("TEMPDIAG: cvars immediate={} mailbox={} fifo_relaxed={}",
++              REXCVAR_GET(vulkan_allow_present_mode_immediate) ? 1 : 0,
++              REXCVAR_GET(vulkan_allow_present_mode_mailbox) ? 1 : 0,
++              REXCVAR_GET(vulkan_allow_present_mode_fifo_relaxed) ? 1 : 0);
+   if (REXCVAR_GET(vulkan_allow_present_mode_immediate) &&
+       std::find(present_modes.cbegin(), present_modes.cend(), VK_PRESENT_MODE_IMMEDIATE_KHR) !=
+           present_modes.cend()) {
+@@ -1529,6 +1558,20 @@ bool VulkanPresenter::GuestOutputImage::Initialize() {
+ }
+ 
+ Presenter::PaintResult VulkanPresenter::PaintAndPresentImpl(bool execute_ui_drawers) {
++  // TEMPDIAG: paint entry telemetry.
++  {
++    static uint32_t tmp_paint_n = 0;
++    static auto tmp_paint_last = std::chrono::steady_clock::now();
++    const auto tmp_now = std::chrono::steady_clock::now();
++    const auto tmp_gap_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
++                                tmp_now - tmp_paint_last)
++                                .count();
++    if (tmp_paint_n % 100 == 0 || tmp_gap_ms > 500) {
++      REXGPU_INFO("TEMPDIAG: paint#{} gap_ms={}", tmp_paint_n, int32_t(tmp_gap_ms));
++    }
++    tmp_paint_n++;
++    tmp_paint_last = tmp_now;
++  }
+   // Begin the submission in place of the one not currently potentially used on
+   // the GPU.
+   uint64_t current_paint_submission_index =
+@@ -1635,6 +1678,24 @@ Presenter::PaintResult VulkanPresenter::PaintAndPresentImpl(bool execute_ui_draw
+     uint32_t guest_output_mailbox_index;
+     std::unique_lock<std::mutex> guest_output_consumer_lock(ConsumeGuestOutput(
+         guest_output_mailbox_index, &guest_output_properties, &guest_output_paint_config));
++    // TEMPDIAG: log the mailbox consumption state.
++    {
++      static uint32_t tmp_mailbox_log_count = 0;
++      static uint32_t tmp_mailbox_last = UINT32_MAX;
++      if (tmp_mailbox_log_count < 5 || guest_output_mailbox_index != tmp_mailbox_last) {
++        if (tmp_mailbox_log_count < 50) {
++          REXGPU_INFO("TEMPDIAG: paint consume mailbox={} (UINT32_MAX=inactive) "
++                      "props={}x{} aspect={}x{}",
++                      guest_output_mailbox_index == UINT32_MAX ? 99u : guest_output_mailbox_index,
++                      guest_output_properties.frontbuffer_width,
++                      guest_output_properties.frontbuffer_height,
++                      guest_output_properties.display_aspect_ratio_x,
++                      guest_output_properties.display_aspect_ratio_y);
++        }
++        tmp_mailbox_last = guest_output_mailbox_index;
++      }
++      tmp_mailbox_log_count++;
++    }
+     if (guest_output_mailbox_index != UINT32_MAX) {
+       assert_true(guest_output_images_[guest_output_mailbox_index].ever_successfully_refreshed);
+       guest_output_image = guest_output_images_[guest_output_mailbox_index].image;
+@@ -1652,6 +1713,27 @@ Presenter::PaintResult VulkanPresenter::PaintAndPresentImpl(bool execute_ui_draw
+         guest_output_properties, paint_context_.swapchain_extent.width,
+         paint_context_.swapchain_extent.height, max_framebuffer_extent.width,
+         max_framebuffer_extent.height, guest_output_paint_config);
++    // TEMPDIAG: log the paint flow decision once.
++    {
++      static bool tmp_paint_flow_logged = false;
++      if (!tmp_paint_flow_logged) {
++        tmp_paint_flow_logged = true;
++        REXGPU_INFO(
++            "TEMPDIAG: paint flow guest_active={} guest={}x{} is_8bpc={} swapchain={}x{} "
++            "effect_count={} effects=[",
++            guest_output_properties.IsActive(), guest_output_properties.frontbuffer_width,
++            guest_output_properties.frontbuffer_height, guest_output_properties.is_8bpc,
++            paint_context_.swapchain_extent.width, paint_context_.swapchain_extent.height,
++            guest_output_flow.effect_count);
++        for (size_t tmp_i = 0; tmp_i < guest_output_flow.effect_count; ++tmp_i) {
++          REXGPU_INFO("TEMPDIAG: paint flow effect[{}] = {} out={}x{}",
++                      tmp_i, int32_t(guest_output_flow.effects[tmp_i]),
++                      guest_output_flow.effect_output_sizes[tmp_i].first,
++                      guest_output_flow.effect_output_sizes[tmp_i].second);
++        }
++        REXGPU_INFO("TEMPDIAG: paint flow ]");
++      }
++    }
+     if (guest_output_flow.effect_count) {
+       // Store the main target reference to the guest output image so it's not
+       // destroyed while it's still potentially in use by main target painting
+@@ -2020,6 +2102,24 @@ Presenter::PaintResult VulkanPresenter::PaintAndPresentImpl(bool execute_ui_draw
+           effect_rect_constants.y = -1.0f + float(effect_rect_y) * effect_y_to_ndc;
+           effect_rect_constants.width = float(effect_rect_size.first) * effect_x_to_ndc;
+           effect_rect_constants.height = float(effect_rect_size.second) * effect_y_to_ndc;
++          // TEMPDIAG: log the paint draw constants once.
++          if (is_final_effect) {
++            static bool tmp_paint_consts_logged = false;
++            if (!tmp_paint_consts_logged) {
++              tmp_paint_consts_logged = true;
++              BilinearConstants tmp_bc;
++              tmp_bc.Initialize(guest_output_flow, i);
++              REXGPU_INFO(
++                  "TEMPDIAG: paint consts rect=[{:.3f},{:.3f},{:.3f},{:.3f}] "
++                  "bilinear_offset=[{},{}] bilinear_inv=[{:.6f},{:.6f}] viewport={}x{} "
++                  "guest_image={:p}",
++                  effect_rect_constants.x, effect_rect_constants.y,
++                  effect_rect_constants.width, effect_rect_constants.height,
++                  tmp_bc.output_offset[0], tmp_bc.output_offset[1], tmp_bc.output_size_inv[0],
++                  tmp_bc.output_size_inv[1], guest_output_viewport.width,
++                  guest_output_viewport.height, (void*)guest_output_image->image());
++            }
++          }
+           dfn.vkCmdPushConstants(draw_command_buffer, guest_output_paint_pipeline_layout,
+                                  VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(effect_rect_constants),
+                                  &effect_rect_constants);
+@@ -2151,6 +2251,7 @@ Presenter::PaintResult VulkanPresenter::PaintAndPresentImpl(bool execute_ui_draw
+     ExecuteUIDrawersFromUIThread(ui_draw_context);
+   }
+ 
++
+   dfn.vkCmdEndRenderPass(draw_command_buffer);
+ 
+   dfn.vkEndCommandBuffer(draw_command_buffer);
+@@ -2208,7 +2309,8 @@ Presenter::PaintResult VulkanPresenter::PaintAndPresentImpl(bool execute_ui_draw
+       }
+     }
+     if (submit_result != VK_SUCCESS) {
+-      REXLOG_ERROR("VulkanPresenter: Failed to submit command buffers");
++      REXLOG_ERROR("VulkanPresenter: Failed to submit command buffers result={}",
++                   int32_t(submit_result));
+       fence_acqusition.SubmissionFailedOrDropped();
+       ui_fence_acquisition.SubmissionFailedOrDropped();
+       if (ui_setup_command_buffer_index != SIZE_MAX) {
+@@ -2242,6 +2344,19 @@ Presenter::PaintResult VulkanPresenter::PaintAndPresentImpl(bool execute_ui_draw
+         vulkan_device_->AcquireQueue(paint_context_.present_queue_family, 0);
+     present_result = dfn.vkQueuePresentKHR(queue_acquisition.queue(), &present_info);
+   }
++  // TEMPDIAG: periodic present telemetry.
++  {
++    static uint32_t tmp_present_n = 0;
++    if (tmp_present_n % 10 == 0) {
++      REXGPU_INFO("TEMPDIAG: present#{} result={} imgIndex={} t={}s",
++                  tmp_present_n, int32_t(present_result),
++                  int32_t(swapchain_image_index),
++                  std::chrono::duration_cast<std::chrono::seconds>(
++                      std::chrono::steady_clock::now().time_since_epoch())
++                      .count());
++    }
++    tmp_present_n++;
++  }
+   switch (present_result) {
+     case VK_SUCCESS:
+       return PaintResult::kPresented;
