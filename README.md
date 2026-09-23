@@ -3,134 +3,43 @@ First and for most this project was made to test the capabilities of local and o
 
 Recompilation of Fable 2 (Xbox 360, title ID 4D5307F1) using the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk) v0.10.0. Guest PPC code is statically recompiled to C++ at build time by `rexglue codegen`, driven by `fable_2_manifest.toml`.
 
-## File structure required to run the exe
+# Current and planned features
+[x] Can be used to beat the game\
+[x] Guild chest fully unlocked\
+[x] Uncapped framerate / increased framerate\
+[ ] Higher Resolution support\
+[ ] Built in Debug Menu
+  - [x] Enabling custom lua to run in game
 
-The executable looks for its content in **its own directory only** (no ancestor search). That directory is mounted as the guest's `game:/` (and `d:`) drive, and everything the game *writes* also goes next to the exe:
+[x] Keyboard / Mouse Support\
+[ ] In game Text changed to respect keyboard and mouse
+  - [ ] Automatic swapping between text
 
-- `saves/` — save files, settings, profiles (created at startup)
-- `cache/` — runtime caches (shader cache, etc.; created at startup)
-- `logs/`, `fable_2.toml` — game logs and cvar config (SDK defaults)
-- `fable2_config.toml` — the recomp's own user config (created/staged at build
-  time; recreated with defaults on first launch if missing, see below)
-- `fable2_patches.toml` — the guest-image (data) patch table, Xenia
-  game-patches format with per-patch `enabled` toggles (see below)
+[ ] Increased performance / framerate\
+[ ] Hero / Dog Texture bug fix\
+[ ] Vulkan support\
+[ ] Linux Builds\
+[ ] Custom commands to aid in debugging\
+[ ] Improved Graphics rendering
+[ ] Custom menu(s) / modifying menus for extra functionality (like closing the game)
 
-The build produces only the exe + runtime plugins — it does **not** copy the
-~6.5 GB game content into the build directory. To run in place, either stage
-the content next to the exe once (`tools\stage_content.cmd`, incremental —
-later runs sync changed files only) or point the exe at an existing content
-tree with `--game_data_root=<path>`. With the content staged, the whole build
-folder is portable: copy it anywhere and it runs, with saves staying inside.
-If the content is missing, the game shows a clear error dialog naming the
-missing piece instead of failing deep in guest code.
 
-Layout of a runnable build directory (`out/build/win-amd64-debug/`):
 
-```
-out/build/win-amd64-debug/
-├── fable_2.exe                   <- the recompiled game
-├── default.xex                   <- game executable (the content marker; staged by you)
-├── data/                         <- game content (art, audio, scripts, ~6.5 GB; staged by you)
-│   ├── art/
-│   ├── audio/
-│   ├── Globals/
-│   ├── dir.manifest
-│   ├── gamescripts.bnk
-│   └── ...
-├── nxeart/                       <- shader/HEC data (staged by you)
-├── $SystemUpdate/                <- system update payload (staged by you; PIRS container, not applied)
-├── saves/                        <- save files / settings / profiles (created at runtime)
-├── cache/                        <- runtime caches (created at runtime)
-├── logs/ + fable_2.toml          <- logs + cvar config (created at runtime)
-├── fable2_config.toml            <- recomp user config (staged at build; created at runtime if missing)
-├── fable2_patches.toml           <- guest-image (data) patch table (staged at build; created at runtime if missing)
-├── README.md                     <- how to run this (staged by the build)
-└── rexruntime.dll, rexgpu-xenos*.dll, ... <- staged runtime + GPU plugins (by the build)
-
-Project root (build sources + the content that gets staged from here):
-
-```
-Fable 2 Rexglue/
-├── default.xex                   <- source content: game executable (the content marker)
-├── data/                         <- source content (art, audio, scripts, ~6.5 GB)
-├── nxeart/                       <- shader/HEC data
-├── $SystemUpdate/                <- system update payload (PIRS container, not applied)
-├── fable_2_manifest.toml         <- codegen manifest (functions, switch tables, jmpbuf addrs)
-│                                   <- every function carries a `name` (see FUNCTION_NAMES.md)
-├── fable2_switch_tables.toml     <- 846 [[switch_tables]] entries, pulled in via [entrypoint] includes
-├── FUNCTION_NAMES.md             <- what each manifest function is + how to trigger it
-├── src/                          <- host application code
-│   ├── main.cpp                  <- entry point (app + probes + keyboard gamepad wiring)
-│   ├── vulkan_smoke.cpp          <- standalone Vulkan pipeline smoke test (fable_2_vulkan_smoke)
-│   ├── core/                     <- app body + config + patches + tracing
-│   │   ├── fable_2_app.h         <- OnConfigurePaths() content-root search; OnPreSetup wires input
-│   │   ├── fable2_config.{h,cpp} <- fable2_config.toml loader (config cvars)
-│   │   ├── fable2_patches.{h,cpp}<- guest-image patch table (fable2_patches.toml)
-│   │   ├── fable2_hooks.cpp      <- mid-asm hook bodies referenced by the manifest
-│   │   ├── fable2_f5_lua.h       <- F5 external-Lua runner (src/lua/F5.lua)
-│   │   ├── fable2_func_trace.h   <- guest function-call tracing (PCH force-include)
-│   │   └── xex_verify.h          <- default.xex integrity verification
-│   ├── diagnostics/              <- probe/diagnostic headers (FPS, text, heap, deadbeef, ...)
-│   ├── input/                    <- keyboard_gamepad.h + remote-control pad server/driver
-│   └── lua/                      <- external game scripts (staged to data/scripts/recomp/)
-├── docs/                         <- investigation notes + RE artifacts
-│   ├── main_menu_crash_fix.md
-│   ├── FPS_CAP_INVESTIGATION.md
-│   └── analysis/                 <- function-scan outputs + seed candidates
-├── generated/                    <- codegen output (291 recomp files, ~305 MB, regenerated by build)
-│   ├── default/
-│   └── rexglue.cmake
-├── out/build/win-amd64-debug/    <- build directory (exe + plugins; stage content to run in place)
-├── XenonRecomp/                  <- ORIGINAL XenonRecomp/XenonAnalyse configs (reference only)
-│   ├── fable2.toml
-│   └── fable2_switch_tables.toml
-├── thirdparty/                   <- tracked: SDK patches + submodule pins + vendored Vulkan headers
-│   ├── sdk_mainmenu_crash_fix.patch <- local SDK source modification (main-menu crash fix)
-│   ├── sdk_allocfixed_patch.patch   <- local SDK source modification (AllocFixed)
-│   ├── xmemory.cpp.allocfixed-patched.bak <- pre-patch backup of the SDK source file
-│   ├── rexglue-sdk-local.patch     <- the local SDK source modifications (Vulkan + FPS work)
-│   ├── rexglue-sdk-submodule-pins.txt <- SDK submodule SHAs the current DLLs were built against
-│   ├── vulkan/ + vk_video/         <- vendored Khronos headers (Vulkan 1.3.282)
-│   ├── rexglue-sdk/                <- (untracked) prebuilt SDK, fetched by tools/setup_sdk.cmd
-│   └── rexglue-sdk-src/            <- (untracked) SDK source, fetched by tools/setup_sdk_src.cmd (Vulkan only)
-├── tools/                        <- build/launch scripts + RE helpers
-│   ├── fable2.cmd                  <- launcher: stages runtime/plugin pair, picks backend
-│   ├── fable2-uncapped.cmd         <- launcher wrapper: sets REX_VSYNC=0 (uncaps the 30 fps lock)
-│   ├── setup_sdk.cmd               <- fetch prebuilt SDK v0.10.0 -> thirdparty/rexglue-sdk (auto-run by build.cmd)
-│   ├── setup_sdk_src.cmd           <- fetch + pin + patch SDK source -> thirdparty/rexglue-sdk-src (Vulkan only)
-│   ├── stage_content.cmd           <- copy the game content next to a built exe (manual, incremental)
-│   ├── build_sdk_vulkan.cmd        <- build the Vulkan GPU plugin from the SDK source
-│   ├── crash_capture.cmd           <- run fable_2.exe under lldb for crash backtraces
-│   ├── dump_funcs.py               <- dump per-function disassembly from generated/default
-│   ├── classify.py / merge_names.py / apply_manifest.py / gen_md.py
-│   │                               <- function-naming pipeline (manifest -> FUNCTION_NAMES.md)
-│   ├── scan_branches.py / scan_funcs.py <- code-range scanners (write docs/analysis/)
-│   └── capture/crash helpers       <- capgame*.ps1, listwins*.ps1, enumwin.ps1, cropgame.ps1,
-│                                       crash_bt.py, run_capture.sh
-├── scratch/                      <- (untracked) old build logs, screenshots, session exports
-├── build.cmd
-├── CMakeLists.txt
-└── CMakePresets.json
-```
-
-Notes:
-
-- **Only `default.xex` is the search marker, and the search is the exe's own directory only.** The other content folders (`data/`, `nxeart/`, `$SystemUpdate/`) must sit next to it; the guest references them via `game:/` paths at runtime. If `default.xex` (or the `data/` folder) is missing, the game shows an error dialog naming the missing piece instead of guessing elsewhere.
-- **You must supply the game content yourself** (it is not in the repo): rip the Fable 2 GOTY (USA/EU) disc (the one with SHA-256 above) and put `default.xex`, `data/`, `nxeart/`, and `$SystemUpdate/` in the project root. The build does not copy this into the build directories — run `tools\stage_content.cmd <project root> out\build\<preset>` to stage it next to an exe (re-running re-syncs changed files), or use `--game_data_root`. `default.xex` is the unpatched original (the only available patch, `$SystemUpdate/su20076000_00000000`, is a PIRS container that XexPatcher cannot apply).
-  - **How to extract:** rip the disc to an ISO, then open it with **[XboxImageExtractor](https://github.com/dromex1/XboxImageExtractor)** — a GUI tool for Xbox 360 game images. It lists the image's filesystem; select `default.xex`, `data`, and `$SystemUpdate` and extract them into the project root (`data` and `$SystemUpdate` extract as folders). You can also grab `nxeart` and anything else the tool lists.
+# Notes for running the game
+- **How to extract:** rip the disc to an ISO, then open it with **[XboxImageExtractor](https://github.com/dromex1/XboxImageExtractor)** — a GUI tool for Xbox 360 game images. It lists the image's filesystem; select `default.xex`, `data`, and `$SystemUpdate` and extract them into the project root (`data` and `$SystemUpdate` extract as folders). You can also grab `nxeart` and anything else the tool lists.
+- **You must supply the game content yourself** (it is not in the repo): rip the Fable 2 GOTY (USA/EU) disc (the one with SHA-256 above) and put `default.xex`, `data/`, `nxeart/`, and `$SystemUpdate/` in the project root. The build does not copy this into the build directories   
 - **Saves live in `<build dir>\saves\`** — back that folder up to keep your progress, and copy it between build trees (Debug/Release) or machines to carry a save over.
 - The `--game_data_root <path>` override still points the content root at a different tree (e.g. to run from a shared content copy without staging); saves/cache still land next to the exe.
-- `generated/` and `out/` are build artifacts — safe to delete, the build regenerates them.
-- `XenonRecomp/` is kept only as a historical reference for the pre-ReXGlue port; nothing in the build reads it.
+
 
 ## Running
 
-```
-out\build\win-amd64-debug\fable_2.exe
-```
+To run the game you must:
+1) Extract a downloaded copy release of the game 
+2) Extract the "data" and "default.xex" from your copy of the game, See "How to extract" for more info on that
+3) Run the fable.exe program and if no errors pop up then the game should launch and you are good to go
+  - If an error pops up about the hash being wrong try to extract a different version of the game and then try again.
 
-(saves and caches are created next to the exe on first launch; the exe needs
-its content next to it — see above — otherwise it shows an error dialog)
 
 Optional command-line overrides (all normal `--cvar value` args):
 
@@ -183,33 +92,95 @@ recomp (guest `.text` is never executed); code patches are mid-asm hooks
 instead. Full details, the current patch list, and how code patches work:
 `docs/patches.md`.
 
-## Frame rate — 30 fps cap, and how to lift it
+## Keyboard controls
 
-The native Xbox 360 build runs at 30 fps. The lock is a **guest-side frame
-gate**: every frame the game waits for the GPU vblank counter (written back by
-the ReXGlue command processor once per vblank) to advance **2 units** — two
-16.6 ms vblanks = 33 ms. The ReXGlue vblank worker paces itself from the
-`vsync` cvar: on = guest refresh rate (60 Hz), off = ~1000 Hz.
+The game normally reads a gamepad via the Xbox 360 `XamInputGetState` API. A
+synthetic "keyboard gamepad" input driver (`src/input/keyboard_gamepad.h`) is added
+on top of the default SDL driver, so host keyboard keys can drive the guest on
+top of (OR-merged with) whatever a real gamepad reports. The physical pad
+keeps working; the keyboard just adds buttons. It is wired up in
+`Fable2App::OnPreSetup` via `config.input_factory`.
 
-**Uncapped launcher (no rebuild, no SDK changes):**
+The mapping is the `keyboard_gamepad_map` cvar, format `Key:Button,Key:Button,...`. Its default is no longer hardcoded in the binary: it comes from `[input] keyboard_gamepad_map` in `fable2_config.toml` (see User config above), which you can edit to remap permanently. The command line and the F3 console still override it per-launch / live.
+
+- **Key** — a host key name understood by `rex::ui::ParseVirtualKey`
+  (`E`, `Space`, `LeftShift`, `F1`, ...).
+- **Button** — a guest gamepad input: `A`, `B`, `X`, `Y`, `LB`/`RB` (shoulders),
+  `LT`/`RT` (triggers), `Up`/`Down`/`Left`/`Right` (dpad), `Pause` (Start),
+  `Select` (Back), `L3`/`R3` (thumb clicks), and `StickUp`/`StickDown`/
+  `StickLeft`/`StickRight` (left thumbstick, full deflection while held).
+
+The default layout is:
+
+| Key(s) | Guest input |
+|---|---|
+| `E` / `2` / `1` / `3` | `A` / `B` / `X` / `Y` |
+| `W` `A` `S` `D` | Left stick (up / left / down / right) |
+| `Escape` | Pause (Start) |
+| `M` | Select (Back) |
+| `Q` / `Tab` | Left / Right trigger |
+| `F1` `F2` `F3` `F4` | Dpad up / down / left / right |
+
+Remap at launch without recompiling, e.g.
 
 ```
-out\build\win-amd64-release\fable2-uncapped.cmd        D3D12, uncapped
-out\build\win-amd64-release\fable2-uncapped.cmd vulkan Vulkan, uncapped
+fable_2.exe --keyboard_gamepad_map "E:A,B:B,Space:L3,Enter:Start"
 ```
 
-It just sets `REX_VSYNC=0` (the SDK's env-var form of the `vsync` cvar) and
-calls `fable2.cmd`. The vblank counter then advances ~1000x/s, the guest's
-"wait +2 units" gate completes in ~2 ms, and the game runs uncapped (observed
-20-100 fps depending on scene; check the Guest FPS line in the F3 overlay).
+### Mouse look (right stick)
 
-Equivalent one-liner: `$env:REX_VSYNC=0; .\fable2.cmd d3d12` (PowerShell), or
-toggle `vsync = false` in the F3 cvar overlay live, or put it in
-`fable_2.toml` next to the exe. To run at the native 30 fps, use `fable2.cmd`
-without the env var.
+Mouse movement is mapped to the guest **right stick** for camera control. The
+movement since the previous poll is converted into stick deflection, so you
+**sweep the mouse to look and stop to stop**. Two cvars control it:
 
-Full investigation record (what was ruled out, the counter chain, the decisive
-experiments): `docs/FPS_CAP_INVESTIGATION.md`.
+| Argument | Effect |
+|---|---|
+| `--mouse_look <bool>` | Enable/disable mouse look (default `true`) |
+| `--mouse_look_scale <n>` | Sensitivity: right-stick units per pixel of mouse movement (default `256`; larger = more sensitive) |
+
+The defaults come from `[input] mouse_look` / `[input] mouse_look_scale` in
+`fable2_config.toml` (edit there to change them permanently), the command
+line overrides per launch, and both cvars are hot-reloadable from the in-game
+console, so you can dial in the sensitivity live. Example: `fable_2.exe
+--mouse_look_scale 512` for a more sensitive camera.
+
+All cvars above are hot-reloadable, so they can also be changed from the in-game console.
+
+## F5 — run an external Lua script
+
+Pressing **F5** (host keyboard) runs an external Lua file in the in-game Lua
+state, exactly the way the game's own `RunScript(path)` global does — but
+triggered from the host. This lets you drop a plain `.lua` file on disk and run
+it against the live game (no recompile of the scripts needed).
+
+- **Default file:** `data/scripts/recomp/F5.lua` (the build stages
+  `src/lua/*.lua` into `data/scripts/recomp/` next to the exe). The shipped
+  `F5.lua` snapshots the hero's position (`QuestManager.HeroEntity:GetPosition()`)
+  and shows `X / Y / Z` in a message box.
+- **Path:** set by the `f5_lua_path` cvar (default `scripts/recomp/F5.lua`,
+  resolved relative to the VFS root `data/`). Override per-launch with
+  `fable_2.exe --f5_lua_path "scripts/other/MyScript.lua"`.
+- **How it works:** `src/core/fable2_f5_lua.h` captures the
+  `CScriptManager::RunScript` callable the first time the game loads a `.lua`
+  script (via a probe on the LuaPlus bound-method dispatcher), then replays that
+  call with your path when F5 is pressed. The file is loaded fresh on each press,
+  so you can edit it live (the VFS re-reads it).
+- **The script runs in the game's global Lua environment**, so it has the full
+  game API (`QuestManager`, `Debug`, `GUI`, `Creature`, `Player`, ...). Plain
+  text is fine — `RunScript`/`loadfile` compile it for you.
+
+Implementation: F5 edge-detection in `src/input/keyboard_gamepad.h`, a per-frame
+replay from the `MainRenderLoop` hook in `src/diagnostics/fps_meter.h`, and the
+string-build + `RunScript` call in `src/core/fable2_f5_lua.h`.\
+<br>
+<br>
+<br>
+<br>
+
+---
+
+
+# Notes for dev who want to work on the build:
 
 ## Guest function-call tracing (fable2_func_trace.log)
 
@@ -302,91 +273,12 @@ than the SDK spdlog logger, which would be far too slow at Fable 2's call
 rate. To remove the feature: delete the `target_precompile_headers` block in
 CMakeLists.txt + `src/core/fable2_func_trace.h` and rebuild.
 
-## Keyboard controls
 
-The game normally reads a gamepad via the Xbox 360 `XamInputGetState` API. A
-synthetic "keyboard gamepad" input driver (`src/input/keyboard_gamepad.h`) is added
-on top of the default SDL driver, so host keyboard keys can drive the guest on
-top of (OR-merged with) whatever a real gamepad reports. The physical pad
-keeps working; the keyboard just adds buttons. It is wired up in
-`Fable2App::OnPreSetup` via `config.input_factory`.
 
-The mapping is the `keyboard_gamepad_map` cvar, format `Key:Button,Key:Button,...`. Its default is no longer hardcoded in the binary: it comes from `[input] keyboard_gamepad_map` in `fable2_config.toml` (see User config above), which you can edit to remap permanently. The command line and the F3 console still override it per-launch / live.
-
-- **Key** — a host key name understood by `rex::ui::ParseVirtualKey`
-  (`E`, `Space`, `LeftShift`, `F1`, ...).
-- **Button** — a guest gamepad input: `A`, `B`, `X`, `Y`, `LB`/`RB` (shoulders),
-  `LT`/`RT` (triggers), `Up`/`Down`/`Left`/`Right` (dpad), `Pause` (Start),
-  `Select` (Back), `L3`/`R3` (thumb clicks), and `StickUp`/`StickDown`/
-  `StickLeft`/`StickRight` (left thumbstick, full deflection while held).
-
-The default layout is:
-
-| Key(s) | Guest input |
-|---|---|
-| `E` / `2` / `1` / `3` | `A` / `B` / `X` / `Y` |
-| `W` `A` `S` `D` | Left stick (up / left / down / right) |
-| `Escape` | Pause (Start) |
-| `M` | Select (Back) |
-| `Q` / `Tab` | Left / Right trigger |
-| `F1` `F2` `F3` `F4` | Dpad up / down / left / right |
-
-Remap at launch without recompiling, e.g.
-
-```
-fable_2.exe --keyboard_gamepad_map "E:A,B:B,Space:L3,Enter:Start"
-```
-
-### Mouse look (right stick)
-
-Mouse movement is mapped to the guest **right stick** for camera control. The
-movement since the previous poll is converted into stick deflection, so you
-**sweep the mouse to look and stop to stop**. Two cvars control it:
-
-| Argument | Effect |
-|---|---|
-| `--mouse_look <bool>` | Enable/disable mouse look (default `true`) |
-| `--mouse_look_scale <n>` | Sensitivity: right-stick units per pixel of mouse movement (default `256`; larger = more sensitive) |
-
-The defaults come from `[input] mouse_look` / `[input] mouse_look_scale` in
-`fable2_config.toml` (edit there to change them permanently), the command
-line overrides per launch, and both cvars are hot-reloadable from the in-game
-console, so you can dial in the sensitivity live. Example: `fable_2.exe
---mouse_look_scale 512` for a more sensitive camera.
-
-All cvars above are hot-reloadable, so they can also be changed from the in-game console.
-
-## F5 — run an external Lua script
-
-Pressing **F5** (host keyboard) runs an external Lua file in the in-game Lua
-state, exactly the way the game's own `RunScript(path)` global does — but
-triggered from the host. This lets you drop a plain `.lua` file on disk and run
-it against the live game (no recompile of the scripts needed).
-
-- **Default file:** `data/scripts/recomp/F5.lua` (the build stages
-  `src/lua/*.lua` into `data/scripts/recomp/` next to the exe). The shipped
-  `F5.lua` snapshots the hero's position (`QuestManager.HeroEntity:GetPosition()`)
-  and shows `X / Y / Z` in a message box.
-- **Path:** set by the `f5_lua_path` cvar (default `scripts/recomp/F5.lua`,
-  resolved relative to the VFS root `data/`). Override per-launch with
-  `fable_2.exe --f5_lua_path "scripts/other/MyScript.lua"`.
-- **How it works:** `src/core/fable2_f5_lua.h` captures the
-  `CScriptManager::RunScript` callable the first time the game loads a `.lua`
-  script (via a probe on the LuaPlus bound-method dispatcher), then replays that
-  call with your path when F5 is pressed. The file is loaded fresh on each press,
-  so you can edit it live (the VFS re-reads it).
-- **The script runs in the game's global Lua environment**, so it has the full
-  game API (`QuestManager`, `Debug`, `GUI`, `Creature`, `Player`, ...). Plain
-  text is fine — `RunScript`/`loadfile` compile it for you.
-
-Implementation: F5 edge-detection in `src/input/keyboard_gamepad.h`, a per-frame
-replay from the `MainRenderLoop` hook in `src/diagnostics/fps_meter.h`, and the
-string-build + `RunScript` call in `src/core/fable2_f5_lua.h`.
-
-## Remote control (AI input channel)
+## Remote control (automated input channel)
 
 `fable_2.exe` runs a localhost TCP **remote control server** so an external
-AI/automation harness can drive the guest gamepad over JSON-lines messages —
+automation harness can drive the guest gamepad over JSON-lines messages —
 no human at the keyboard. Design doc: `plans/ai-remote-input-control.md`.
 
 **Debug builds only.** This is a debugging/automation channel — it opens a
