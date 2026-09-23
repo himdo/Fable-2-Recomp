@@ -78,19 +78,7 @@ game recreates it with defaults on launch if it is ever missing. Loaded in
   `false` = original 30/s). Guest-image data patches are a different file:
   `fable2_patches.toml` (see above).
 
-## Guest-image patches (fable2_patches.toml)
 
-Data patches for the loaded `default.xex` guest image (Xenia game-patches
-format), applied before the guest module launches: `Fable2App::OnPostLoadXexImage()`
-→ `fable2::patches::Load()` + `ApplyAll()` (code in `src/core/fable2_patches.{h,cpp}`).
-Same lifecycle as the user config: staged by the build, recreated with the
-built-in defaults if missing, and a broken file falls back to the built-ins
-(dialog + log) so it never blocks launch. Each `[[patch]]` has an `enabled`
-toggle (default true) — flip it in the file and relaunch to A/B a patch with
-no rebuild. **Scope: data patches only** — code-region ops are inert in this
-recomp (guest `.text` is never executed); code patches are mid-asm hooks
-instead. Full details, the current patch list, and how code patches work:
-`docs/patches.md`.
 
 ## Keyboard controls
 
@@ -181,6 +169,20 @@ string-build + `RunScript` call in `src/core/fable2_f5_lua.h`.\
 
 
 # Notes for dev who want to work on the build:
+
+## Guest-image patches (fable2_patches.toml)
+
+Data patches for the loaded `default.xex` guest image (Xenia game-patches
+format), applied before the guest module launches: `Fable2App::OnPostLoadXexImage()`
+→ `fable2::patches::Load()` + `ApplyAll()` (code in `src/core/fable2_patches.{h,cpp}`).
+Same lifecycle as the user config: staged by the build, recreated with the
+built-in defaults if missing, and a broken file falls back to the built-ins
+(dialog + log) so it never blocks launch. Each `[[patch]]` has an `enabled`
+toggle (default true) — flip it in the file and relaunch to A/B a patch with
+no rebuild. **Scope: data patches only** — code-region ops are inert in this
+recomp (guest `.text` is never executed); code patches are mid-asm hooks
+instead. Full details, the current patch list, and how code patches work:
+`docs/patches.md`.
 
 ## Guest function-call tracing (fable2_func_trace.log)
 
