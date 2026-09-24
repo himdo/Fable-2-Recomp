@@ -63,6 +63,13 @@ struct Values {
   std::string remote_host = "127.0.0.1";  // "0.0.0.0" = all interfaces
   int32_t remote_port = 8791;  // if busy, ports +1..+9 are tried
   std::string remote_token;  // empty = no auth required
+  // [perf] - hot-function override tuning.
+  // hotfunc_yield_every: NtYieldExecution batching factor for the hotfunc
+  // overrides (see src/core/hotfunc/hotfunc_yield.h). Every Nth call does
+  // the real SwitchToThread; the others take a full memory fence. 1 =
+  // original (yield every call), 0 = never yield. Larger = fewer context
+  // switches, less frequent CPU rotation to other guest threads.
+  int32_t hotfunc_yield_every = 8;
 };
 
 // Load the config from `path`.

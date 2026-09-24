@@ -120,6 +120,16 @@ port = 8791
 # {"cmd":"auth","token":"..."} as its first line.
 # Default: ""
 token = ""
+
+[perf]
+# NtYieldExecution batching for the hot-function overrides (see
+# src/core/hotfunc/hotfunc_yield.h): every Nth guest yield does the real
+# SwitchToThread; the others take a full memory fence. The work-loop yield
+# was the single biggest cost in the 475 render chain; on multi-core hosts
+# the yield is only a politeness hint, so batch it. 1 = original (yield
+# every call); 0 = never yield; larger = fewer context switches.
+# Default: 8
+hotfunc_yield_every = 8
 )TOML_EOF";
 
 std::string_view TypeName(toml::node_type t) {
@@ -177,8 +187,8 @@ bool Load(const std::filesystem::path& path) {
 
   // Warn about unknown top-level sections (usually a typo or a file written
   // for a newer build).
-  static constexpr std::array<std::string_view, 4> kKnownSections = {
-      "general", "input", "patches", "remote"};
+  static constexpr std::array<std::string_view, 5> kKnownSections = {
+      "general", "input", "patches", "remote", "perf"};
   for (const auto& [key, value] : root) {
     const bool known =
         std::ranges::find(kKnownSections, key.str()) != kKnownSections.end();
@@ -234,6 +244,14 @@ bool Load(const std::filesystem::path& path) {
         remote_table, "remote", "port", "integer", values.remote_port));
     values.remote_token = Read<std::string>(
         remote_table, "remote", "token", "string", values.remote_token);
+  }
+  const toml::path perf_path{"perf"};
+  const auto perf = root[perf_path];
+  if (perf.is_table()) {
+    const toml::table& perf_table = *perf.as_table();
+    values.hotfunc_yield_every = static_cast<int32_t>(Read<int64_t>(
+        perf_table, "perf", "hotfunc_yield_every", "integer",
+        values.hotfunc_yield_every));
   }
 
   g_values = values;

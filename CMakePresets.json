@@ -107,6 +107,17 @@
             "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
         },
         {
+            "name": "win-amd64-release-profiling",
+            "displayName": "Windows AMD64 Release (profiling: -O3 + symbols, frame pointers, no PE cleaning)",
+            "inherits": "windows-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+                "FABLE2_NO_PE_CLEAN": "ON",
+                "FABLE2_PROFILER_FRIENDLY": "ON"
+            }
+        },
+        {
             "name": "linux-amd64-debug",
             "displayName": "Linux AMD64 Debug",
             "inherits": "linux-base",
@@ -207,6 +218,7 @@
         { "name": "win-msvc-debug", "configurePreset": "win-msvc-debug" },
         { "name": "win-amd64-debug", "configurePreset": "win-amd64-debug" },
         { "name": "win-amd64-release", "configurePreset": "win-amd64-release" },
+        { "name": "win-amd64-release-profiling", "configurePreset": "win-amd64-release-profiling" },
         { "name": "win-amd64-relwithdebinfo", "configurePreset": "win-amd64-relwithdebinfo" },
         { "name": "linux-amd64-debug", "configurePreset": "linux-amd64-debug" },
         { "name": "linux-amd64-release", "configurePreset": "linux-amd64-release" },
