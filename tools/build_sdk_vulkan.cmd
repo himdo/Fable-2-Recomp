@@ -23,17 +23,15 @@ setlocal
 set "REPO=%~dp0.."
 set "WRAPPER=%REPO%\tools\vulkan_sdk"
 set "OUT=%REPO%\out\build\vulkan-sdk"
-rem SDK source: thirdparty\rexglue-sdk-src in this repo (fetched + patched by
-rem tools\setup_sdk_src.cmd if missing), else a sibling rexglue-sdk-src
-rem install; its build outputs land in SDKOUT (under the SDK source root).
-set "SDKSRC=%REPO%\thirdparty\rexglue-sdk-src"
-if not exist "%SDKSRC%\CMakeLists.txt" set "SDKSRC=%REPO%\..\rexglue-sdk-src"
+rem SDK source: the thirdparty\rexglue-sdk submodule (your fork, branch
+rem vsync-present-gate); its build outputs land in SDKOUT (under the SDK
+rem source root).
+set "SDKSRC=%REPO%\thirdparty\rexglue-sdk"
+if not exist "%SDKSRC%\CMakeLists.txt" set "SDKSRC=%REPO%\..\rexglue-sdk"
 set "SDKOUT=%SDKSRC%\out"
 if not exist "%SDKSRC%\CMakeLists.txt" (
-    echo SDK source not found; fetching via tools\setup_sdk_src.cmd - LONG...
-    call "%~dp0setup_sdk_src.cmd" || exit /b 1
-    set "SDKSRC=%REPO%\thirdparty\rexglue-sdk-src"
-    set "SDKOUT=%SDKSRC%\out"
+    echo SDK source not found; run: git submodule update --init --recursive
+    exit /b 1
 )
 rem LLVM: prefer clang++ already on PATH, else the default install location
 where clang++ >nul 2>nul

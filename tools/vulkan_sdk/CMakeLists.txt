@@ -33,14 +33,14 @@ endif()
 set(REXGLUE_USE_VULKAN ON CACHE BOOL "Enable Vulkan graphics backend" FORCE)
 set(REXGLUE_USE_D3D12 ON CACHE BOOL "Enable D3D12 graphics backend" FORCE)
 
-# SDK source: default to thirdparty/rexglue-sdk-src in this repo (fetched +
-# patched by tools/setup_sdk_src.cmd); override with -DREXGLUE_SDK_SOURCE=...
+# SDK source: default to the thirdparty/rexglue-sdk submodule (your fork,
+# branch vsync-present-gate); override with -DREXGLUE_SDK_SOURCE=...
 if(NOT REXGLUE_SDK_SOURCE OR NOT EXISTS "${REXGLUE_SDK_SOURCE}")
-    set(REXGLUE_SDK_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/../../thirdparty/rexglue-sdk-src")
+    set(REXGLUE_SDK_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/../../thirdparty/rexglue-sdk")
 endif()
 message(STATUS "REXGLUE_SDK_SOURCE: ${REXGLUE_SDK_SOURCE}")
 if(NOT EXISTS "${REXGLUE_SDK_SOURCE}/CMakeLists.txt")
-    message(FATAL_ERROR "SDK source not found at ${REXGLUE_SDK_SOURCE} - run tools\setup_sdk_src.cmd first")
+    message(FATAL_ERROR "SDK source not found at ${REXGLUE_SDK_SOURCE} - run git submodule update --init --recursive first")
 endif()
 
 # Add PDB debug info to the Release build so crash dumps can be symbolized with

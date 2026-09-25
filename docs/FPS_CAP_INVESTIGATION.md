@@ -155,6 +155,49 @@ Instrumentation added (temporary): logs every memory `WAIT_REG_MEM` with
   rebuild from `rexglue-sdk-src`.
 - `REX_VSYNC=0` is the shipped solution (fully uncapped).
 
+## Vsync on -> host runs at (monitor refresh + 30) fps — root cause + fix
+
+**Symptom:** with the `vsync` cvar enabled (the default; `REX_VSYNC` unset), the
+window's host present rate was monitor-refresh + 30 fps (60 Hz -> ~90 fps,
+144 Hz -> ~174 fps), i.e. consistently 30 fps over the refresh rate.
+
+**Root cause (three interacting pieces, all in the SDK UI presenter):**
+
+1. The Fable 2 app always has an ImGui dialog registered (the achievement
+   toast, created in `ReXApp::LaunchModule`), so the ImGui drawer is always
+   attached as a UI drawer. That forces paint mode `kUIThreadOnRequest` and the
+   *continuous UI repaint* loop (`ImGuiDrawer::Draw` requests a new UI paint
+   after every draw), which presents once per host vblank -> **R presents/s**.
+2. Every guest frame swap (30/s) calls `RefreshGuestOutput`, which requests a
+   *forced* UI paint (`RequestPaintOrConnectionRecoveryViaWindow(true)` ->
+   `ForceUIThreadPaintTick`). The force flag makes `WaitForUITickFromUIThread`
+   return without waiting for a vblank -> **30 extra presents/s** on top of the
+   vblank-paced repaints.
+3. The D3D12/Vulkan presenters present with **sync interval 0 + tearing**
+   (deliberately, so the host refresh rate never paces the guest), so nothing
+   caps the total: present rate = R + 30/s. The guest-side `vsync` cvar only
+   paces the *guest vblank worker*; it never touched the host present rate.
+
+**Fix (SDK source, `thirdparty/rexglue-sdk-src`):** a vsync present gate in
+the base `Presenter` (presenter.h/.cpp) — `VsyncPresentGateAllows()` /
+`VsyncPresentGateNotePresent()`. When the `vsync` cvar is enabled (queried by
+name via `rex::cvar::Query<bool>("vsync")` so the UI layer doesn't link the
+GPU plugin) and the host vblank ticks are being produced, at most one present
+per host vblank tick is allowed; later paints in the same vblank skip the
+`Present`/`vkQueuePresentKHR` call (the D3D12 and Vulkan presenters both gate
+their present call; the Vulkan path consumes its present semaphore with an
+empty submit so it is not left signaled-but-unconsumed). The skipped frame's
+content is not lost: the continuous UI repaint presents the latest guest output
+on the next vblank. A rate-limited log line reports suppressions per second.
+
+Result: vsync on caps the host present rate at the monitor refresh rate
+(exactly R while any UI drawer is active; the guest's own rate when only guest
+output is painted). Vsync off (`REX_VSYNC=0`) is unchanged (uncapped).
+
+The fix requires a source SDK rebuild (`tools\build_sdk_vulkan.cmd`) and is
+staged next to the exe for Release builds by CMake (the source dual-backend
+plugin is dual D3D12+Vulkan, so a plain launch stays D3D12).
+
 ## Files
 
 - `src/diagnostics/fps_probe.h` — all probes + limiter experiment (temporary)
