@@ -98,8 +98,9 @@ unlock_ce = true
 
 # Force a CPU readback of the render-to-texture resolve that regenerates the
 # hero/dog face+skin texture, so the character does not render black on a
-# split-memory host (see plans/hero-dog-texture-readback.md). Seeds the SDK
-# cvar readback_resolve_force_addresses (guest base 0x12704000); readback then
+# split-memory host (see plans/hero-dog-texture-readback.md). Approach + the
+# guest base 0x12704000 come from just-harry's Unofficial Xenia femtofork for
+# Fable II. Seeds the SDK cvar readback_resolve_force_addresses; readback then
 # happens only for that resolve, not every frame. false = original black bug.
 # Default: true
 hero_dog_texture_readback = true

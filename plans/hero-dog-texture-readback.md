@@ -9,9 +9,18 @@ only remaining step is in-game verification (needs a display/save).
 
 Goal: fix the rendering bug where the hero and the dog render completely black, by
 forcing a CPU readback of their render-to-texture result only when the game regenerates
-those textures — mirroring the "unofficial Xenia femtofork for Fable II"
-(`just-harry/unofficial-xenia-femtofork-for-fable-ii`) without paying the frame-rate cost
-of a global `readback_resolve`.
+those textures — mirroring the "unofficial Xenia femtofork for Fable II" without paying the
+frame-rate cost of a global `readback_resolve`.
+
+## Credit
+
+The root-cause analysis, the hero/dog texture guest address (`0x12704000`), the
+"readback only the affected texture, only while it's being resolved" mechanism, and the
+resolution-scaled downscale all come from **just-harry**, author of the *Unofficial Xenia:
+Femtofork for Fable II* (`github.com/just-harry/unofficial-xenia-femtofork-for-fable-ii`).
+This recomp port reuses that insight (per the femtofork's `xe::f2::player_and_dog_textures_address`
+and its D3D12 readback approach); the implementation here adapts it to the ReXGlue SDK.
+Thanks, just-harry.
 
 ---
 

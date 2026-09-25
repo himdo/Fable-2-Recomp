@@ -117,11 +117,12 @@ class Fable2App : public rex::ReXApp {
 
   void OnPostSetup() override {
     // Hero/dog black-texture fix (see plans/hero-dog-texture-readback.md).
-    // readback_resolve_force_addresses is defined in the GPU plugin (loaded in
-    // OnPreSetup, i.e. after OnPostInitLogging), so it is seeded here, now that
-    // the plugin is loaded and its cvar is registered. Force a CPU readback of
-    // the render-to-texture resolve that regenerates the hero/dog face+skin
-    // texture; the guest base (0x12704000) is Fable-II-specific, so it lives in
+    // Approach + guest base 0x12704000 credit just-harry's Unofficial Xenia
+    // femtofork for Fable II. readback_resolve_force_addresses is defined in the
+    // GPU plugin (loaded in OnPreSetup, i.e. after OnPostInitLogging), so it is
+    // seeded here, now that the plugin is loaded and its cvar is registered.
+    // Force a CPU readback of the render-to-texture resolve that regenerates the
+    // hero/dog face+skin texture; the address is Fable-II-specific, so it lives in
     // the app and the SDK only knows "read back resolves to these addresses".
     {
       const fable2::config::Values& cfg = fable2::config::Get();
