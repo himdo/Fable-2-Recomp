@@ -46,15 +46,6 @@ setjmp_address = 0x83000200
 # keyed by address in codegen (a duplicate address overrides the earlier one),
 # so each address appears exactly once below.
 #
-# 60 FPS (Xenia "60 FPS" by Margen67; guest: be8 0x82B9C8EB = 0x01): the
-# state-2 case of sub_82B9C7F8 does `li r11,2` at 0x82B9C8E8; the hook fires
-# right after it and overwrites r11 with 1.
-[[entrypoint.midasm_hook]]
-address = 0x82B9C8E8
-name = "fable2_hook_60fps"
-registers = ["r11"]
-after_instruction = true
-
 # Unlock Website Items (Xenia "Unlock Website Items" by Guy). sub_8256E368 is
 # the "is a website/Guild-chest item available" check. It is gated by the
 # player's website-registration flags on the chest object (r4): GATE 1 = bit6
@@ -47866,7 +47857,7 @@ name = "DispatchOsNotifications_82185080"
 # Existing Functions
 
 # The main per-frame render/present loop (one call per frame: ~30/s at the
-# 30 fps cap, ~60/s with the 60 FPS patch). Presents the frame via VdSwap and
+# 30 fps cap). Presents the frame via VdSwap and
 # calls the frame limiter (0x82242628), the per-frame helpers, and the
 # 60 FPS dispatch function (0x82B9C7F8). fps_meter.h hooks this symbol.
 [entrypoint.functions."0x82B9CD68"]

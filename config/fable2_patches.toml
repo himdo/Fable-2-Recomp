@@ -42,9 +42,9 @@
 name = "High Tick Rate"             # Default: (required, no default)
 description = "Doubles tickrate to 30hz. Vastly improves in-game UI framerate. Improves input delay. Minor side effects."  # Default: ""
 author = "Guy"                       # Default: ""
-# Enable/disable this patch: set false to turn it off (no rebuild needed).
-# Default: true
-enabled = true
+# Enable/disable this patch: set true to turn it on (no rebuild needed).
+# Default: false
+enabled = false
 ops = [
     { width = "be32", address = 0x8233AEB4, value = 0x60000000 },  # code-region NOP (inert in this recomp)
     { width = "be8",  address = 0x83319511, value = 0x3E },        # data op (takes effect)

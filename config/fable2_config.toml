@@ -51,11 +51,6 @@ mouse_look_scale = 256
 # Toggles for the recomp-level (mid-asm hook) patches, consulted at runtime
 # by the hook bodies (src/core/fable2_hooks.cpp) - no rebuild needed. Guest-image
 # DATA patches are a different file: fable2_patches.toml next to the exe.
-# 60 FPS (mid-asm hook fable2_hook_60fps; Xenia "60 FPS" by Margen67):
-# lifts the guest main loop from 30/s to ~60/s. false = 30/s (original).
-# Default: true
-fps_60 = true
-
 # Unlock Website Items (mid-asm hooks fable2_hook_website_g1/g1b/grantnew;
 # Xenia "Unlock Website Items" by Guy): forces the website-registration gates
 # AND the grant-method result in the Guild-chest item getter so the website
@@ -70,22 +65,3 @@ unlock_website = true
 # Default: true
 unlock_ce = true
 
-[remote]
-# Remote control server (AI/automation input channel): a localhost TCP
-# server that accepts JSON-lines commands to drive the guest gamepad -
-# press/release/stick, timed scripts, cvar get/set. See
-# src/input/remote_control_server.h and plans/ai-remote-input-control.md.
-# Default: true
-enabled = true
-# Interface to bind. "127.0.0.1" = this machine only (default). "0.0.0.0" =
-# all interfaces (use with a token; a remote attacker could then drive the
-# game and set cvars).
-# Default: "127.0.0.1"
-host = "127.0.0.1"
-# TCP port. If the port is busy the game tries port+1..port+9 (the bound
-# port is logged at startup). Default: 8791
-port = 8791
-# Shared token. Empty = no auth. When set, every client connection must send
-# {"cmd":"auth","token":"..."} as its first line.
-# Default: ""
-token = ""

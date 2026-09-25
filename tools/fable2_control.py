@@ -11,8 +11,8 @@ Examples:
   python tools/fable2_control.py press A --hold 120
   python tools/fable2_control.py state --buttons A,RT --ly 1000
   python tools/fable2_control.py get-state
-  python tools/fable2_control.py cvar fps_60
-  python tools/fable2_control.py cvar set fps_60 false
+  python tools/fable2_control.py cvar mouse_look_scale
+  python tools/fable2_control.py cvar set mouse_look_scale 512
   python tools/fable2_control.py script --file repro.json
   python tools/fable2_control.py raw '{"cmd":"info"}'
 

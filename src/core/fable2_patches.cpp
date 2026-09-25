@@ -3,8 +3,8 @@
 // SCOPE: this table is for GUEST-IMAGE (data) patches only. Code-region
 // Xenia patches must be implemented as mid-asm hooks instead
 // ([[entrypoint.midasm_hook]] in fable_2_manifest.toml + src/core/fable2_hooks.cpp)
-// - the 60 FPS patch used to live here (its guest-byte write was inert) and
-// is now fable2_hook_60fps.
+// (the 60 FPS patch used to live here; its guest-byte write was inert,
+// so it became a mid-asm hook, which has since been removed entirely).
 //
 // The table is data-driven: Load() reads fable2_patches.toml from next to
 // the exe (same format as Xenia's game-patches files), creating it with the
@@ -31,8 +31,8 @@ namespace {
 // ---------------------------------------------------------------------------
 // Built-in defaults (fallback + first-launch template). Ported from the Xenia
 // game-patches file "4D5307F1 - Fable II (GOTY/Platinum Edition).patch.toml"
-// (https://github.com/xenia-canary/game-patches). Everything is enabled by
-// default; the Xenia file ships these with is_enabled = false.
+// (https://github.com/xenia-canary/game-patches); the Xenia file ships
+// these with is_enabled = false. We default High Tick Rate to disabled.
 // ---------------------------------------------------------------------------
 const std::vector<Patch>& DefaultPatches() {
   static const std::vector<Patch> kPatches = {
@@ -41,7 +41,7 @@ const std::vector<Patch>& DefaultPatches() {
           "Doubles tickrate to 30hz. Vastly improves in-game UI framerate. "
           "Improves input delay. Minor side effects.",
           "Guy",
-          true,
+          false,
           {
               // NOTE: code-region op. In this recomp the guest .text is never
               // executed (native recompiled code runs instead), so this NOP
@@ -52,10 +52,9 @@ const std::vector<Patch>& DefaultPatches() {
               {Op::Width::kBe8, 0x83319511, 0x3E},
           },
       },
-      // 60 FPS (Margen67) used to be listed here as be8 0x82B9C8EB = 0x01,
-      // but that guest-byte write is inert in a recomp. It is now the
-      // fable2_hook_60fps mid-asm hook (src/core/fable2_hooks.cpp +
-      // [[entrypoint.midasm_hook]] in fable_2_manifest.toml).
+      // NOTE: 60 FPS (Margen67) was listed here as be8 0x82B9C8EB = 0x01
+      // but was removed: the guest-byte write is inert in a recomp, and the
+      // replacement mid-asm hook (fable2_hook_60fps) has been removed.
   };
   return kPatches;
 }
@@ -107,9 +106,9 @@ R"TOML_EOF(# ===================================================================
 name = "High Tick Rate"             # Default: (required, no default)
 description = "Doubles tickrate to 30hz. Vastly improves in-game UI framerate. Improves input delay. Minor side effects."  # Default: ""
 author = "Guy"                       # Default: ""
-# Enable/disable this patch: set false to turn it off (no rebuild needed).
-# Default: true
-enabled = true
+# Enable/disable this patch: set true to turn it on (no rebuild needed).
+# Default: false
+enabled = false
 ops = [
     { width = "be32", address = 0x8233AEB4, value = 0x60000000 },  # code-region NOP (inert in this recomp)
     { width = "be8",  address = 0x83319511, value = 0x3E },        # data op (takes effect)

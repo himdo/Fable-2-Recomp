@@ -269,21 +269,14 @@ class Fable2App : public rex::ReXApp {
     seed_cvar("mouse_look_scale", std::to_string(cfg.mouse_look_scale));
 
 #ifdef FABLE2_REMOTE_CONTROL
-    // Start the remote control server (AI input channel; [remote] section).
-    // Debug builds only (FABLE2_REMOTE_CONTROL); Release builds never open the
-    // port.
-    if (cfg.remote_enabled) {
-      fable2::remote::ControlServer::Config rcfg;
-      rcfg.host = cfg.remote_host;
-      rcfg.port = cfg.remote_port;
-      rcfg.token = cfg.remote_token;
-      if (!remote_server_.Start(rcfg)) {
-        REXSYS_WARN(
-            "[fable2-config] remote control server could not start; remote "
-            "input disabled (see logs/)");
-      }
-    } else {
-      REXSYS_INFO("[fable2-config] remote control disabled by config");
+    // Start the remote control server (AI input channel; debug-only, no
+    // config knobs - always on with ControlServer::Config defaults: 127.0.0.1:
+    // 8791, no auth). Debug builds only (FABLE2_REMOTE_CONTROL); Release
+    // builds never open the port.
+    if (!remote_server_.Start({})) {
+      REXSYS_WARN(
+          "[fable2-config] remote control server could not start; remote "
+          "input disabled (see logs/)");
     }
 
     // Observe remote A-presses (the state machine's input transition). The
@@ -294,8 +287,8 @@ class Fable2App : public rex::ReXApp {
         fable2::stateprobe::record_a_press(fable2::stateprobe::t_ms());
     });
     // Start the 1-second game-state classifier (feeds the remote `state`
-    // command + the [state] in-game log). Runs regardless of remote_enabled so
-    // the state is always tracked in debug builds.
+    // command + the [state] in-game log). The state is always tracked in
+    // debug builds.
     fable2::stateprobe::start();
 #endif  // FABLE2_REMOTE_CONTROL
   }

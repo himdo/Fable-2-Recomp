@@ -230,7 +230,7 @@ monotonic clock; the driver just reads "what is active right now" each poll:
   server expands it into the same timeline. Scripts give the AI a single atomic message
   to reproduce a bug: e.g. "hold RT, wait 300 ms, tap X, release."
 
-The driver is polled by the guest input system (30–60 Hz depending on the fps_60 patch).
+The driver is polled by the guest input system (~30 Hz, the guest's frame cadence).
 That polling rate is the actuation rate — matches a real controller and is what the game
 logic expects. Millisecond precision in *scheduling* (from the server thread) is enough;
 no sub-frame precision is needed or even physically meaningful to the guest.
@@ -361,7 +361,7 @@ Commands:
 | `{"cmd":"clear"}` | — | Release everything remote (baseline + timed). |
 | `{"cmd":"script","steps":[...],"id_tag":"jump_over_pit"}` | steps = ordered list; each step: an input op (`press`/`stick`/`state` fragment) + optional `delay_ms` (wait *before* this step) + optional `hold_ms` | Atomically enqueue a sequence. Server returns the total duration. This is the primitive for reproducible bug scripts. |
 | `{"cmd":"get_state"}` | — | Reply with current resolved snapshot: `{buttons:["A","RT"], triggers:{...}, sticks:{...}, packet_number, ms_until_release: {A: 120}}`. |
-| `{"cmd":"cvar","name":"fps_60","value":"false"}` | `name`, optional `value` | Get/set any cvar by name via `rex::cvar` — gives the AI access to the existing knob surface (input map, patches toggles, etc.) for free. |
+| `{"cmd":"cvar","name":"mouse_look_scale","value":"512"}` | `name`, optional `value` | Get/set any cvar by name via `rex::cvar` — gives the AI access to the existing knob surface (input map, patches toggles, etc.) for free. |
 | `{"cmd":"enable"}` / `{"cmd":"disable"}` | — | Toggle the remote pad device (reconnect/disconnect from the guest's view). |
 | `{"cmd":"ping"}` | — | `{"ok":true,"ms":<server processing time>}`. |
 
@@ -377,7 +377,7 @@ Examples (what an AI harness would actually send):
   {"delay_ms":2100,"op":"press","input":"A","hold_ms":80},
   {"delay_ms":2200,"op":"press","input":"B","hold_ms":80}
 ]}
-{"cmd":"cvar","name":"fps_60"}
+{"cmd":"cvar","name":"mouse_look_scale"}
 ```
 
 A "script" is a single message, so it is **atomic** from the guest's perspective — no
@@ -394,7 +394,7 @@ python tools/fable2_control.py state --set-buttons A,RT --ly 1000
 python tools/fable2_control.py clear
 python tools/fable2_control.py script --file repro.json
 python tools/fable2_control.py get-state
-python tools/fable2_control.py cvar set fps_60 false
+python tools/fable2_control.py cvar set mouse_look_scale 512
 ```
 
 - `--port` / `--token` flags (default 8791).

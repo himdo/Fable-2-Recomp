@@ -82,11 +82,6 @@ mouse_look_scale = 256
 # Toggles for the recomp-level (mid-asm hook) patches, consulted at runtime
 # by the hook bodies (src/core/fable2_hooks.cpp) - no rebuild needed. Guest-image
 # DATA patches are a different file: fable2_patches.toml next to the exe.
-# 60 FPS (mid-asm hook fable2_hook_60fps; Xenia "60 FPS" by Margen67):
-# lifts the guest main loop from 30/s to ~60/s. false = 30/s (original).
-# Default: true
-fps_60 = true
-
 # Unlock Website Items (mid-asm hooks fable2_hook_website_g1/g1b/grantnew;
 # Xenia "Unlock Website Items" by Guy): forces the website-registration gates
 # AND the grant-method result in the Guild-chest item getter so the website
@@ -100,26 +95,6 @@ unlock_website = true
 # the CE items are granted at save load. false = locked (original).
 # Default: true
 unlock_ce = true
-
-[remote]
-# Remote control server (AI/automation input channel): a localhost TCP
-# server that accepts JSON-lines commands to drive the guest gamepad -
-# press/release/stick, timed scripts, cvar get/set. See
-# src/input/remote_control_server.h and plans/ai-remote-input-control.md.
-# Default: true
-enabled = true
-# Interface to bind. "127.0.0.1" = this machine only (default). "0.0.0.0" =
-# all interfaces (use with a token; a remote attacker could then drive the
-# game and set cvars).
-# Default: "127.0.0.1"
-host = "127.0.0.1"
-# TCP port. If the port is busy the game tries port+1..port+9 (the bound
-# port is logged at startup). Default: 8791
-port = 8791
-# Shared token. Empty = no auth. When set, every client connection must send
-# {"cmd":"auth","token":"..."} as its first line.
-# Default: ""
-token = ""
 
 [perf]
 # NtYieldExecution batching for the hot-function overrides (see
@@ -187,8 +162,8 @@ bool Load(const std::filesystem::path& path) {
 
   // Warn about unknown top-level sections (usually a typo or a file written
   // for a newer build).
-  static constexpr std::array<std::string_view, 5> kKnownSections = {
-      "general", "input", "patches", "remote", "perf"};
+  static constexpr std::array<std::string_view, 4> kKnownSections = {
+      "general", "input", "patches", "perf"};
   for (const auto& [key, value] : root) {
     const bool known =
         std::ranges::find(kKnownSections, key.str()) != kKnownSections.end();
@@ -223,27 +198,11 @@ bool Load(const std::filesystem::path& path) {
   const auto patches = root[patches_path];
   if (patches.is_table()) {
     const toml::table& patches_table = *patches.as_table();
-    values.fps_60 = Read<bool>(patches_table, "patches", "fps_60", "boolean",
-                               values.fps_60);
     values.unlock_website = Read<bool>(patches_table, "patches",
                                        "unlock_website", "boolean",
                                        values.unlock_website);
     values.unlock_ce = Read<bool>(patches_table, "patches", "unlock_ce",
                                   "boolean", values.unlock_ce);
-  }
-  const toml::path remote_path{"remote"};
-  const auto remote = root[remote_path];
-  if (remote.is_table()) {
-    const toml::table& remote_table = *remote.as_table();
-    values.remote_enabled =
-        Read<bool>(remote_table, "remote", "enabled", "boolean",
-                   values.remote_enabled);
-    values.remote_host = Read<std::string>(
-        remote_table, "remote", "host", "string", values.remote_host);
-    values.remote_port = static_cast<int32_t>(Read<int64_t>(
-        remote_table, "remote", "port", "integer", values.remote_port));
-    values.remote_token = Read<std::string>(
-        remote_table, "remote", "token", "string", values.remote_token);
   }
   const toml::path perf_path{"perf"};
   const auto perf = root[perf_path];

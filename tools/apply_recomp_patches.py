@@ -26,8 +26,7 @@ GENERATED_DIR = sys.argv[1] if len(sys.argv) > 1 else "generated/default"
 # per generated file that contains the target function. The replacement ends
 # with the patch's marker comment, which is the idempotency check.
 # Patches that cannot be expressed as a [[entrypoint.midasm_hook]] (see
-# docs/patches.md). The 60 FPS patch used to live here; it is now the
-# fable2_hook_60fps mid-asm hook in fable_2_manifest.toml.
+# docs/patches.md).
 PATCHES = []
 
 MARKER = "// [recomp-patch: "

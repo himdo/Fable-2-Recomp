@@ -52,13 +52,12 @@ template in `src/core/fable2_patches.cpp` — keep it in sync with
 built-in defaults (the game always runs); an explicitly empty patch list is
 valid (all patches off). Log: `[patches] loaded N patch(es) from ...`.
 
-## Current patches (from fable2_patches.toml; all enabled by default)
+## Current patches (from fable2_patches.toml; High Tick Rate defaults to **disabled**)
 
 | Patch | Op | Region | Effective in recomp? |
 |---|---|---|---|
 | High Tick Rate (Guy) | be32 0x8233AEB4 = 0x60000000 (NOP) | .text | **No** — guest .text is never executed; the recompiled native code runs instead. The byte write happens (verified in log), but it changes nothing at runtime. |
 | High Tick Rate (Guy) | be8 0x83319511 = 0x3E (was 0x2E) | .data | **Yes** — recompiled code reads .data from the guest arena live. (No direct `lbz`/`lwz` of exactly 0x83319511 found in the recompiled output; the one `-27375` reference reads 0x83399511. If the game's behavior doesn't visibly change, that's why.) |
-| 60 FPS (Margen67) | be8 0x82B9C8EB = 0x01 (was 0x02) | .text | **Yes, via the `fable2_hook_60fps` mid-asm hook** (below): rewrites r11 after the `li r11,2` at 0x82B9C8E8 in `sub_82B9C7F8`. Verified: main-loop rate 30/s → ~54–67/s (avg ≈60) with FABLE2_FPS_METER. |
 
 This is the fundamental recomp vs. emulator split: **data patches work, code
 patches don't** (a code patch here would mean editing the recompiled C++ at
@@ -99,23 +98,13 @@ Wiring (all three pieces):
    right after the patched instruction executes.
 2. `src/core/fable2_hooks.cpp` → the hook function, plain C++ linkage matching
    the prototype codegen auto-emits into the generated code
-   (`extern void fable2_hook_60fps(PPCRegister& r11);`).
+   (`extern void fable2_hook_website_g1(PPCRegister& r9);`).
 3. Nothing else — codegen handles the rest, and it survives codegen re-runs
    by construction (the manifest is a codegen input).
 
-```cpp
-// generated code after codegen:
-loc_82B9C8E8:
-	// li r11,2
-	ctx.r11.s64 = 2;
-	fable2_hook_60fps(ctx.r11);   // overwrites r11 = 1
-	goto loc_82B9C8FC;
-```
-
 **Runtime toggle (done):** the hook body is C++ in the game process and
-consults `fable2::config::Get()` on every call — `[patches] fps_60` in
-`fable2_config.toml` (default `true`) enables/disables the 60 FPS patch with
-no rebuild. Verified: `true` → main loop 57–62/s; `false` → 30.0/s.
+consults `fable2::config::Get()` on every call — a `[patches]` key in
+`fable2_config.toml` enables/disables the patch with no rebuild.
 (New hooks should follow the same pattern: read their toggle from
 `fable2::config::Get()`.)
 
@@ -128,13 +117,12 @@ generated/default/codegen.build.stamp). Idempotent via a unique
 `// [recomp-patch: <name>]` marker; missing anchor = build failure.
 `FABLE2_RECOMP_PATCHES=0` skips all (A/B runs). Use only for patches that
 can't be expressed as hooks (e.g. constants baked into memory operands).
-Currently **empty** — the 60 FPS patch moved to a hook.
+Currently **empty**.
 
 ### Current recomp-level patches
 
 | Patch | Mechanism | Change | Measured effect |
 |---|---|---|---|
-| 60 FPS | mid-asm hook `fable2_hook_60fps` @ 0x82B9C8E8 (after `li r11,2`); toggle: `[patches] fps_60` in fable2_config.toml | `r11 = 2` → `1` in `sub_82B9C7F8`'s state-2 case (the high byte of the op value handed to `sub_821F5F20`); mirrors Xenia be8 0x82B9C8EB | main loop 30/s → ~54–67/s (avg ≈60); toggle off → 30.0/s |
 | Unlock Website Items (Guy) | mid-asm hook `fable2_hook_unlock_website` @ 0x8256E384 (after `rlwinm r9,r10,0,25,25`); toggle: `[patches] unlock_website` | Forces `r9 = 0x40` (bit 6) in `sub_8256E368`, so the website/Guild-chest item lookup reads as unlocked and runs the real lookup. Re-derives the Xenia "Unlock Website Items" intent for THIS build (the stock ops target a different revision's bytes). | Hook confirmed in generated code + clean startup; in-game chest unlock pending manual test |
 | Unlock CE Content (Guy) | mid-asm hook `fable2_hook_unlock_ce` @ 0x824B3540 (after `rlwinm r10,r11,0,25,25`); toggle: `[patches] unlock_ce` | Forces `r10 = 0x40` (bit 6) in `sub_824B3528`, so the Collectors-Edition chest item lookup reads as unlocked and runs the real lookup. Same re-derivation approach. | Hook confirmed in generated code + clean startup; in-game chest unlock pending manual test |
 
@@ -160,7 +148,7 @@ original `__imp__` entry). Enabled with `FABLE2_FPS_METER=1`.
    made toggleable the same way later — the hook bodies are C++ in the game
    process.)
 2. **Other Xenia patches** for this title (from
-   `4D5307F1 - Fable II (GOTY).patch.toml`). Done as mid-asm hooks: **60 FPS**,
+   `4D5307F1 - Fable II (GOTY).patch.toml`). Done as mid-asm hooks:
    **Unlock Website Items**, **Unlock CE Content** (all re-derived for THIS
    build — see the recomp-level patches table above). Remaining (still to port,
    each needs the same build-mismatch investigation — the stock ops target a
