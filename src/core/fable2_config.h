@@ -55,6 +55,12 @@ struct Values {
   // GuildChest_GetCEContent_824B3528 (hooks fable2_hook_ce_g1/g1b/grantavail
   // in src/core/fable2_hooks.cpp).
   bool unlock_ce = true;
+  // Force a CPU readback of the render-to-texture resolve that (re)generates
+  // the hero/dog face+skin texture, so the character does not render black on
+  // a split-memory host (see plans/hero-dog-texture-readback.md). This seeds
+  // the SDK cvar readback_resolve_force_addresses (guest base 0x12704000) in
+  // Fable2App; readback then happens only for that resolve, not every frame.
+  bool hero_dog_texture_readback = true;
   // [perf] - hot-function override tuning.
   // hotfunc_yield_every: NtYieldExecution batching factor for the hotfunc
   // overrides (see src/core/hotfunc/hotfunc_yield.h). Every Nth call does

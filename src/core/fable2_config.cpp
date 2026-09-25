@@ -96,6 +96,14 @@ unlock_website = true
 # Default: true
 unlock_ce = true
 
+# Force a CPU readback of the render-to-texture resolve that regenerates the
+# hero/dog face+skin texture, so the character does not render black on a
+# split-memory host (see plans/hero-dog-texture-readback.md). Seeds the SDK
+# cvar readback_resolve_force_addresses (guest base 0x12704000); readback then
+# happens only for that resolve, not every frame. false = original black bug.
+# Default: true
+hero_dog_texture_readback = true
+
 [perf]
 # NtYieldExecution batching for the hot-function overrides (see
 # src/core/hotfunc/hotfunc_yield.h): every Nth guest yield does the real
@@ -203,6 +211,9 @@ bool Load(const std::filesystem::path& path) {
                                        values.unlock_website);
     values.unlock_ce = Read<bool>(patches_table, "patches", "unlock_ce",
                                   "boolean", values.unlock_ce);
+    values.hero_dog_texture_readback =
+        Read<bool>(patches_table, "patches", "hero_dog_texture_readback", "boolean",
+                   values.hero_dog_texture_readback);
   }
   const toml::path perf_path{"perf"};
   const auto perf = root[perf_path];
