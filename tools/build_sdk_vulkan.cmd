@@ -65,4 +65,6 @@ if errorlevel 1 (
 echo === Build OK. Locating plugin:
 dir /s /b "%SDKOUT%\*rexgpu-xenos.dll" 2>nul
 dir /s /b "%OUT%\*rexgpu-xenos.dll" 2>nul
-endlocal
+rem dir above can leave errorlevel 1 (no match under the wrapper build dir);
+rem callers use "call ... || exit /b 1", so report success explicitly.
+exit /b 0

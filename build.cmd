@@ -117,14 +117,25 @@ if "%CLEAN%"=="1" (
     exit /b 0
 )
 
-rem SDK source (optional, Vulkan plugin): thirdparty, then a sibling install.
-set "SDKSRC=%~dp0thirdparty\rexglue-sdk-src"
-if not exist "%SDKSRC%\CMakeLists.txt" set "SDKSRC=%~dp0..\rexglue-sdk-src"
+rem SDK source (the Vulkan plugin + source runtime): the thirdparty\rexglue-sdk
+rem submodule (your fork, branch vsync-present-gate). The CMake staging only
+rem swaps the source runtime/plugin in if they are BUILT under
+rem <SDKSRC>\out\win-amd64\Release, so build the SDK first (Release) for a
+rem -release / fable_2_profiler build; the Debug config does not stage them.
+set "SDKSRC=%~dp0thirdparty\rexglue-sdk"
+if not exist "%SDKSRC%\CMakeLists.txt" set "SDKSRC=%~dp0..\rexglue-sdk"
+if not exist "%SDKSRC%\CMakeLists.txt" (
+    echo SDK source not found; run: git submodule update --init --recursive 1>&2
+    exit /b 1
+)
+
+rem Build the SDK source (Release) so the staged pair is your fork's
+rem (dual-backend, vsync-capped) runtime + plugin, not the prebuilt 0.10.0 pair.
+if /i not "%CONFIG%"=="win-amd64-debug" (
+    call "%~dp0tools\build_sdk_vulkan.cmd" || exit /b 1
+)
+
 rem (inline -D with quotes at the call site: cmd cannot carry a quoted value
 rem in a variable for paths with spaces)
-if exist "%SDKSRC%\CMakeLists.txt" (
-    cmake --preset %CONFIG% -DCMAKE_PREFIX_PATH="%REXSDK%" -DREXGLUE_SDK_ROOT="%REXSDK%" -DREXGLUE_SDK_SOURCE="%SDKSRC%" || exit /b 1
-) else (
-    cmake --preset %CONFIG% -DCMAKE_PREFIX_PATH="%REXSDK%" -DREXGLUE_SDK_ROOT="%REXSDK%" || exit /b 1
-)
+cmake --preset %CONFIG% -DCMAKE_PREFIX_PATH="%REXSDK%" -DREXGLUE_SDK_ROOT="%REXSDK%" -DREXGLUE_SDK_SOURCE="%SDKSRC%" || exit /b 1
 cmake --build out\build\%CONFIG% --target %TARGET%
