@@ -14,7 +14,9 @@
 #include "fable2_heap_scan.h"
 #include "fable2_text_append.h"
 #include "fable2_state_probe.h"
+#ifdef _WIN32
 #include "fable2_av_probe.h"  // self-installs a guest-PC AV logger (VEH)
+#endif
 // #include "fable2_ui_render_probe.h"
 #include "keyboard_gamepad.h"
 

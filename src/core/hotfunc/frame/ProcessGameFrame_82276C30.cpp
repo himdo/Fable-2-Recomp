@@ -168,8 +168,11 @@ constexpr u32 kBitArrayHolder    = 0x8349E6EC;  // active-entity bit-array holde
 // The target attribute keeps it a tiny out-of-line call (the compiler will not
 // inline FMA code into the non-FMA callers), still a large win. Needs an
 // FMA3-capable x86-64 host (any modern CPU).
+#if defined(__x86_64__) || defined(_M_X64)
 static inline double guest_fma(double a, double b, double c)
     __attribute__((target("fma")));
+#endif
+// ARM64 already has scalar fused multiply-add; the x86 feature name is invalid.
 static inline double guest_fma(double a, double b, double c) {
 	return __builtin_fma(a, b, c);
 }
@@ -1099,4 +1102,3 @@ extern "C" void ProcessGameFrame_82276C30(PPCContext& __restrict ctx, uint8_t* b
 	__restgprlr_14(ctx, base);
 	return;
 }
-

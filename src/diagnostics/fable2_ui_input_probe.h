@@ -326,12 +326,21 @@ inline const uint8_t* host_of(uint32_t ga) {
 
 // Safe guest read: host arena is commit-on-fault; SEH catches uncommitted.
 inline bool gread(const uint8_t* /*base*/, uint32_t addr, void* dst, size_t n) {
+#ifdef _WIN32
   __try {
     std::memcpy(dst, host_of(addr), n);
     return true;
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     return false;
   }
+#else
+  // This diagnostic assumes the Windows arena address and SEH fault guard.
+  // Do not read that address on hosts with a different guest memory mapping.
+  (void)addr;
+  (void)dst;
+  (void)n;
+  return false;
+#endif
 }
 
 inline bool valid_addr(uint32_t a) {

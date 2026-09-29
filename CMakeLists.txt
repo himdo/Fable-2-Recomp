@@ -33,6 +33,9 @@ if(WIN32)
 else()
     add_executable(fable_2 ${FABLE2_SOURCES})
 endif()
+if(APPLE)
+    target_sources(fable_2 PRIVATE src/core/fable2_window_position.cpp)
+endif()
 
 # The app's headers live in subfolders (src/core, src/diagnostics, src/input)
 # and are included by bare filename ("fable2_config.h"), so the subfolders
@@ -42,14 +45,64 @@ set(FABLE2_HEADER_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/diagnostics
     ${CMAKE_CURRENT_SOURCE_DIR}/src/input)
 target_include_directories(fable_2 PRIVATE ${FABLE2_HEADER_DIRS})
-if(TARGET fable_2_recomp)
-    target_include_directories(fable_2_recomp PRIVATE ${FABLE2_HEADER_DIRS})
-endif()
 
 # Stage the Xenos GPU emulation plugin next to the exe (rexglue picks the
 # per-configuration variant: rexgpu-xenosd.dll for Debug, rexgpu-xenos.dll
 # for Release). Without it the game runs with no GPU emulation.
 rexglue_setup_target(fable_2 GPU_PLUGINS xenos)
+if(TARGET fable_2_recomp)
+    target_include_directories(fable_2_recomp PRIVATE ${FABLE2_HEADER_DIRS})
+endif()
+
+option(FABLE2_BUILD_INPUT_TESTS "Build macOS input and window regression tests" OFF)
+if(APPLE AND FABLE2_BUILD_INPUT_TESTS)
+    enable_testing()
+    add_executable(fable_2_readback_config_tests tests/readback_config_tests.cpp)
+    target_include_directories(fable_2_readback_config_tests PRIVATE src/core)
+    target_link_libraries(fable_2_readback_config_tests PRIVATE rex::runtime)
+    add_test(NAME readback_config COMMAND fable_2_readback_config_tests)
+    add_executable(fable_2_input_tests tests/keyboard_mouse_tests.cpp)
+    target_include_directories(fable_2_input_tests PRIVATE src/input src/core)
+    target_link_libraries(fable_2_input_tests PRIVATE rex::runtime)
+    set_target_properties(fable_2_input_tests PROPERTIES BUILD_RPATH "@executable_path")
+    add_test(NAME keyboard_mouse COMMAND fable_2_input_tests)
+    add_executable(fable_2_rate_window_tests tests/rate_window_tests.cpp)
+    target_compile_options(fable_2_rate_window_tests PRIVATE -UNDEBUG)
+    target_include_directories(fable_2_rate_window_tests PRIVATE src/diagnostics)
+    add_test(NAME rate_window COMMAND fable_2_rate_window_tests)
+    add_test(NAME startup_handoff_patch
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/startup_handoff_patch_tests.py)
+    add_test(NAME macos_app_packaging
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/macos_app_packaging_tests.py)
+    add_test(NAME macos_launcher
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/macos_launcher_tests.py)
+    add_test(NAME macos_terrain_helper
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/macos_terrain_fix_tests.py)
+    add_executable(fable_2_window_tests
+        tests/window_position_tests.cpp src/core/fable2_window_position.cpp)
+    target_include_directories(fable_2_window_tests PRIVATE
+        src/core)
+    target_include_directories(fable_2_window_tests SYSTEM PRIVATE
+        thirdparty/tomlplusplus/include)
+    target_link_libraries(fable_2_window_tests PRIVATE rex::runtime)
+    add_test(NAME window_position COMMAND fable_2_window_tests)
+    # The prebuilt SDK includes Cocoa but no dummy video driver. This test
+    # uses hidden windows and needs a normal macOS desktop session.
+endif()
+
+# Clang spends many minutes processing the single generated function that
+# registers ~61,000 guest entry points, including GlobalISel's Localizer at
+# -O0 on arm64. It runs once at startup; limit these workarounds to this file.
+if(APPLE AND TARGET fable_2_recomp)
+    set_source_files_properties(
+        "${CMAKE_CURRENT_SOURCE_DIR}/generated/default/fable_2_register.cpp"
+        PROPERTIES COMPILE_OPTIONS "-O0;-fno-global-isel"
+                   SKIP_PRECOMPILE_HEADERS ON)
+endif()
 
 # The app's probe/diagnostic headers (src/diagnostics/*.h) use the standard CRT
 # functions (fopen, getenv, strcat, strncat, ...), which the MSVC/UCRT headers
@@ -85,6 +138,7 @@ if(TARGET fable_2_recomp)
                 "${CMAKE_CURRENT_SOURCE_DIR}/generated/default/recomp_patches.stamp"
         DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/generated/default/codegen.build.stamp"
                 ${CMAKE_CURRENT_SOURCE_DIR}/tools/apply_recomp_patches.py
+                ${CMAKE_CURRENT_SOURCE_DIR}/tools/apply_startup_handoff.py
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         COMMENT "Applying recomp-level patches to generated code"
         VERBATIM
@@ -101,14 +155,23 @@ endif()
 # the generated pch already loaded and redefines REX_FUNC_PROLOGUE() to also
 # call Fable2FuncTraceCall(__func__) - every guest function entry then logs
 # its name (see the header). No generated files are modified, so codegen
-# re-runs never lose the hook. Off by default; enable with
+# re-runs never lose the hook. Mac Release builds omit the instrumentation.
+# To collect traces, build with -DFABLE2_ENABLE_FUNC_TRACE=ON, then enable
 # FABLE2_FUNC_TRACE=1 (env) or Fable2FuncTraceSetEnabled(true) (runtime).
 # Appended AFTER fable_2_pch.h in the target's precompile-header list: CMake
 # writes the list into cmake_pch.hxx in order, so the hook section at the
 # bottom of fable2_func_trace.h (which redefines REX_FUNC_PROLOGUE) runs with
 # the generated pch already loaded, and the patched macro is baked into the
 # PCH used by every recompiled TU.
-if(TARGET fable_2_recomp)
+set(FABLE2_FUNC_TRACE_DEFAULT ON)
+if(APPLE AND CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(FABLE2_FUNC_TRACE_DEFAULT OFF)
+endif()
+option(FABLE2_ENABLE_FUNC_TRACE "Compile per-guest-function tracing hooks"
+       ${FABLE2_FUNC_TRACE_DEFAULT})
+target_compile_definitions(fable_2 PRIVATE
+    FABLE2_ENABLE_FUNC_TRACE=$<BOOL:${FABLE2_ENABLE_FUNC_TRACE}>)
+if(TARGET fable_2_recomp AND FABLE2_ENABLE_FUNC_TRACE)
     target_precompile_headers(fable_2_recomp PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core/fable2_func_trace.h)
 endif()
@@ -405,4 +468,20 @@ elseif(WIN32)
     else()
         message(STATUS "Python3 not found; skipping stable-hash PE cleaning")
     endif()
+endif()
+
+# Deliver a double-clickable app on macOS, including on incremental builds.
+# A separate ALL target runs after SDK library staging, and also refreshes the
+# bundle when only launcher/packaging sources changed or the app was removed.
+if(APPLE)
+    add_custom_target(fable_2_app ALL
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/package_macos_app.py
+            --runtime $<TARGET_FILE_DIR:fable_2>
+            --output "$<TARGET_FILE_DIR:fable_2>/Fable II.app"
+            --game-data-root ${CMAKE_CURRENT_SOURCE_DIR}
+            --backend vulkan --replace
+            --sdk-lib-dir $<TARGET_FILE_DIR:rex::runtime> --configuration $<CONFIG>
+        DEPENDS fable_2
+        COMMENT "Packaging Fable II.app"
+        VERBATIM)
 endif()

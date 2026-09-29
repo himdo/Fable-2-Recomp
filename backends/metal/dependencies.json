@@ -1,0 +1,38 @@
+[
+  {
+    "name": "metal-cpp",
+    "url": "https://codeload.github.com/bkaradzic/metal-cpp/tar.gz/9a8bc57c0318b84863bec2faf6605594877c5f5d",
+    "sha256": "46736574f7afd977d7d35a13aa781edb595a43650d437b50f5779ec750879530",
+    "commit": "9a8bc57c0318b84863bec2faf6605594877c5f5d"
+  },
+  {
+    "name": "DirectXShaderCompiler",
+    "url": "https://codeload.github.com/xenios-jp/DirectXShaderCompiler/tar.gz/55db9bc0bc574816d60073872b6a209f7c3d7f0a",
+    "sha256": "95d697359604b33490a8fbec48bd3c6ed1e57f08847e6543e7eb6950cdfdd65f",
+    "commit": "55db9bc0bc574816d60073872b6a209f7c3d7f0a"
+  },
+  {
+    "name": "DirectX-Headers",
+    "url": "https://codeload.github.com/microsoft/DirectX-Headers/tar.gz/33374754f65baac0500dda6187e371136357246f",
+    "sha256": "f2815fd9ea9571d271596576b56292fcccc9b18e83a013e88e7722a671425f05",
+    "commit": "33374754f65baac0500dda6187e371136357246f"
+  },
+  {
+    "name": "metal-shader-converter",
+    "url": "https://codeload.github.com/xenios-jp/metal-shader-converter/tar.gz/2bbd3665b0143c1f18043ddd9a20de77ba65e834",
+    "sha256": "057156e3f6c22e8c71b050f6117d51fe621981a3cbb66a4ed6a33264115bfabc",
+    "commit": "2bbd3665b0143c1f18043ddd9a20de77ba65e834"
+  },
+  {
+    "name": "sdk-source",
+    "url": "https://codeload.github.com/rexglue/rexglue-sdk/tar.gz/f5337cdc947ff6d4c4196737e2c807a48f2a1fc2",
+    "sha256": "58aa7ea03ea79db428ed7d52c96bdad0780d5680459948c0517c1de81570113c",
+    "commit": "f5337cdc947ff6d4c4196737e2c807a48f2a1fc2"
+  },
+  {
+    "name": "xenios-source",
+    "url": "https://codeload.github.com/xenios-jp/xenios/tar.gz/87b176a078c316fde3adf67a217f0c44615b0e0d",
+    "sha256": "af2eccbd79053709a84c097cf01bc28633575b352c09e286dd2723e20e61dbd6",
+    "commit": "87b176a078c316fde3adf67a217f0c44615b0e0d"
+  }
+]

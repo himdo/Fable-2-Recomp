@@ -1,0 +1,15 @@
+{
+  "xenios": {
+    "url": "https://github.com/xenios-jp/XeniOS",
+    "commit": "87b176a078c316fde3adf67a217f0c44615b0e0d",
+    "scope": "Adapted Metal/UI sources under port; built-in helper shader source downloaded at build time"
+  },
+  "rexglue": {
+    "url": "https://github.com/rexglue/rexglue-sdk",
+    "commit": "f5337cdc947ff6d4c4196737e2c807a48f2a1fc2",
+    "scope": "Private graphics-source adaptation in sdk-metal.patch; installed runtime unmodified"
+  },
+  "morph_readback_reference": "https://github.com/just-harry/unofficial-xenia-femtofork-for-fable-ii",
+  "original_work": "ReXGlue compatibility adapters and plugin integration, register batching, geometry retry backoff, selective Metal readback/completion handling, build scripts and tests.",
+  "distribution": "Source only; no generated guest code, game-derived shaders, game files, saves or compiled dependencies included."
+}

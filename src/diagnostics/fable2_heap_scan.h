@@ -39,6 +39,9 @@
 
 namespace fable2::heapscan {
 
+#ifdef _WIN32
+// Scanning arbitrary guest pages requires VirtualQuery and SEH. Keep this
+// optional Windows diagnostic out of other hosts; retain the forwarding hook.
 inline constexpr uintptr_t kArenaHostBase = 0x100000000ull;  // see alloc_watch.h
 
 // ---------------------------------------------------------------------------
@@ -368,6 +371,10 @@ inline void maybe_request() {
   // menu; FABLE2_HEAP_SCAN_TIMES caps the total number of full scans).
   if (el > 5.0) scan_request().store(1);
 }
+
+#else
+inline void maybe_request() {}
+#endif
 
 }  // namespace fable2::heapscan
 
