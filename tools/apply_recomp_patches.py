@@ -19,6 +19,7 @@ Set FABLE2_RECOMP_PATCHES=0 to skip all patches (used for A/B runs).
 
 import os
 import sys
+from apply_startup_handoff import apply as apply_startup_handoff
 
 GENERATED_DIR = sys.argv[1] if len(sys.argv) > 1 else "generated/default"
 
@@ -44,7 +45,7 @@ def main() -> int:
         print(f"[recomp-patches] ERROR: no fable_2_recomp.*.cpp in {GENERATED_DIR}", file=sys.stderr)
         return 1
 
-    applied_total = 0
+    applied_total = apply_startup_handoff(GENERATED_DIR)
     for name, anchor, replacement in PATCHES:
         marker = MARKER + name + "]"  # MARKER ends with a space
         found = False

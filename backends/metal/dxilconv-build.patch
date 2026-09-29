@@ -1,0 +1,41 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -112,7 +112,8 @@
+ option(SPIRV_BUILD_TESTS "Build targets for the SPIR-V unit tests." OFF)
+ 
+ # Enable SPIR-V CodeGen for Linux by default.
+-if(NOT WIN32)
++# Honor ENABLE_SPIRV_CODEGEN=OFF on macOS; only DXIL conversion is needed.
++if(NOT WIN32 AND NOT APPLE)
+   set(ENABLE_SPIRV_CODEGEN ON)
+ endif()
+ 
+--- a/cmake/modules/AddLLVM.cmake
++++ b/cmake/modules/AddLLVM.cmake
+@@ -82,7 +82,7 @@
+       VERBATIM
+       COMMENT "Creating export file for ${target_name}")
+     set_property(TARGET ${target_name} APPEND_STRING PROPERTY
+-                 LINK_FLAGS " -Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/${native_export_file}")
++                 LINK_FLAGS " -Wl,-exported_symbols_list,\"${CMAKE_CURRENT_BINARY_DIR}/${native_export_file}\"")
+   elseif(LLVM_HAVE_LINK_VERSION_SCRIPT)
+     # Gold and BFD ld require a version script rather than a plain list.
+     set(native_export_file "${target_name}.exports")
+--- a/projects/dxilconv/tools/dxilconv/CMakeLists.txt
++++ b/projects/dxilconv/tools/dxilconv/CMakeLists.txt
+@@ -69,7 +69,7 @@
+     if(APPLE)
+         # macOS uses different linker flags
+         set_target_properties(dxilconv PROPERTIES
+-            LINK_FLAGS "-Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/dxilconv.symbols"
++            LINK_FLAGS "-Wl,-exported_symbols_list,\"${CMAKE_CURRENT_BINARY_DIR}/dxilconv.symbols\""
+         )
+         # Create exported symbols list for macOS
+         file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/dxilconv.symbols"
+@@ -94,4 +94,4 @@
+ install(TARGETS dxilconv
+     LIBRARY DESTINATION lib
+     RUNTIME DESTINATION bin
+-)
+\ No newline at end of file
++)

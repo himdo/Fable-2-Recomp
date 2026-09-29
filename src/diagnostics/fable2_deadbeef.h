@@ -261,10 +261,15 @@ bool redirect_prompt(const uint8_t* base, uint32_t S) {
     // The guest arena is commit-on-fault; commit our slot before writing.
     const uint64_t hb = host_addr(base, kNewBuf);
     if (!host_writable(hb, total)) {
+#ifdef _WIN32
       void* p = VirtualAlloc((void*)hb, 256, MEM_COMMIT, PAGE_READWRITE);
       if (!p)
         p = VirtualAlloc((void*)hb, 256, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
       if (!p || !host_writable(hb, total)) return false;
+#else
+      // This optional canary needs Windows guest-page commitment support.
+      return false;
+#endif
     }
   }
   gwrite(base, kNewBuf, newstr, total);

@@ -139,6 +139,7 @@ inline std::atomic<uint32_t>& g_data0() { static std::atomic<uint32_t> v{0}; ret
 inline std::atomic<uint32_t>& g_data1() { static std::atomic<uint32_t> v{0}; return v; }
 
 inline void vbuf_dump_later(uint8_t* base) {
+#ifdef _WIN32
   bool expect = false;
   if (!vbuf_started().compare_exchange_strong(expect, true)) return;
   CreateThread(nullptr, 0, [](LPVOID b) -> DWORD {
@@ -187,6 +188,10 @@ inline void vbuf_dump_later(uint8_t* base) {
     }
     return 0;
   }, base, 0, nullptr);
+#else
+  // The asynchronous probe relies on Windows page-access checks.
+  (void)base;
+#endif
 }
 
 // Scan [lo,hi) page-by-page (fast) for the UTF-16BE string "Press A to

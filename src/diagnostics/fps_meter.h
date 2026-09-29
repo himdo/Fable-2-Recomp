@@ -13,6 +13,11 @@
 // below then binds in place of the weak recompiled symbol.
 
 #pragma once
+#if defined(__APPLE__)
+#include "rate_window.h"
+#include <mutex>
+#include <pthread.h>
+#endif
 
 #include <atomic>
 #include <chrono>
@@ -100,11 +105,45 @@ inline bool enabled() {
 }  // namespace fable2::fpsmeter
 
 extern "C" void MainRenderLoop_82B9CD68(PPCContext& ctx, uint8_t* base) {
+#if !defined(FABLE2_ENABLE_FUNC_TRACE) || FABLE2_ENABLE_FUNC_TRACE
   // Bounded unfiltered trace window (FABLE2_TRACE_WINDOW=1); see above.
   fable2::functrace_window::run_window(
       std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now().time_since_epoch())
           .count());
+#endif
+#if defined(__APPLE__)
+  // Measure guest render-loop calls, not displayed frames. Separate thread
+  // counters avoid combining unrelated timing windows; only log writes lock.
+  if (fable2::fpsmeter::enabled()) {
+    static thread_local fable2::measurement::RateWindow meter;
+    const auto now = std::chrono::steady_clock::now();
+    const int64_t us = std::chrono::duration_cast<std::chrono::microseconds>(
+        now.time_since_epoch()).count();
+    if (auto report = meter.tick(us)) {
+      static std::mutex output_mutex;
+      const std::lock_guard guard(output_mutex);
+      uint64_t thread_id = 0;
+      pthread_threadid_np(nullptr, &thread_id);
+      static std::ofstream logf{[] {
+        const char* path = std::getenv("FABLE2_FPS_LOG");
+        return path ? path : "fps_meter.log";
+      }(), std::ios::out};
+      const auto epoch = std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::system_clock::now().time_since_epoch()).count();
+      if (logf) {
+        char buf[256];
+        std::snprintf(buf, sizeof(buf),
+            "unix_ms=%lld tid=%llu guest_render_rate=%.3f/s "
+            "window_seconds=%.3f max_gap_ms=%.3f total=%llu\n",
+            (long long)epoch, (unsigned long long)thread_id, report->rate,
+            report->seconds, report->max_gap_ms, (unsigned long long)report->total);
+        logf << buf;
+        logf.flush();
+      }
+    }
+  }
+#else
   if (fable2::fpsmeter::enabled()) {
     static std::atomic<uint64_t> calls{0};
     static std::atomic<int64_t> window_start_us{0};
@@ -136,6 +175,7 @@ extern "C" void MainRenderLoop_82B9CD68(PPCContext& ctx, uint8_t* base) {
       }
     }
   }
+#endif
   // F5 (host) -> run the external Lua file (per-frame, responsive).
   fable2::f5lua::poll_mainloop(ctx, base);
   __imp__MainRenderLoop_82B9CD68(ctx, base);

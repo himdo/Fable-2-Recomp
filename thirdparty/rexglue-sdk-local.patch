@@ -965,10 +965,49 @@ index 001f36b..250f137 100644
    if (primitive_processing_result.index_buffer_type ==
            PrimitiveProcessor::ProcessedIndexBufferType::kNone ||
 diff --git a/src/graphics/vulkan/pipeline_cache.cpp b/src/graphics/vulkan/pipeline_cache.cpp
-index 91ac08f..d7a500a 100644
+index 91ac08f..39e67b0 100644
 --- a/src/graphics/vulkan/pipeline_cache.cpp
 +++ b/src/graphics/vulkan/pipeline_cache.cpp
-@@ -3508,6 +3508,12 @@ bool VulkanPipelineCache::EnsurePipelineCreated(const PipelineCreationArguments&
+@@ -31,6 +31,7 @@
+ #include <rex/math.h>
+ #include <rex/thread.h>
+ #include <rex/memory.h>
++#include <rex/platform.h>
+ #include <rex/graphics/util/draw.h>
+ #include <rex/graphics/flags.h>
+ #include <rex/graphics/pipeline_util.h>
+@@ -59,6 +60,12 @@ REXCVAR_DEFINE_BOOL(vulkan_tessellation_wireframe, false, "GPU/Vulkan",
+                     "Render tessellation as wireframe")
+     .lifecycle(rex::cvar::Lifecycle::kHotReload);
+ 
++REXCVAR_DEFINE_BOOL(
++    vulkan_tessellation_constants_fix, REX_PLATFORM_MAC != 0, "GPU/Vulkan",
++    "Use the system-constant descriptor set for Vulkan tessellation helpers "
++    "(default on macOS, opt-in elsewhere)")
++    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
++
+ namespace rex::graphics::vulkan {
+ 
+ namespace {
+@@ -91,7 +98,16 @@ constexpr bool IsPatchIndexedHostVertexShaderType(
+ 
+ std::string GetTessellationSystemConstantsBlockGlsl() {
+   std::string source;
+-  source += "layout(set = 0, binding = 0, std140) uniform XeSystemConstants {\n";
++  // Set 0 is shared memory / EDRAM; system constants live in set 1.
++  // Keep the legacy binding available for platforms not yet validated.
++  if (REXCVAR_GET(vulkan_tessellation_constants_fix)) {
++    source += fmt::format(
++        "layout(set = {}, binding = {}, std140) uniform XeSystemConstants {{\n",
++        uint32_t(SpirvShaderTranslator::kDescriptorSetConstants),
++        uint32_t(SpirvShaderTranslator::kConstantBufferSystem));
++  } else {
++    source += "layout(set = 0, binding = 0, std140) uniform XeSystemConstants {\n";
++  }
+   source += fmt::format("  layout(offset = {}) uint xe_vertex_index_endian;\n",
+                         offsetof(SpirvShaderTranslator::SystemConstants, vertex_index_endian));
+   source += fmt::format("  layout(offset = {}) int xe_vertex_base_index;\n",
+@@ -3508,6 +3524,12 @@ bool VulkanPipelineCache::EnsurePipelineCreated(const PipelineCreationArguments&
    } else {
      creation_arguments.pipeline->second.is_placeholder.store(false, std::memory_order_release);
      if (was_placeholder && old_pipeline != VK_NULL_HANDLE) {
@@ -981,7 +1020,7 @@ index 91ac08f..d7a500a 100644
        std::lock_guard<std::mutex> lock(deferred_destroy_lock_);
        deferred_destroy_pipelines_.emplace_back(command_processor_.GetCurrentSubmission(),
                                                 old_pipeline);
-@@ -3539,6 +3545,15 @@ void VulkanPipelineCache::CreationThread(size_t thread_index) {
+@@ -3539,6 +3561,15 @@ void VulkanPipelineCache::CreationThread(size_t thread_index) {
      }
  
      bool created = EnsurePipelineCreated(creation_arguments);

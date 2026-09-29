@@ -127,13 +127,16 @@ inline void logline(const char* fmt, ...) {
   }
 }
 
+// Mac window events and Windows polling both queue work for the guest thread.
+inline void request_run() { g_f5_pending.store(true); }
+
 // Per-frame F5 edge detector. Call from the host input poll (per frame).
 inline void poll_f5() {
 #ifdef _WIN32
   const bool down = (GetAsyncKeyState(FABLE2_F5_VK) & 0x8000) != 0;
   const bool edge = down && !g_f5_down_prev;
   g_f5_down_prev = down;
-  if (edge) g_f5_pending.store(true);
+  if (edge) request_run();
 #endif
 }
 

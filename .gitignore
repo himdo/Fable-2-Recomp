@@ -1,8 +1,20 @@
-# --- Game content (ripped disc; see README "How to extract") ---------------
-default.xex
-/data/
-/nxeart/
-/$SystemUpdate/
+# --- Disc images and sidecars (never part of a contribution) ----------------
+*.[iI][sS][oO]
+*.[iI][sS][oO].*
+*.[dD][vV][dD]
+[iI][sS][oO]/
+
+# --- Extracted game content (at any depth; see README "How to extract") ------
+*.[xX][eE][xX]
+*.[xX][bB][eE]
+data/
+nxeart
+$SystemUpdate/
+# Keep any additional files extracted from the disc in this ignored folder.
+disc-content/
+
+# --- Local player saves and profiles (never part of a contribution) ----------
+saves/
 
 # --- Build artifacts --------------------------------------------------------
 out
@@ -24,6 +36,7 @@ fps_probe.log
 
 # --- Local scratch (old build logs, screenshots, session exports,
 #     stray runtime content folders) ------------------------------------------
+.DS_Store
 /scratch/
 
 # --- Manifest backup (pre-rename safety copy) --------------------------------
@@ -47,6 +60,9 @@ __pycache__/
 !tools/repro/*.py
 !tools/apply_recomp_patches.py
 !tools/fable2_control.py
+!tools/build_macos.sh
+!tools/macos_terrain_fix.py
+!tests/macos_terrain_fix_tests.py
 
 # --- Fetched/external toolchain deps (created by tools/setup_sdk*.cmd). -------
 # The tracked files in thirdparty/ (rexglue-sdk-local.patch,
@@ -57,3 +73,18 @@ thirdparty/android-ndk/
 # --- Historical reference (pre-ReXGlue XenonRecomp configs) -------------------
 XenonRecomp
 TODO.md
+
+!tests/macos_launcher_tests.py
+
+# Metal build sources and tests (generated assets remain ignored).
+!tools/build_macos_metal.py
+!tools/compile_metal_helpers.py
+!tools/apply_startup_handoff.py
+!tests/startup_handoff_patch_tests.py
+!backends/metal/tests/*.py
+
+# Native macOS app packaging (generated bundles remain under out/).
+!tools/package_macos_app.py
+!tests/macos_app_tests.py
+
+!tests/macos_app_packaging_tests.py

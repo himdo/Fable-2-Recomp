@@ -472,7 +472,8 @@ inline void Fable2FuncTraceFlush() {
 // function. Mirrors the pch's own variant structure (clang is this project's
 // toolchain).
 // ---------------------------------------------------------------------------
-#if defined(REX_CONFIG_H_INCLUDED) && !defined(FABLE2_FUNC_TRACE_HOOKED)
+#if defined(REX_CONFIG_H_INCLUDED) && !defined(FABLE2_FUNC_TRACE_HOOKED) && \
+    (!defined(FABLE2_ENABLE_FUNC_TRACE) || FABLE2_ENABLE_FUNC_TRACE)
 #define FABLE2_FUNC_TRACE_HOOKED
 #undef REX_FUNC_PROLOGUE
 #if defined(__clang__)

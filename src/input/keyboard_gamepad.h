@@ -14,7 +14,7 @@
 //
 // The keyboard mapping is data-driven via the `keyboard_gamepad_map` cvar
 // (defined in main.cpp): "Key:Button,Key:Button,..." where Key is a host key
-// name understood by rex::ui::ParseVirtualKey ("E", "Space", "LeftShift", ...)
+// name understood by rex::ui::ParseVirtualKey ("E", "Space", "Shift", ...)
 // and Button is a guest gamepad button name (A/B/X/Y/LB/RB/LT/RT/Up/Down/
 // Left/Right/Start/Back/L3/R3/StickUp/StickDown/StickLeft/StickRight).
 // The cvar's default is seeded from fable2_config.toml [input] at startup
@@ -23,13 +23,15 @@
 //
 // The mouse is mapped to the right stick (camera look) via the `mouse_look`
 // and `mouse_look_scale` cvars (defaults seeded from fable2_config.toml
-// [input] at startup, same as the keyboard map above). The cursor is recentered to the window center
-// every poll and that frame's movement is consumed, so the camera rotates
-// continuously and the cursor never wanders or hits the screen edge.
+// [input] at startup, same as the keyboard map above). Windows recenters the
+// cursor each poll; macOS consumes relative SDL window motion. Both allow
+// continuous camera rotation without hitting the edge of the screen.
 
 #pragma once
 
 #include <cctype>
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -45,6 +47,11 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#endif
+#ifdef __APPLE__
+#include "window_keyboard_mouse.h"
+#include <rex/logging.h>
+#include <rex/ui/imgui_drawer.h>
 #endif
 
 // Declared here, defined in main.cpp (REXCVAR_DEFINE_* must live in a .cpp).
@@ -185,9 +192,28 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
  public:
   // InputDriver's constructor is protected, so expose a public one.
   KeyboardGamepadDriver(rex::ui::Window* window, size_t window_z_order)
-      : rex::input::InputDriver(window, window_z_order) {}
+      : rex::input::InputDriver(window, window_z_order) {
+#ifdef __APPLE__
+    mac_input_ = std::make_shared<input_detail::WindowKeyboardMouse>([] {
+      input_detail::WindowKeyboardMouse::Options options;
+      options.mouse_look = REXCVAR_GET(mouse_look);
+      options.unlock_key = static_cast<uint16_t>(
+          rex::ui::ParseVirtualKey(REXCVAR_GET(mouse_unlock_key)));
+      if (auto* rt = rex::Runtime::instance()) {
+        if (auto* drawer = rt->imgui_drawer()) {
+          const auto& io = drawer->GetIO();
+          options.overlay_captures_input = io.WantCaptureMouse || io.WantCaptureKeyboard;
+        }
+      }
+      return options;
+    }, [] { fable2::f5lua::request_run(); });
+#endif
+  }
 
   ~KeyboardGamepadDriver() override {
+#ifdef __APPLE__
+    mac_input_->RequestDetach();
+#endif
     if (cursor_hidden_) {
       if (rex::ui::Window* w = GameWindow())
         w->SetCursorVisibility(rex::ui::Window::CursorVisibility::kVisible);
@@ -196,6 +222,14 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
   }
 
   X_STATUS Setup() override { return X_STATUS_SUCCESS; }
+
+#ifdef __APPLE__
+  void OnWindowAvailable(rex::ui::Window* window) override {
+    // SDK AttachWindow is called on the UI thread before the guest starts.
+    mac_input_->Attach(window);
+    if (window) REXLOG_INFO("macOS keyboard/mouse input attached (SDL window events)");
+  }
+#endif
 
   void EnumerateDevices(std::vector<DeviceInfo>& out) override {
     RefreshBindings();
@@ -308,6 +342,30 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     } else {
       mouse_centered_ = false;  // re-prime on (re)focus to avoid a jump
     }
+#elif defined(__APPLE__)
+    mac_input_->RequestRefresh();
+    const auto host = mac_input_->Consume();
+    const auto unlock_key = static_cast<uint16_t>(
+        rex::ui::ParseVirtualKey(REXCVAR_GET(mouse_unlock_key)));
+    if (host.active) {
+      for (const auto& m : bindings_) {
+        if (m.vk == unlock_key || !host.Down(m.vk)) continue;
+        if (m.button) buttons |= m.button;
+        else if (m.trigger == 'L') left_trigger = 0xFF;
+        else if (m.trigger == 'R') right_trigger = 0xFF;
+        else if (m.axis == 1) lx += m.axis_sign * input_detail::kStickMax;
+        else if (m.axis == 2) ly += m.axis_sign * input_detail::kStickMax;
+      }
+      lx = input_detail::ClampStick(lx);
+      ly = input_detail::ClampStick(ly);
+      // Clamp before conversion so fast motion/high sensitivity cannot overflow.
+      const auto mouse_axis = [](double delta, int32_t scale) {
+        if (!std::isfinite(delta)) return int32_t{0};
+        return static_cast<int32_t>(std::clamp(delta * scale, -32767.0, 32767.0));
+      };
+      rx = mouse_axis(host.dx, REXCVAR_GET(mouse_look_scale));
+      ry = mouse_axis(-host.dy, REXCVAR_GET(mouse_look_scale));
+    }
 #endif
 
     out_state->packet_number.set(packet_number_++);
@@ -367,6 +425,9 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
   bool cursor_hidden_ = false;   // set while the SDK window cursor is hidden
   bool console_open_ = false;    // debug menu open -> mouse lock released
   bool unlock_down_prev_ = false;  // prev-poll state of the unlock key
+#ifdef __APPLE__
+  std::shared_ptr<input_detail::WindowKeyboardMouse> mac_input_;
+#endif
   // The game window (from the runtime's display window), used for recentering
   // and cursor visibility.
   rex::ui::Window* GameWindow() {

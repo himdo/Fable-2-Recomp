@@ -1,0 +1,27 @@
+set(COMMON_SOURCES
+  ${SDK}/src/graphics/flags.cpp
+  ${SDK}/src/graphics/register_file.cpp
+  ${SDK}/src/graphics/registers.cpp
+  ${SDK}/src/graphics/pipeline/shader/shader.cpp
+  ${SDK}/src/graphics/format/ucode.cpp
+  ${SDK}/src/graphics/sampler_info.cpp
+  ${SDK}/src/graphics/graphics_system.cpp
+  ${SDK}/src/graphics/command_processor.cpp
+  ${SDK}/src/graphics/util/draw_extent_estimator.cpp
+  ${SDK}/src/graphics/util/draw.cpp
+  ${SDK}/src/graphics/packet_disassembler.cpp
+  ${SDK}/src/graphics/primitive_processor.cpp
+  ${SDK}/src/graphics/pipeline/render_target/cache.cpp
+  ${SDK}/src/graphics/shared_memory.cpp
+  ${SDK}/src/graphics/pipeline/texture/cache.cpp
+  ${SDK}/src/graphics/pipeline/shader/interpreter.cpp
+  ${SDK}/src/graphics/pipeline/shader/translator.cpp
+  ${SDK}/src/graphics/pipeline/shader/translator_disasm.cpp
+  ${SDK}/src/graphics/pipeline/shader/dxbc.cpp
+  ${SDK}/src/graphics/pipeline/shader/dxbc_translator.cpp
+  ${SDK}/src/graphics/pipeline/shader/dxbc_translator_alu.cpp
+  ${SDK}/src/graphics/pipeline/shader/dxbc_translator_fetch.cpp
+  ${SDK}/src/graphics/pipeline/shader/dxbc_translator_memexport.cpp
+  ${SDK}/src/graphics/pipeline/shader/dxbc_translator_om.cpp
+  ${SDK}/thirdparty/dxbc/DXBCChecksum.cpp
+)

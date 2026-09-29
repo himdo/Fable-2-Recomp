@@ -1,0 +1,27 @@
+set(METAL_SOURCES
+  port/rex/graphics/metal/dxbc_to_dxil_converter.cc
+  port/rex/graphics/metal/metal_heap_pool.cc
+  port/rex/graphics/metal/metal_zpd_visibility_pool.cc
+  port/rex/graphics/metal/metal_render_target_cache.cc
+  port/rex/graphics/metal/metal_shader.cc
+  port/rex/graphics/metal/metal_geometry_shader.cc
+  port/rex/graphics/metal/ir_runtime_impl.mm
+  port/rex/graphics/metal/metal_shared_memory.cc
+  port/rex/graphics/metal/metal_pipeline_cache.cc
+  port/rex/graphics/metal/metal_upload_buffer_pool.cc
+  port/rex/graphics/metal/metal_shader_cache.cc
+  port/rex/graphics/metal/metal_direct_host_resolve.cc
+  port/rex/graphics/metal/metal_graphics_system.cc
+  port/rex/graphics/metal/metal_shader_converter.cc
+  port/rex/graphics/metal/metal_primitive_processor.cc
+  port/rex/graphics/metal/metal_backend_telemetry.cc
+  port/rex/graphics/metal/metal_stage_compile_cache.cc
+  port/rex/graphics/metal/metal_command_processor.cc
+  port/rex/graphics/metal/metal_texture_cache.cc
+  port/rex/ui/metal/metal_api.cc
+  port/rex/ui/metal/metal_provider.cc
+  port/rex/ui/metal/metal_presenter.mm
+  port/rex/ui/metal/metal_immediate_drawer.mm
+  port/rex/ui/metal/metal_gpu_completion_timeline.cc
+  port/rex/graphics/pipeline/shader/dxbc_geometry_shader.cc
+)

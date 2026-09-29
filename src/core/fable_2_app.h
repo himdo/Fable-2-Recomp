@@ -29,7 +29,12 @@
 #include "alloc_watch.h"
 #include "dir_manifest_heal.h"
 #include "fable2_config.h"
+#include "fable2_state_path.h"
 #include "fable2_patches.h"
+#include "fable2_readback_config.h"
+#ifdef __APPLE__
+#include "fable2_window_position.h"
+#endif
 // #include "fable2_deadbeef_overlay.h"
 // 30fps-cap instrumentation (writes fps_probe.log next to the exe). Disabled
 // now that the cap is lifted via REX_VSYNC=0 (see tools/fable2-uncapped.cmd).
@@ -55,12 +60,28 @@ void record_a_press(std::int64_t ms);
 class Fable2App : public rex::ReXApp {
  public:
   using rex::ReXApp::ReXApp;
+  bool metal_backend_ = false;
 
   static std::unique_ptr<rex::ui::WindowedApp> Create(
       rex::ui::WindowedAppContext& ctx) {
     return std::unique_ptr<Fable2App>(new Fable2App(ctx, "fable_2",
         PPCImageConfig));
   }
+
+#ifdef __APPLE__
+  fable2::WindowPosition window_position_;
+
+  bool SetupPresentation() override {
+    if (!rex::ReXApp::SetupPresentation()) return false;
+    if (!window_position_.Attach(
+            window()->GetTitle(),
+            fable2::StateDirectory() / "fable2_window.toml",
+            !rex::cvar::HasNonDefaultValue("monitor"))) {
+      REXLOG_WARN("Could not enable window position saving");
+    }
+    return true;
+  }
+#endif
 
   // Remote control (AI input channel) - see plans/ai-remote-input-control.md
   // and src/input/remote_control_server.h. The store is shared by the remote pad
@@ -87,6 +108,7 @@ class Fable2App : public rex::ReXApp {
   void OnPreSetup(rex::RuntimeConfig& config) override {
     std::string plugin = config.gpu_plugin.empty() ? "xenos" : config.gpu_plugin;
     config.gpu_plugin = plugin;
+    metal_backend_ = plugin == "metal";
     if (plugin == "xenos-vulkan") {
       // Load the source-built plugin and force the Vulkan backend. It is
       // compiled with both D3D12 and Vulkan; the default "any" would pick
@@ -127,19 +149,9 @@ class Fable2App : public rex::ReXApp {
     // the app and the SDK only knows "read back resolves to these addresses".
     {
       const fable2::config::Values& cfg = fable2::config::Get();
-      const std::string_view force_addr =
-          cfg.hero_dog_texture_readback ? "0x12704000" : "";
-      if (rex::cvar::GetFlagSource("readback_resolve_force_addresses") ==
-          rex::cvar::Source::kDefault) {
-        if (rex::cvar::SetFlagByName("readback_resolve_force_addresses", force_addr)) {
-          REXSYS_INFO("[fable2-config] seeded readback_resolve_force_addresses "
-                      "from fable2_config.toml (hero_dog_texture_readback={})",
-                      cfg.hero_dog_texture_readback);
-        } else {
-          REXSYS_WARN("[fable2-config] cvar readback_resolve_force_addresses "
-                      "rejected '{}'; hero/dog readback fix may be inactive",
-                      std::string{force_addr});
-        }
+      if (!fable2::SeedHeroDogReadback(metal_backend_, cfg.hero_dog_texture_readback)) {
+        REXSYS_WARN("[fable2-config] graphics plugin does not support the "
+                    "hero/dog readback setting; the fix may be inactive");
       }
     }
 
@@ -149,6 +161,10 @@ class Fable2App : public rex::ReXApp {
     // plugin); read the last snapshot and expose it as FrameStats so the
     // overlay's "Guest: X FPS (Y ms)" line works on every runtime build.
 
+#ifndef __APPLE__
+    // The watcher below requires Windows memory queries or Linux /proc and
+    // assumes the old guest base. On macOS it cannot sample the arena and
+    // otherwise wakes every 5 ms forever without gathering useful data.
     // Background monitor for the table-zeroing / init-ordering bug. Runs on a
     // SEPARATE OS thread with hardcoded stable addresses (no recompiled probe
     // dependency), so it does not perturb the recompiled hot path that the
@@ -248,6 +264,7 @@ class Fable2App : public rex::ReXApp {
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
       }
     }).detach();
+#endif
 
     SetGuestFrameStats([]() {
       rex::ui::FrameStats stats;
@@ -262,15 +279,15 @@ class Fable2App : public rex::ReXApp {
     });
   }
 
-  // Load the recomp's own user config (fable2_config.toml) next to the exe,
+  // Load the recomp config from the state directory (Application Support for
+  // the Mac app, beside the executable for command builds),
   // creating it with defaults on first launch. Runs after the SDK's logging
   // init so load/create/parse problems land in logs/ (see src/core/fable2_config.h).
   // Plain settings are read via fable2::config::Get(); settings that back a
   // cvar are seeded into it below so the console/overlay keep working.
   void OnPostInitLogging() override {
-    const std::filesystem::path exe_dir =
-        rex::filesystem::GetExecutableFolder();
-    fable2::config::Load(exe_dir / "fable2_config.toml");
+    const auto state_dir = fable2::StateDirectory();
+    fable2::config::Load(state_dir / "fable2_config.toml");
 
     // Seed cvars from the config. Only when the cvar is still at its
     // compiled default (source kDefault), so higher-priority sources --
@@ -333,13 +350,12 @@ class Fable2App : public rex::ReXApp {
 #endif  // FABLE2_REMOTE_CONTROL
   // Apply the game patches (see src/core/fable2_patches.h) once the SDK has
   // decrypted default.xex into the guest arena, before the module launches.
-  // The patch table is data-driven: fable2_patches.toml next to the exe
+  // The patch table is data-driven: fable2_patches.toml in the state directory
   // (created with built-in defaults on first launch; a broken file falls
   // back to the built-ins, so a hand edit can never wedge the launch).
   void OnPostLoadXexImage() override {
-    const std::filesystem::path exe_dir =
-        rex::filesystem::GetExecutableFolder();
-    fable2::patches::Load(exe_dir / "fable2_patches.toml");
+    const auto state_dir = fable2::StateDirectory();
+    fable2::patches::Load(state_dir / "fable2_patches.toml");
     fable2::patches::ApplyAll(runtime()->memory(), PPCImageConfig);
   }
 
@@ -464,16 +480,24 @@ class Fable2App : public rex::ReXApp {
       std::exit(1);
     }
 
-    // Keep saves and caches inside the exe's own folder (self-contained).
+    // Command builds keep state beside the exe; the macOS app launcher
+    // supplies a persistent external state directory. Both use saves/ below it.
     // The SDK's default user dir is a per-user platform location, which
     // caused save corruption. NOTE: set unconditionally because the SDK
     // defaults are non-empty, so empty-checks would never trigger (this
     // also overrides the cvar/CLI defaults).
     std::error_code ec;
-    paths.user_data_root = exe_dir / "saves";
+    const auto state_dir = fable2::StateDirectory();
+    paths.user_data_root = state_dir / "saves";
     std::filesystem::create_directories(paths.user_data_root, ec);
-    paths.cache_root = exe_dir / "cache";
+    paths.cache_root = state_dir / "cache";
     std::filesystem::create_directories(paths.cache_root, ec);
+
+    if (state_dir != exe_dir) {
+      paths.config_path = state_dir / "fable_2.toml";
+      paths.metadata_root = state_dir / "metadata";
+      std::filesystem::create_directories(paths.metadata_root, ec);
+    }
 
     // Mount the $SystemUpdate folder (inside the content root) as update:\
     // so VdSetGraphicsInterruptCallback-era update partition lookups resolve
