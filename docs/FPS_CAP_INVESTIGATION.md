@@ -157,10 +157,12 @@ Instrumentation added (temporary): logs every memory `WAIT_REG_MEM` with
   2× (120 Hz) so the guest's "+2 units" = 16.6 ms; that needs a plugin/runtime
   rebuild from `rexglue-sdk-src`.
 - `REX_VSYNC=0` is the shipped solution (fully uncapped).
-- `FrameLimiterWait_82242628` has a generated (nv) hot-function override at
+- `FrameLimiterWait_82242628` has a hand-tuned hot-function override at
   `src/core/hotfunc/vblank/FrameLimiterWait_82242628.cpp` (see
-  docs/hotfunc_overrides.md) — a behavior-identical fast copy; it no longer
-  implements the vblank fast gate.
+  docs/hotfunc_overrides.md) — a behavior-identical goto-free rewrite; it no
+  longer implements the vblank fast gate. Its loads stay volatile
+  (`REX_LOAD_*`) because the counter it spins on is written by the GPU
+  thread.
 
 ## Vsync on -> host runs at (monitor refresh + 30) fps — root cause + fix
 

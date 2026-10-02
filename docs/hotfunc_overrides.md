@@ -52,7 +52,7 @@ are hand-written readable C++ rewrites (see
 | `entity/InitializeGameEntity_8233CAC8.cpp` | **hand-tuned** (was nv (21)) |
 | `entity/ProcessGameStateUpdate_821C9008.cpp` | **hand-tuned** (was nv (34)) |
 | `yield/Yield_82CBD098.cpp` | nv (3) + batched yield |
-| `vblank/FrameLimiterWait_82242628.cpp` | **hand-tuned** (goto-free rewrite, see below) |
+| `vblank/FrameLimiterWait_82242628.cpp` | **hand-tuned** (goto-free rewrite, volatile guest access; see below) |
 
 Transforms:
 - **nv** — non-volatile `GV*/SV*` guest-RAM access (rules below).
@@ -148,9 +148,14 @@ header with the reason it is unobservable):
   writes to *volatile non-argument* registers (r0-r12 except arguments) since
   the PPC32 ABI makes them unobservable to callers - never r2/r13-r30;
   document any such deviation in the file header.
-- Non-volatile access is safe per-function: each recompiled function is
-  compiled independently, calls are opaque, so CSE only happens inside basic
-  blocks. Verify the function touches **no MMIO** (no `REX_MM_*`) first.
+- Non-volatile access is safe per-function only for memory no other thread
+  writes while the function runs (its own stack frame, for example), and
+  only when it touches **no MMIO** (no `REX_MM_*`). Calls are not opaque
+  under the ThinLTO/PGO build: the optimiser can see that a callee does not
+  write a location and keep a non-volatile load out of a loop. A loop that
+  polls memory another thread writes (the GPU progress counter in
+  `FrameLimiterWait_82242628`) must use `REX_LOAD_*`, or that load is a data
+  race and can turn into a hang.
 - Hoisting globals: a whole-tree scan for literal `REX_STORE_*` writers is
   **necessary but not sufficient** — pointer-based stores and cross-thread
   writers are invisible to it. If the function's loop calls
