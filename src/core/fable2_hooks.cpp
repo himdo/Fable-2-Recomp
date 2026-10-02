@@ -96,3 +96,17 @@ void fable2_hook_ce_grantavail(PPCRegister& r3) {
     r3.u32 = 1;
   }
 }
+
+// Skip Intro Videos (just-harry's "Skip intro videos" patch, as a hook).
+// sub_822F4958 builds the boot video queue (microsoft_logo.bik,
+// lionhead_logo.bik, terminator) and loops queueing slots until
+// CompareString_8229AD78 reports the terminator. This runs right after the
+// first CompareString (bl at 0x822F49B8): r3 = 0 means "slot 0 is the
+// terminator", so the loop is skipped and no intro video is queued. Harry's
+// original NOPs the slot-0 construction instead; the hook leaves all three
+// strings constructed and released normally. Runs once per boot.
+void fable2_hook_skip_intro_videos(PPCRegister& r3) {
+  if (fable2::config::Get().skip_intro_videos) {
+    r3.u64 = 0;
+  }
+}

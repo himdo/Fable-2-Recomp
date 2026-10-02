@@ -67,6 +67,12 @@ unlock_website = true
 # Default: true
 unlock_ce = true
 
+# Skip Intro Videos (mid-asm hook fable2_hook_skip_intro_videos; just-harry's
+# "Skip intro videos" patch from his Unofficial Xenia femtofork): skips the
+# Microsoft and Lionhead logo videos at boot. false = videos play (original).
+# Default: false
+skip_intro_videos = false
+
 
 # Force a CPU readback of the render-to-texture resolve that regenerates the
 # hero/dog face+skin texture, so the character does not render black on a

@@ -98,6 +98,12 @@ unlock_website = true
 # Default: true
 unlock_ce = true
 
+# Skip Intro Videos (mid-asm hook fable2_hook_skip_intro_videos; just-harry's
+# "Skip intro videos" patch from his Unofficial Xenia femtofork): skips the
+# Microsoft and Lionhead logo videos at boot. false = videos play (original).
+# Default: false
+skip_intro_videos = false
+
 # Force a CPU readback of the render-to-texture resolve that regenerates the
 # hero/dog face+skin texture, so the character does not render black on a
 # split-memory host (see plans/hero-dog-texture-readback.md). Approach + the
@@ -214,6 +220,9 @@ bool Load(const std::filesystem::path& path) {
                                        values.unlock_website);
     values.unlock_ce = Read<bool>(patches_table, "patches", "unlock_ce",
                                   "boolean", values.unlock_ce);
+    values.skip_intro_videos =
+        Read<bool>(patches_table, "patches", "skip_intro_videos", "boolean",
+                   values.skip_intro_videos);
     values.hero_dog_texture_readback =
         Read<bool>(patches_table, "patches", "hero_dog_texture_readback", "boolean",
                    values.hero_dog_texture_readback);

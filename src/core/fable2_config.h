@@ -56,6 +56,10 @@ struct Values {
   // GuildChest_GetCEContent_824B3528 (hooks fable2_hook_ce_g1/g1b/grantavail
   // in src/core/fable2_hooks.cpp).
   bool unlock_ce = true;
+  // Skip the Microsoft and Lionhead logo videos at boot (just-harry's "Skip
+  // intro videos"; hook fable2_hook_skip_intro_videos in
+  // src/core/fable2_hooks.cpp). false = original.
+  bool skip_intro_videos = false;
   // Force a CPU readback of the render-to-texture resolve that (re)generates
   // the hero/dog face+skin texture, so the character does not render black on
   // a split-memory host (see plans/hero-dog-texture-readback.md). Approach + the

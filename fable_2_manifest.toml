@@ -111,6 +111,19 @@ name = "fable2_hook_ce_grantavail"
 registers = ["r3"]
 after_instruction = true
 
+# Skip Intro Videos (just-harry's "Skip intro videos" patch from his
+# Unofficial Xenia femtofork, as a hook). sub_822F4958 builds the boot video
+# queue: slot 0 = microsoft_logo.bik, slot 1 = lionhead_logo.bik, slot 2 =
+# terminator, then loops queueing slots until CompareString says "terminator".
+# Right after the first CompareString (bl at 0x822F49B8) we report
+# "terminator" (r3 = 0), so nothing is queued; the three strings are still
+# constructed and released normally. Toggle: [patches] skip_intro_videos.
+[[entrypoint.midasm_hook]]
+address = 0x822F49B8
+name = "fable2_hook_skip_intro_videos"
+registers = ["r3"]
+after_instruction = true
+
 # Conservative settings: no register optimizations
 skip_lr = false
 skip_msr = false
