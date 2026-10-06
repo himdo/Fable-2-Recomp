@@ -59,10 +59,6 @@ __pycache__/
 # Graphics enhancements: building and porting material shaders.
 !tools/build_material_shaders.py
 !tools/xenos_to_hlsl.py
-# Profiling and GPU-layer analysis.
-!tools/map_gpu_layer.py
-!tools/sample_threads.ps1
-!tools/thread_cpu.ps1
 
 # --- Fetched/external toolchain deps (created by tools/setup_sdk*.cmd). -------
 # The tracked files in thirdparty/ (rexglue-sdk-local.patch,
