@@ -502,13 +502,9 @@ The build also accepts explicit overrides if you keep the SDK elsewhere:
 `cmake -DREXGLUE_SDK_ROOT=<prebuilt SDK root> -DREXGLUE_SDK_SOURCE=<SDK source>`
 (`build.cmd` sets `REXGLUE_SDK_ROOT`/`REXGLUE_SDK_SOURCE` from its own search).
 
-The graphics enhancements are SDK changes carried as
-`thirdparty/rexglue-sdk-graphics-fx.patch`, applied with the other SDK patches
-by `tools/prepare_runtime_sdk.py`. When working on them in
-`thirdparty/rexglue-sdk`, regenerate the patch with
-`python tools/regen_graphics_fx_patch.py` before building (a stale patch is
-rejected); their shaders are rebuilt with `python tools/build_scene_fx_shaders.py`
-and the material shaders with `python tools/build_material_shaders.py`. See
+The graphics enhancements are commits in the SDK the `thirdparty/rexglue-sdk`
+submodule points at; the material shaders in `materials/` are rebuilt with
+`python tools/build_material_shaders.py`. See
 [docs/GRAPHICS_ENHANCEMENTS.md](docs/GRAPHICS_ENHANCEMENTS.md#working-on-it).
 
 - Toolchain: the `win-amd64-debug` preset (Ninja + clang) by default. The SDK's public headers use clang builtins (`__builtin_bswap32`, `__VA_OPT__`), so plain MSVC `cl` cannot compile the generated code — a `win-msvc-debug` preset exists but only works for targets that don't compile `generated/`.

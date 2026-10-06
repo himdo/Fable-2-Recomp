@@ -22,8 +22,6 @@ MSPACK_PIN = "305907723a4e7ab2018e58040059ffb5e77db837"
 PATCHES = (
     "rexglue-sdk-runtime-fixes.patch",
     "rexglue-sdk-debug-exports.patch",
-    "rexglue-sdk-vulkan-present-gate.patch",
-    "rexglue-sdk-graphics-fx.patch",
 )
 
 

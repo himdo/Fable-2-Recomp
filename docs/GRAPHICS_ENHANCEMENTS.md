@@ -4,8 +4,8 @@ Modern rendering on top of, and in place of, Fable II's own: screen-space
 effects added to the game's frame, and *material shaders* that replace some of
 the game's shaders outright. Everything is configured live from the in-game
 **Graphics Enhancements** menu (**F6**), and all of it lives in the ReXGlue SDK
-as a patch (`thirdparty/rexglue-sdk-graphics-fx.patch`) plus this repository's
-`materials/` folder.
+(the `thirdparty/rexglue-sdk` submodule) plus this repository's `materials/`
+folder.
 
 - [Using it](#using-it)
 - [Effects](#effects)
@@ -132,7 +132,7 @@ Effects (`GPU/Effects`):
 
 ## How it works
 
-All code is in the SDK (applied as `thirdparty/rexglue-sdk-graphics-fx.patch`):
+All code is in the SDK (`thirdparty/rexglue-sdk`):
 
 - `src/graphics/pipeline/scene_effects.cpp` - the backend-independent core.
   It watches the guest's draws and eDRAM resolves:
@@ -162,21 +162,28 @@ All code is in the SDK (applied as `thirdparty/rexglue-sdk-graphics-fx.patch`):
 
 ## Working on it
 
-Rebuild the effect shaders after editing `src/graphics/shaders/scene_fx/`
-(needs FXC from the Windows SDK and glslangValidator built from the SDK's
-glslang - see the script's header):
+The effects are SDK code: edit them in `thirdparty/rexglue-sdk` (a git
+checkout of the SDK), commit there and open a pull request against the SDK, then
+point this repository's submodule at the new commit. `build.cmd` builds the SDK
+from that checkout, so local edits are picked up by the next build:
 
 ```
-python tools/build_scene_fx_shaders.py
-```
-
-The SDK changes are carried as a patch: after editing any of the files listed
-in `tools/regen_graphics_fx_patch.py`, regenerate it, or the build's
-`prepare_runtime_sdk.py` step rejects the stale patch:
-
-```
-python tools/regen_graphics_fx_patch.py
 build.cmd -release fable_2
+```
+
+Rebuild the effect shaders after editing `src/graphics/shaders/scene_fx/`
+(needs FXC from the Windows SDK and glslangValidator on PATH - see the script's
+header):
+
+```
+python thirdparty/rexglue-sdk/scripts/build_scene_fx_shaders.py
+```
+
+Rebuild the material shaders after editing `materials/src/` (needs FXC on
+PATH, e.g. a Visual Studio developer shell):
+
+```
+python tools/build_material_shaders.py
 ```
 
 `scene_fx_trace` and the remote control's `screenshot` command

@@ -197,8 +197,9 @@ per host vblank tick is allowed; later paints in the same vblank skip the
 call; the Vulkan presenter checks the gate before `vkAcquireNextImageKHR`,
 because an acquired swapchain image only goes back to the presentation engine
 by being presented - suppressing after the acquire leaked one image per skipped
-paint until every acquire failed and the window went black; see
-`thirdparty/rexglue-sdk-vulkan-present-gate.patch`). The skipped frame's
+paint until every acquire failed and the window went black - fixed in the
+SDK by "vulkan: decide the present gates before acquiring a swapchain image").
+The skipped frame's
 content is not lost: the continuous UI repaint presents the latest guest output
 on the next vblank. A rate-limited log line reports suppressions per second.
 
