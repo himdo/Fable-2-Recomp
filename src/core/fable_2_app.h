@@ -30,6 +30,7 @@
 #include "dir_manifest_heal.h"
 #include "fable2_config.h"
 #include "fable2_patches.h"
+#include "gpu_backend.h"
 // #include "fable2_deadbeef_overlay.h"
 // 30fps-cap instrumentation (writes fps_probe.log next to the exe). Disabled
 // now that the cap is lifted via REX_VSYNC=0 (see tools/fable2-uncapped.cmd).
@@ -96,24 +97,23 @@ class Fable2App : public rex::ReXApp {
                                                &remote_pad_enabled_};
 #endif  // FABLE2_REMOTE_CONTROL
 
-  // Emulate the Xbox 360 Xenos GPU. Two plugins are staged next to the exe:
-  //   rexgpu-xenos[d].dll        -> D3D12 (prebuilt SDK plugin; the default)
-  //   rexgpu-xenos-vulkan[d].dll -> Vulkan (built from the SDK source via
-  //                                   tools/build_sdk_vulkan.cmd)
-  // Swap the renderer at launch with --gpu_plugin, no rebuild required:
-  //   --gpu_plugin=xenos            D3D12 (default)
-  //   --gpu_plugin=xenos-vulkan     Vulkan
+  // Emulate the Xbox 360 Xenos GPU. rexgpu-xenos[d].dll is built from the SDK
+  // source with both D3D12 and Vulkan (tools/build_runtime_sdk.cmd); the
+  // gpu_backend cvar ([graphics] backend in fable2_config.toml, or
+  // --gpu_backend=vulkan) picks one at launch, no rebuild required, and the
+  // other backend is the fallback (src/core/gpu_backend.h). The old
+  // --gpu_plugin=xenos-vulkan spelling still selects Vulkan.
   void OnPreSetup(rex::RuntimeConfig& config) override {
-    std::string plugin = config.gpu_plugin.empty() ? "xenos" : config.gpu_plugin;
-    config.gpu_plugin = plugin;
-    if (plugin == "xenos-vulkan") {
-      // Load the source-built plugin and force the Vulkan backend. It is
-      // compiled with both D3D12 and Vulkan; the default "any" would pick
-      // D3D12, so pass "vulkan" explicitly to get the VulkanGraphicsSystem.
-      config.graphics = rex::system::LoadGpuPlugin("xenos-vulkan", "vulkan");
+    std::string backend =
+        fable2::gpu::NormalizeBackend(rex::cvar::GetFlagByName("gpu_backend"));
+    if (config.gpu_plugin == "xenos-vulkan") backend = "vulkan";
+    config.gpu_plugin = "xenos";
+    fable2::gpu::Started gpu =
+        fable2::gpu::Start(config.gpu_plugin, backend, &app_context());
+    config.graphics = std::move(gpu.graphics);
+    if (config.graphics) {
+      REXSYS_INFO("[gpu] requested={} running={}", backend, gpu.backend);
     }
-    // Otherwise leave config.graphics null so ReXApp loads
-    // LoadGpuPlugin("xenos") -> the prebuilt D3D12 plugin.
 
     // Build on top of the default input system (SDL gamepad + NOP) and add a
     // synthetic "keyboard gamepad" driver so host keys/mouse buttons can drive
@@ -326,6 +326,7 @@ class Fable2App : public rex::ReXApp {
     seed_cvar("keyboard_gamepad_map", cfg.keyboard_gamepad_map);
     seed_cvar("mouse_look", cfg.mouse_look ? "true" : "false");
     seed_cvar("mouse_look_scale", std::to_string(cfg.mouse_look_scale));
+    seed_cvar("gpu_backend", cfg.gpu_backend);
     // NOTE: the hero/dog readback fix (readback_resolve_force_addresses) is a
     // GPU-PLUGIN cvar, so it is seeded in OnPostSetup() (after the plugin is
     // loaded) rather than here - see plans/hero-dog-texture-readback.md.

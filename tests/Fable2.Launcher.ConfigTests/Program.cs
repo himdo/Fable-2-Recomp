@@ -69,6 +69,16 @@ try
     Require(GraphicsOptions.FrameLimits.Any(option => option.Value == "144"), "144 FPS preset missing");
     Console.WriteLine("30/60/120/144/165/240/unlimited mapping, validation and persistence passed.");
 
+    Require(GraphicsSettings.Create("1080p", "2", "4", "none", "windowed", true)["gpu_backend"] == "\"d3d12\"",
+        "default renderer is not D3D12");
+    var vulkan = GraphicsSettings.Create("1080p", "2", "4", "none", "windowed", true, "0", "vulkan");
+    Require(vulkan["gpu_backend"] == "\"vulkan\"", "Vulkan renderer mapping failed");
+    LauncherConfigFile.WriteValues(configPath, vulkan, GraphicsSettings.ManagedKeys);
+    Require(LauncherConfigFile.ReadValues(configPath)["gpu_backend"] == "\"vulkan\"", "renderer roundtrip failed");
+    RequireThrows(() => GraphicsSettings.Create("1080p", "2", "4", "none", "windowed", true, "0", "opengl"),
+        "unsupported renderer accepted");
+    Console.WriteLine("Renderer selection mapping, validation and persistence passed.");
+
     var preferred = GraphicsSettings.Create("4k", "3", "4", "fxaa", "windowed", false, "60");
     string preferencesPath = Path.Combine(testDirectory, "launcher-settings.toml");
     LauncherConfigFile.WriteValues(preferencesPath, preferred, GraphicsSettings.ManagedKeys);

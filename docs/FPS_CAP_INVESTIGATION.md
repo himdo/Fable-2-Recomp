@@ -193,9 +193,12 @@ the base `Presenter` (presenter.h/.cpp) — `VsyncPresentGateAllows()` /
 name via `rex::cvar::Query<bool>("vsync")` so the UI layer doesn't link the
 GPU plugin) and the host vblank ticks are being produced, at most one present
 per host vblank tick is allowed; later paints in the same vblank skip the
-`Present`/`vkQueuePresentKHR` call (the D3D12 and Vulkan presenters both gate
-their present call; the Vulkan path consumes its present semaphore with an
-empty submit so it is not left signaled-but-unconsumed). The skipped frame's
+`Present`/`vkQueuePresentKHR` call (the D3D12 presenter gates its present
+call; the Vulkan presenter checks the gate before `vkAcquireNextImageKHR`,
+because an acquired swapchain image only goes back to the presentation engine
+by being presented - suppressing after the acquire leaked one image per skipped
+paint until every acquire failed and the window went black; see
+`thirdparty/rexglue-sdk-vulkan-present-gate.patch`). The skipped frame's
 content is not lost: the continuous UI repaint presents the latest guest output
 on the next vblank. A rate-limited log line reports suppressions per second.
 

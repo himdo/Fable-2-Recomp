@@ -74,6 +74,10 @@ struct Values {
   // original (yield every call), 0 = never yield. Larger = fewer context
   // switches, less frequent CPU rotation to other guest threads.
   int32_t hotfunc_yield_every = 1;
+  // [graphics]
+  // GPU backend: "d3d12" or "vulkan". Seeds the gpu_backend cvar
+  // (src/main.cpp); Fable2App::OnPreSetup starts it (src/core/gpu_backend.h).
+  std::string gpu_backend = "d3d12";
 };
 
 // Load the config from `path`.

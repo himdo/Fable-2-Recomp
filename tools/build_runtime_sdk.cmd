@@ -1,5 +1,5 @@
 @echo off
-rem Matched Windows x64 runtime and D3D12 plugin. Optional second arg: Debug.
+rem Matched Windows x64 runtime and dual-backend (D3D12 + Vulkan) GPU plugin. Optional second arg: Debug.
 rem Run in a VS x64
 rem developer shell with LLVM 20+, Ninja, CMake and Python on PATH.
 setlocal
@@ -33,7 +33,7 @@ python "%~dp0prepare_runtime_sdk.py" "%SOURCE%" || exit /b 1
 cmake -S "%SOURCE%" -B "%BUILD%" -G Ninja ^
   -DCMAKE_BUILD_TYPE=%CONFIGURATION% -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ^
   -DCMAKE_C_FLAGS=-march=x86-64-v2 -DCMAKE_CXX_FLAGS=-march=x86-64-v2 ^
-  -DREXGLUE_USE_D3D12=ON -DREXGLUE_USE_VULKAN=OFF ^
+  -DREXGLUE_USE_D3D12=ON -DREXGLUE_USE_VULKAN=ON ^
   -DREXGLUE_ENABLE_TRACY=OFF -DREXGLUE_ENABLE_FIDELITYFX=OFF ^
   -DREXGLUE_BUILD_TESTS=OFF || exit /b 1
 cmake --build "%BUILD%" --target rexruntime rexgpu-xenos || exit /b 1

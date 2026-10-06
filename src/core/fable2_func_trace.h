@@ -54,20 +54,28 @@
 
 namespace fable2::functrace {
 
-inline std::atomic<bool>& enabled() {
-  static std::atomic<bool> e{[] {
+// The flag every guest function entry reads. Namespace-scope with a constant
+// initializer, so the check is one relaxed load: a function-local static with
+// a dynamic initializer would add a thread-safe-init guard check (a TLS access
+// with the MSVC ABI) to millions of guest calls per second.
+inline std::atomic<bool> g_enabled{false};
+
+// FABLE2_FUNC_TRACE=1 is applied once, during static initialization.
+inline const bool g_enabled_from_env = [] {
 #ifdef _WIN32
-    char v[8] = {};
-    size_t n = 0;
-    return ::getenv_s(&n, v, sizeof(v), "FABLE2_FUNC_TRACE") == 0 &&
-           v[0] == '1';
+  char v[8] = {};
+  size_t n = 0;
+  const bool on = ::getenv_s(&n, v, sizeof(v), "FABLE2_FUNC_TRACE") == 0 &&
+                  v[0] == '1';
 #else
-    const char* v = std::getenv("FABLE2_FUNC_TRACE");
-    return v != nullptr && v[0] == '1';
+  const char* v = std::getenv("FABLE2_FUNC_TRACE");
+  const bool on = v != nullptr && v[0] == '1';
 #endif
-  }()};
-  return e;
-}
+  if (on) g_enabled.store(true, std::memory_order_relaxed);
+  return on;
+}();
+
+inline std::atomic<bool>& enabled() { return g_enabled; }
 
 inline std::string& filter() {
   static std::string f = [] {
@@ -374,13 +382,12 @@ inline void ensure_sweeper() {
   }
 }
 
-// Hot path: a handful of atomic loads when disabled or when every output
-// is off. When enabled, the common case (same function entered again) is a
-// single pointer compare + counter bump; the per-thread summary map is
-// touched once per RUN of identical calls, and finished runs flush to disk
-// every 8 KB.
-inline void trace(const char* name) {
-  if (!enabled().load(std::memory_order_relaxed)) return;
+// Tracing is on: a handful of atomic loads when every output is off. The
+// common case (same function entered again) is a single pointer compare +
+// counter bump; the per-thread summary map is touched once per RUN of
+// identical calls, and finished runs flush to disk every 8 KB. Kept out of
+// line so the per-call hook below stays one inlined load and branch.
+[[gnu::noinline]] inline void trace_enabled(const char* name) {
   const bool want_summary = summary_enabled().load(std::memory_order_relaxed);
   const bool want_log = trace_log_enabled().load(std::memory_order_relaxed);
   if (want_summary) ensure_sweeper();
@@ -412,6 +419,13 @@ inline void trace(const char* name) {
   if (want_log && ts.buf.size() >= 8192) flush_buffer(ts.buf);
 }
 
+// Per-call hook: off by default, and then just this load and branch inlined
+// into each recompiled function.
+[[gnu::always_inline]] inline void trace(const char* name) {
+  if (__builtin_expect(g_enabled.load(std::memory_order_relaxed), 0))
+    trace_enabled(name);
+}
+
 // Finalizes the calling thread's in-flight run and writes everything to disk.
 inline void flush() {
   ThreadState& ts = state();
@@ -425,7 +439,7 @@ inline void flush() {
 extern "C" {
 
 // Called by the (redefined) REX_FUNC_PROLOGUE() in every recompiled function.
-inline void Fable2FuncTraceCall(const char* name) {
+[[gnu::always_inline]] inline void Fable2FuncTraceCall(const char* name) {
   fable2::functrace::trace(name);
 }
 

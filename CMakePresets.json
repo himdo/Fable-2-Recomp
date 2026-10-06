@@ -117,7 +117,8 @@
                 "CMAKE_BUILD_TYPE": "Release",
                 "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
                 "FABLE2_NO_PE_CLEAN": "ON",
-                "FABLE2_PROFILER_FRIENDLY": "ON"
+                "FABLE2_PROFILER_FRIENDLY": "ON",
+                "FABLE2_REMOTE_CONTROL": "ON"
             }
         },
         {
