@@ -12,6 +12,48 @@ Inputs, from running the game with --dump_shaders=<dir>:
   (one bindings file per modification - every one found becomes a variant)
 
     python tools/xenos_to_hlsl.py <dump dir> <HASH> [-o materials/src/<HASH>.hlsl]
+
+The output is derived from the game's shader: keep it local (materials/generated
+is ignored by git) and commit only shaders rewritten by hand.
+
+How Xenos shaders work, and how each part maps to HLSL
+-------------------------------------------------------
+The Xbox 360 GPU ("Xenos") runs shader microcode made of two layers:
+
+* A control-flow program: a list of clauses. `exec` runs a block of
+  instructions (optionally only if a boolean constant or the predicate p0 is
+  set), `jmp` skips forward to a label, `exece` ends the shader. We keep the
+  clauses as Cf objects. Forward jumps become `if` blocks that close at the
+  jump's target; when jumps overlap (a block can't express that) each jump
+  sets a flag instead and later code runs only while its flag is clear.
+  Backward jumps (loops) aren't supported - none of the shaders ported so far
+  needed them.
+
+* The instructions inside each exec. An ALU instruction issues a vector
+  operation (on float4) and a scalar operation (on one float, whose previous
+  result is kept in the "ps" register) at the same time; a fetch instruction
+  samples a texture. Instructions read the temporary registers r0..rN and the
+  float constants cN, with swizzles, negation and abs, and write registers or
+  the color outputs oC0..3 under a write mask. They can be predicated on p0.
+
+The port declares every register as a `float4 rN` local, maps each cN to the
+constant the translator actually uploads (the bindings file lists which ones,
+packed), and writes each operation as one HLSL statement using the helpers in
+xenos_d3d12.hlsli. Those helpers reproduce the GPU's exact rules where they
+differ from plain HLSL - e.g. XeMul treats 0 * infinity as 0, the rcp/rsq
+variants clamp or flush infinities, the texture fetches apply the same
+coordinate rounding offset and sampler choice as the translator. That is what
+makes the port render pixel-identical to the translation.
+
+One guest shader can be translated several times ("modifications": different
+interpolator layouts, early depth, point sprites...). The port contains all
+of them as #if branches selected by XE_MODIFICATION_INDEX, and
+tools/build_material_shaders.py compiles one .dxbc per modification.
+
+The parts, in order: parse_disassembly() and parse_bindings() read the dump;
+Shader generates the body (operations, fetches, control flow); generate()
+wraps it with the constant mapping, the per-modification inputs and the
+epilogue (alpha test, alpha to coverage, color output); main() is the CLI.
 """
 import argparse
 import re
@@ -19,8 +61,12 @@ import struct
 import sys
 from pathlib import Path
 
+# The translator nudges texture coordinates by this before sampling (it matches
+# how the Xbox 360 rounds them to texels); the port does the same.
 ROUNDING_OFFSET = 1.5 / 1024.0
 
+# The microcode's operation names, as the disassembly prints them. Vector
+# operations work on float4, scalar ones on one float; fetches read textures.
 VECTOR_OPS = {
     "add", "mul", "max", "min", "seq", "sgt", "sge", "sne", "frc", "trunc", "floor", "mad",
     "cndeq", "cndge", "cndgt", "dp4", "dp3", "dp2add", "cube", "max4", "setp_eq_push",
@@ -35,6 +81,7 @@ SCALAR_OPS = {
     "kills_gt", "kills_ge", "kills_ne", "kills_one", "sqrt", "mulsc", "addsc", "subsc", "sin",
     "cos", "retain_prev",
 }
+# Fetch operation -> (what it does, texture dimension).
 FETCH_OPS = {
     "tfetch1D": ("fetch", 1), "tfetch2D": ("fetch", 2), "tfetch3D": ("fetch", 3),
     "tfetchCube": ("fetch", "cube"), "getWeights1D": ("weights", 1),
@@ -45,10 +92,10 @@ COMPONENTS = "xyzw"
 
 
 class ConvertError(Exception):
-    pass
+    """Something in the shader the port doesn't support (or a malformed dump)."""
 
 
-# Parsing.
+# Parsing: the disassembly text into control-flow clauses and instructions.
 
 class Operand:
     """A source operand: rN / cN with abs, negation, relative addressing and
@@ -132,6 +179,9 @@ class Result:
 
 
 class Instruction:
+    """One microcode instruction: a co-issued vector + scalar ALU pair, or a
+    texture fetch. `text` keeps the disassembly, emitted as comments."""
+
     def __init__(self, number, predicate):
         self.number = number
         self.predicate = predicate  # None, True or False
@@ -142,6 +192,10 @@ class Instruction:
 
 
 class Cf:
+    """A control-flow clause: kind "exec" (runs `instructions`; `end` stops
+    the shader after it), "jmp" (to `target`) or "nop". `predicate` (p0) or
+    `bool_constant` ((index, expected value)) make it conditional."""
+
     def __init__(self, address, kind, **fields):
         self.address = address
         self.kind = kind
@@ -163,6 +217,7 @@ def parse_op(text):
 
 
 def parse_predicate(text):
+    """'(!p0) mul r0, ...' -> (False, 'mul r0, ...'); no predicate -> None."""
     match = re.match(r"\s*(\((!?)p0\))?\s*(.*)", text)
     predicate = None
     if match.group(1):
@@ -171,6 +226,12 @@ def parse_predicate(text):
 
 
 def parse_disassembly(text):
+    """The SDK's disassembly (.ucode.frag) into a list of Cf clauses.
+
+    Control-flow lines are numbered "/* major.minor */" (two clauses per
+    major number); instructions are numbered "/* N */", with the co-issued
+    scalar operation on a following "+" line. "label LN" lines mark jump
+    targets."""
     cfs = []
     labels = {}
     current = None
@@ -270,6 +331,9 @@ def parse_disassembly(text):
 
 
 def parse_bindings(path):
+    """The translation's bindings file: which float constants it uploads
+    ("dynamic" = all 256, indexed at run time; otherwise the packed list), and
+    the descriptor slot of each texture and sampler it binds."""
     bindings = {"textures": [], "samplers": [], "float_constants": None}
     for line in path.read_text().splitlines():
         words = line.split()
@@ -285,7 +349,10 @@ def parse_bindings(path):
 
 
 def parse_modification(value):
-    """DxbcShaderTranslator::Modification::PixelShaderModification."""
+    """Unpack the 64-bit modification key the translator was built with
+    (DxbcShaderTranslator::Modification::PixelShaderModification in the SDK):
+    which interpolators the vertex shader feeds, which are centroid-sampled,
+    where the pixel parameters (position, facing) go, and the depth mode."""
     low, high = value & 0xFFFFFFFF, value >> 32
     return {
         "interpolator_mask": low & 0xFFFF,
@@ -297,15 +364,24 @@ def parse_modification(value):
     }
 
 
-# Code generation.
+# Code generation: the parsed shader into HLSL statements.
 
 def float_literal(value):
+    """A float as HLSL source, exact to float32 precision."""
     if value == int(value):
         return f"{value:.1f}"
     return repr(struct.unpack("f", struct.pack("f", value))[0])
 
 
 class Shader:
+    """Generates the body of main(): one HLSL statement per operation, in the
+    clauses' order. Also records what the body uses (registers, constants,
+    color outputs, discard) for generate() to declare.
+
+    The generated locals: rN (registers), xe_v (the vector result), xe_ps (the
+    previous scalar result), xe_f (a fetch result), xe_p0 (the predicate),
+    xe_a0 (the address register for relative constant indexing)."""
+
     def __init__(self, cfs, bindings, shader_hash):
         self.cfs = cfs
         self.bindings = bindings
@@ -324,6 +400,7 @@ class Shader:
     # Operations.
 
     def vector_value(self, opcode, operands):
+        """A vector operation's result as an HLSL float4 expression."""
         a = lambda i: operands[i].expression(self, 4)
         if opcode == "add":
             return f"{a(0)} + {a(1)}"
@@ -356,6 +433,10 @@ class Shader:
         raise ConvertError(f"vector {opcode} is not supported")
 
     def scalar_value(self, opcode, operands):
+        """A scalar operation's result as an HLSL float expression. Scalar
+        operations read the first two components of their operand as a and b
+        (or a and the second operand's first component, c); *_prev forms use
+        the previous scalar result, xe_ps."""
         a = operands[0].component(self, 0) if operands else None
         b = operands[0].component(self, 1) if operands else None
         c = operands[1].component(self, 0) if len(operands) > 1 else None
@@ -382,6 +463,9 @@ class Shader:
         raise ConvertError(f"scalar {opcode} is not supported")
 
     def store(self, result_text, value, saturate, replicated=False):
+        """Write `value` to a result under its write mask. A result component
+        can also be the constant 0 or 1, or _ (left unchanged). `replicated`
+        values (dot products, scalar results) are the same in every component."""
         result = Result(result_text)
         if not result.written:
             return
@@ -402,6 +486,9 @@ class Shader:
             self.emit(f"{target}.{constant_mask} = {constant_type}({constants});")
 
     def emit_alu(self, instruction):
+        """A vector + scalar pair. Both read their operands before either
+        writes (they issue together), so both compute into temporaries first
+        and are stored after."""
         vector, scalar = instruction.vector, instruction.scalar
         stores = []
         if vector:
@@ -478,6 +565,8 @@ class Shader:
             self.store(result_text, value, saturate, replicated)
 
     def texture_slots(self, fetch, dimension):
+        """The descriptor slots the translation binds fetch constant `fetch`
+        to: (unsigned view, signed view) - the shader picks per the format."""
         binding_dimension = "cube" if dimension == "cube" else ("3d" if dimension == 3 else "2d")
         slots = {}
         for binding in self.bindings["textures"]:
@@ -488,7 +577,9 @@ class Shader:
         return slots[False], slots[True]
 
     def sampler_slot(self, fetch, attributes, computed_lod):
-        names = {"point": "point", "linear": "linear", "basemap": "basemap", "keep": "keep"}
+        """The sampler slot for a fetch's filter overrides (the translator
+        makes one sampler per fetch constant and filter combination)."""
+        names ={"point": "point", "linear": "linear", "basemap": "basemap", "keep": "keep"}
         mag = names[attributes.get("MagFilter", "keep")]
         min_ = names[attributes.get("MinFilter", "keep")]
         mip = names[attributes.get("MipFilter", "keep")]
@@ -505,6 +596,9 @@ class Shader:
         raise ConvertError(f"no sampler binding for tf{fetch} {mag} {min_} {mip} {aniso}")
 
     def emit_fetch(self, instruction):
+        """A texture fetch (or getWeights / setTexLOD) through the XeTexture*
+        helpers, which sample like the translation: same rounding offset,
+        LOD selection, sampler and signed/unsigned view."""
         opcode, operands, attributes = instruction.fetch
         kind, dimension = FETCH_OPS[opcode]
         if kind == "set_lod":
@@ -580,7 +674,10 @@ class Shader:
             self.indent -= 1
             self.emit("}")
 
+    # Control flow.
+
     def condition(self, cf):
+        """A clause's condition as HLSL, or None if unconditional."""
         if cf.bool_constant is not None:
             index, value = cf.bool_constant
             return f"{'' if value else '!'}XeBoolConstant({index}u)"
@@ -588,7 +685,29 @@ class Shader:
             return f"{'' if cf.predicate else '!'}xe_p0"
         return None
 
+    def jumps_nest(self):
+        """True if every jump lands at or before the target of the jumps it is
+        inside of - then they map to nested `if`s."""
+        open_targets = []
+        for cf in self.cfs:
+            while open_targets and open_targets[-1] == cf.address:
+                open_targets.pop()
+            if cf.kind == "jmp":
+                if open_targets and cf.target > open_targets[-1]:
+                    return False
+                open_targets.append(cf.target)
+        return True
+
     def generate_body(self):
+        """Emit every clause in order: execs as their instructions (in an `if`
+        when conditional), forward jumps as `if (jump not taken) {` blocks
+        closed at the target."""
+        for cf in self.cfs:
+            if cf.kind == "jmp" and cf.target <= cf.address:
+                raise ConvertError("backward jumps (loops) are not supported")
+        if not self.jumps_nest():
+            self.generate_body_with_jump_flags()
+            return
         # Forward jumps become `if`s closed at their targets.
         open_targets = []
         for cf in self.cfs:
@@ -628,8 +747,47 @@ class Shader:
             self.indent -= 1
             self.emit("}")
 
+    def generate_body_with_jump_flags(self):
+        # Overlapping forward jumps: each jump sets a flag when taken, and
+        # everything up to its target runs only while the flag is clear.
+        taken = []  # (flag, target)
+        for cf in self.cfs:
+            taken = [(flag, target) for flag, target in taken if target > cf.address]
+            skipped = " || ".join(flag for flag, _ in taken)
+            if cf.kind == "jmp":
+                flag = f"xe_jump_{cf.address}"
+                condition = self.condition(cf) or "true"
+                if skipped:
+                    condition = f"!({skipped}) && ({condition})"
+                self.emit(f"// jmp L{cf.target}")
+                self.emit(f"bool {flag} = {condition};")
+                taken.append((flag, cf.target))
+                continue
+            if cf.kind != "exec":
+                continue
+            conditions = [f"!({skipped})"] if skipped else []
+            condition = self.condition(cf)
+            if condition:
+                conditions.append(condition)
+            if conditions:
+                self.emit(f"if ({' && '.join(conditions)}) {{")
+                self.indent += 1
+            for instruction in cf.instructions:
+                self.emit_instruction(instruction)
+            if conditions:
+                self.indent -= 1
+                self.emit("}")
+            if cf.end:
+                if conditions:
+                    raise ConvertError("ending the shader inside a condition is not supported")
+                break
 
-def generate(dump, shader_hash):
+
+def generate(dump, shader_hash, tag=None, include="../include/xenos_d3d12.hlsli"):
+    """The whole .hlsl file for one guest shader: header, constant mapping, one
+    #if branch of inputs per modification, main() with the register setup, the
+    generated body and the epilogue. `tag` (an RGB color) paints everything the
+    shader draws, to find it in game."""
     ucode_path = dump / f"shader_{shader_hash}.ucode.frag"
     cfs = parse_disassembly(ucode_path.read_text())
     variants = []
@@ -658,7 +816,7 @@ def generate(dump, shader_hash):
     else:
         out.append(f"#define XE_FLOAT_CONSTANT_COUNT {max(len(float_constants), 1)}")
     out.append(f"#define XE_DESCRIPTOR_INDEX_VECTOR_COUNT {(descriptor_count + 3) // 4}")
-    out.append('#include "../include/xenos_d3d12.hlsli"')
+    out.append(f'#include "{include}"')
     out.append("")
     out.append("// The guest float constants.")
     if float_constants != "dynamic":
@@ -675,8 +833,6 @@ def generate(dump, shader_hash):
     # Variants: the build defines XE_MODIFICATION_INDEX.
     for index, (modification, _) in enumerate(variants):
         fields = parse_modification(modification)
-        if fields["param_gen_point"]:
-            raise ConvertError("point sprite parameters are not supported")
         if fields["depth_stencil_mode"] > 1:
             raise ConvertError("float24 depth modes are not supported")
         early = fields["depth_stencil_mode"] == 1 and not shader.kills
@@ -690,6 +846,9 @@ def generate(dump, shader_hash):
                 qualifier = "centroid " if centroid & (1 << i) else ""
                 out.append(f"  {qualifier}float4 interpolator{i} : TEXCOORD{packed};")
                 packed += 1
+        point = bool(fields["param_gen"] and fields["param_gen_point"])
+        if point:
+            out.append("  float2 point_coordinates : XESPRITETEXCOORD;")
         out.append("  float4 position : SV_Position;")
         out.append("  bool is_front_face : SV_IsFrontFace;")
         out.append("};")
@@ -697,6 +856,7 @@ def generate(dump, shader_hash):
         out.append(f"#define XE_INTERPOLATOR_MASK 0x{mask:X}")
         param_gen = fields["param_gen_interpolator"] if fields["param_gen"] else -1
         out.append(f"#define XE_PARAM_GEN_REGISTER {param_gen}")
+        out.append(f"#define XE_PARAM_GEN_POINT {1 if point else 0}")
     out.append("#endif")
     out.append("")
     out.append("#if XE_EARLY_DEPTH_STENCIL")
@@ -717,7 +877,10 @@ def generate(dump, shader_hash):
     out.append("  // The registers: interpolators, the pixel parameters, the rest zeroed.")
     for i in range(registers):
         out.append(f"  float4 r{i} = 0.0;")
-    out.append("#if XE_PARAM_GEN_REGISTER >= 0")
+    out.append("#if XE_PARAM_GEN_POINT")
+    out.append("  float4 xe_param_gen = XePsParamGenPoint(xe_input.position, "
+               "xe_input.point_coordinates);")
+    out.append("#elif XE_PARAM_GEN_REGISTER >= 0")
     out.append("  float4 xe_param_gen = XePsParamGen(xe_input.position, xe_input.is_front_face);")
     out.append("#endif")
     for i in range(16):
@@ -736,6 +899,10 @@ def generate(dump, shader_hash):
     out.append("  int xe_a0 = 0;")
     out.append("")
     out.extend(shader.lines)
+    if tag is not None and 0 in shader.color_targets:
+        out.append("")
+        out.append("  // Debug tag: what this shader draws shows in this color.")
+        out.append(f"  xe_color0.rgb = float3({', '.join(map(float_literal, tag))});")
     out.append("")
     out.append("  // Epilogue.")
     if 0 in shader.color_targets:
@@ -755,9 +922,14 @@ def main():
     parser.add_argument("dump", type=Path, help="the --dump_shaders directory")
     parser.add_argument("hash", help="the guest shader's hash (16 hex digits)")
     parser.add_argument("-o", "--output", type=Path)
+    parser.add_argument("--tag", help="R,G,B: draw everything this shader draws in this "
+                        "color, to find what it is in game")
+    parser.add_argument("--include", default="../include/xenos_d3d12.hlsli",
+                        help="how the port includes xenos_d3d12.hlsli")
     args = parser.parse_args()
+    tag = [float(value) for value in args.tag.split(",")] if args.tag else None
     try:
-        hlsl = generate(args.dump, args.hash.upper())
+        hlsl = generate(args.dump, args.hash.upper(), tag, args.include)
     except ConvertError as error:
         raise SystemExit(f"{args.hash}: {error}")
     if args.output:
