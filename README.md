@@ -21,10 +21,10 @@ Original GOTY USA/Europe and German GOTY dumps are supported by the default
 
 [ ] Increased performance / framerate\
 [x] Hero / Dog Texture bug fix (upstream renderer, verified on German GOTY)\
-[ ] Vulkan support\
+[ ] Vulkan support (selectable renderer; not yet on par with Direct3D 12 - see [known limits](docs/GRAPHICS_ENHANCEMENTS.md#known-limits))\
 [ ] Linux Builds\
 [x] Custom commands to aid in debugging\
-[ ] Improved Graphics rendering\
+[x] Improved Graphics rendering ([graphics enhancements](docs/GRAPHICS_ENHANCEMENTS.md): ambient occlusion, GI, light shafts, fog, reflections, contact shadows, soft shadows, PBR highlights, sharpening, color grading)\
 [ ] Custom menu(s) / modifying menus for extra functionality (like closing the game)\
 [x] Supporting other languages
   - [x] Germany
@@ -171,6 +171,22 @@ console, so you can dial in the sensitivity live. Example: `fable_2.exe
 --mouse_look_scale 512` for a more sensitive camera.
 
 All cvars above are hot-reloadable, so they can also be changed from the in-game console.
+
+## F6 — graphics enhancements
+
+Press **F6** in game for the **Graphics Enhancements** menu: modern effects
+added to the game's own rendering - ambient occlusion (GTAO), global
+illumination, contact shadows, volumetric light shafts, height fog,
+screen-space reflections, sharpening and color grading - and *material
+shaders*, rewritten versions of the game's own shaders with soft sun shadows
+(PCSS) and physically based highlights. Tick an effect to turn it on, open it
+to tune it; changes apply instantly and **Save** keeps them. Presets go from
+Off to Ultra. The effects work on SDR and HDR displays, and are complete on
+Direct3D 12 (the default renderer).
+
+Details, every setting and how it works:
+[docs/GRAPHICS_ENHANCEMENTS.md](docs/GRAPHICS_ENHANCEMENTS.md); the material
+shaders: [materials/README.md](materials/README.md).
 
 ## F5 — run an external Lua script
 
@@ -482,6 +498,15 @@ plain `git fetch`/`checkout`.
 The build also accepts explicit overrides if you keep the SDK elsewhere:
 `cmake -DREXGLUE_SDK_ROOT=<prebuilt SDK root> -DREXGLUE_SDK_SOURCE=<SDK source>`
 (`build.cmd` sets `REXGLUE_SDK_ROOT`/`REXGLUE_SDK_SOURCE` from its own search).
+
+The graphics enhancements are SDK changes carried as
+`thirdparty/rexglue-sdk-graphics-fx.patch`, applied with the other SDK patches
+by `tools/prepare_runtime_sdk.py`. When working on them in
+`thirdparty/rexglue-sdk`, regenerate the patch with
+`python tools/regen_graphics_fx_patch.py` before building (a stale patch is
+rejected); their shaders are rebuilt with `python tools/build_scene_fx_shaders.py`
+and the material shaders with `python tools/build_material_shaders.py`. See
+[docs/GRAPHICS_ENHANCEMENTS.md](docs/GRAPHICS_ENHANCEMENTS.md#working-on-it).
 
 - Toolchain: the `win-amd64-debug` preset (Ninja + clang) by default. The SDK's public headers use clang builtins (`__builtin_bswap32`, `__VA_OPT__`), so plain MSVC `cl` cannot compile the generated code — a `win-msvc-debug` preset exists but only works for targets that don't compile `generated/`.
 - **Release builds:** `build.cmd` defaults to the `win-amd64-debug` preset (`-O0`, `out\build\win-amd64-debug`). Pass the `-release` flag (short form: `-r`) to select the `win-amd64-release` preset (`-O3`, `out\build\win-amd64-release`):

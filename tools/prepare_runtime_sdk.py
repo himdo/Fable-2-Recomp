@@ -23,6 +23,7 @@ PATCHES = (
     "rexglue-sdk-runtime-fixes.patch",
     "rexglue-sdk-debug-exports.patch",
     "rexglue-sdk-vulkan-present-gate.patch",
+    "rexglue-sdk-graphics-fx.patch",
 )
 
 

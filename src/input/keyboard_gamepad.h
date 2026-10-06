@@ -275,15 +275,22 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     uint16_t unlock_vk = static_cast<uint16_t>(
         rex::ui::ParseVirtualKey(REXCVAR_GET(mouse_unlock_key)));
     bool has_unlock_key = unlock_vk != 0;
+    // The graphics enhancements menu (the SDK's bind_effects_menu, F6 by
+    // default) frees the mouse the same way while it's open.
+    uint16_t effects_vk = EffectsMenuKey();
     if (focused) {
       bool unlock_down = has_unlock_key && (GetAsyncKeyState(unlock_vk) & 0x8000);
       if (unlock_down && !unlock_down_prev_) console_open_ = !console_open_;
       unlock_down_prev_ = unlock_down;
+      bool effects_down = effects_vk != 0 && (GetAsyncKeyState(effects_vk) & 0x8000);
+      if (effects_down && !effects_down_prev_) effects_menu_open_ = !effects_menu_open_;
+      effects_down_prev_ = effects_down;
     }
 
     if (focused) {
       for (const auto& m : bindings_) {
         if (has_unlock_key && m.vk == unlock_vk) continue;  // not gamepad input
+        if (effects_vk != 0 && m.vk == effects_vk) continue;
         if ((GetAsyncKeyState(m.vk) & 0x8000) == 0) continue;  // not held
         if (m.button != 0) {
           buttons |= m.button;
@@ -309,7 +316,8 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     // away releases the lock) and on the debug menu being closed (F4) so the
     // cursor is free while the menu is open. Fable 2 inverts Y, so mouse-up
     // (dy<0) maps to +ry (look up).
-    bool looking = focused && REXCVAR_GET(mouse_look) && !console_open_;
+    bool looking =
+        focused && REXCVAR_GET(mouse_look) && !console_open_ && !effects_menu_open_;
 
     // Hide/restore the cursor via the SDK Window. This is a thread-safe
     // "desired state" that the UI thread applies, so it actually takes effect
@@ -389,6 +397,16 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     bindings_ = input_detail::ParseMap(cached_text_);
   }
 
+  // The SDK keybind of the graphics enhancements menu, re-read about once a
+  // second (a by-name registry lookup), so rebinding it in F4 also works here.
+  uint16_t EffectsMenuKey() {
+    if (effects_key_polls_++ % 64 == 0) {
+      effects_vk_ = static_cast<uint16_t>(
+          rex::ui::ParseVirtualKey(rex::cvar::GetFlagByName("bind_effects_menu")));
+    }
+    return effects_vk_;
+  }
+
   // Device id for this synthetic pad. MUST NOT collide with the SDL driver's
   // sequential ids (they start at 1): InputSystem::DriverForDevice() resolves
   // an id by first match, so sharing id 1 with the first physical pad
@@ -402,6 +420,10 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
   bool cursor_hidden_ = false;   // set while the SDK window cursor is hidden
   bool console_open_ = false;    // debug menu open -> mouse lock released
   bool unlock_down_prev_ = false;  // prev-poll state of the unlock key
+  bool effects_menu_open_ = false;  // graphics menu open -> mouse lock released
+  bool effects_down_prev_ = false;  // prev-poll state of its key
+  uint16_t effects_vk_ = 0;
+  uint32_t effects_key_polls_ = 0;
   // The game window (from the runtime's display window), used for recentering
   // and cursor visibility.
   rex::ui::Window* GameWindow() {

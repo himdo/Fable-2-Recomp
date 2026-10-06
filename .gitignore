@@ -56,6 +56,11 @@ __pycache__/
 !tools/create_app_icon.ps1
 !assets/app-icon.png
 !docs/screenshots/launcher.png
+# Graphics enhancements: the shader builds, the SDK patch, material shaders.
+!tools/build_scene_fx_shaders.py
+!tools/regen_graphics_fx_patch.py
+!tools/build_material_shaders.py
+!tools/xenos_to_hlsl.py
 # Profiling and GPU-layer analysis.
 !tools/map_gpu_layer.py
 !tools/sample_threads.ps1

@@ -239,6 +239,20 @@ add_custom_target(fable_2_lua_staging
 )
 add_dependencies(fable_2 fable_2_lua_staging)
 
+# --- Material shaders (materials/) -----------------------------------------
+# Improved replacements for the game's own shaders, compiled by
+# tools/build_material_shaders.py from materials/src/*.hlsl into
+# materials/d3d12/*.dxbc, which the SDK loads from <exe dir>/materials (cvar
+# material_shaders_path). A custom target like the Lua staging, so rebuilt
+# shaders are re-copied on every build.
+add_custom_target(fable_2_materials_staging
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          ${CMAKE_CURRENT_SOURCE_DIR}/materials/d3d12
+          $<TARGET_FILE_DIR:fable_2>/materials/d3d12
+  COMMENT "Staging materials/d3d12/*.dxbc next to fable_2.exe"
+)
+add_dependencies(fable_2 fable_2_materials_staging)
+
 # The remote-control CLI client is a debug-only feature (see the
 # FABLE2_REMOTE_CONTROL gate above), so only stage it where the server exists.
 if(FABLE2_REMOTE_CONTROL)
