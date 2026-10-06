@@ -27,7 +27,10 @@ Original GOTY USA/Europe and German GOTY dumps are supported by the default
 [ ] Vulkan support (selectable renderer; not yet on par with Direct3D 12 - see [known limits](docs/GRAPHICS_ENHANCEMENTS.md#known-limits))\
 [ ] Linux Builds\
 [x] Custom commands to aid in debugging\
-[x] Improved Graphics rendering ([graphics enhancements](docs/GRAPHICS_ENHANCEMENTS.md): ambient occlusion, GI, light shafts, fog, reflections, contact shadows, soft shadows, PBR highlights, sharpening, color grading)\
+[ ] Improved Graphics rendering
+  - [x] [Graphics enhancements](docs/GRAPHICS_ENHANCEMENTS.md): ambient occlusion, GI, light shafts, fog, reflections, contact shadows, soft shadows, PBR highlights, sharpening, color grading
+  - [ ] Shaders glitching frames
+
 [ ] Custom menu(s) / modifying menus for extra functionality (like closing the game)\
 [x] Supporting other languages
   - [x] Germany
@@ -175,22 +178,6 @@ console, so you can dial in the sensitivity live. Example: `fable_2.exe
 
 All cvars above are hot-reloadable, so they can also be changed from the in-game console.
 
-## F6 — graphics enhancements
-
-Press **F6** in game for the **Graphics Enhancements** menu: modern effects
-added to the game's own rendering - ambient occlusion (GTAO), global
-illumination, contact shadows, volumetric light shafts, height fog,
-screen-space reflections, sharpening and color grading - and *material
-shaders*, rewritten versions of the game's own shaders with soft sun shadows
-(PCSS) and physically based highlights. Tick an effect to turn it on, open it
-to tune it; changes apply instantly and **Save** keeps them. Presets go from
-Off to Ultra. The effects work on SDR and HDR displays, and are complete on
-Direct3D 12 (the default renderer).
-
-Details, every setting and how it works:
-[docs/GRAPHICS_ENHANCEMENTS.md](docs/GRAPHICS_ENHANCEMENTS.md); the material
-shaders: [materials/README.md](materials/README.md).
-
 ## F5 — run an external Lua script
 
 Pressing **F5** (host keyboard) runs an external Lua file in the in-game Lua
@@ -216,7 +203,23 @@ it against the live game (no recompile of the scripts needed).
 
 Implementation: F5 edge-detection in `src/input/keyboard_gamepad.h`, a per-frame
 replay from the `MainRenderLoop` hook in `src/diagnostics/fps_meter.h`, and the
-string-build + `RunScript` call in `src/core/fable2_f5_lua.h`.\
+string-build + `RunScript` call in `src/core/fable2_f5_lua.h`.
+
+## F6 — graphics enhancements
+
+Press **F6** in game for the **Graphics Enhancements** menu: modern effects
+added to the game's own rendering - ambient occlusion (GTAO), global
+illumination, contact shadows, volumetric light shafts, height fog,
+screen-space reflections, sharpening and color grading - and *material
+shaders*, rewritten versions of the game's own shaders with soft sun shadows
+(PCSS) and physically based highlights. Tick an effect to turn it on, open it
+to tune it; changes apply instantly and **Save** keeps them. Presets go from
+Off to Ultra. The effects work on SDR and HDR displays, and are complete on
+Direct3D 12 (the default renderer).
+
+Details, every setting and how it works:
+[docs/GRAPHICS_ENHANCEMENTS.md](docs/GRAPHICS_ENHANCEMENTS.md); the material
+shaders: [materials/README.md](materials/README.md).\
 <br>
 <br>
 <br>
