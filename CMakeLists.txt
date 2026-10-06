@@ -200,7 +200,10 @@ add_custom_command(TARGET fable_2 POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
           ${CMAKE_CURRENT_SOURCE_DIR}/tools/fable2-functrace.cmd
           $<TARGET_FILE_DIR:fable_2>/fable2-functrace.cmd
-  COMMENT "Staging README.md + fable2-functrace.cmd next to fable_2.exe"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          ${CMAKE_CURRENT_SOURCE_DIR}/tools/run_profiler.cmd
+          $<TARGET_FILE_DIR:fable_2>/run_profiler.cmd
+  COMMENT "Staging README.md + fable2-functrace.cmd + run_profiler.cmd next to fable_2.exe"
 )
 
 # --- F5 external-Lua runner (src/lua/) -----------------------------------
@@ -396,6 +399,23 @@ add_custom_command(TARGET fable_2 POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/fable2-uncapped.cmd"
             "$<TARGET_FILE_DIR:fable_2>/fable2-uncapped.cmd")
+# Vulkan loader (vulkan-1.dll), staged next to the exe so the plugin's
+# LoadLibrary("vulkan-1.dll") resolves in place: a locally staged copy
+# (out/tooling/vulkan-loader, e.g. the official loader zip) if there is one,
+# else the driver-installed System32 copy.
+if(WIN32)
+    file(GLOB FABLE2_VULKAN_LOADER_CANDIDATES
+         "${CMAKE_CURRENT_SOURCE_DIR}/out/tooling/vulkan-loader/vulkan-1.dll"
+         "$ENV{SystemRoot}/System32/vulkan-1.dll")
+    if(FABLE2_VULKAN_LOADER_CANDIDATES)
+        list(GET FABLE2_VULKAN_LOADER_CANDIDATES 0 FABLE2_VULKAN_LOADER)
+        add_custom_command(TARGET fable_2 POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${FABLE2_VULKAN_LOADER}"
+                    "$<TARGET_FILE_DIR:fable_2>/vulkan-1.dll")
+    else()
+        message(STATUS "vulkan-1.dll not found (checked out/tooling/vulkan-loader and System32) - the Vulkan backend will rely on the driver-installed loader")
+    endif()
+endif()
 
 # --- Vulkan renderer: Stage 1 smoke test ----------------------------------
 # A self-contained Vulkan pipeline (vendored Khronos headers in

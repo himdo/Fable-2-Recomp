@@ -3,6 +3,9 @@ First and for most this project was made to test the capabilities of local and o
 
 Recompilation of Fable 2 (Xbox 360, title ID 4D5307F1) using the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk) v0.10.0. Guest PPC code is statically recompiled to C++ at build time by `rexglue codegen`, driven by `fable_2_manifest.toml`.
 
+# Important Note:
+**This project does not condone Piracy, any mentions or links will result in removal and an instant ban from this repo!**
+
 # Current and planned features
 
 Original GOTY USA/Europe and German GOTY dumps are supported by the default
