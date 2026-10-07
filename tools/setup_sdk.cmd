@@ -40,7 +40,10 @@ if errorlevel 1 (
 )
 
 echo Extracting to %DEST%
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '%TEMP%\%ZIPNAME%' -DestinationPath '%DEST%' -Force"
+rem Windows' bsdtar first: Expand-Archive -Force fails on this zip's directory
+rem entries (and on DLLs an antivirus scan still holds open).
+"%SystemRoot%\System32\tar.exe" -xf "%TEMP%\%ZIPNAME%" -C "%DEST%" 2>nul
+if errorlevel 1 powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '%TEMP%\%ZIPNAME%' -DestinationPath '%DEST%' -Force"
 if errorlevel 1 (
     echo Error: SDK extraction failed. 1>&2
     exit /b 1
@@ -49,6 +52,10 @@ del /q "%TEMP%\%ZIPNAME%" 2>nul
 
 if not exist "%DEST%\win-amd64\lib\cmake\rexglue\rexglueConfig.cmake" (
     echo Error: SDK incomplete after extract; expected %DEST%\win-amd64. 1>&2
+    exit /b 1
+)
+if not exist "%DEST%\win-amd64\bin\rexruntime.dll" (
+    echo Error: bin\rexruntime.dll was not extracted; antivirus may be blocking it. 1>&2
     exit /b 1
 )
 echo OK: ReXGlue SDK v%VER% -> %DEST%\win-amd64

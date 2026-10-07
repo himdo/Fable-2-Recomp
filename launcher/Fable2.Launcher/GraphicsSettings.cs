@@ -9,12 +9,12 @@ public static class GraphicsSettings
     [
         "resolution", "window_width", "window_height", "resolution_scale",
         "anisotropic_override", "swap_post_effect", "vsync", "fullscreen", "fullscreen_exclusive",
-        "frame_limit", "guest_vblank_pacing"
+        "frame_limit", "guest_vblank_pacing", "gpu_backend"
     ];
 
     public static Dictionary<string, string> Create(string resolution, string scale,
         string anisotropic, string antiAliasing, string displayMode, bool vsync,
-        string frameLimit = "0")
+        string frameLimit = "0", string backend = "d3d12")
     {
         (int width, int height) = resolution switch
         {
@@ -26,6 +26,7 @@ public static class GraphicsSettings
             !new[] { "-1", "1", "2", "3", "4", "5" }.Contains(anisotropic) ||
             !new[] { "none", "fxaa", "fxaa_extreme" }.Contains(antiAliasing) ||
             !new[] { "windowed", "borderless", "exclusive" }.Contains(displayMode) ||
+            !new[] { "d3d12", "vulkan" }.Contains(backend) ||
             !GraphicsOptions.FrameLimits.Any(option => option.Value == frameLimit))
             throw new ArgumentException("Unsupported graphics setting");
 
@@ -45,7 +46,10 @@ public static class GraphicsSettings
             // This does not disable the user's host presentation VSync.
             ["guest_vblank_pacing"] = (frameLimit == "30").ToString().ToLowerInvariant(),
             ["fullscreen"] = (displayMode != "windowed").ToString().ToLowerInvariant(),
-            ["fullscreen_exclusive"] = (displayMode == "exclusive").ToString().ToLowerInvariant()
+            ["fullscreen_exclusive"] = (displayMode == "exclusive").ToString().ToLowerInvariant(),
+            // Both backends ship in one plugin; the game falls back to the
+            // other if this one cannot start.
+            ["gpu_backend"] = $"\"{backend}\""
         };
     }
 }

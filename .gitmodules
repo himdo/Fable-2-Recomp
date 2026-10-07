@@ -1,4 +1,4 @@
 [submodule "thirdparty/rexglue-sdk"]
 	path = thirdparty/rexglue-sdk
-	url = https://github.com/himdo/rexglue-sdk.git
-	branch = vsync-present-gate
+	url = https://github.com/yushaer/rexglue-sdk.git
+	branch = graphics-enhancements

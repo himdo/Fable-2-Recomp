@@ -92,3 +92,11 @@ hero_dog_texture_readback = true
 # every call); 0 = never yield; larger = fewer context switches.
 # Default: 1
 hotfunc_yield_every = 1
+
+[graphics]
+# GPU backend used to emulate the Xenos GPU: "d3d12" or "vulkan". Seeds the
+# gpu_backend cvar, so --gpu_backend on the command line still wins. If the
+# chosen backend cannot start, the game falls back to the other one and logs
+# a warning.
+# Default: "d3d12"
+backend = "d3d12"

@@ -122,6 +122,14 @@ hero_dog_texture_readback = true
 # every call); 0 = never yield; larger = fewer context switches.
 # Default: 1
 hotfunc_yield_every = 1
+
+[graphics]
+# GPU backend used to emulate the Xenos GPU: "d3d12" or "vulkan". Seeds the
+# gpu_backend cvar, so --gpu_backend on the command line still wins. If the
+# chosen backend cannot start, the game falls back to the other one and logs
+# a warning.
+# Default: "d3d12"
+backend = "d3d12"
 )TOML_EOF";
 
 std::string_view TypeName(toml::node_type t) {
@@ -179,8 +187,8 @@ bool Load(const std::filesystem::path& path) {
 
   // Warn about unknown top-level sections (usually a typo or a file written
   // for a newer build).
-  static constexpr std::array<std::string_view, 4> kKnownSections = {
-      "general", "input", "patches", "perf"};
+  static constexpr std::array<std::string_view, 5> kKnownSections = {
+      "general", "input", "patches", "perf", "graphics"};
   for (const auto& [key, value] : root) {
     const bool known =
         std::ranges::find(kKnownSections, key.str()) != kKnownSections.end();
@@ -234,6 +242,13 @@ bool Load(const std::filesystem::path& path) {
     values.hotfunc_yield_every = static_cast<int32_t>(Read<int64_t>(
         perf_table, "perf", "hotfunc_yield_every", "integer",
         values.hotfunc_yield_every));
+  }
+  const toml::path graphics_path{"graphics"};
+  const auto graphics = root[graphics_path];
+  if (graphics.is_table()) {
+    values.gpu_backend = Read<std::string>(*graphics.as_table(), "graphics",
+                                           "backend", "string",
+                                           values.gpu_backend);
   }
 
   g_values = values;

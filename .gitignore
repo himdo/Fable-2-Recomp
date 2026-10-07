@@ -56,6 +56,9 @@ __pycache__/
 !tools/create_app_icon.ps1
 !assets/app-icon.png
 !docs/screenshots/launcher.png
+# Graphics enhancements: building and porting material shaders.
+!tools/build_material_shaders.py
+!tools/xenos_to_hlsl.py
 
 # --- Fetched/external toolchain deps (created by tools/setup_sdk*.cmd). -------
 # The tracked files in thirdparty/ (rexglue-sdk-local.patch,

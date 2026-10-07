@@ -4,7 +4,8 @@
 // (0x82B9CD68; renamed from sub_82B9CD68 in fable_2_manifest.toml). One
 // call per frame; ~33 ms period at the 30 fps cap, see
 // docs/FPS_CAP_INVESTIGATION.md). Counts invocations over 5 s windows and
-// appends `mainloop rate=NN.N/s` lines to fps_meter.log (CWD = exe dir).
+// appends `mainloop rate=NN.N/s worst=NN.Nms` lines (average rate and longest
+// frame in the window) to fps_meter.log (CWD = exe dir).
 // Forward-only: the override just counts, then calls the original
 // __imp__ entry point, so it is safe to leave compiled in.
 //
@@ -115,6 +116,8 @@ extern "C" void MainRenderLoop_82B9CD68(PPCContext& ctx, uint8_t* base) {
     static std::atomic<uint64_t> calls{0};
     static std::atomic<int64_t> window_start_us{0};
     static std::atomic<uint64_t> window_calls{0};
+    static std::atomic<int64_t> last_call_us{0};
+    static std::atomic<int64_t> worst_frame_us{0};
     static std::ofstream& logf = [] -> std::ofstream& {
       std::remove("fps_meter.log");  // fresh log per run
       static std::ofstream f{"fps_meter.log", std::ios::app};
@@ -124,18 +127,31 @@ extern "C" void MainRenderLoop_82B9CD68(PPCContext& ctx, uint8_t* base) {
                                std::chrono::steady_clock::now().time_since_epoch())
                                .count();
     calls.fetch_add(1, std::memory_order_relaxed);
+    // Longest gap between two calls in the window: a stutter the average hides.
+    const int64_t prev_us = last_call_us.exchange(now_us, std::memory_order_relaxed);
+    if (prev_us != 0) {
+      const int64_t frame_us = now_us - prev_us;
+      int64_t worst = worst_frame_us.load(std::memory_order_relaxed);
+      while (frame_us > worst &&
+             !worst_frame_us.compare_exchange_weak(worst, frame_us,
+                                                   std::memory_order_relaxed)) {
+      }
+    }
     int64_t start = window_start_us.load(std::memory_order_relaxed);
-    if (start == 0)
-      window_start_us.compare_exchange_strong(start, now_us);
+    if (start == 0 && window_start_us.compare_exchange_strong(start, now_us))
+      start = now_us;  // first call opens the first window
     const uint64_t n = window_calls.fetch_add(1, std::memory_order_relaxed) + 1;
-    if (n == 1 || (now_us - start) >= 5'000'000) {
+    if ((now_us - start) >= 5'000'000) {
       window_calls.store(0, std::memory_order_relaxed);
       window_start_us.store(now_us, std::memory_order_relaxed);
       const double secs = (now_us - start) / 1'000'000.0;
+      const double worst_ms =
+          worst_frame_us.exchange(0, std::memory_order_relaxed) / 1000.0;
       if (logf) {
         char buf[128];
-        std::snprintf(buf, sizeof(buf), "mainloop rate=%.1f/s (total %llu)\n",
-                      n / secs,
+        std::snprintf(buf, sizeof(buf),
+                      "mainloop rate=%.1f/s worst=%.1fms (total %llu)\n",
+                      n / secs, worst_ms,
                       (unsigned long long)calls.load(std::memory_order_relaxed));
         logf << buf;
         logf.flush();

@@ -30,6 +30,7 @@ public partial class MainWindow : Window
         SelectByTag(AnisotropicCombo, "5");
         SelectByTag(AntiAliasingCombo, "none");
         SelectByTag(DisplayModeCombo, "borderless");
+        SelectByTag(BackendCombo, "d3d12");
         if (FrameLimitCombo.Items.Count == 0)
             foreach (var option in Constants.GraphicsOptions.FrameLimits)
                 FrameLimitCombo.Items.Add(new ComboBoxItem { Tag = option.Value, Content = option.Label });
@@ -99,6 +100,7 @@ public partial class MainWindow : Window
             SelectByTag(AnisotropicCombo, GetValue("anisotropic_override", "5"));
             SelectByTag(AntiAliasingCombo, Unquote(GetValue("swap_post_effect", "none")));
             SelectByTag(FrameLimitCombo, GetValue("frame_limit", "0"));
+            SelectByTag(BackendCombo, Unquote(GetValue("gpu_backend", "d3d12")));
 
             bool fullscreen = ParseBool(GetValue("fullscreen", "true"), true);
             bool exclusive = ParseBool(GetValue("fullscreen_exclusive", "false"), false);
@@ -142,7 +144,8 @@ public partial class MainWindow : Window
         return GraphicsSettings.Create(SelectedTag(ResolutionCombo) ?? "1080p",
             SelectedTag(RenderScaleCombo) ?? "2", SelectedTag(AnisotropicCombo) ?? "5",
             SelectedTag(AntiAliasingCombo) ?? "none", SelectedTag(DisplayModeCombo) ?? "borderless",
-            VsyncCheck.IsChecked == true, SelectedTag(FrameLimitCombo) ?? "0");
+            VsyncCheck.IsChecked == true, SelectedTag(FrameLimitCombo) ?? "0",
+            SelectedTag(BackendCombo) ?? "d3d12");
     }
 
     private bool SaveConfiguration()

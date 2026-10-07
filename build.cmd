@@ -69,6 +69,14 @@ if not exist "%REXSDK%\lib\cmake\rexglue\rexglueConfig.cmake" (
     echo Error: ReXGlue SDK not found under %REXSDK% 1>&2
     exit /b 1
 )
+rem The codegen tool imports the official rexruntime.dll beside it; antivirus
+rem products have been seen to quarantine that one file.
+if not exist "%REXSDK%\bin\rexruntime.dll" (
+    echo Error: %REXSDK%\bin\rexruntime.dll is missing; codegen needs it. 1>&2
+    echo        If antivirus quarantined it, restore it or add an exception for 1>&2
+    echo        this folder, then delete out\tooling\rexglue-sdk-0.10.0 and rerun. 1>&2
+    exit /b 1
+)
 
 rem Argument parsing: -release / -r select the Release preset, -clean / -c
 rem wipes the build dir instead of building, the first non-flag argument is

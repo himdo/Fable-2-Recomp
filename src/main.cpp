@@ -57,6 +57,16 @@ REXCVAR_DEFINE_INT32(mouse_look_scale, 256, "Input",
                      "from fable2_config.toml [input] mouse_look_scale.")
     .range(1, 4096);
 
+// Xenos GPU backend inside the dual-backend rexgpu-xenos plugin. Read by name
+// in Fable2App::OnPreSetup; seeded from fable2_config.toml [graphics] backend.
+REXCVAR_DEFINE_STRING(
+    gpu_backend,
+    "d3d12",
+    "GPU",
+    "GPU backend: d3d12 or vulkan. Falls back to the other backend if the "
+    "chosen one cannot start. Default comes from fable2_config.toml "
+    "[graphics] backend.");
+
 // Key that toggles the debug menu (F4). While the menu is open the mouse lock
 // is released (free cursor); closing it re-locks. This key is excluded from
 // the gamepad map so it doesn't double as a button. Set empty to always lock
