@@ -115,76 +115,158 @@ inline bool safe_read(const void* p, void* dst, size_t n) {
   return true;
 }
 
+// Capture a thread's RIP/RSP + a stack sample. Must stay POD-only (no C++
+// objects requiring unwinding) so the SEH __try is legal. Reading the live
+// context without suspending: GetThreadContext works on user-mode running
+// threads (a slightly stale RIP is fine here), and suspending every thread
+// risks leaving one stuck if we fault midway.
+inline bool capture_thread(uint32_t tid, uintptr_t* rip, uintptr_t* rsp,
+                           void* st, size_t st_n,
+                           uintptr_t* rax = nullptr, uintptr_t* rcx = nullptr,
+                           uintptr_t* rdx = nullptr, uintptr_t* r8 = nullptr,
+                           uintptr_t* r9 = nullptr, uintptr_t* r10 = nullptr,
+                           uintptr_t* r11 = nullptr) {
+  *rip = 0;
+  *rsp = 0;
+  __try {
+    HANDLE th = OpenThread(THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION,
+                           FALSE, tid);
+    if (!th) return false;
+    CONTEXT c{};
+    c.ContextFlags = CONTEXT_FULL;
+    bool ok = false;
+    if (GetThreadContext(th, &c)) {
+      *rip = c.Rip;
+      *rsp = c.Rsp;
+      if (rax) *rax = c.Rax;
+      if (rcx) *rcx = c.Rcx;
+      if (rdx) *rdx = c.Rdx;
+      if (r8) *r8 = c.R8;
+      if (r9) *r9 = c.R9;
+      if (r10) *r10 = c.R10;
+      if (r11) *r11 = c.R11;
+      safe_read((const void*)c.Rsp, st, st_n);
+      ok = true;
+    }
+    CloseHandle(th);
+    return ok;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+
 inline void dump_threads(uint32_t render_tid) {
   const int64_t unix_ms = (int64_t)GetTickCount64();
   sline("# stall dump unix_ms=%lld render_tid=0x%08X", (long long)unix_ms,
         render_tid);
-  HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-  if (snap == INVALID_HANDLE_VALUE) return;
-  const uint32_t pid = GetCurrentProcessId();
-  THREADENTRY32 te{};
-  te.dwSize = sizeof(te);
-  if (Thread32First(snap, &te)) {
-    do {
-      if (te.th32OwnerProcessID != pid) continue;
-      uintptr_t rip = 0, rsp = 0;
-      uint8_t st[64] = {};
-      HANDLE th = OpenThread(THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME |
-                                 THREAD_QUERY_INFORMATION,
-                             FALSE, te.th32ThreadID);
-      if (th) {
-        SuspendThread(th);
-        CONTEXT c{};
-        c.ContextFlags = CONTEXT_FULL;
-        if (GetThreadContext(th, &c)) {
-          rip = c.Rip;
-          rsp = c.Rsp;
-          safe_read((const void*)rsp, st, sizeof(st));
-        }
-        ResumeThread(th);
-        CloseHandle(th);
-      }
-      // One line per thread; stack words as 64-bit hex for offline mapping.
-      FILE* f = slog();
-      if (!f) break;
-      fprintf(f, "tid=0x%08lX%s rsp=0x%012llX", (unsigned long)te.th32ThreadID,
-              te.th32ThreadID == render_tid ? " (RENDER)" : "",
-              (unsigned long long)rsp);
-      fmt_ip(f, "rip", rip);
-      fprintf(f, " stk:");
-      for (int i = 0; i < (int)sizeof(st); i += 8) {
-        uint64_t w;
-        std::memcpy(&w, st + i, 8);
-        fprintf(f, " %016llX", (unsigned long long)w);
-      }
-      std::fputc('\n', f);
-      std::fflush(f);
-    } while (Thread32Next(snap, &te));
+  // Log actual module bases so raw stack words resolve offline.
+  for (const ModuleRange& m : modules()) {
+    sline("# module %s base=0x%llX end=0x%llX", m.name.c_str(),
+          (unsigned long long)m.base, (unsigned long long)m.end);
   }
-  CloseHandle(snap);
+  // Retry the snapshot a few times: early in the run the process is still
+  // churning threads and a racy snapshot can enumerate only a few.
+  std::vector<THREADENTRY32> entries;
+  for (int attempt = 0; attempt < 4 && entries.size() < 4; ++attempt) {
+    entries.clear();
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snap == INVALID_HANDLE_VALUE) return;
+    const uint32_t pid = GetCurrentProcessId();
+    THREADENTRY32 te{};
+    te.dwSize = sizeof(te);
+    bool first = true;
+    while (first ? Thread32First(snap, &te) : Thread32Next(snap, &te)) {
+      first = false;
+      if (te.th32OwnerProcessID != pid) continue;
+      entries.push_back(te);
+    }
+    CloseHandle(snap);
+  }
+  int shown = 0;
+  for (const THREADENTRY32& te : entries) {
+    uintptr_t rip = 0, rsp = 0;
+    uintptr_t rax = 0, rcx = 0, rdx = 0, r8 = 0, r9 = 0, r10 = 0, r11 = 0;
+    const bool is_render = (te.th32ThreadID == render_tid);
+    uint8_t st[256] = {};
+    // Capture the full general-register set for EVERY thread: while blocked in
+    // NtDelayExecution, r8 holds the host sleep duration in 100ns units
+    // (negative = relative). The render thread (guest code in its stack) is
+    // identified post-hoc among the NtDelayExecution waiters.
+    capture_thread(te.th32ThreadID, &rip, &rsp, st, sizeof(st), &rax, &rcx,
+                   &rdx, &r8, &r9, &r10, &r11);
+    // One line per thread; stack words as 64-bit hex for offline mapping.
+    FILE* f = slog();
+    if (!f) break;
+    fprintf(f, "tid=0x%08lX%s rsp=0x%012llX", (unsigned long)te.th32ThreadID,
+            is_render ? " (RENDER)" : "",
+            (unsigned long long)rsp);
+    fmt_ip(f, "rip", rip);
+    fprintf(f,
+            " rax=0x%016llX rcx=0x%016llX rdx=0x%016llX r8=0x%016llX "
+            "r9=0x%016llX r10=0x%016llX r11=0x%016llX",
+            (unsigned long long)rax, (unsigned long long)rcx,
+            (unsigned long long)rdx, (unsigned long long)r8,
+            (unsigned long long)r9, (unsigned long long)r10,
+            (unsigned long long)r11);
+    fprintf(f, " stk:");
+    for (int i = 0; i < (int)sizeof(st); i += 8) {
+      uint64_t w;
+      std::memcpy(&w, st + i, 8);
+      // Resolve to module+offset when it lands in a known image.
+      bool hit = false;
+      for (const ModuleRange& m : modules()) {
+        if (w >= m.base && w < m.end) {
+          fprintf(f, " +%08llX(%s)", (unsigned long long)(w - m.base),
+                  m.name.c_str());
+          hit = true;
+          break;
+        }
+      }
+      if (!hit) fprintf(f, " %016llX", (unsigned long long)w);
+    }
+    std::fputc('\n', f);
+    std::fflush(f);
+    ++shown;
+  }
+  sline("# dump done threads=%d", shown);
 }
 
 inline void loop() {
   Sleep(3000);
   sline("== stall dumper thread alive");
-  int64_t last_dump_us = 0;
+  // Use GetTickCount64 (not the UI probe clock) for the wall-clock samples so
+  // the sampler fires even when the UI input probe is not enabled.
+  const int64_t start_ms = (int64_t)GetTickCount64();
+  int64_t last_dump_ms = 0;
   int dumps = 0;
   while (dumps < 40) {
     Sleep(1000);
     const int64_t last =
         fable2::uip::last_hook_us().load(std::memory_order_relaxed);
-    if (last == 0) continue;
-    const int64_t now = fable2::uip::now_us();
-    const int64_t silence_ms = (now - last) / 1000;
-    if (silence_ms < 4000) continue;
-    if (silence_ms > 300000) continue;  // only interesting early in the run
-    if (now - last_dump_us < 5000000) continue;
-    last_dump_us = now;
+    const int64_t now_ms = (int64_t)GetTickCount64();
+    const int64_t up_ms = now_ms - start_ms;
+    bool want = false;
+    const char* why = nullptr;
+    if (last != 0) {
+      const int64_t last_hook_ms = last / 1000;
+      const int64_t silence_ms = now_ms - last_hook_ms;
+      if (silence_ms >= 4000 && silence_ms <= 300000) {
+        want = true;
+        why = "hook silence";
+      }
+    }
+    // Always wall-clock-sample during the early window too: the hooked
+    // pipeline may keep firing while the render path is still frozen.
+    if (!want && up_ms >= 6000 && up_ms <= 150000) {
+      want = true;
+      why = "wall-clock sample";
+    }
+    if (!want) continue;
+    if (now_ms - last_dump_ms < 5000) continue;
+    last_dump_ms = now_ms;
     ++dumps;
-    const uint32_t tid =
-        fable2::uip::last_hook_tid().load(std::memory_order_relaxed);
-    sline("== STALL: %lld ms since last hook call", (long long)silence_ms);
-    dump_threads(tid);
+    sline("== STALL[%s] up=%lld ms", why, (long long)up_ms);
+    dump_threads(fable2::uip::last_hook_tid().load(std::memory_order_relaxed));
   }
 }
 

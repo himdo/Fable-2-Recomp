@@ -41,6 +41,13 @@
 //   0x8224270C  call sub_82B9BEC8(r1+80), then the epilogue at 0x82242714.
 #include "fable_2_pch.h"
 
+// DIAGNOSTIC includes (frame-limiter wait probe).
+#include <cstdio>
+#include <cstdlib>
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 extern "C" void FastHelper_821E8D20(PPCContext& ctx, uint8_t* base);
 extern "C" void GpuProgressCheck_82B9BF90(PPCContext& ctx, uint8_t* base);
 extern "C" void __restgprlr_29(PPCContext& ctx, uint8_t* base);
@@ -155,6 +162,61 @@ void Epilogue(PPCContext& ctx, uint8_t* base) {
   __restgprlr_29(ctx, base);
 }
 
+// ---- DIAGNOSTIC: frame-limiter wait probe ---------------------------------
+// Logs the wait-loop state (GPU progress counter vs the timebase) so we can
+// see whether the guest is stuck because the counter is frozen (host GPU) or
+// advancing too slowly (guest pacing). Register-only + the same guest reads the
+// readiness test performs (so no new fault surface), rate-capped and buffered
+// so it does not disturb the render thread. Disable with FABLE2_FLIMIT=0.
+bool flimit_enabled() {
+  static const bool on = [] {
+    const char* v = std::getenv("FABLE2_FLIMIT");
+    return v == nullptr || v[0] != '0';
+  }();
+  return on;
+}
+FILE* flimit_log() {
+  static FILE* f = [] {
+    FILE* out = nullptr;
+#ifdef _WIN32
+    if (::fopen_s(&out, "fable2_framelimit.log", "w") != 0) out = nullptr;
+#else
+    out = std::fopen("fable2_framelimit.log", "w");
+#endif
+    if (out) {
+      static char buf[1 << 16];
+      std::setvbuf(out, buf, _IOFBF, sizeof(buf));
+    }
+    return out;
+  }();
+  return f;
+}
+// counter value behind the GPU progress counter pointer (same reads the guest
+// does in ReadinessR9R11: *(limit+10896) -> *that).
+void flimit_log_state(PPCContext& ctx, uint8_t* base, uint32_t iter) {
+  if (!flimit_enabled()) return;
+  static thread_local int64_t last_ms = 0;
+#ifdef _WIN32
+  const int64_t now_ms = (int64_t)GetTickCount64();
+#else
+  const int64_t now_ms = 0;
+#endif
+  if (now_ms - last_ms < 100) return;
+  last_ms = now_ms;
+  FILE* f = flimit_log();
+  if (!f) return;
+  const uint32_t limit = ctx.r31.u32;
+  const uint32_t cp = REX_LOAD_U32(limit + kCounterPtrOffset);
+  const uint32_t counter = cp ? REX_LOAD_U32(cp) : 0;
+  const uint32_t deadline = REX_LOAD_U32(limit + kDeadlineOffset);
+  const uint32_t now = ctx.r30.u32;
+  fprintf(f, "t=%llums iter=%u now=%08X counter=%08X (ptr=%08X) "
+             "deadline=%08X now-counter=%08X cr6lt=%d\n",
+          (long long)now_ms, iter, now, counter, cp, deadline, now - counter,
+          (int)ctx.cr6.lt);
+  fflush(f);
+}
+
 }  // namespace
 
 extern "C" void FrameLimiterWait_82242628(PPCContext& __restrict ctx, uint8_t* base) {
@@ -188,7 +250,10 @@ extern "C" void FrameLimiterWait_82242628(PPCContext& __restrict ctx, uint8_t* b
   // sub_82B9BEC8. The loop leaves on GpuProgressCheck == 0 (beq 0x8224270C)
   // or once the counter reaches the deadline (blt cr6,0x822426E0 not taken).
   BuildArgBlock(ctx, base);
+  uint32_t probe_iter = 0;
   while (ctx.cr6.lt != 0) {
+    flimit_log_state(ctx, base, probe_iter);  // DIAGNOSTIC (rate-capped, reads only)
+    ++probe_iter;
     ctx.r3.s64 = ctx.r1.s64 + kArgBlock;
     ctx.lr = kRetProgressCheck;
     GpuProgressCheck_82B9BF90(ctx, base);

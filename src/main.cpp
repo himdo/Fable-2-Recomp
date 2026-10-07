@@ -18,6 +18,7 @@
 #include "fable2_modmenu.h"  // 6th "MOD OPTION" selectable main-menu item
 #include "fable2_av_probe.h"  // self-installs a guest-PC AV logger (VEH)
 #include "fable2_stall_dump.h"  // self-installs a render-stall thread dumper
+#include "fable2_white_icon.h"  // self-installs the A-button white-square override
 // #include "fable2_ui_render_probe.h"
 #include "keyboard_gamepad.h"
 

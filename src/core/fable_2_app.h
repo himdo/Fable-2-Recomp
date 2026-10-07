@@ -36,6 +36,7 @@
 // Re-enable to re-measure the frame pacing:
 // #include "fps_probe.h"
 #include "keyboard_gamepad.h"
+#include "fable2_frame_capture.h"
 #ifdef FABLE2_REMOTE_CONTROL
 #include "remote_control_server.h"
 #include "remote_gamepad_driver.h"
@@ -138,6 +139,27 @@ class Fable2App : public rex::ReXApp {
 
   void OnPostSetup() override {
     fable2::branding::Apply(window());
+    // Self-triggering screenshot probe (FABLE2_SHOTS=1): read the guest output
+    // frame back to PNGs every few seconds so the render state can be inspected
+    // visually, without the debug-only remote control server. Captures `this`
+    // (the app lives for the process lifetime); the presenter is queried at
+    // capture time (it may not exist yet at setup). GPU readback is one-shot and
+    // sparse, so it does not meaningfully perturb the render loop.
+    if (const char* _sh = std::getenv("FABLE2_SHOTS"); _sh && _sh[0] != '0') {
+      std::thread([this]() {
+        const auto t0 = std::chrono::steady_clock::now();
+        for (int n = 0; n < 48; ++n) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+          rex::ui::Presenter* pres = GetWindowPresenter(window());
+          if (!pres) continue;
+          const int el = (int)std::chrono::duration_cast<std::chrono::seconds>(
+              std::chrono::steady_clock::now() - t0).count();
+          const std::string path = std::format("shot_{:03d}_t{:03d}.png", n, el);
+          fable2::framecapture::CaptureGuestOutputToPng(pres, path);
+          REXSYS_INFO("[fable2-shots] wrote {} (t={}s)", path, el);
+        }
+      }).detach();
+    }
     // Hero/dog black-texture fix (see plans/hero-dog-texture-readback.md).
     // Approach + guest base 0x12704000 credit just-harry's Unofficial Xenia
     // femtofork for Fable II. readback_resolve_force_addresses is defined in the
