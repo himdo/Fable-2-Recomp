@@ -126,6 +126,22 @@ name = "fable2_hook_ce_grantavail"
 registers = ["r3"]
 after_instruction = true
 
+# Address-space scan fix (src/core/fable2_address_scan.cpp). sub_82B4DDD8
+# finds an aligned block of address space by reserving one candidate address
+# after another (step r28, size r26, limit r27, candidate r31); each taken
+# candidate was a failed NtAllocateVirtualMemory call and an "[error]
+# BaseHeap::AllocFixed attempting to reserve an already reserved range" line
+# (~3,850 at startup). The hook runs at the loop head, before each attempt,
+# and moves r31 to the first candidate whose range is actually free, so the
+# game gets the same address without the failed calls. It returns true only
+# when no candidate is left, jumping to the function's own "nothing found"
+# exit (li r3, 0).
+[[entrypoint.midasm_hook]]
+address = 0x82B4DE50
+name = "fable2_hook_address_scan_skip"
+registers = ["r26", "r27", "r28", "r31"]
+jump_address_on_true = 0x82B4DEF8
+
 # Skip Intro Videos (just-harry's "Skip intro videos" patch from his
 # Unofficial Xenia femtofork, as a hook). sub_822F4958 builds the boot video
 # queue: slot 0 = microsoft_logo.bik, slot 1 = lionhead_logo.bik, slot 2 =
