@@ -90,6 +90,18 @@ Credit for the original approach/address goes to just-harry's Unofficial Xenia
 femtofork, with the ReXGlue implementation maintained upstream. Explicit
 readback configuration still takes precedence over the application's default.
 
+The SDK's D3D12 renderer dropped draws while their pipeline was still being
+created in the background (`async_shader_compilation`, on by default). A
+dropped draw leaves its object missing for that frame, and when the dropped
+pass renders into a texture, everything sampling that texture shows stale or
+uninitialized data: noise bands, colored streaks and short bursts of
+corruption, mostly when new effects or areas first appear. The fix is made in
+rexglue-sdk itself (himdo/rexglue-sdk, not a patch here): draws wait for their
+pipeline instead, with the waiting thread helping to create queued pipelines.
+Async compilation stays on; only the first use of a pipeline can stall.
+`async_pipeline_wait = false` in the SDK config restores the old skipping, and
+`async_pipeline_wait_timeout_ms` (default 5000) bounds a single wait.
+
 ## Validation and remaining limits
 
 Both unchanged USA/EU and German GOTY images started with the same native EXE.
