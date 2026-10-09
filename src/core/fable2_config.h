@@ -79,6 +79,13 @@ struct Values {
   // Fable2App; readback then happens only for that resolve, not every frame.
   // Superseded by realtime_texture_morphing (only takes effect with that off).
   bool hero_dog_texture_readback = false;
+  // Give the dog's shell-fur layers (pixel shader 014F8A02DB7B19CA) a small
+  // extra depth bias so they don't Z-fight with the body and with each other.
+  // The fur relies on exact depth ties in the Xbox 360's 24-bit float depth
+  // buffer (greater-or-equal test); the host's 32-bit depth breaks those ties
+  // at random, which shows as flickering patches on the dog. Seeds the SDK
+  // cvars depth_bias_shader(_units) in Fable2App. false = no bias.
+  bool dog_fur_depth_bias = true;
   // [perf] - hot-function override tuning.
   // hotfunc_yield_every: NtYieldExecution batching factor for the hotfunc
   // overrides (see src/core/hotfunc/hotfunc_yield.h). Every Nth call does

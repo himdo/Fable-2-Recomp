@@ -103,6 +103,16 @@ realtime_texture_morphing = true
 # Default: false
 hero_dog_texture_readback = false
 
+# Dog Fur Depth Bias: the dog's fur is drawn as 15 thin layers over its body
+# that rely on exact depth ties in the Xbox 360's 24-bit depth buffer. The PC's
+# 32-bit depth breaks those ties at random, which shows as flickering, blocky
+# patches on the dog (worse at higher internal resolutions). This gives the fur
+# draws (pixel shader 014F8A02DB7B19CA) a small depth bias so the ties pass as
+# on the console. Seeds the SDK cvars depth_bias_shader(_units).
+# false = no bias (flickering patches).
+# Default: true
+dog_fur_depth_bias = true
+
 [perf]
 # NtYieldExecution batching for the hot-function overrides (see
 # src/core/hotfunc/hotfunc_yield.h): every Nth guest yield does the real

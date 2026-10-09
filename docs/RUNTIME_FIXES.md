@@ -90,6 +90,37 @@ Credit for the original approach/address goes to just-harry's Unofficial Xenia
 femtofork, with the ReXGlue implementation maintained upstream. Explicit
 readback configuration still takes precedence over the application's default.
 
+The SDK's D3D12 renderer dropped draws while their pipeline was still being
+created in the background (`async_shader_compilation`, on by default). A
+dropped draw leaves its object missing for that frame, and when the dropped
+pass renders into a texture, everything sampling that texture shows stale or
+uninitialized data: noise bands, colored streaks and short bursts of
+corruption, mostly when new effects or areas first appear. The fix is made in
+rexglue-sdk itself (himdo/rexglue-sdk, not a patch here): draws wait for their
+pipeline instead, with the waiting thread helping to create queued pipelines.
+Async compilation stays on; only the first use of a pipeline can stall.
+`async_pipeline_wait = false` in the SDK config restores the old skipping, and
+`async_pipeline_wait_timeout_ms` (default 5000) bounds a single wait.
+
+The dog's fur flickers because of depth ties. The fix is made in rexglue-sdk
+itself (himdo/rexglue-sdk, not a patch here): the SDK cvars
+`depth_bias_shader` (a guest pixel shader hash) and `depth_bias_shader_units`
+add an extra host depth bias for draws that use that shader. Fable II draws the
+dog's fur as 15 thin shell layers over the body with pixel shader
+`014F8A02DB7B19CA`, a greater-or-equal depth test and no polygon offset. The
+layers sit about 0.001 units apart and rely on exact ties in the Xbox 360's
+24-bit floating-point depth buffer. The host stores 32-bit depth, so the same
+layers land a hair in front or behind depending on rounding, and about half of
+them fail: flickering, blocky patches on the dog that get worse at higher
+internal resolutions. A bias of 16 units (about two 24-bit depth steps) turns
+the near-ties back into passes; in testing it removed the dog's flickering at
+1x, 1440p and 4K, and 64 looked the same as 16. `[patches] dog_fur_depth_bias` in
+`fable2_config.toml` (default `true`) seeds the cvars in the app; an explicit
+`depth_bias_shader` in the SDK config takes precedence. The SDK's
+general exact-24-bit mode (`depth_float24_convert_in_pixel_shader`) also
+addresses this but breaks other rendering in this game. The bias applies to
+the host render-target path only, not ROV.
+
 ## Validation and remaining limits
 
 Both unchanged USA/EU and German GOTY images started with the same native EXE.
