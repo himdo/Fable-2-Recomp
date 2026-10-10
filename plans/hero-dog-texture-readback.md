@@ -1,6 +1,10 @@
 # Hero / Dog black-texture fix (targeted readback-resolve)
 
-**STATUS: IMPLEMENTED + VERIFIED (Phase 0 — done).**
+**STATUS: REMOVED.** Superseded by `hero-dog-realtime-texture-morphing.md`; the
+`hero_dog_texture_readback` option and its `OnPostSetup` seeding are gone. Kept
+as history.
+
+**Earlier status: IMPLEMENTED + VERIFIED (Phase 0 — done).**
 
 Implementation is complete and the Release build is green; both the staged
 `rexgpu-xenos.dll` (cvar + gated readback + diagnostic log) and `fable_2.exe`

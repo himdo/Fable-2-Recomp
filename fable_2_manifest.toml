@@ -174,7 +174,7 @@ after_instruction = true
 # GPU, so the CPU never reads the result. Every morph request becomes a morph
 # job in sub_82A76018, which copies the request's realtime byte with
 # `lbz r9, 0x20(r30)` at 0x82A7607C (then `stb r9, 0x60(r31)`); force it to 1.
-# Toggle: [patches] realtime_texture_morphing.
+# Always on (no config toggle).
 [[entrypoint.midasm_hook]]
 address = 0x82A7607C
 name = "fable2_hook_realtime_texture_morphing"

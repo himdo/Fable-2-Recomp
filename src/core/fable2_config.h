@@ -72,21 +72,6 @@ struct Values {
   // camera passes to the renderer (hook fable2_hook_disable_motion_blur in
   // src/core/fable2_hooks.cpp). false = original.
   bool disable_motion_blur = false;
-  // [patches] realtime_texture_morphing: build the hero/dog morphed skin
-  // textures on the GPU (the game's own RealTimeTextureMorphing mode) instead
-  // of CPU-compressing a resolved scratch texture, so they are not black on a
-  // split-memory host (hook fable2_hook_realtime_texture_morphing in
-  // src/core/fable2_hooks.cpp; plans/hero-dog-realtime-texture-morphing.md).
-  // Replaces hero_dog_texture_readback. false = original.
-  bool realtime_texture_morphing = true;
-  // Force a CPU readback of the render-to-texture resolve that (re)generates
-  // the hero/dog face+skin texture, so the character does not render black on
-  // a split-memory host (see plans/hero-dog-texture-readback.md). Approach + the
-  // guest base 0x12704000 come from just-harry's Unofficial Xenia femtofork for
-  // Fable II. This seeds the SDK cvar readback_resolve_force_addresses in
-  // Fable2App; readback then happens only for that resolve, not every frame.
-  // Superseded by realtime_texture_morphing (only takes effect with that off).
-  bool hero_dog_texture_readback = false;
   // [perf] - hot-function override tuning.
   // hotfunc_yield_every: NtYieldExecution batching factor for the hotfunc
   // overrides (see src/core/hotfunc/hotfunc_yield.h). Every Nth call does

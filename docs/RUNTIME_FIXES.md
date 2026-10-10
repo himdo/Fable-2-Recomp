@@ -85,10 +85,12 @@ fallback, and does not change the guest clock or advertised video mode.
 F3 counts guest swaps in Release, averaged over a short window and including
 stalls; it does not count monitor refreshes or establish unique rendered frames.
 
-Hero/dog resolve readback is the upstream fix, not a new implementation here.
-Credit for the original approach/address goes to just-harry's Unofficial Xenia
-femtofork, with the ReXGlue implementation maintained upstream. Explicit
-readback configuration still takes precedence over the application's default.
+Black hero/dog textures are fixed by always forcing the game's own
+RealTimeTextureMorphing mode (hook fable2_hook_realtime_texture_morphing; see
+plans/hero-dog-realtime-texture-morphing.md), so the CPU never reads the morph
+result back. The earlier targeted resolve readback (credit: just-harry's
+Unofficial Xenia femtofork) and its `hero_dog_texture_readback` option were
+removed.
 
 ## Validation and remaining limits
 
