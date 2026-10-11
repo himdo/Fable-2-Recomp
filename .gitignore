@@ -71,3 +71,10 @@ thirdparty/android-ndk/
 # --- Historical reference (pre-ReXGlue XenonRecomp configs) -------------------
 XenonRecomp
 TODO.md
+
+# --- graphify: share only the graph and its report ---------------------------
+# Everything else in graphify-out/ is local (AST cache, dated snapshots, HTML
+# view, interpreter/root paths) and is rewritten by the post-commit hook.
+graphify-out/*
+!graphify-out/graph.json
+!graphify-out/GRAPH_REPORT.md
