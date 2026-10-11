@@ -518,11 +518,12 @@ brew install cmake ninja      # clang comes with the Xcode command line tools
 cp /path/to/default.xex .     # codegen input, as on Windows
 ./build.sh -release fable_2
 tools/stage_content.sh <content root> out/build/mac-arm64-release
-out/build/mac-arm64-release/fable_2 --fullscreen=false
+out/build/mac-arm64-release/fable_2
 ```
 
-Use windowed mode for now: in fullscreen the window shows only black on macOS
-(the game itself runs; reaches the title screen windowed).
+Fullscreen uses SDL's non-Spaces mode on macOS (native Spaces fullscreen
+presented only black); set `SDL_VIDEO_MAC_FULLSCREEN_SPACES=1` to force the
+native one, or pass `--fullscreen=false` for a window.
 
 Not available on macOS yet: the WPF launcher (edit `fable2_config.toml` and
 `fable_2.toml` next to the binary), keyboard/mouse-to-gamepad input (a

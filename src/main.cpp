@@ -99,4 +99,16 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 #endif
 
+#ifdef __APPLE__
+#include <cstdlib>
+// macOS: native fullscreen moves the window to its own Space and the
+// re-created swapchain presents only black (the game keeps running). SDL's
+// non-Spaces fullscreen covers the screen without that transition and renders
+// fine. Set before main() so the hint is in place when the runtime opens the
+// SDL window; an explicit SDL_VIDEO_MAC_FULLSCREEN_SPACES in the environment
+// still wins (overwrite = 0).
+static const int kMacFullscreenWithoutSpaces =
+    setenv("SDL_VIDEO_MAC_FULLSCREEN_SPACES", "0", 0);
+#endif
+
 REX_DEFINE_APP(fable_2, Fable2App::Create)
