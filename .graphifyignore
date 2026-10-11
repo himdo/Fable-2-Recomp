@@ -1,0 +1,33 @@
+node_modules/
+.next/
+dist/
+build/
+out/
+.venv/
+generated/
+
+# Vendored third-party code (headers/libs, not ours)
+thirdparty/vulkan/
+thirdparty/vk_video/
+thirdparty/tomlplusplus/
+thirdparty/rexglue-sdk/
+thirdparty/rexglue-sdk-src/
+thirdparty/android-ndk/
+thirdparty/*.bak
+
+# Heavy assets / raw dumps
+assets/*.ico
+assets/*.png
+docs/screenshots/
+docs/analysis/scan_branch_targets.txt
+# Generated 182k-word Lua API catalog; would swamp the graph
+FABLE2_LUA_API.md
+
+# Agent tooling config
+.claude/
+CLAUDE.md
+
+# Ripped game content
+data/
+nxeart/
+Gamefiles/
