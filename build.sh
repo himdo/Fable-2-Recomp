@@ -69,10 +69,17 @@ if [ ! -f generated/rexglue.cmake ]; then
   "$REXSDK/bin/rexglue" codegen fable_2_manifest.toml
 fi
 
-# ponytail: links the official SDK runtime as-is. The Windows build swaps in a
-# runtime built from thirdparty/rexglue-sdk with the project's fixes
-# (tools/build_runtime_sdk.cmd); add that here once the game boots on this host.
+# Link the runtime built from the SDK fork with the project's fixes when
+# tools/build_runtime_sdk.sh has staged it; else the official runtime as-is.
+# Codegen keeps running the official tool against its own runtime.
+# ponytail: not rebuilt automatically (unlike build.cmd); rerun the script
+# after changing the fork or its patches.
+CODEGEN_TOOL="$REXSDK/bin/rexglue"
+if [ -f "out/tooling/runtime-sdk/$PLATFORM/lib/cmake/rexglue/rexglueConfig.cmake" ]; then
+  REXSDK="$PWD/out/tooling/runtime-sdk/$PLATFORM"
+fi
 cmake --preset "$CONFIG" \
+  -DFABLE2_CODEGEN_TOOL="$CODEGEN_TOOL" \
   -DCMAKE_PREFIX_PATH="$REXSDK" \
   -Drexglue_DIR="$REXSDK/lib/cmake/rexglue" \
   -DREXGLUE_SDK_ROOT="$REXSDK"

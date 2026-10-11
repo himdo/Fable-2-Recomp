@@ -172,6 +172,68 @@ Aunque se arregle, el Vulkan de Windows también tiene "muchos artefactos" (comm
   teclado. **Sin verificar:** la cámara con ratón en partida. Windows sigue con `GetAsyncKeyState` sin cambios.
   Para probar con teclas automáticas hace falta permiso de Accesibilidad para el terminal (`osascript` + System Events).
 - El launcher WPF no existe en Mac (editar `fable2_config.toml` / `fable_2.toml` a mano).
+- La cámara con ratón en partida **verificada** por el usuario ("gira bien").
+- En el menú principal la **flecha abajo (cruceta) no mueve el cursor**, pero **S (stick abajo) sí**. El SDK
+  traduce bien `SDL_SCANCODE_DOWN` a `kDown` y ImGui no marca el evento como gestionado. Sospecha: el script
+  de prueba. `key down (key code 125)` de AppleScript ejecuta `key code`, que es una pulsación instantánea,
+  y el juego, que muestrea por frame, no la ve. Pendiente: que el usuario lo pruebe a mano.
+
+## Fallos gráficos en partida (abierto)
+
+El usuario ve "fallos gráficos graves" en partida. En las capturas de la escena de referencia (Bowerstone, muralla
+con brasero, diálogo de Rose "Piensa en ese comedor…", unos 160 s tras arrancar con el script de abajo) casi todo
+se dibuja bien. Lo sospechoso: el suelo nevado del camino es un plano blanco liso sin textura ni sombreado;
+el cielo a veces sale como una franja plana; hay manchas azules con bordes dentados en las ventanas (quizá sea nieve
+en los alféizares). Falta que el usuario concrete qué ve (parpadeos, triángulos, colores…).
+
+Pruebas A/B en esa escena, todas **sin cambios** respecto a la referencia: `--gpu_allow_invalid_fetch_constants=true`,
+`--render_target_path_vulkan=fbo`, y las tres `--vulkan_force_*` (quads, rectángulos y point sprites) juntas.
+
+El usuario confirma (2026-10-12): lo que se ve en las capturas es lo que hay, **rendimiento pésimo** y fallos
+graves por todas partes.
+
+**Pista fuerte:** cada ejecución escribe ~30 000–180 000 veces `[mvk-warn] Metal does not support disabling
+primitive restart`. MoltenVK (`MVKPipeline.mm`) solo lo emite **al crear un pipeline** con topología strip/fan,
+y de las cuatro llamadas a `vkCreateGraphicsPipelines` del backend solo los pipelines Xenos
+(`pipeline_cache.cpp`, ~l. 3488) usan strips/fans. La caché en disco
+(`cache/shaders/shareable/4D5307F1.*.vk.xpso`) solo tiene ~12 KB, así que **se crean pipelines sin parar** en
+vez de reutilizarlos. Eso basta para hundir el rendimiento (creación de pipelines en el hilo de la GPU) y
+puede explicar los fallos (draws con un pipeline provisional o sin pipeline).
+
+**Causa encontrada y arreglada:** no eran los pipelines Xenos. En `vulkan_presenter.cpp` (pintado de la salida
+del guest sobre el swapchain, topología `TRIANGLE_STRIP`) nunca se asignaba
+`swapchain_effect_pipeline.swapchain_format`. En **cada frame** el formato "no coincidía": esperaba a que la
+GPU terminara (`AwaitSubmissionCompletion`), destruía el pipeline y lo recreaba. Medido en la pantalla de
+título: ~115 creaciones/s con el runtime oficial y **1 en total** con el arreglo. En la escena de referencia
+el suelo ya tiene textura, la iluminación es correcta y el juego avanza bastante más rápido (con el mismo guion
+de teclas, a los 165 s ya ha pasado el diálogo de Rose). El bug está en el fork y casi seguro también en el
+0.10.0 oficial (mismo síntoma), así que afecta igual a Vulkan en Windows. Merece reportarse upstream (pendiente
+de que el usuario lo autorice).
+
+Lo que queda visible: finas líneas claras en las aristas de algunas mallas (piedras, espada) y un halo morado
+alrededor de algún personaje (puede ser del juego). Aún sin medir FPS (F3).
+
+`thirdparty/rexglue-sdk-fork-fixes.patch` (lo aplica `prepare_runtime_sdk.py` en Windows y en Mac):
+1. el arreglo del presentador;
+2. `presenter.h`: el fork dejó los contadores del pacer dentro de `#if REX_PLATFORM_WIN32`, lo que rompía la
+   compilación fuera de Windows;
+3. `src/system/CMakeLists.txt`: `-Xlinker /DEF:` solo en WIN32 (en Mach-O se exporta con visibilidad
+   por defecto).
+`build.sh` usa `out/tooling/runtime-sdk/<plataforma>` si existe y pasa `FABLE2_CODEGEN_TOOL` al `rexglue`
+oficial, porque el `rexglue` de la copia carga el runtime nuevo y revienta con *Bus error*.
+
+Runtime desde fuente: `tools/build_runtime_sdk.sh` (equivalente de `build_runtime_sdk.cmd`; Vulkan ON,
+Tracy OFF) más `stage_renderer_sdk.py --platform mac-arm64`, que lo instala sobre una copia del SDK oficial
+en `out/tooling/runtime-sdk/mac-arm64`. El fuente y la compilación van en un sparsebundle APFS case-sensitive
+del disco externo (`/Volumes/EXT/fable2/fable2build.sparsebundle`, montado en `/Volumes/fable2build`;
+se monta con `hdiutil attach`), porque EXT es exFAT: sin enlaces simbólicos y lleno de `._*`.
+`rexglue-sdk-local.patch` solo trae arreglos para NVIDIA Optimus y diagnóstico de Windows, nada de Mac.
+
+Herramienta de prueba (scratchpad de la sesión, no está en el repo): `scene.sh <nombre> "<t:acción ...>" [args]`
+arranca el juego, envía teclas (`e`=E/A, `s`=S/stick abajo, `d`=flecha abajo) y captura la ventana (`c`) con
+`screencapture -l` + JXA `CGWindowListCopyWindowInfo`. Secuencia hasta la escena: `25:e 37:s 40:e 160:c`
+(título → menú → Continuar → carga). Necesita `skip_intro_videos = true` en el `fable2_config.toml` del build
+(ya cambiado) y permisos de Grabación de pantalla y Accesibilidad. Copia de las partidas guardadas en el scratchpad.
 
 ## Otros trabajos de esta sesión
 

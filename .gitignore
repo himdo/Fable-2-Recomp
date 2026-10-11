@@ -60,6 +60,7 @@ __pycache__/
 !build.sh
 !tools/setup_sdk.sh
 !tools/stage_content.sh
+!tools/build_runtime_sdk.sh
 !docs/screenshots/launcher.png
 
 # --- Fetched/external toolchain deps (created by tools/setup_sdk*.cmd). -------

@@ -505,17 +505,21 @@ The build also accepts explicit overrides if you keep the SDK elsewhere:
 - Codegen runs as part of the build and re-runs automatically when `fable_2_manifest.toml` or `default.xex` change (tracked via the generated DEPFILE).
 - A full clean build recompiles ~291 generated translation units (60,462 guest functions).
 
-### macOS (experimental, untested in game)
+### macOS (experimental)
 
 `build.sh` is the macOS/Linux counterpart of `build.cmd` (Apple Silicon:
 `mac-arm64-*` presets). It fetches the official ReXGlue SDK v0.10.0 for the
 host (`tools/setup_sdk.sh`; it bundles MoltenVK, so rendering is Vulkan on
-Metal) and links it as-is: the patched source runtime that Windows builds is
-not wired up yet.
+Metal). Build the runtime from the SDK fork first, as Windows does: the
+official 0.10.0 runtime recreates the swapchain paint pipeline after a full GPU
+wait on every frame (fixed by `thirdparty/rexglue-sdk-fork-fixes.patch`).
+`build.sh` links that runtime whenever it is staged, and keeps the official
+tool for codegen.
 
 ```
 brew install cmake ninja      # clang comes with the Xcode command line tools
 cp /path/to/default.xex .     # codegen input, as on Windows
+tools/build_runtime_sdk.sh    # SDK fork + patches -> out/tooling/runtime-sdk/
 ./build.sh -release fable_2
 tools/stage_content.sh <content root> out/build/mac-arm64-release
 out/build/mac-arm64-release/fable_2
@@ -525,9 +529,13 @@ Fullscreen uses SDL's non-Spaces mode on macOS (native Spaces fullscreen
 presented only black); set `SDL_VIDEO_MAC_FULLSCREEN_SPACES=1` to force the
 native one, or pass `--fullscreen=false` for a window.
 
+The SDK checkout and its build take several GB. To keep them elsewhere, set
+`REXGLUE_SDK_SOURCE` (an SDK fork checkout) and `RUNTIME_SDK_BUILD`; the volume
+must be case-sensitive and support symlinks (an APFS disk image works on an
+exFAT drive).
+
 Not available on macOS yet: the WPF launcher (edit `fable2_config.toml` and
-`fable_2.toml` next to the binary), keyboard/mouse-to-gamepad input (a
-physical controller should work through the SDK's SDL driver), and the Windows-only diagnostics
+`fable_2.toml` next to the binary) and the Windows-only diagnostics
 (AV/stall/heap probes).
 
 ## Vulkan renderer
