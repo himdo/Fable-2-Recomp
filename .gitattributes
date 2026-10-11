@@ -1,3 +1,5 @@
 # Unified-diff context lines representing blank source lines contain one space.
 thirdparty/rexglue-sdk-runtime-fixes.patch text eol=lf whitespace=-blank-at-eol
 thirdparty/rexglue-sdk-debug-exports.patch text eol=lf whitespace=-blank-at-eol
+# Shell scripts must keep LF or they fail to run on macOS/Linux.
+*.sh text eol=lf

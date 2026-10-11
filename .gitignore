@@ -1,9 +1,10 @@
 # --- Game content (ripped disc; see README "How to extract") ---------------
 default.xex
 /data/
-/nxeart/
+/nxeart
 /$SystemUpdate/
 /Gamefiles/
+*.iso
 
 # --- Build artifacts --------------------------------------------------------
 out
@@ -55,6 +56,10 @@ __pycache__/
 !tools/stage_renderer_sdk.py
 !tools/create_app_icon.ps1
 !assets/app-icon.png
+# macOS/Linux build entry points (counterparts of build.cmd / tools/*.cmd).
+!build.sh
+!tools/setup_sdk.sh
+!tools/stage_content.sh
 !docs/screenshots/launcher.png
 
 # --- Fetched/external toolchain deps (created by tools/setup_sdk*.cmd). -------

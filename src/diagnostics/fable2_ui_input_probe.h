@@ -452,13 +452,19 @@ inline bool gread(const uint8_t* /*base*/, uint32_t addr, void* dst, size_t n) {
   // Reject protections that fault on read (NOACCESS, guard pages).
   if (mbi.Protect == PAGE_NOACCESS) return false;
   if (mbi.Protect & PAGE_GUARD) return false;
-#endif
   __try {
     std::memcpy(dst, h, n);
     return true;
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     return false;
   }
+#else
+  // No page query or SEH off Windows: refuse rather than risk a host AV.
+  (void)h;
+  (void)dst;
+  (void)n;
+  return false;
+#endif
 }
 
 inline bool valid_addr(uint32_t a) {
@@ -663,13 +669,13 @@ inline bool dump_hop_on() {
     return ::getenv_s(&n, v, sizeof(v), "FABLE2_UIR_IN_HOP") == 0 &&
            v[0] == '1';
   }();
-  return on;
 #else
   static const bool on = [] {
     const char* v = std::getenv("FABLE2_UIR_IN_HOP");
     return v != nullptr && v[0] == '1';
   }();
 #endif
+  return on;
 }
 
 // Decode any run of >=4 printable UTF-16BE chars in buf and log it.

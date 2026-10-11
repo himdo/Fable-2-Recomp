@@ -11,13 +11,20 @@
 #include "fable2_text_probe.h"
 #include "fable2_glyph_probe.h"
 #include "fable2_hotfuncs.h"
+// Windows-only diagnostics (SEH/VEH, VirtualQuery, Toolhelp thread snapshots).
+// All are env-gated and off by default; without heap_scan the generated
+// UIText_FrameRender runs unhooked, same as with the probes disabled.
+#ifdef _WIN32
 #include "fable2_heap_scan.h"
+#endif
 #include "fable2_text_append.h"
 #include "fable2_state_probe.h"
 #include "fable2_menu_probe.h"  // main-menu input path (mod-menu hook points)
 #include "fable2_modmenu.h"  // 6th "MOD OPTION" selectable main-menu item
+#ifdef _WIN32  // Windows-only diagnostics, see above
 #include "fable2_av_probe.h"  // self-installs a guest-PC AV logger (VEH)
 #include "fable2_stall_dump.h"  // self-installs a render-stall thread dumper
+#endif
 // #include "fable2_ui_render_probe.h"
 #include "keyboard_gamepad.h"
 

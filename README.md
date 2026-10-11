@@ -505,6 +505,30 @@ The build also accepts explicit overrides if you keep the SDK elsewhere:
 - Codegen runs as part of the build and re-runs automatically when `fable_2_manifest.toml` or `default.xex` change (tracked via the generated DEPFILE).
 - A full clean build recompiles ~291 generated translation units (60,462 guest functions).
 
+### macOS (experimental, untested in game)
+
+`build.sh` is the macOS/Linux counterpart of `build.cmd` (Apple Silicon:
+`mac-arm64-*` presets). It fetches the official ReXGlue SDK v0.10.0 for the
+host (`tools/setup_sdk.sh`; it bundles MoltenVK, so rendering is Vulkan on
+Metal) and links it as-is: the patched source runtime that Windows builds is
+not wired up yet.
+
+```
+brew install cmake ninja      # clang comes with the Xcode command line tools
+cp /path/to/default.xex .     # codegen input, as on Windows
+./build.sh -release fable_2
+tools/stage_content.sh <content root> out/build/mac-arm64-release
+out/build/mac-arm64-release/fable_2 --fullscreen=false
+```
+
+Use windowed mode for now: in fullscreen the window shows only black on macOS
+(the game itself runs; reaches the title screen windowed).
+
+Not available on macOS yet: the WPF launcher (edit `fable2_config.toml` and
+`fable_2.toml` next to the binary), keyboard/mouse-to-gamepad input (a
+physical controller should work through the SDK's SDL driver), and the Windows-only diagnostics
+(AV/stall/heap probes).
+
 ## Vulkan renderer
 
 The goal is a Vulkan rendering path for the game (the SDK's Windows GPU plugin only ships a
