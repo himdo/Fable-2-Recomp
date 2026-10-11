@@ -165,8 +165,13 @@ Aunque se arregle, el Vulkan de Windows también tiene "muchos artefactos" (comm
 - Diagnósticos que siguen con `0x100000000` fijo (no válido en Mac): `fable2_deadbeef.h`,
   `fable2_ui_input_probe.h` (`host_of`), `fable2_list_dump.h`, el monitor `allocwatch` de `fable_2_app.h`
   (en Mac nunca lee, porque busca páginas en `/proc/self/maps`, que no existe). Todos vienen apagados por defecto.
-- Sin teclado ni ratón como mando en Mac (`GetAsyncKeyState` solo existe en Windows): pendiente de SDL3. El
-  launcher WPF no existe en Mac (editar `fable2_config.toml` / `fable_2.toml` a mano).
+- Teclado y ratón como mando en Mac/Linux: `KeyboardGamepadDriver` se registra como `WindowInputListener` de la
+  ventana del juego y guarda el estado de cada `VirtualKey` desde los eventos (hilo de UI); el poll del guest lo
+  lee. La cámara con ratón usa `Window::SetRelativeMouseMode` (se activa desde los eventos, porque SDL exige el hilo
+  principal). **Verificado:** E (botón A) salta la demo y avanza al menú; el usuario empezó una partida con el
+  teclado. **Sin verificar:** la cámara con ratón en partida. Windows sigue con `GetAsyncKeyState` sin cambios.
+  Para probar con teclas automáticas hace falta permiso de Accesibilidad para el terminal (`osascript` + System Events).
+- El launcher WPF no existe en Mac (editar `fable2_config.toml` / `fable_2.toml` a mano).
 
 ## Otros trabajos de esta sesión
 
