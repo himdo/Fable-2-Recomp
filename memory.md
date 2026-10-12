@@ -272,3 +272,28 @@ Tras arreglar el presentador, el juego iba a ~6 FPS. Diagnóstico (perfil con `s
 - PR del arreglo del presentador al fork: himdo/rexglue-sdk#11. Issue upstream: rexglue/rexglue-sdk#507.
   El `main` de himdo avanzó a `a728090` (espera de memexport, readback de resolve, sesgo de profundidad en
   D3D12); el submódulo sigue fijado en `b097123`.
+
+## Cuelgue en blanco (resuelto) y rendimiento en 3D (abierto) — 2026-10-12 tarde
+
+**Cuelgue en pantalla blanca** al entrar en la escena 3D (2 de 3 veces): no era un bloqueo, era un *crash* que
+daba vueltas. `getVkHandle()` de MoltenVK reescribe `ICD_LOADER_MAGIC` sobre el puntero de despacho del loader
+cada vez que notifica un mensaje a un *debug messenger*; el siguiente trampolín del loader sobre ese `VkDevice`
+(`vkAllocateCommandBuffers`, cuando todos los command buffers están en vuelo) leía `0x01CDC0DE` y fallaba.
+El manejador POSIX del SDK volvía de un fallo que nadie atendía y la instrucción se repetía sin fin.
+Arreglo (commit `abe45e5`): `vulkan_log_debug_messages=false` por defecto en macOS (sin messenger no se llama) y,
+en el parche del fork, señal no atendida → `SIG_DFL` (crash con informe en vez de bucle). Para investigar un
+crash: `~/Library/Logs/DiagnosticReports/fable_2-*.ips` (JSON tras la primera línea; `faultingThread`).
+
+**Rendimiento en 3D: ~7,7 FPS** (menús y carga a 30). Perfil del hilo "GPU Commands" en 3D: 521/1268 muestras en
+`IssueDraw_MemexportReadbackFastPath → FullPath`, de ellas 386 en `vkWaitForFences` (drenado completo de la GPU por
+cada draw con memexport) y ~130 en `vkQueueSubmit`; otras ~400 codificando envíos en MoltenVK. El hilo "3D Engine"
+del juego espera a ese hilo (`GpuProgressCheck`). MoltenVK: "Execute a MTLCommandBuffer" media 43 ms (cola, no
+solo GPU). `--render_target_path_vulkan=fbo` en 3D: igual (5,5–7,8). En curso: A/B con `--readback_memexport=false`
+y `--vulkan_submit_on_primary_buffer_end=false`; traza "Metal System Trace" de 5 s en `scratchpad/mst.trace`.
+
+Herramienta: `scratchpad/prof3d.sh <nombre> [args]` arranca, navega al 3D (E, S, E), captura, hace `sample` 10 s y
+saca la cadencia del log. `oncpu.py` resume el `sample` por hilo (tiempo propio sin esperas).
+
+Forma de trabajo pedida por el usuario: Fable 5.1 lleva el análisis; agentes de Opus para el trabajo bruto.
+El hook de `functrace` seguía en el binario tras cambiar la opción CMake porque el PCH viejo no se regeneró:
+borrar `CMakeFiles/fable_2_recomp.dir/cmake_pch.hxx.pch` y los `.o` fuerza la recompilación (~40 min a -O3).
