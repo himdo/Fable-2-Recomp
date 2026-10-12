@@ -88,10 +88,30 @@ index fdfd166..621964d 100644
  rex_target_pch(rexruntime
      <mutex>
 diff --git a/src/ui/vulkan/vulkan_presenter.cpp b/src/ui/vulkan/vulkan_presenter.cpp
-index 1cd16da..c78dcae 100644
+index 1cd16da..ae59ca8 100644
 --- a/src/ui/vulkan/vulkan_presenter.cpp
 +++ b/src/ui/vulkan/vulkan_presenter.cpp
-@@ -1860,6 +1860,11 @@ Presenter::PaintResult VulkanPresenter::PaintAndPresentImpl(bool execute_ui_draw
+@@ -1538,10 +1538,15 @@ Presenter::PaintResult VulkanPresenter::PaintAndPresentImpl(bool execute_ui_draw
+   // an acquired image only goes back to the presentation engine by being
+   // presented, so skipping the present after the acquire leaks one image per
+   // suppressed paint, until every acquire fails and the window stops updating.
+-  if (!VsyncPresentGateAllows() || !GuestVblankPaceAllows()) {
+-    if (execute_ui_drawers) {
+-      // The UI drawers that would have requested the next paint don't run
+-      // this time; keep the continuous UI repaint going.
++  const bool vsync_gate_allows = VsyncPresentGateAllows();
++  if (!vsync_gate_allows || !GuestVblankPaceAllows()) {
++    // The UI drawers that would have requested the next paint don't run this
++    // time. Keep the continuous UI repaint going only for the vsync gate (the
++    // next host vblank lets it through); a pacer-suppressed paint is requested
++    // again by RefreshGuestOutput when the next guest frame lands. Requesting
++    // it here spins the UI thread where no vblank tick throttles paints
++    // (everything but Win32).
++    if (execute_ui_drawers && !vsync_gate_allows) {
+       RequestUIPaintFromUIThread();
+     }
+     // The swapchain keeps showing the last presented image until a later
+@@ -1860,6 +1865,11 @@ Presenter::PaintResult VulkanPresenter::PaintAndPresentImpl(bool execute_ui_draw
                  swapchain_effect, paint_context_.swapchain_render_pass);
              if (swapchain_effect_pipeline.swapchain_pipeline == VK_NULL_HANDLE) {
                guest_output_flow.effect_count = 0;

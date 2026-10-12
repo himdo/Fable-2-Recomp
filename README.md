@@ -534,6 +534,10 @@ The SDK checkout and its build take several GB. To keep them elsewhere, set
 must be case-sensitive and support symlinks (an APFS disk image works on an
 exFAT drive).
 
+The guest function tracer hook (`FABLE2_FUNC_TRACE=1`) is compiled out on
+macOS because it costs a call on every guest function even while off; configure
+with `-DFABLE2_FUNC_TRACE=ON` to get it back.
+
 Not available on macOS yet: the WPF launcher (edit `fable2_config.toml` and
 `fable_2.toml` next to the binary) and the Windows-only diagnostics
 (AV/stall/heap probes).

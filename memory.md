@@ -258,9 +258,17 @@ Tras arreglar el presentador, el juego iba a ~6 FPS. Diagnóstico (perfil con `s
   defecto en macOS desde `fable_2_app.h` (`OnPostInitLogging`, solo si el cvar sigue en su valor por defecto).
   Resultado: 29–30 FPS estables en título, menú y carga, que es la tasa nativa de Fable 2 en 360.
   Para medir: el log `logs/fable_2_NNN.log` trae una línea `guest vblank pacer: guest frame (gate) ~N Hz` por segundo.
-- Pendiente:
-  - con el juego sin frames nuevos (p. ej. ventana sin foco), el hilo de UI gira suprimiendo presents a ~175 kHz;
-  - `fable2::functrace::trace` se llama en cada función del guest también en Release (~24% del hilo 3D en el perfil);
-  - el hilo de `stateprobe` hace `memchr` sobre el heap una vez por segundo;
-  - `hotfunc_yield_every = 1`.
-  Arreglo estructural en el SDK: no retener el mutex de la cola mientras MoltenVK espera el drawable.
+- Seguimiento:
+  - Bucle del hilo de UI cuando el limitador suprime (~175 kHz sin frames nuevos): `vulkan_presenter.cpp` solo
+    vuelve a pedir repintado si quien suprime es la puerta de vsync; un frame nuevo del guest ya lo pide desde
+    `RefreshGuestOutput`. Está en `rexglue-sdk-fork-fixes.patch`.
+  - Hook de `functrace`: nueva opción CMake `FABLE2_FUNC_TRACE`, OFF en Apple y ON en el resto (allí existe
+    `fable2-functrace.cmd`).
+  - `stateprobe` y servidor remoto: solo existían porque el build de pruebas tenía
+    `FABLE2_REMOTE_CONTROL_ANY_CONFIG=ON`; ya está en OFF. El guion de pruebas no los necesita.
+  - `hotfunc_yield_every` no lo toco: con el juego al tope de 30 no hay motivo.
+  - No retener el mutex de la cola mientras MoltenVK espera el drawable: con el limitador la espera pasa a
+    0,02 ms, así que no hace falta por ahora.
+- PR del arreglo del presentador al fork: himdo/rexglue-sdk#11. Issue upstream: rexglue/rexglue-sdk#507.
+  El `main` de himdo avanzó a `a728090` (espera de memexport, readback de resolve, sesgo de profundidad en
+  D3D12); el submódulo sigue fijado en `b097123`.
