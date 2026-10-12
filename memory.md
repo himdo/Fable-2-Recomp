@@ -242,3 +242,25 @@ arranca el juego, envía teclas (`e`=E/A, `s`=S/stick abajo, `d`=flecha abajo) y
   bloqueó esos subagentes; `/graphify . --update` los recoge.
 - `tests/test_config_parity.py`: comprueba que las claves de `fable2_config.toml` coinciden en C++
   (plantilla + `Read<>`), el TOML que se copia junto al exe y C# (`Fable2ConfigFile`).
+
+## Rendimiento: de ~6 a 30 FPS (2026-10-12)
+
+Tras arreglar el presentador, el juego iba a ~6 FPS. Diagnóstico (perfil con `sample`, análisis de Fable 5.1 y
+`MVK_CONFIG_PERFORMANCE_TRACKING=1`):
+- En macOS nada limita los repintados del hilo de UI (el tick de vblank del presentador solo existe en Win32), así
+  que se presentaba a 120 Hz (ProMotion). Cada present esperaba ~8,2 ms en `[CAMetalLayer nextDrawable]`, porque
+  MoltenVK adquiere el drawable de forma perezosa **dentro de** `vkQueueSubmit`, y lo hacía **con el
+  `recursive_mutex` de la cola compartida cogido** (~98% del tiempo). El hilo "GPU Commands" no podía enviar y el
+  hilo "3D Engine" del juego giraba en `GpuProgressCheck`.
+- No influyeron: `MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS=0` (5,7 FPS), `--render_target_path_vulkan=fbo` (7,4) ni
+  `--readback_memexport=false` (7,0). Ojo: el overlay F3 fuerza un repintado por frame y contamina las medidas.
+- **Arreglo:** `pace_to_guest_vblank=true` (cvar del fork: como mucho un present por frame del guest), activado por
+  defecto en macOS desde `fable_2_app.h` (`OnPostInitLogging`, solo si el cvar sigue en su valor por defecto).
+  Resultado: 29–30 FPS estables en título, menú y carga, que es la tasa nativa de Fable 2 en 360.
+  Para medir: el log `logs/fable_2_NNN.log` trae una línea `guest vblank pacer: guest frame (gate) ~N Hz` por segundo.
+- Pendiente:
+  - con el juego sin frames nuevos (p. ej. ventana sin foco), el hilo de UI gira suprimiendo presents a ~175 kHz;
+  - `fable2::functrace::trace` se llama en cada función del guest también en Release (~24% del hilo 3D en el perfil);
+  - el hilo de `stateprobe` hace `memchr` sobre el heap una vez por segundo;
+  - `hotfunc_yield_every = 1`.
+  Arreglo estructural en el SDK: no retener el mutex de la cola mientras MoltenVK espera el drawable.

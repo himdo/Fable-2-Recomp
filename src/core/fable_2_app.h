@@ -314,6 +314,18 @@ class Fable2App : public rex::ReXApp {
       REXSYS_INFO("[fable2-config] seeded cvar {} from fable2_config.toml",
                   cvar);
     };
+#ifdef __APPLE__
+    // macOS: nothing limits UI-thread paints (the vblank tick is Win32-only),
+    // so the presenter repainted at the display rate (120 Hz on ProMotion),
+    // holding the shared Vulkan queue lock while MoltenVK waited for a
+    // CAMetalDrawable and starving the GPU command processor (~6 guest FPS).
+    // One present per guest frame gives the full 30. Config/env/CLI still win.
+    if (rex::cvar::GetFlagSource("pace_to_guest_vblank") ==
+            rex::cvar::Source::kDefault &&
+        rex::cvar::SetFlagByName("pace_to_guest_vblank", "true")) {
+      REXSYS_INFO("[macos] pace_to_guest_vblank defaulted to true");
+    }
+#endif
     const fable2::config::Values& cfg = fable2::config::Get();
     // XLanguage profile default; config, environment and CLI still win.
     std::string profile_hash;
