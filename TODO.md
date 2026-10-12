@@ -60,7 +60,21 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
   ignorados por defecto) y un `tools/mac/README.md` corto con el protocolo de medida.
 - **Aceptación:** `tools/mac/prof3d.sh base` reproduce la línea base y deja la captura.
 
-### T1. Subidas de shared memory fuera del render pass — pendiente (prioridad 1)
+### T1. Subidas de shared memory fuera del render pass — implementado, criterio de FPS no alcanzado (cvar off por defecto)
+- **Estado (2026-10-12):** implementado en el parche del fork tras el cvar
+  `vulkan_shared_memory_upload_first` (por defecto **false**; probar con `--vulkan_shared_memory_upload_first=true`).
+  Mismo binario, escena de Bowerstone, A/B con instrumentación temporal:
+  copias en línea 431 → ~8/frame (las ~430 restantes van al búfer de subidas previo); passes fbo 409 → ~145/frame
+  (+ ~81 de transferencias EDRAM, sin cambio: total 491 → ~226); FPS 7,9 → 9,7 (+23%; escena de la cinemática con
+  Rose 6,0 → 8,2). Sin artefactos frente a `p3d4_3d.png` (texto de UI, nieve). **No cumple FPS ≥ 12 ni < 150 passes
+  en total:** lo que queda son los 41 drenados de memexport (T2), los reinicios de la teselación (T3) y las
+  transferencias EDRAM (T4). Con `--readback_memexport=false` además: ~10,3. Activar por defecto tras T2/T3.
+- **Diseño:** el criterio es "página no **accedida** por la GPU en esta submission" (pedida con `RequestRange(s)` o
+  escrita con `RangeWrittenByGpu`), no solo "no subida": una página leída por un draw anterior de la misma
+  submission no puede subirse antes que ese draw. Hook `SharedMemory::RangeAccessedByGpu` (virtual, base) + bitmap
+  por submission en `VulkanSharedMemory` (reiniciado en su `EndSubmission`); `upload_command_buffer_` en
+  `VulkanCommandProcessor` reproducido antes del principal. Barreras propias del búfer de subidas: todos los usos →
+  transfer al abrir, transfer → todos los usos al cerrar; el seguimiento `Use()` del búfer principal no se toca.
 - **Objetivo:** que las 431 copias por frame no cierren el render pass.
 - **Dónde:** `src/graphics/vulkan/shared_memory.cpp` (`UploadRanges`, :272),
   `src/graphics/vulkan/command_processor.cpp` (`SubmitBarriers`, `EndSubmission`,
