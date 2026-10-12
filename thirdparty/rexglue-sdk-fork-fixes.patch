@@ -65,6 +65,22 @@ index 8808c1a..3945fce 100644
    // If output is null or shutdown is true, the signal may not be sent, either
    // don't limit the frame rate in this case (an exceptional situation, such as
    // a failure to find the output in DXGI), or don't draw at all if the window
+diff --git a/src/core/exception_handler_posix.cpp b/src/core/exception_handler_posix.cpp
+index 8b1c76a..2951565 100644
+--- a/src/core/exception_handler_posix.cpp
++++ b/src/core/exception_handler_posix.cpp
+@@ -417,6 +417,11 @@ static void ExceptionHandlerCallback(int signal_number, siginfo_t* signal_info,
+       return;
+     }
+   }
++
++  // No handler took it: a real crash. Returning would re-run the faulting
++  // instruction forever (a silent hang at 100% CPU), so fall back to the
++  // default action and let the fault terminate the process with a report.
++  signal(signal_number, SIG_DFL);
+ }
+ 
+ void ExceptionHandler::Install(Handler fn, void* data) {
 diff --git a/src/system/CMakeLists.txt b/src/system/CMakeLists.txt
 index fdfd166..621964d 100644
 --- a/src/system/CMakeLists.txt

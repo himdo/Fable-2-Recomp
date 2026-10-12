@@ -325,6 +325,16 @@ class Fable2App : public rex::ReXApp {
         rex::cvar::SetFlagByName("pace_to_guest_vblank", "true")) {
       REXSYS_INFO("[macos] pace_to_guest_vblank defaulted to true");
     }
+    // MoltenVK's getVkHandle() rewrites ICD_LOADER_MAGIC over the loader's
+    // dispatch pointer whenever it reports a message to a debug messenger,
+    // so the next loader trampoline on that VkDevice (vkAllocateCommandBuffers
+    // when every command buffer is in flight) reads 0x01CDC0DE and faults.
+    // Without a messenger MoltenVK never calls it. Config/env/CLI still win.
+    if (rex::cvar::GetFlagSource("vulkan_log_debug_messages") ==
+            rex::cvar::Source::kDefault &&
+        rex::cvar::SetFlagByName("vulkan_log_debug_messages", "false")) {
+      REXSYS_INFO("[macos] vulkan_log_debug_messages defaulted to false");
+    }
 #endif
     const fable2::config::Values& cfg = fable2::config::Get();
     // XLanguage profile default; config, environment and CLI still win.
