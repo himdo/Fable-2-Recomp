@@ -180,10 +180,33 @@ index ec0df7c..ede87a0 100644
  
  bool SharedMemory::RequestRange(uint32_t start, uint32_t length) {
 diff --git a/src/graphics/vulkan/command_processor.cpp b/src/graphics/vulkan/command_processor.cpp
-index c025183..e4a2caf 100644
+index c025183..f472c36 100644
 --- a/src/graphics/vulkan/command_processor.cpp
 +++ b/src/graphics/vulkan/command_processor.cpp
-@@ -580,6 +580,7 @@ VulkanCommandProcessor::VulkanCommandProcessor(VulkanGraphicsSystem* graphics_sy
+@@ -55,6 +55,22 @@ REXCVAR_DEFINE_BOOL(vulkan_readback_memexport, false, "GPU/Vulkan",
+                     "Read data written by memory export in shaders on the CPU")
+     .lifecycle(rex::cvar::Lifecycle::kHotReload);
+ 
++// When the previous readback slot for a memexport (address, size) key is still
++// in flight (written in the open submission, or the GPU is behind), the fast
++// path falls back to a full GPU drain. When the GPU is the bottleneck (Apple)
++// that drain serializes CPU and GPU every frame; there, skip the read instead.
++#if REX_PLATFORM_MAC
++constexpr bool kReadbackMemexportNoDrainDefault = true;
++#else
++constexpr bool kReadbackMemexportNoDrainDefault = false;
++#endif
++REXCVAR_DEFINE_BOOL(readback_memexport_no_drain, kReadbackMemexportNoDrainDefault, "GPU",
++                    "With readback_memexport_fast, when the previous memexport copy for the same "
++                    "destination has not completed on the GPU yet, skip the CPU readback for this "
++                    "draw instead of draining the GPU. The guest then sees the data of a previous "
++                    "memexport draw once its copy completes, instead of the current draw's data.")
++    .lifecycle(rex::cvar::Lifecycle::kHotReload);
++
+ REXCVAR_DEFINE_BOOL(vulkan_async_skip_incomplete_frames, true, "GPU/Vulkan",
+                     "When async shader compilation is enabled, skip presenting frames that "
+                     "used placeholder pipelines to avoid visible flashing")
+@@ -580,6 +596,7 @@ VulkanCommandProcessor::VulkanCommandProcessor(VulkanGraphicsSystem* graphics_sy
                                                 system::KernelState* kernel_state)
      : CommandProcessor(graphics_system, kernel_state),
        deferred_command_buffer_(*this),
@@ -191,7 +214,7 @@ index c025183..e4a2caf 100644
        transient_descriptor_allocator_uniform_buffer_(
            static_cast<const ui::vulkan::VulkanProvider*>(graphics_system->provider())
                ->vulkan_device(),
-@@ -2058,6 +2059,7 @@ void VulkanCommandProcessor::ShutdownContext() {
+@@ -2058,6 +2075,7 @@ void VulkanCommandProcessor::ShutdownContext() {
    sparse_memory_binds_.clear();
  
    deferred_command_buffer_.Reset();
@@ -199,7 +222,22 @@ index c025183..e4a2caf 100644
    for (const auto& command_buffer_pair : command_buffers_submitted_) {
      dfn.vkDestroyCommandPool(device, command_buffer_pair.second.pool, nullptr);
    }
-@@ -5138,6 +5140,7 @@ bool VulkanCommandProcessor::BeginSubmission(bool is_guest_command) {
+@@ -4357,7 +4375,13 @@ bool VulkanCommandProcessor::IssueDraw_MemexportReadbackFastPath(uint32_t total_
+       total_size <= readback.written_size[read_index] && readback.submission_written[read_index] &&
+       readback.submission_written[read_index] <= submission_completed_;
+   if (!previous_slot_ready) {
+-    IssueDraw_MemexportReadbackFullPath(total_size);
++    // With no_drain the read is skipped, not deferred: the slot just written
++    // keeps its submission_written, so the next draw with this key copies it
++    // once that submission completes. Delivering every draw's data without a
++    // drain would need the copy done at fence reclaim (per-submission buffer).
++    if (!REXCVAR_GET(readback_memexport_no_drain)) {
++      IssueDraw_MemexportReadbackFullPath(total_size);
++    }
+     readback.current_index = read_index;
+     return true;
+   }
+@@ -5138,6 +5162,7 @@ bool VulkanCommandProcessor::BeginSubmission(bool is_guest_command) {
      // the end of the submission (when async pipeline object creation requests
      // are fulfilled).
      deferred_command_buffer_.Reset();
@@ -207,7 +245,7 @@ index c025183..e4a2caf 100644
  
      // Reset cached state of the command buffer.
      dynamic_viewport_update_needed_ = true;
-@@ -5387,6 +5390,7 @@ bool VulkanCommandProcessor::EndSubmission(bool is_swap) {
+@@ -5387,6 +5412,7 @@ bool VulkanCommandProcessor::EndSubmission(bool is_swap) {
        REXGPU_ERROR("Failed to begin a Vulkan command buffer");
        return false;
      }

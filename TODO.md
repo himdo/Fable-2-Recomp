@@ -100,7 +100,21 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
 - **Riesgo:** reutilización de una página dentro de la misma submission (ring buffers de
   UI/partículas): cubierta por la ruta de fallback. Vigilar texto de UI y partículas.
 
-### T2. Memexport: dejar de drenar la GPU por draw — pendiente (tras T1)
+### T2. Memexport: dejar de drenar la GPU por draw — hecho (opción a)
+- **Estado (2026-10-12):** cvar `readback_memexport_no_drain` en el parche del fork (por defecto **true** en
+  macOS, false en el resto; recarga en caliente). Si el slot anterior no está completado, se salta la lectura
+  de ese draw y se alterna el slot; la siguiente lectura con esa clave copia el slot cuando su submission
+  termina. Rama `t2-memexport-no-drain` en `pr-wt` (sobre `t1-upload-first`, que trae 4c21ec4: allí el caso
+  "submission ya enviada" espera solo esa fence y el salto queda para la submission abierta).
+  Medido (mismo binario, A/B con `--readback_memexport_no_drain=false`): partida 9,7 → 10,6 FPS; con el
+  `sample` de 10 s enganchado 5,7–7,0 → 9,0–9,8; `vkWaitForFences` bajo `FullPath` en "GPU Commands"
+  944–972 de ~1970 muestras → 0 (la espera que queda está en `BeginSubmission`, límite de submissions en
+  vuelo: es la GPU). Sin cambios visuales (héroe, Rose, nieve, fuego); el perro no sale en esta escena.
+- **Corrección del diagnóstico:** no eran 41 drenados por frame: la vía rápida sí leía el ~97% de los draws
+  (las 41 copias de `:4342`); caía a `FullPath` ~1 vez por frame (`:4217`), pero ese drenado completo
+  serializaba CPU y GPU. Con no_drain el guest recibe muchos menos datos: solo el 1–10% de las lecturas (frente
+  al ~97%) encuentran el slot completado, porque sin el drenado la GPU va siempre un frame por detrás. Si
+  aparece el perro/héroe negro o #68, probar `--readback_memexport_no_drain=false` y pasar a (b).
 - **Objetivo:** quitar los 41 drenados completos (`vkWaitForFences`) y las 41 copias por frame.
 - **Dónde:** `command_processor.cpp` `IssueDraw_MemexportReadbackFastPath/FullPath`
   (:4180–4370); cvars `readback_memexport*` en `src/graphics/command_processor.cpp:79-88`.
