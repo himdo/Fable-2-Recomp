@@ -406,3 +406,6 @@ Hallazgos de la tanda:
   y `tools/mac/phase.sh` (FPS por ventanas alineadas a la entrada en el 3D). El interruptor `FABLE2_EXP_MSAA_MAX2`
   está en `out/mac-measure/exp_switches.patch`. Siguiente: comparar las dos trazas (3 passes grandes) y la
   GPU Frame Capture en Xcode; candidatos: HSR/early-Z con MSAA, sample count 2 en Metal, resolves de EDRAM.
+- PR #2 de saulob/geometry-wars-retro-evolved-2-recompiled revisado: ideas en TODO.md T8 (hashes del SDK/XEX,
+  sello y exports del plugin, LINK_DEPENDS, auditoría del cierre `~MnkInputDriver → CallInUIThreadSynchronous`,
+  selector de ISO con osascript, relanzado con `_NSGetArgv`+`posix_spawn`). Nada contradice nuestras decisiones.

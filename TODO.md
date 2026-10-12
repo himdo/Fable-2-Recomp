@@ -231,6 +231,24 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
   launcher de Windows con su equivalente propuesto, y estimación por opción. No construir
   nada hasta elegir.
 
+### T8. Ideas del PR #2 de saulob/geometry-wars-retro-evolved-2-recompiled — pendiente (pequeñas)
+Mismo port (ReXGlue 0.10.0, mac-arm64, MoltenVK) en otro juego; revisado el 2026-10-12. Vale la pena adoptar:
+- `exp_adjust` del traductor SPIR-V (dword 3, no 4): probar visualmente en Fable 2 y, si cambia, entra en la
+  rama `macos` del fork (T2b). Referencia: `patches/rexglue-sdk/0002-spirv-texture-exp-adjust.patch` del PR.
+- Verificación SHA-256 del zip del SDK en `tools/setup_sdk.sh` y de `default.xex` en `build.sh`/`stage_content.sh`
+  (mensaje claro "unsupported default.xex"), y comprobar `rexglue --version` (~1 h).
+- Sello con hashes y `nm -gU` de exports del plugin frente al oficial en `stage_renderer_sdk.py` (detecta un
+  runtime/plugin instalado que no es el esperado) (~1–2 h).
+- `LINK_DEPENDS` sobre el plugin de GPU en CMake, para reenlazar cuando cambie el dylib (15 min).
+- Auditar nuestro cierre: su cuelgue al 100% de CPU con ventana negra al reiniciar el proceso viene de
+  `Runtime::Shutdown → InputSystem::Shutdown → ~MnkInputDriver → CallInUIThreadSynchronous`; ellos lo esquivan con
+  `FlushLogging()` + `std::_Exit(0)` solo en el reinicio. Comprobar si nuestra salida normal pasa por ahí (1–2 h).
+- Para T7: `osascript -e 'POSIX path of (choose file ...)'` como selector de ISO sin dependencias, y
+  `_NSGetArgv` + `posix_spawn` como patrón de relanzado; `GetPendingRestartFlags`/`ClearPendingRestartFlags` del
+  SDK si un launcher escribe cvars restart-only antes de lanzar.
+Sin interés: su build del plugin solo (nuestro target Ninja ya es incremental), los presets (tenemos `build.sh`),
+y su diagnóstico del frame rate (es el #507 que ya tenemos arreglado; 25–30 FPS en un M1 Air como referencia).
+
 ## Hecho (resumen; detalle en `memory.md` y en el log de git)
 
 - Build desde fuente del runtime del fork en macOS (`tools/build_runtime_sdk.sh`,
