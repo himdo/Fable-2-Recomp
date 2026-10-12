@@ -356,3 +356,53 @@ MSAA 1x + gamma8: igual que MSAA 1x. Forzar 1x deja bandas de basura en la franj
 `pipeline_cache.cpp:1394/3299`) ni emulación 2x-como-4x (2x nativo). Hipótesis en estudio: tráfico de
 carga/volcado de tiles por pass sobre attachments dimensionados por la EDRAM (1040×2528, 320×8192…) × muestras.
 T2 (`readback_memexport_no_drain`): +0,9 FPS pero el guest pierde casi todos los datos de memexport; OFF.
+
+## Cierre de la sesión del 2026-10-12 (noche): tanda de pruebas y diseños
+
+Forma de trabajo acordada: Fable 5.1 lleva el análisis y reparte; Opus para cambios en el SDK y diseños, Sonnet para
+herramientas y documentación, Haiku para lo mecánico. Un solo juego en ejecución a la vez. Los agentes no hacen
+commits en las tandas; los hago yo al final.
+
+Estado de las tareas (detalle en TODO.md):
+- T0 hecha (`tools/mac/`: prof3d.sh con reintento del E a 60 s, 3 capturas, `TRACE=1`; gpucapture.sh;
+  menu_arrows.sh; scene.sh; oncpu.py; trace/*.py; apply_diag.py + tempdiag_block.inc).
+- T1 hecha y activada por defecto en macOS (`vulkan_shared_memory_upload_first`): 7,9 → 9,7 FPS.
+- T2: opción (a) implementada pero OFF (`readback_memexport_no_drain`): +0,9 FPS a costa de que el guest reciba
+  solo el 1–10% de las lecturas. **La variante correcta ya existe**: el `main` del fork de himdo (`a728090`) trae
+  4c21ec4 (espera solo a la fence de la submission del slot) y la rama `t2-memexport-no-drain` del worktree
+  `/Volumes/fable2build/pr-wt` combina ambas. El checkout de macOS está en `b097123`, sin 4c21ec4.
+- T3 diseñada (`docs/macos-gpu-plan.md`): lista de triángulos instanciada (una instancia por parche, rejilla fija
+  17×17 en index buffer de 16 bits, VS de dominio como VS normal, N en `Modification`, `kVersion` 12→13),
+  ~115 líneas en 8 ficheros, −12 a −18 ms/frame estimados. Ni T2 ni T3 llegan a 30 FPS: el MSAA es el 45%.
+- T5 preparada (`docs/upstream/`): borrador de issue para MoltenVK (getVkHandle pisa el puntero de despacho del
+  loader; el mensaje culpable no está identificado: el aviso de primitive restart pasa el pipeline, que no es
+  dispatchable) y 6 PRs redactados; ramas en `/Volumes/fable2build/pr-wt`: `fix-vulkan-paint-pipeline-churn`
+  (PR #11 abierto), `t1-upload-first`, `t2-memexport-no-drain` (corregir el mensaje: debe quedar OFF),
+  `fix-pacer-members-non-win32`, `fix-def-only-windows`, `fix-posix-unhandled-signal`,
+  `fix-ui-paint-spin-when-paced`. Sin push.
+- T7 estudiada (`docs/macos-launcher-study.md`): asistente de terminal ahora (2–3 días), Avalonia con la lógica
+  C# común si hace falta GUI (7–10), SwiftUI solo con cuenta de desarrollador (10–14); 9 decisiones del usuario.
+
+Hallazgos de la tanda:
+- GPU Frame Capture de la escena 3D: `out/mac-measure/f2_3d.gputrace` (1,6 GB), para abrir en Xcode
+  (Performance → encoders por duración → attachments/sample count, draws y shader profiler). Pendiente de que el
+  usuario la abra.
+- `exp_adjust` del traductor SPIR-V leído de la palabra 4 en vez de la 3 (`spirv_translator_fetch.cpp:2032`):
+  presente en nuestro checkout y en el `main` oficial; upstream cerró #334/#456 con "no aceptamos cambios en la
+  emulación Xenos". Parche de referencia: PR #2 de saulob/geometry-wars-retro-evolved-2-recompiled
+  (`patches/rexglue-sdk/0002-spirv-texture-exp-adjust.patch`; Xenia Canary 32889f51b). Prueba visual A/B en
+  Fable 2 encargada a la cola de experimentos (resultado pendiente, ver TODO.md).
+- Experimentos pendientes de resultado al parar: reparto 4x/2x del MSAA (`FABLE2_EXP_MSAA_MAX2`) con dos trazas
+  (`mst_tr_base`, `mst_tr_msaa1`), renderArea recortado, pantalla completa, volcado de shaders, flecha abajo en el
+  menú, point sprites a mitad de tamaño, repetición de la base. Interruptores en
+  `out/mac-measure/exp_switches*.patch` (ignorados por git).
+- Decisión tomada: el SDK se modifica en el fork `rasty94/rexglue-sdk` con una rama de integración `macos` sobre
+  `a728090` (himdo main), un commit por arreglo; el proyecto apuntará a esa rama en lugar de al parche.
+- **Reparto del MSAA (medido, mismo build):** base 111,7 ms/frame; 4x→2x (`max2`) 110,5 (≈1 ms, ruido ±3–4);
+  todo a 1x 60,9. **Los ~50 ms son de los passes a 2x, y el salto es binario** (tener MSAA o no), no
+  proporcional a las muestras. Trazas en el mismo plano (brasero, +28 s de la entrada al 3D):
+  `out/mac-measure/mst_tr_base.trace` y `mst_tr_msaa1.trace`, capturas `tr_base_trace.png` / `tr_msaa1_trace.png`.
+  Guiones: `tools/mac/prof3d_hold.sh` (mantiene el juego hasta `HOLD` s y lanza la traza a entrada+`TRACE_AT`)
+  y `tools/mac/phase.sh` (FPS por ventanas alineadas a la entrada en el 3D). El interruptor `FABLE2_EXP_MSAA_MAX2`
+  está en `out/mac-measure/exp_switches.patch`. Siguiente: comparar las dos trazas (3 passes grandes) y la
+  GPU Frame Capture en Xcode; candidatos: HSR/early-Z con MSAA, sample count 2 en Metal, resolves de EDRAM.

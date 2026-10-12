@@ -136,7 +136,7 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
 - **Aceptación:** `vkWaitForFences` desaparece del perfil del hilo "GPU Commands" en 3D;
   sin regresión visual en el perro/héroe ni montañas negras (himdo/Fable-2-Recomp#68).
 
-### T3. Teselación continua emulada en el vertex shader — pendiente (tras T1)
+### T3. Teselación continua emulada en el vertex shader — diseñada (`docs/macos-gpu-plan.md`), pendiente de implementar
 - **Objetivo:** que los 485 draws continuos del terreno no pasen por la teselación de
   Metal (MoltenVK: VS+TCS en compute + reinicio del render pass por draw).
 - **Dónde:** `src/graphics/shader.h` (`HostVertexShaderType`, hay hueco en los 4 bits),
@@ -158,12 +158,31 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
 - **Riesgo:** grietas entre parches continuos y adaptativos vecinos (los adaptativos
   siguen siendo reales, así que no debería); coste de vértices igual (512 tris/parche).
 
+### T2b. Fork de integración del SDK — pendiente (prioridad 1 de la fase de corrección)
+- **Objetivo:** dejar de acumular `thirdparty/rexglue-sdk-fork-fixes.patch`. Upstream no acepta cambios de
+  emulación Xenos (#334/#456 cerrados), así que el fork `rasty94/rexglue-sdk` es el hogar de los arreglos.
+- **Qué:** rama `macos` sobre `a728090` (himdo main; trae 4c21ec4, la mitad de la T2 correcta) con un commit por
+  arreglo, tomados de las ramas de `/Volumes/fable2build/pr-wt` (`docs/upstream/pr-drafts.md`), más `exp_adjust`
+  si la prueba visual lo confirma. `tools/build_runtime_sdk.sh` y `prepare_runtime_sdk.py` pasan a aceptar esa
+  rama como fuente (el pin de `SDK_PIN`/baked-in debe reconocerla), el submódulo apunta a ella y el parche
+  queda vacío o desaparece. Rehacer la medida base (la base cambia de `b097123` a `a728090`).
+- **Aceptación:** `build_runtime_sdk.sh` compila desde la rama sin parche; `git diff` del checkout vacío;
+  FPS y capturas iguales o mejores que con el parche.
+
+### T2c. Resultados pendientes de la tanda de pruebas — pendiente de recoger
+- HECHO: reparto 4x/2x del MSAA: 4x→2x ≈ 1 ms, 2x→1x ≈ 50 ms (coste binario por tener MSAA); trazas
+  `mst_tr_base`/`mst_tr_msaa1` grabadas en el mismo plano, pendientes de comparar. Pendientes: renderArea recortado; pantalla
+  completa; volcado de shaders; flecha abajo; point sprites a mitad; base repetida; prueba visual de `exp_adjust`.
+  Interruptores en `out/mac-measure/exp_switches*.patch`. Si el MSAA 4x concentra el coste, añadir la tarea
+  "MSAA máximo 2x por opción"; si no, abrir `out/mac-measure/f2_3d.gputrace` en Xcode (usuario) para el coste
+  por draw y por shader.
+
 ### T4. Verificar 30 FPS estables y limpiar — pendiente (tras T1–T3)
 - Medir tres escenas (Bowerstone, exterior, interior) y pantalla completa.
 - Si no llega: transferencias de EDRAM (82 passes/frame, diseño fbo de Xenia) y MSAA 4x
   (60 passes/frame): estudiar antes de tocar.
 
-### T5. Subir los arreglos al fork y upstream — pendiente
+### T5. Subir los arreglos al fork y upstream — preparada (`docs/upstream/`, ramas en pr-wt), pendiente de abrir
 - PR al fork por cada cambio del SDK que quede validado (T1, T2, T3) y los que ya están
   en `rexglue-sdk-fork-fixes.patch` sin PR: miembros del pacer fuera de `#if WIN32`,
   `/DEF:` solo en Windows, `SIG_DFL` para señales no atendidas, no repintar al suprimir
@@ -188,7 +207,7 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
 - `graphify-out/` se regenera en cada commit por el hook y aparece modificado; el hook
   añadió una vez `graphify-out/*` a `.gitignore` (quitado). Vigilar.
 
-### T7. Launcher para macOS (ISO, mods, configuración) — pendiente (al final)
+### T7. Launcher para macOS (ISO, mods, configuración) — estudiada (`docs/macos-launcher-study.md`), pendiente de decidir
 - **Objetivo:** lo que hoy hace el launcher WPF en Windows (perfiles de juego, edición de
   `fable2_config.toml` y `fable_2.toml`, botón de guardar, mods) y lo que en macOS se hace
   a mano: elegir la ISO, extraer el contenido (`tools/stage_content.sh`; extracción GDFX

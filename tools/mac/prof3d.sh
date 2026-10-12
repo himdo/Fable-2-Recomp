@@ -31,6 +31,8 @@ if [ "${TRACE:-0}" = 1 ]; then
 else
   sample $pid 10 -file "$OUT/sample_$name.txt" >/dev/null 2>&1
 fi
+# HOLD=N: keep the game running N more seconds so the log covers +40 s of 3D.
+sleep "${HOLD:-0}"
 kill -INT $pid; sleep 3; kill -9 $pid 2>/dev/null
 L=logs/$(ls -t logs | head -1)
 echo "fps: $(grep 'guest vblank pacer' $L | tail -15 | sed -E 's/.*guest frame \(gate\) ~([0-9.]+) Hz.*/\1/' | tr '\n' ' ')"
