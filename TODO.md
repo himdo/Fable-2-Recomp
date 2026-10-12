@@ -171,7 +171,14 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
 
 ### T2c. Resultados pendientes de la tanda de pruebas — pendiente de recoger
 - HECHO: reparto 4x/2x del MSAA: 4x→2x ≈ 1 ms, 2x→1x ≈ 50 ms (coste binario por tener MSAA); trazas
-  `mst_tr_base`/`mst_tr_msaa1` grabadas en el mismo plano, pendientes de comparar. Pendientes: renderArea recortado; pantalla
+  `mst_tr_base`/`mst_tr_msaa1` grabadas en el mismo plano, pendientes de comparar.
+- Punteros para los pendientes (de la cola, que no llegó a ejecutarse): renderArea recortado → el SDK usa
+  dynamic rendering (`vulkan/command_processor.cpp:82`), así que el sitio es `DeferredCommandBuffer::Execute`
+  (`deferred_command_buffer.cpp:193`, `kVkBeginRendering`): mirar por delante hasta `kVkEndRendering` y tomar el
+  mayor fondo de scissor/`kVkClearAttachments` + 16 filas. Point sprites → `point_screen_diameter_to_ndc_radius`
+  (`command_processor.cpp:6194-6198`). `dump_shaders` en Vulkan solo vuelca ucode (`shader.cpp:122-153`), no SPIR-V.
+  `exp_adjust` confirmado en `xenos.h:1239` (dword 3, bits 13-18). Análisis de FPS por ventanas:
+  `tools/mac/phases.py` y `phase.sh`. Pendientes: renderArea recortado; pantalla
   completa; volcado de shaders; flecha abajo; point sprites a mitad; base repetida; prueba visual de `exp_adjust`.
   Interruptores en `out/mac-measure/exp_switches*.patch`. Si el MSAA 4x concentra el coste, añadir la tarea
   "MSAA máximo 2x por opción"; si no, abrir `out/mac-measure/f2_3d.gputrace` en Xcode (usuario) para el coste
