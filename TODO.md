@@ -48,7 +48,8 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
 
 ## Tareas
 
-### T0. Herramientas de medida en el repo — pendiente
+### T0. Herramientas de medida en el repo — hecho
+- **Hecho:** `tools/mac/` con `prof3d.sh`, `scene.sh`, `winlist.js`, `oncpu.py`, `gdfx_extract.py`, `apply_diag.py`+`tempdiag_block.inc`, `trace/` (xt, a1-a5) y README; salida en `out/mac-measure/`.
 - **Objetivo:** que el guion de medida no viva en el scratchpad de una sesión.
 - **Qué:** crear `tools/mac/` con `prof3d.sh`, `scene.sh`, `winlist.js` (lista de ventanas por
   JXA), `oncpu.py` (tiempo propio por hilo a partir de `sample`) y los scripts de análisis

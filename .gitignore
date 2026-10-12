@@ -61,6 +61,11 @@ __pycache__/
 !tools/setup_sdk.sh
 !tools/stage_content.sh
 !tools/build_runtime_sdk.sh
+!tools/mac/*.sh
+!tools/mac/*.py
+!tools/mac/*.js
+!tools/mac/*.inc
+!tools/mac/trace/*.py
 !docs/screenshots/launcher.png
 
 # --- Fetched/external toolchain deps (created by tools/setup_sdk*.cmd). -------
