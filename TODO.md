@@ -100,7 +100,7 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
 - **Riesgo:** reutilización de una página dentro de la misma submission (ring buffers de
   UI/partículas): cubierta por la ruta de fallback. Vigilar texto de UI y partículas.
 
-### T2. Memexport: dejar de drenar la GPU por draw — hecho (opción a)
+### T2. Memexport: dejar de drenar la GPU por draw — implementada la opción (a), OFF por defecto; falta la variante correcta
 - **Estado (2026-10-12):** cvar `readback_memexport_no_drain` en el parche del fork (por defecto **true** en
   macOS, false en el resto; recarga en caliente). Si el slot anterior no está completado, se salta la lectura
   de ese draw y se alterna el slot; la siguiente lectura con esa clave copia el slot cuando su submission
@@ -115,6 +115,14 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
   serializaba CPU y GPU. Con no_drain el guest recibe muchos menos datos: solo el 1–10% de las lecturas (frente
   al ~97%) encuentran el slot completado, porque sin el drenado la GPU va siempre un frame por detrás. Si
   aparece el perro/héroe negro o #68, probar `--readback_memexport_no_drain=false` y pasar a (b).
+- **Estado (2026-10-12):** `readback_memexport_no_drain` da +0,9 FPS (9,7 → 10,6) y quita el
+  `vkWaitForFences` del hilo "GPU Commands", pero con la GPU un frame por detrás solo el 1–10% de
+  las lecturas encuentran el slot completado: el guest recibe muchos menos datos de memexport
+  (equivale casi a apagar la lectura). Perro y #68 sin comprobar. Por eso queda OFF. El diagnóstico
+  de "41 drenados por frame" era falso: la vía rápida lee el 97% de los draws; el drenado es ~1 por
+  frame, pero serializa CPU y GPU. Variante correcta: esperar solo a la fence de la submission del
+  slot (como 4c21ec4 upstream, que la rama del PR ya trae) y saltar únicamente cuando el slot es de
+  la submission abierta; o la opción (b).
 - **Objetivo:** quitar los 41 drenados completos (`vkWaitForFences`) y las 41 copias por frame.
 - **Dónde:** `command_processor.cpp` `IssueDraw_MemexportReadbackFastPath/FullPath`
   (:4180–4370); cvars `readback_memexport*` en `src/graphics/command_processor.cpp:79-88`.

@@ -322,3 +322,26 @@ el adaptativo con teselación real. Antes: medir `VGT_HOS_MAX_TESS_LEVEL` y el r
 repite en la misma submission (`command_processor.cpp:4353-4362`); 4c21ec4 upstream no lo arregla.
 Scripts de análisis de trazas (resuelven id/ref de xctrace): `scratchpad/py/xt.py, a1-a3.py`; tablas en
 `scratchpad/mst/` y `mst_fbo/`.
+
+### Tras T1: dónde va el tiempo de GPU (traza mst_t1, 2026-10-12 noche)
+
+T1 (subidas de shared memory antes del render pass, `vulkan_shared_memory_upload_first`, on por defecto en
+macOS) cumplió lo suyo: encoders −38%, `CopyBuffer` −92%, passes fbo 409→~145/frame, GPU del 73% al 82%,
+7,9→9,7 FPS en la posición del agente (7,5–8 en la mía: la posición de la escena importa; con el E extra a los
+60 s se entra un poco antes). Pero la GPU por frame solo baja de 105 a 99 ms, porque **el coste fijo de passes
+y reinicios era ~10 ms/frame, no ~50** (el p10 de un pass son 8 µs, no 100; mi hipótesis del volcado de
+attachments por pass era falsa). Reparto real (ms/frame, mst_t1): sombreado de fragment ≈82 (63%), vertex 30
+(de ellos 13,5 de teselación en compute y 12,6 de vértices teselados), coste fijo de passes 1,3, de reinicios
+8,8, transfer/compute 7. **El 80% del tiempo está en 3 passes a mitad de frame** (el pass principal de escena,
+unos 184 reinicios de teselación cada uno); los otros ~172 passes/frame son despreciables (p50 11 µs).
+Consecuencia: T3 (quitar la teselación de Metal) ahorra como mucho ~25–30 ms/frame; lo grande es el fragment
+del pass principal. Multiplicadores candidatos: MSAA 4x (60 passes/frame) y 2x, render targets gamma como
+RGBA16 (`gamma_render_target_as_unorm16=true`, 8 B/px), overdraw, coste por píxel de los shaders traducidos.
+Descartado: profundidad escrita desde el pixel shader (`depth_float24_convert_in_pixel_shader=false` en fbo;
+solo la ruta FSI lo fuerza). Siguiente: A/B con interruptores temporales (MSAA forzado a 1x, factor de
+teselación 1, `--gamma_render_target_as_unorm16=false`) y, si no discriminan, GPU Frame Capture
+(`MTL_CAPTURE_ENABLED=1 MVK_CONFIG_AUTO_GPU_CAPTURE_SCOPE=3 MVK_CONFIG_AUTO_GPU_CAPTURE_OUTPUT_FILE=x.gputrace`,
+disparo por la tubería `/tmp/MoltenVKCapturePipe-*`) para abrirla en Xcode y ver el tiempo por draw y por
+shader (el shader profiler de xctrace no guarda muestras al adjuntarse a un proceso).
+Guion: `tools/mac/prof3d.sh` reintenta el E a los 60 s y captura a 110/130/150 s (hay un fundido a negro tras
+la carga); `TRACE=1` graba la Metal System Trace. Tablas de la traza en `out/mac-measure/mst_t1/`.
