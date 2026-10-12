@@ -345,3 +345,14 @@ disparo por la tubería `/tmp/MoltenVKCapturePipe-*`) para abrirla en Xcode y ve
 shader (el shader profiler de xctrace no guarda muestras al adjuntarse a un proceso).
 Guion: `tools/mac/prof3d.sh` reintenta el E a los 60 s y captura a 110/130/150 s (hay un fundido a negro tras
 la carga); `TRACE=1` graba la Metal System Trace. Tablas de la traza en `out/mac-measure/mst_t1/`.
+
+### A/B del sombreado (2026-10-12, interruptores temporales; parche en `out/mac-measure/exp_switches.patch`)
+
+Ventana estable de partida, ms/frame: base 104 (9,6 FPS) · **MSAA forzado a 1x (bits 16-17 de
+`RB_SURFACE_INFO` a 0): 56 (−48, 17,8 FPS)** · sin draws teselados: 76 (−28, suelo negro) · sin point
+sprites: 90 (−14, sin nieve) · factor de teselación 1: 98 (−6) · RT gamma como sRGB 8 bits: 103 (0) ·
+MSAA 1x + gamma8: igual que MSAA 1x. Forzar 1x deja bandas de basura en la franja inferior (letterbox).
+**El MSAA es el 45% del frame.** No es sombreado por muestra (`sample_rate_shading` solo con float24 en el PS,
+`pipeline_cache.cpp:1394/3299`) ni emulación 2x-como-4x (2x nativo). Hipótesis en estudio: tráfico de
+carga/volcado de tiles por pass sobre attachments dimensionados por la EDRAM (1040×2528, 320×8192…) × muestras.
+T2 (`readback_memexport_no_drain`): +0,9 FPS pero el guest pierde casi todos los datos de memexport; OFF.
