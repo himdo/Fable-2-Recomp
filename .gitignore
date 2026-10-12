@@ -71,7 +71,6 @@ thirdparty/android-ndk/
 
 # --- Historical reference (pre-ReXGlue XenonRecomp configs) -------------------
 XenonRecomp
-TODO.md
 
 # --- graphify: share only the graph and its report ---------------------------
 # Everything else in graphify-out/ is local (AST cache, dated snapshots, HTML
