@@ -60,7 +60,7 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
   ignorados por defecto) y un `tools/mac/README.md` corto con el protocolo de medida.
 - **Aceptación:** `tools/mac/prof3d.sh base` reproduce la línea base y deja la captura.
 
-### T1. Subidas de shared memory fuera del render pass — implementado, criterio de FPS no alcanzado (cvar off por defecto)
+### T1. Subidas de shared memory fuera del render pass — hecha (cvar on por defecto en macOS)
 - **Estado (2026-10-12):** implementado en el parche del fork tras el cvar
   `vulkan_shared_memory_upload_first` (por defecto **false**; probar con `--vulkan_shared_memory_upload_first=true`).
   Mismo binario, escena de Bowerstone, A/B con instrumentación temporal:
@@ -95,7 +95,7 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
 - **Medida:** con la instrumentación temporal de `scratchpad/apply_diag.py` (o equivalente)
   contar render passes y copias por frame antes y después; FPS con `prof3d.sh`.
 - **Aceptación:** copias en línea por frame < 20; render passes por frame < 150; FPS en 3D
-  ≥ 12; sin artefactos nuevos en la captura (comparar con `p3d4_3d.png`). Documentar en
+  ≥ 12 (no alcanzado: 9,7; el criterio de seguridad sí, y por eso va activado); sin artefactos nuevos en la captura (comparar con `p3d4_3d.png`). Documentar en
   el commit los contadores antes/después.
 - **Riesgo:** reutilización de una página dentro de la misma submission (ring buffers de
   UI/partículas): cubierta por la ruta de fallback. Vigilar texto de UI y partículas.

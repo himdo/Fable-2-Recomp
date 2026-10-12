@@ -216,21 +216,30 @@ index c025183..e4a2caf 100644
      if (dfn.vkEndCommandBuffer(command_buffer.buffer) != VK_SUCCESS) {
        REXGPU_ERROR("Failed to end a Vulkan command buffer");
 diff --git a/src/graphics/vulkan/shared_memory.cpp b/src/graphics/vulkan/shared_memory.cpp
-index 6788214..4e079fd 100644
+index 6788214..a041189 100644
 --- a/src/graphics/vulkan/shared_memory.cpp
 +++ b/src/graphics/vulkan/shared_memory.cpp
-@@ -27,6 +27,10 @@ REXCVAR_DEFINE_BOOL(vulkan_sparse_shared_memory, true, "GPU/Vulkan",
+@@ -27,6 +27,19 @@ REXCVAR_DEFINE_BOOL(vulkan_sparse_shared_memory, true, "GPU/Vulkan",
                      "Use sparse shared memory on Vulkan")
      .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
  
-+REXCVAR_DEFINE_BOOL(vulkan_shared_memory_upload_first, false, "GPU/Vulkan",
++// On tile-based GPUs (Apple) every render pass interruption stores and reloads
++// the attachments, so uploads that break the pass dominate the frame; on
++// immediate-mode GPUs the interruption is cheap, keep the proven path there.
++#if REX_PLATFORM_MAC
++constexpr bool kSharedMemoryUploadFirstDefault = true;
++#else
++constexpr bool kSharedMemoryUploadFirstDefault = false;
++#endif
++REXCVAR_DEFINE_BOOL(vulkan_shared_memory_upload_first, kSharedMemoryUploadFirstDefault,
++                    "GPU/Vulkan",
 +                    "Upload shared memory pages not yet accessed by the GPU in the current "
 +                    "submission at its beginning instead of interrupting the render pass");
 +
  namespace rex::graphics::vulkan {
  
  VulkanSharedMemory::VulkanSharedMemory(VulkanCommandProcessor& command_processor,
-@@ -161,6 +165,9 @@ bool VulkanSharedMemory::Initialize() {
+@@ -161,6 +174,9 @@ bool VulkanSharedMemory::Initialize() {
    last_usage_ = Usage::kTransferDestination;
    last_written_range_ = std::make_pair<uint32_t, uint32_t>(0, 0);
  
@@ -240,7 +249,7 @@ index 6788214..4e079fd 100644
    upload_buffer_pool_ = std::make_unique<ui::vulkan::VulkanUploadBufferPool>(
        vulkan_device, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
        rex::align(ui::vulkan::VulkanUploadBufferPool::kDefaultPageSize, size_t(1)
-@@ -195,6 +202,35 @@ void VulkanSharedMemory::CompletedSubmissionUpdated() {
+@@ -195,6 +211,35 @@ void VulkanSharedMemory::CompletedSubmissionUpdated() {
  
  void VulkanSharedMemory::EndSubmission() {
    upload_buffer_pool_->FlushWrites();
@@ -276,7 +285,7 @@ index 6788214..4e079fd 100644
  }
  
  void VulkanSharedMemory::Use(Usage usage, std::pair<uint32_t, uint32_t> written_range) {
-@@ -273,15 +309,52 @@ bool VulkanSharedMemory::UploadRanges(
+@@ -273,15 +318,52 @@ bool VulkanSharedMemory::UploadRanges(
    if (upload_page_ranges.empty()) {
      return true;
    }
@@ -338,7 +347,7 @@ index 6788214..4e079fd 100644
    uint64_t submission_current = command_processor_.GetCurrentSubmission();
    bool successful = true;
    upload_regions_.clear();
-@@ -332,6 +405,20 @@ bool VulkanSharedMemory::UploadRanges(
+@@ -332,6 +414,20 @@ bool VulkanSharedMemory::UploadRanges(
    return successful;
  }
  
