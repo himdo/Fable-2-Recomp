@@ -151,6 +151,23 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
 - `graphify-out/` se regenera en cada commit por el hook y aparece modificado; el hook
   añadió una vez `graphify-out/*` a `.gitignore` (quitado). Vigilar.
 
+### T7. Launcher para macOS (ISO, mods, configuración) — pendiente (al final)
+- **Objetivo:** lo que hoy hace el launcher WPF en Windows (perfiles de juego, edición de
+  `fable2_config.toml` y `fable_2.toml`, botón de guardar, mods) y lo que en macOS se hace
+  a mano: elegir la ISO, extraer el contenido (`tools/stage_content.sh`; extracción GDFX
+  del scratchpad de la sesión del 2026-10-12, `gdfx_extract.py`, a incorporar en T0),
+  lanzar el juego con los flags adecuados.
+- **Primero estudiar, luego prototipar.** Opciones a comparar: (a) app nativa SwiftUI/AppKit
+  (la mejor integración: permisos, Spaces, firma); (b) reutilizar el código C# del launcher
+  con Avalonia (misma lógica de config, `Fable2ConfigFile.cs`, y `tests/test_config_parity.py`
+  sigue valiendo); (c) un asistente de terminal en `tools/mac/` como mínimo viable mientras
+  se decide. Criterios: paridad con el launcher de Windows (ver `launcher/` y
+  `docs/screenshots/launcher.png`), mantenimiento de una sola fuente de verdad para las
+  claves de configuración, y que la extracción de la ISO no requiera herramientas externas.
+- **Entregables del estudio:** comparativa de una página en `docs/`, lista de funciones del
+  launcher de Windows con su equivalente propuesto, y estimación por opción. No construir
+  nada hasta elegir.
+
 ## Hecho (resumen; detalle en `memory.md` y en el log de git)
 
 - Build desde fuente del runtime del fork en macOS (`tools/build_runtime_sdk.sh`,
