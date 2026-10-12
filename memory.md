@@ -297,3 +297,28 @@ saca la cadencia del log. `oncpu.py` resume el `sample` por hilo (tiempo propio 
 Forma de trabajo pedida por el usuario: Fable 5.1 lleva el análisis; agentes de Opus para el trabajo bruto.
 El hook de `functrace` seguía en el binario tras cambiar la opción CMake porque el PCH viejo no se regeneró:
 borrar `CMakeFiles/fable_2_recomp.dir/cmake_pch.hxx.pch` y los `.o` fuerza la recompilación (~40 min a -O3).
+
+### Diagnóstico 3D con traza de Metal (2026-10-12 noche)
+
+Traza "Metal System Trace" de 5,4 s en la escena 3D (~7,9 FPS): GPU ocupada 73% a frecuencia máxima, ~105 ms
+de GPU por frame; la CPU solo explica el 8%. **No son shaders pesados, es fragmentación:** 21 111 draws en 5 s
+(~490/frame) van por pipelines con **teselación Xenos** (terreno: kQuadPatch, `primitive_processor.cpp:349`
+cita "4D5307F1 - ground - continuous"; la caché `4D5307F1.fbo.vk.xpso` tiene 14 pipelines PatchList, 10
+continuos + 4 adaptativos). MoltenVK ejecuta VS+TCS en un compute encoder y **reinicia el render pass de Metal
+en cada draw** (`MVKCmdDraw.mm:222-291`, sin condición ni opción): 21 111 reinicios = 32% del tiempo de GPU,
+más ~2300 encoders/frame y 17 005 `vkCmdCopyBuffer` (shared memory, memexport, resolve).
+A/B en 3D, todas sin mejora: `--readback_memexport=false` (7,5), `--vulkan_submit_on_primary_buffer_end=false`
+(4,7), ambas (2,8–9,7).
+**`render_target_path_vulkan=fbo` es el valor por defecto** (la caché se llama `.fbo.`): mi "A/B con fbo" no
+probó nada. **`=fsi` descartado:** 5 FPS e imagen corrupta (bandas de basura) en 3D; los 29–30 FPS que medí
+primero con fsi eran del menú (el guion no entró en la partida: caché de shaders fría cambia los tiempos;
+comprobar siempre la captura `*_3d.png`).
+Vía que queda: emular en el vertex shader la teselación continua de QuadPatch (sin TCS/TES, lista de
+triángulos; ~250 líneas en 5 ficheros del SDK: `shader.h` HostVertexShaderType nuevo, `primitive_processor.cpp`
+6 índices por patch, `spirv_translator.cpp` registros de dominio desde gl_VertexIndex como ya hace la ruta
+compute de memexport en :2323-2400, `pipeline_cache.cpp` topología TriangleList, constantes de sistema), dejando
+el adaptativo con teselación real. Antes: medir `VGT_HOS_MAX_TESS_LEVEL` y el reparto continuo/adaptativo
+(instrumentación temporal en curso). Memexport: la vía rápida cae a la completa (drenado) porque la clave se
+repite en la misma submission (`command_processor.cpp:4353-4362`); 4c21ec4 upstream no lo arregla.
+Scripts de análisis de trazas (resuelven id/ref de xctrace): `scratchpad/py/xt.py, a1-a3.py`; tablas en
+`scratchpad/mst/` y `mst_fbo/`.
