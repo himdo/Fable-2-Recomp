@@ -135,7 +135,12 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
 - **Aceptación:** `vkWaitForFences` desaparece del perfil del hilo "GPU Commands" en 3D;
   sin regresión visual en el perro/héroe ni montañas negras (himdo/Fable-2-Recomp#68).
 
-### T3. Teselación continua emulada en el vertex shader — diseñada (`docs/macos-gpu-plan.md`), pendiente de implementar
+### T3. Teselación continua emulada en el vertex shader — hecha (fork `macos`, `464aac6`), 9,7 → 13,7 FPS
+- **Resultado (2026-10-13):** escena 3D 9,7 → 13,7 FPS (misma ventana, `HOLD=40`); capturas idénticas a la base.
+  Primera versión con una sola diagonal por celda: rombos negros en la nieve (la profundidad no coincidía con
+  las pasadas teseladas de verdad). Corregido con diagonales reflejadas por cuadrante hacia el centro del
+  parche, como el teselador de D3D11/Metal. Un arranque con la T3 se colgó en el título (sin draws teselados,
+  GPU ociosa); no se repitió en cuatro arranques: vigilar. Falta medir reinicios de render pass con traza.
 - **Objetivo:** que los 485 draws continuos del terreno no pasen por la teselación de
   Metal (MoltenVK: VS+TCS en compute + reinicio del render pass por draw).
 - **Dónde:** `src/graphics/shader.h` (`HostVertexShaderType`, hay hueco en los 4 bits),
@@ -157,7 +162,13 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
 - **Riesgo:** grietas entre parches continuos y adaptativos vecinos (los adaptativos
   siguen siendo reales, así que no debería); coste de vértices igual (512 tris/parche).
 
-### T2b. Fork de integración del SDK — rama hecha y subida; falta compilar y medir
+### T2b. Fork de integración del SDK — hecha (fork `macos` = `b017e57`), base medida 9,7 FPS
+- **2026-10-13, después:** la base desde la rama da 9,7 FPS (igual que con el parche). Añadidos a `macos`:
+  `show_debug_overlay` (overlay de FPS al arrancar; el juego lo activa), T3, y el PR himdo#12 de mitchell
+  (`b017e57`: slots de readback de memexport por ocurrencia, ruta rápida sin lock en `RequestRanges`, esperas
+  POSIX con precisión de µs, menos coste por registro/draw): T3 13,7 → 14,8 FPS. Overlay: coste 0.
+  Del SDK oficial (`development`) quedan 15 commits nuevos (codegen, entrada, build): diferidos; el de
+  MoltenVK 1.4.3 ya estaba. PR himdo#8 (cargas rápidas) limpio, pendiente; himdo#4 (efectos) descartado.
 - **Estado (2026-10-13):** `rasty94/rexglue-sdk` rama `macos` = `a728090` + 8 commits (pacer no-Win32, `/DEF:`
   solo Windows, SIG_DFL, formato del pipeline de paint, no re-pedir paint con pacer, T1 upload-first, T2
   no-drain OFF, T1 on por defecto en macOS), `0a3b1fa`. Rama aparte `fix-exp-adjust` (`228a153`, sobre

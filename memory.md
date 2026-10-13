@@ -420,3 +420,14 @@ Hallazgos de la tanda:
 - Rescatado: partida en `~/fable2-saves-backup`, interruptores de experimento en `tools/mac/exp_switches.patch`.
 - Siguiente: partición APFS en EXT (la hace el usuario), clonar el fork en `macos`, compilar runtime y juego
   allí, repetir la medida base y las trazas con/sin MSAA.
+
+## 2026-10-13 (tarde) — T3, PR himdo#12, overlay y vídeos
+
+- EXT es ahora APFS (1 TB): área de trabajo `/Volumes/EXT/fable2/`, `out/` del repo enlazado allí.
+- Base desde la rama `macos` del fork: 9,7 FPS en 3D, igual que con el parche.
+- T3 (teselación continua como rejilla instanciada en el VS): 13,7 FPS. Primera versión con rombos negros en
+  la nieve por la diagonal de las celdas; corregido reflejando las diagonales por cuadrante (como Metal).
+- PR himdo#12 (mitchell) integrado: 14,8 FPS. Overlay de FPS abierto: sin coste.
+- `skip_intro_videos` y el overlay de FPS (cvar nueva `show_debug_overlay` en el fork) activados por defecto.
+- Caché de Instruments: `xctrace export` llenó 72 GB del disco interno; borrar `path_manager` tras cada análisis.
+- Pendiente: trazas con/sin MSAA (los ~50 ms siguen siendo el mayor coste), prueba visual de `exp_adjust`.
