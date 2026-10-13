@@ -326,9 +326,15 @@ de CPU. Para 30 FPS hacen falta **las dos cosas**: GPU ≤ 33 ms y ese hilo ≤ 
 
 ## Para la próxima sesión (anotado 2026-10-13, noche)
 Estado: build `macos` `bbadd11` del fork (subido), 14,8 FPS en 3D y 29 en menús; trabajo en `/Volumes/EXT/fable2/`.
-1. **KosmicKrisp** (pendiente de decisión del usuario): instalar el Vulkan SDK de LunarG en EXT (preferido) o
-   `brew install mesa` (disco interno, varios GB), apuntar `VK_DRIVER_FILES` a su ICD y medir con `prof3d.sh`
-   (base y `FABLE2_EXP_MSAA1`). Comprobar antes que el cargador del SDK respeta `VK_DRIVER_FILES`.
+1. **KosmicKrisp** — instalado (`brew install mesa`, Mesa 26.2.4, ~2 GB) y probado una vez:
+   `VK_DRIVER_FILES=/opt/homebrew/share/vulkan/icd.d/kosmickrisp_mesa_icd.aarch64.json` (el SDK respeta la
+   variable; sin ella usa MoltenVK). Arranca y llega al 3D sin recompilar; **17,2 FPS** frente a 14,8 con
+   MoltenVK (escena no del todo comparable: a 150 s seguía la cinemática). **Parpadeos importantes** (vistos
+   por el usuario) y, al final, **device lost** → abort (`CheckSubmissionFenceAndDeviceLoss` esperando la fence
+   de `IssueDraw_MemexportReadbackFastPath`; informe `fable_2-2026-10-13-231524.ips`). Pendiente: aislar el
+   parpadeo (¿presentación/sincronización, pipelines provisionales, memexport?) con `vulkan_async_skip_incomplete_frames`,
+   `readback_memexport*` y la validación de Mesa (`MESA_VK_*`/`KK_DEBUG`); medir con MSAA 1x; reportar a Mesa
+   si es un fallo del driver. Para volver a MoltenVK basta con no definir `VK_DRIVER_FILES`.
 2. **Coste del MSAA (28 ms)**: medir las rutas solo-MSAA del emulador (transferencias de propiedad por muestra,
    dump/resolve multisample; `docs/analysis/msaa-code-path.md`, puntos 3 y medidas 3–4): contador de draws de
    transferencia y dispatches por frame, y el interruptor 2x→4x para ver si el coste escala con las muestras.
