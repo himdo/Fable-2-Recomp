@@ -33,6 +33,8 @@ else
 fi
 # HOLD=N: keep the game running N more seconds so the log covers +40 s of 3D.
 sleep "${HOLD:-0}"
+# Capture the end of the window too: the FPS below comes from its last lines.
+screencapture -x -o -l "$wid" "$OUT/${name}_end.png"
 kill -INT $pid; sleep 3; kill -9 $pid 2>/dev/null
 L=logs/$(ls -t logs | head -1)
 echo "fps: $(grep 'guest vblank pacer' $L | tail -15 | sed -E 's/.*guest frame \(gate\) ~([0-9.]+) Hz.*/\1/' | tr '\n' ' ')"
