@@ -1,6 +1,6 @@
 import sys
 import os
-SDK=os.environ.get('REXGLUE_SDK_SOURCE','/Volumes/fable2build/rexglue-sdk')+'/src/graphics/vulkan/'
+SDK=os.environ.get('REXGLUE_SDK_SOURCE','/Volumes/EXT/fable2/rexglue-sdk')+'/src/graphics/vulkan/'
 SP=sys.argv[1] if len(sys.argv)>1 else os.path.dirname(os.path.abspath(__file__))
 cp=open(SDK+'command_processor.cpp').read().split('\n')
 def ins(lines, lineno, text, expect):  # insert before 1-based lineno

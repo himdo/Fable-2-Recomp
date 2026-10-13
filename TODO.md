@@ -19,10 +19,10 @@ Estado del port (2026-10-12): título, menú y carga a 29–30 FPS (tasa nativa)
   cadencia. Línea base: `fps: 7.7 7.6 ...`. Una caché de shaders fría cambia los tiempos:
   si la captura no muestra el 3D, repetir.
 - **Cambios en el SDK**: commits en la rama `macos` de `rasty94/rexglue-sdk` (sobre himdo
-  `a728090`); el submódulo apunta a ella y ya no hay parche. Checkout y build del runtime en
-  el disco externo (partición APFS de EXT, pendiente de crear; la imagen sparsebundle sobre
-  exFAT se corrompió el 2026-10-13). Compilar con
-  `REXGLUE_SDK_SOURCE=<ext>/rexglue-sdk RUNTIME_SDK_BUILD=<ext>/build-runtime tools/build_runtime_sdk.sh Release`
+  `a728090`); el submódulo apunta a ella y ya no hay parche. Todo lo pesado vive en el volumen
+  APFS `/Volumes/EXT/fable2/` (checkout `rexglue-sdk`, `build-runtime`, `out` —el `out/` del repo es
+  un enlace a él—, `tmp`, `logs`); nada pesado en el disco interno. Compilar con
+  `TMPDIR=/Volumes/EXT/fable2/tmp/ REXGLUE_SDK_SOURCE=/Volumes/EXT/fable2/rexglue-sdk RUNTIME_SDK_BUILD=/Volumes/EXT/fable2/build-runtime tools/build_runtime_sdk.sh Release`
   y luego `./build.sh -release fable_2`. Cada arreglo que valga para himdo va además a una
   rama propia para PR (como himdo/rexglue-sdk#11).
 - **No tocar cabeceras de `include/rex/`** salvo necesidad: recompila el juego entero
@@ -169,7 +169,7 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
 - **Objetivo:** dejar de acumular `thirdparty/rexglue-sdk-fork-fixes.patch`. Upstream no acepta cambios de
   emulación Xenos (#334/#456 cerrados), así que el fork `rasty94/rexglue-sdk` es el hogar de los arreglos.
 - **Qué:** rama `macos` sobre `a728090` (himdo main; trae 4c21ec4, la mitad de la T2 correcta) con un commit por
-  arreglo, tomados de las ramas de `/Volumes/fable2build/pr-wt` (`docs/upstream/pr-drafts.md`), más `exp_adjust`
+  arreglo (`docs/upstream/pr-drafts.md`), más `exp_adjust`
   si la prueba visual lo confirma. `tools/build_runtime_sdk.sh` y `prepare_runtime_sdk.py` pasan a aceptar esa
   rama como fuente (el pin de `SDK_PIN`/baked-in debe reconocerla), el submódulo apunta a ella y el parche
   queda vacío o desaparece. Rehacer la medida base (la base cambia de `b097123` a `a728090`).

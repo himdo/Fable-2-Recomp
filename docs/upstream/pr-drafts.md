@@ -1,6 +1,6 @@
 # PR drafts for himdo/rexglue-sdk (nothing pushed or opened)
 
-Local branches live in /Volumes/fable2build/pr-wt, all on top of origin/main (a728090) unless noted.
+The per-fix branches were lost with the old disk image; every fix is now a commit on rasty94/rexglue-sdk branch `macos` (on himdo a728090). Recreate a PR branch by cherry-picking its commit onto himdo/main.
 
 ## Already open
 

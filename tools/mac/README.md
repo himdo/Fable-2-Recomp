@@ -22,13 +22,17 @@ Salida (capturas, logs, `sample`) en `$OUT`, por defecto `out/mac-measure/` (ign
 - `gdfx_extract.py <iso> <dir>`: extrae una ISO GDFX (port de `tools/x360extract/lib/Gdfx.cs`).
 - `apply_diag.py [dir]` + `tempdiag_block.inc`: inserta instrumentacion temporal
   (`TEMPDIAG`) en `command_processor.cpp` del SDK (`REXGLUE_SDK_SOURCE`, por defecto
-  `/Volumes/fable2build/rexglue-sdk`). No se commitea: es solo para medir.
+  `/Volumes/EXT/fable2/rexglue-sdk`). No se commitea: es solo para medir.
 
 ## Analizar una traza de Metal
 ```
 xcrun xctrace record --template 'Metal System Trace' --attach <pid> --time-limit 5s --output X.trace
 xcrun xctrace export --input X.trace --xpath '<tabla>' > mst/<tabla>.xml   # tablas de metal-*, display-*, gpu-*
 ```
+**Ojo con el disco interno:** cada `xctrace export` deja una copia entera de la traza en
+`$(getconf DARWIN_USER_CACHE_DIR)com.apple.dt.InstrumentsCLI/path_manager` (72 GB en una tarde) y
+`xctrace record` deja `instruments*.ktrace` en `$TMPDIR`. Exportar con `TMPDIR` en EXT y borrar
+`path_manager` al terminar cada análisis.
 Los scripts de `trace/` leen los XML exportados (rutas `mst/...` relativas al directorio
 actual; `a4.py`/`a5.py` reciben el directorio como argumento):
 - `xt.py <xml> [n]`: carga una tabla (resuelve `id`/`ref`), muestra columnas y n filas.
