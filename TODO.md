@@ -169,6 +169,8 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
   POSIX con precisión de µs, menos coste por registro/draw): T3 13,7 → 14,8 FPS. Overlay: coste 0.
   Del SDK oficial (`development`) quedan 15 commits nuevos (codegen, entrada, build): diferidos; el de
   MoltenVK 1.4.3 ya estaba. PR himdo#8 (cargas rápidas) limpio, pendiente; himdo#4 (efectos) descartado.
+  `exp_adjust` (dword 3): sin cambio visible en la escena de Rose (luminancia media igual ±1); incluido en
+  `macos` por ser la lectura correcta del registro.
 - **Estado (2026-10-13):** `rasty94/rexglue-sdk` rama `macos` = `a728090` + 8 commits (pacer no-Win32, `/DEF:`
   solo Windows, SIG_DFL, formato del pipeline de paint, no re-pedir paint con pacer, T1 upload-first, T2
   no-drain OFF, T1 on por defecto en macOS), `0a3b1fa`. Rama aparte `fix-exp-adjust` (`228a153`, sobre
