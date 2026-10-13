@@ -431,3 +431,6 @@ Hallazgos de la tanda:
 - `skip_intro_videos` y el overlay de FPS (cvar nueva `show_debug_overlay` en el fork) activados por defecto.
 - Caché de Instruments: `xctrace export` llenó 72 GB del disco interno; borrar `path_manager` tras cada análisis.
 - Pendiente: trazas con/sin MSAA (los ~50 ms siguen siendo el mayor coste), prueba visual de `exp_adjust`.
+
+- Noche 2026-10-13: MSAA hoy = 28 ms (1x: 25,5 FPS). Descartados: sin SampleRateShading, commit de bigmah,
+  prefill y MTLHeap de MoltenVK. MoltenVK deprecado; KosmicKrisp (Mesa) es la alternativa recomendada en Apple Silicon.

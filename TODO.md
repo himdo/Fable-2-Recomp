@@ -305,3 +305,21 @@ de CPU. Para 30 FPS hacen falta **las dos cosas**: GPU ≤ 33 ms y ese hilo ≤ 
    por pipelines provisionales). Probar con caché fría y `--vulkan_async_skip_incomplete_frames=false`.
 5. Correcciones a conclusiones previas: "la CPU explica el 8 %" ya no vale (el hilo de comandos es el 80–85 %
    del frame); el ahorro de la T3 (30 ms) fue en parte CPU; `exp_adjust` no mejora nada medible.
+- **Resultados T9 (2026-10-13, noche; misma escena, `HOLD=40`, captura final comprobada):**
+  | Prueba | FPS 3D |
+  |---|---|
+  | build actual (`macos` `bbadd11`) | 14,8 |
+  | MSAA forzado a 1x (`FABLE2_EXP_MSAA1`) | 25,5 → el MSAA cuesta hoy ~28 ms, no 50 |
+  | sin `SampleRateShading` para la máscara (punto 1) | 14,3 → hipótesis descartada, revertido |
+  | bigmah 38955c4 (área de render acotada + subidas agrupadas) | 14,4 → sin ganancia, descartado |
+  | `MVK_CONFIG_PREFILL_METAL_COMMAND_BUFFERS=1` | ~11, peor |
+  | `MVK_CONFIG_USE_MTLHEAP=1` | 14,1, igual |
+  Consecuencias: el coste del MSAA no es sombreado por muestra ni guardado/recarga de adjuntos; quedan
+  las rutas solo-MSAA del emulador (transferencias de propiedad por muestra, dump/resolve multisample) o el
+  propio coste de MSAA del GPU de Apple vía MoltenVK. Con 1x el frame baja a 39 ms, así que el hilo de
+  comandos gasta ≤ 39 ms (la estimación de 54–57 ms estaba inflada por `sample`).
+- **MoltenVK está deprecado por Khronos** (README, 2026): mantenimiento comunitario; para Apple Silicon
+  recomiendan **KosmicKrisp** (Mesa, Vulkan 1.4 conforme, en el Vulkan SDK desde 2026-09-29). Su tabla de
+  features: `tessellationShader`, `sampleRateShading`, stencil export y dynamic rendering sí; sin geometry
+  shaders ni fragment shader interlock (igual que MoltenVK, el SDK ya no los necesita). Homebrew `mesa` lo
+  compila en macOS ≥ 26. Probar = instalar Mesa y apuntar `VK_DRIVER_FILES` a su ICD, sin recompilar.
