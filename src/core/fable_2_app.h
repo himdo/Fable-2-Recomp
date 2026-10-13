@@ -336,6 +336,12 @@ class Fable2App : public rex::ReXApp {
       REXSYS_INFO("[macos] vulkan_log_debug_messages defaulted to false");
     }
 #endif
+    // Show the guest FPS overlay (F3 toggles it) from the start. Runtimes
+    // without the cvar just keep it closed. Config/env/CLI still win.
+    if (rex::cvar::GetFlagSource("show_debug_overlay") == rex::cvar::Source::kDefault &&
+        rex::cvar::SetFlagByName("show_debug_overlay", "true")) {
+      REXSYS_INFO("show_debug_overlay defaulted to true");
+    }
     const fable2::config::Values& cfg = fable2::config::Get();
     // XLanguage profile default; config, environment and CLI still win.
     std::string profile_hash;

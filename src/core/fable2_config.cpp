@@ -100,8 +100,8 @@ unlock_ce = true
 # Skip Intro Videos (mid-asm hook fable2_hook_skip_intro_videos; just-harry's
 # "Skip intro videos" patch from his Unofficial Xenia femtofork): skips the
 # Microsoft and Lionhead logo videos at boot. false = videos play (original).
-# Default: false
-skip_intro_videos = false
+# Default: true
+skip_intro_videos = true
 
 # High Tick Rate (Xenia patch by Guy, plus mid-asm hook
 # fable2_hook_high_tick_rate_skip_store): doubles the game's LF tick from

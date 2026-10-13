@@ -28,7 +28,7 @@ public class Fable2ConfigValues
     // [patches]
     public bool UnlockWebsite { get; set; } = true;
     public bool UnlockCe { get; set; } = true;
-    public bool SkipIntroVideos { get; set; } = false;
+    public bool SkipIntroVideos { get; set; } = true;
     public bool HighTickRate { get; set; } = false;       // unstable
     public bool HigherHfTickRate { get; set; } = false;    // unstable
     public bool DisableMotionBlur { get; set; } = false;
