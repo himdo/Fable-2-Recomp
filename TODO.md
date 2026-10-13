@@ -323,3 +323,19 @@ de CPU. Para 30 FPS hacen falta **las dos cosas**: GPU ≤ 33 ms y ese hilo ≤ 
   features: `tessellationShader`, `sampleRateShading`, stencil export y dynamic rendering sí; sin geometry
   shaders ni fragment shader interlock (igual que MoltenVK, el SDK ya no los necesita). Homebrew `mesa` lo
   compila en macOS ≥ 26. Probar = instalar Mesa y apuntar `VK_DRIVER_FILES` a su ICD, sin recompilar.
+
+## Para la próxima sesión (anotado 2026-10-13, noche)
+Estado: build `macos` `bbadd11` del fork (subido), 14,8 FPS en 3D y 29 en menús; trabajo en `/Volumes/EXT/fable2/`.
+1. **KosmicKrisp** (pendiente de decisión del usuario): instalar el Vulkan SDK de LunarG en EXT (preferido) o
+   `brew install mesa` (disco interno, varios GB), apuntar `VK_DRIVER_FILES` a su ICD y medir con `prof3d.sh`
+   (base y `FABLE2_EXP_MSAA1`). Comprobar antes que el cargador del SDK respeta `VK_DRIVER_FILES`.
+2. **Coste del MSAA (28 ms)**: medir las rutas solo-MSAA del emulador (transferencias de propiedad por muestra,
+   dump/resolve multisample; `docs/analysis/msaa-code-path.md`, puntos 3 y medidas 3–4): contador de draws de
+   transferencia y dispatches por frame, y el interruptor 2x→4x para ver si el coste escala con las muestras.
+3. **Hilo de comandos de la GPU**: perfil sin `sample` (que reduce los FPS a la mitad) o con ventana corta, y
+   revisar deduplicación de barreras / command buffers previos de la rama de andrew17182.
+4. **Plugin Metal nativo de andrew17182** (`feature/macos-playtest`): evaluar licencia, dependencias
+   (Metal Shader Converter) y medirlo en el M3 Pro.
+5. Cuelgue ocasional al arrancar con caché fría (T3/T9 punto 4) y PR himdo#8 (cargas rápidas).
+Árbol auxiliar: `/Volumes/EXT/fable2/t3-wt` rama `exp-msaa` con los interruptores TEMPDIAG sin commitear
+(incluida la ruta de escritura de registros en bloque); plugin experimental en `t3-wt/out/mac-arm64/`.
