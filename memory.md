@@ -409,3 +409,14 @@ Hallazgos de la tanda:
 - PR #2 de saulob/geometry-wars-retro-evolved-2-recompiled revisado: ideas en TODO.md T8 (hashes del SDK/XEX,
   sello y exports del plugin, LINK_DEPENDS, auditoría del cierre `~MnkInputDriver → CallInUIThreadSynchronous`,
   selector de ISO con osascript, relanzado con `_NSGetArgv`+`posix_spawn`). Nada contradice nuestras decisiones.
+
+## 2026-10-13 — rama `macos` del fork y pérdida de la imagen de EXT
+
+- T2b: rama `macos` en `rasty94/rexglue-sdk` (a728090 + 8 commits, `0a3b1fa`) y `fix-exp-adjust` (`228a153`),
+  subidas. Submódulo apuntado al fork; parche `rexglue-sdk-fork-fixes.patch` eliminado.
+- El disco interno se llenó durante el export de trazas. Al mover `out/` a la imagen APFS sobre exFAT,
+  el sparsebundle perdió `Info.plist`/`token` y se volvió ilegible: se perdieron el checkout del SDK, el
+  build del runtime y del juego, y todas las trazas y capturas. Los commits del SDK estaban subidos.
+- Rescatado: partida en `~/fable2-saves-backup`, interruptores de experimento en `tools/mac/exp_switches.patch`.
+- Siguiente: partición APFS en EXT (la hace el usuario), clonar el fork en `macos`, compilar runtime y juego
+  allí, repetir la medida base y las trazas con/sin MSAA.

@@ -22,11 +22,6 @@ PATCHES = (
     "rexglue-sdk-runtime-fixes.patch",
     "rexglue-sdk-debug-exports.patch",
 )
-# Fixes on top of the fork pin itself (non-Windows build, Vulkan presenter
-# pipeline churn). Applied to any revision that lacks them; drop once upstreamed.
-FORK_PATCHES = (
-    "rexglue-sdk-fork-fixes.patch",
-)
 
 
 def fail(message):
@@ -111,13 +106,6 @@ def main():
                  f"can be applied, or use a fork revision that bakes them in.\n"
                  f"Restore the base with: git -C {source} checkout {SDK_PIN}")
         print(f"SDK revision {head} already carries all runtime fixes (baked in).")
-        for name in FORK_PATCHES:
-            state = patch_state(source, patch_directory / name)
-            if state == "clean":
-                git(source, "apply", str(patch_directory / name))
-                print(f"Applied: {name}")
-            elif state == "conflict":
-                fail(f"SDK patch {name} conflicts with revision {head}; refresh it.")
 
     if not args.skip_dependencies:
         # libmspack is either a submodule gitlink (base pin and older fork

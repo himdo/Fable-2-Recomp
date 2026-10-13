@@ -512,7 +512,8 @@ The build also accepts explicit overrides if you keep the SDK elsewhere:
 host (`tools/setup_sdk.sh`; it bundles MoltenVK, so rendering is Vulkan on
 Metal). Build the runtime from the SDK fork first, as Windows does: the
 official 0.10.0 runtime recreates the swapchain paint pipeline after a full GPU
-wait on every frame (fixed by `thirdparty/rexglue-sdk-fork-fixes.patch`).
+wait on every frame. The fixes live as commits on the fork
+`rasty94/rexglue-sdk`, branch `macos`, which the submodule points at.
 `build.sh` links that runtime whenever it is staged, and keeps the official
 tool for codegen.
 

@@ -18,14 +18,13 @@ Estado del port (2026-10-12): título, menú y carga a 29–30 FPS (tasa nativa)
   arranca, pulsa E/S/E para cargar la partida, captura, hace `sample` 10 s y saca la
   cadencia. Línea base: `fps: 7.7 7.6 ...`. Una caché de shaders fría cambia los tiempos:
   si la captura no muestra el 3D, repetir.
-- **Cambios en el SDK** (ReXGlue, fork himdo en `b097123`): se hacen en el checkout
-  `/Volumes/fable2build/rexglue-sdk` (imagen APFS `fable2build.sparsebundle` en el disco
-  EXT; se monta con `hdiutil attach`), se compilan con
-  `REXGLUE_SDK_SOURCE=/Volumes/fable2build/rexglue-sdk RUNTIME_SDK_BUILD=/Volumes/fable2build/build-runtime tools/build_runtime_sdk.sh Release`
-  y luego `./build.sh -release fable_2`. El `git diff` del checkout se vuelca a
-  `thirdparty/rexglue-sdk-fork-fixes.patch` (lo aplica `prepare_runtime_sdk.py`). Cada
-  cambio terminado va además a una rama en `rasty94/rexglue-sdk` para PR al fork
-  (como himdo/rexglue-sdk#11).
+- **Cambios en el SDK**: commits en la rama `macos` de `rasty94/rexglue-sdk` (sobre himdo
+  `a728090`); el submódulo apunta a ella y ya no hay parche. Checkout y build del runtime en
+  el disco externo (partición APFS de EXT, pendiente de crear; la imagen sparsebundle sobre
+  exFAT se corrompió el 2026-10-13). Compilar con
+  `REXGLUE_SDK_SOURCE=<ext>/rexglue-sdk RUNTIME_SDK_BUILD=<ext>/build-runtime tools/build_runtime_sdk.sh Release`
+  y luego `./build.sh -release fable_2`. Cada arreglo que valga para himdo va además a una
+  rama propia para PR (como himdo/rexglue-sdk#11).
 - **No tocar cabeceras de `include/rex/`** salvo necesidad: recompila el juego entero
   (~40 min). Si se tocan, borrar `CMakeFiles/fable_2_recomp.dir/cmake_pch.hxx.pch`.
 - **Un solo juego a la vez** en la máquina (las pruebas usan el foco de la ventana).
@@ -158,7 +157,15 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
 - **Riesgo:** grietas entre parches continuos y adaptativos vecinos (los adaptativos
   siguen siendo reales, así que no debería); coste de vértices igual (512 tris/parche).
 
-### T2b. Fork de integración del SDK — pendiente (prioridad 1 de la fase de corrección)
+### T2b. Fork de integración del SDK — rama hecha y subida; falta compilar y medir
+- **Estado (2026-10-13):** `rasty94/rexglue-sdk` rama `macos` = `a728090` + 8 commits (pacer no-Win32, `/DEF:`
+  solo Windows, SIG_DFL, formato del pipeline de paint, no re-pedir paint con pacer, T1 upload-first, T2
+  no-drain OFF, T1 on por defecto en macOS), `0a3b1fa`. Rama aparte `fix-exp-adjust` (`228a153`, sobre
+  `macos`) para la prueba visual. Submódulo → fork/`macos`; `rexglue-sdk-fork-fixes.patch` eliminado y
+  `prepare_runtime_sdk.py` ya no aplica parches de fork. Equivalencia con el parche viejo comprobada por diff
+  (solo cambia un comentario). **Falta:** compilar el runtime desde la rama y repetir la medida base (el
+  build se perdió con la imagen; partida guardada en `~/fable2-saves-backup`, copiar a `saves/` del build).
+  Interruptores de experimento: `tools/mac/exp_switches.patch`.
 - **Objetivo:** dejar de acumular `thirdparty/rexglue-sdk-fork-fixes.patch`. Upstream no acepta cambios de
   emulación Xenos (#334/#456 cerrados), así que el fork `rasty94/rexglue-sdk` es el hogar de los arreglos.
 - **Qué:** rama `macos` sobre `a728090` (himdo main; trae 4c21ec4, la mitad de la T2 correcta) con un commit por
