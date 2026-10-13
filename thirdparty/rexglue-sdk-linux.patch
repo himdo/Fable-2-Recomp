@@ -1,0 +1,435 @@
+diff --git a/include/rex/graphics/vulkan/command_processor.h b/include/rex/graphics/vulkan/command_processor.h
+index 696ff48..90325eb 100644
+--- a/include/rex/graphics/vulkan/command_processor.h
++++ b/include/rex/graphics/vulkan/command_processor.h
+@@ -453,11 +453,24 @@ class VulkanCommandProcessor : public CommandProcessor {
+     uint32_t current_index = 0;
+     uint64_t last_used_frame = 0;
+   };
+-  void EvictOldReadbackBuffers(std::unordered_map<uint64_t, ReadbackBuffer>& buffer_map);
++  void EvictOldReadbackBuffers(std::unordered_map<uint64_t, ReadbackBuffer>& buffer_map,
++                               size_t max_buffers, uint64_t eviction_age_frames);
+   static constexpr uint32_t kReadbackBufferSizeIncrement = 16 * 1024 * 1024;
++  // Resolve readback buffers can be several megabytes each, so they are
++  // dropped soon after they stop being used.
+   static constexpr size_t kMaxReadbackBuffers = 256;
+   static constexpr uint64_t kReadbackBufferEvictionAgeFrames = 60;
++  // Memexport readback slots are cheap to keep (most memexport readbacks are a
++  // few hundred bytes) and expensive to lose: the first readback through a new
++  // slot has no previous copy to return, so it takes the full synchronous path
++  // and stalls until the GPU has drained. Keep them long enough to survive a
++  // camera cut away from an object and back, at any frame rate.
++  static constexpr size_t kMaxMemexportReadbackBuffers = 1024;
++  static constexpr uint64_t kMemexportReadbackBufferEvictionAgeFrames = 1800;
+   static inline uint32_t AlignReadbackBufferSize(uint32_t size) {
++    if (size < 64 * 1024) {
++      return rex::align(size, 16u * 1024u);
++    }
+     if (size < 1 * 1024 * 1024) {
+       return rex::align(size, 256u * 1024u);
+     }
+@@ -749,6 +762,12 @@ class VulkanCommandProcessor : public CommandProcessor {
+   uint64_t vertex_buffers_in_sync_[2] = {};
+   std::unordered_map<uint64_t, ReadbackBuffer> readback_buffers_;
+   std::unordered_map<uint64_t, ReadbackBuffer> memexport_readback_buffers_;
++  // How many memexport readbacks each (address, size) key has had in the frame
++  // memexport_readback_counts_frame_, so that repeated exports to the same
++  // range within a frame each get their own readback slot (see
++  // vulkan_readback_memexport_per_occurrence).
++  std::unordered_map<uint64_t, uint32_t> memexport_readback_frame_counts_;
++  uint64_t memexport_readback_counts_frame_ = 0;
+ 
+   // The current dynamic state of the graphics pipeline bind point. Note that
+   // binding any pipeline to the bind point with static state (even if it's
+diff --git a/include/rex/ui/presenter.h b/include/rex/ui/presenter.h
+index 8808c1a..9e39782 100644
+--- a/include/rex/ui/presenter.h
++++ b/include/rex/ui/presenter.h
+@@ -1074,6 +1074,30 @@ class Presenter {
+   std::atomic<uint64_t> vsync_present_gate_last_present_tick_{0};
+   std::atomic<uint64_t> vsync_present_gate_suppressed_{0};
+   uint64_t vsync_present_gate_last_log_time_ms_ = 0;
++  // If output is null or shutdown is true, the signal may not be sent, either
++  // don't limit the frame rate in this case (an exceptional situation, such as
++  // a failure to find the output in DXGI), or don't draw at all if the window
++  // was removed from a connected monitor.
++  Microsoft::WRL::ComPtr<IDXGIOutput> dxgi_ui_tick_output_;
++  // To avoid allocating processing resources to the thread when nothing needs
++  // the ticks (not drawing the UI), the thread waits for vertical blanking
++  // intervals only when the UI drawing ticks are needed, and sleeping waiting
++  // for the control condition variable signals otherwise. Modifiable only from
++  // the UI thread, so readable by it without locking the mutex.
++  bool dxgi_ui_ticks_needed_ = false;
++  // The shutdown flag is modifiable only from the UI thread.
++  bool dxgi_ui_tick_thread_shutdown_ = false;
++  bool dxgi_ui_tick_force_requested_ = false;
++
++  std::condition_variable dxgi_ui_tick_control_condition_;
++  // May be signaled by guest output refreshing.
++  std::condition_variable dxgi_ui_tick_signal_condition_;
++
++  std::thread dxgi_ui_tick_thread_;
++#endif  // XE_PLATFORM
++
++  // Guest frame pacing state. Platform-independent: used by OnGuestVblank and
++  // GuestVblankPaceAllows on every backend.
+   // Emulated guest vblank counter (incremented by OnGuestVblank on every
+   // emulated vblank interrupt). This runs at the configured refresh rate
+   // (~60 Hz, or ~1000 Hz when guest_vblank_pacing is off), independent of how
+@@ -1098,27 +1122,6 @@ class Presenter {
+   std::atomic<uint64_t> guest_frame_pace_window_start_ms_{0};
+   std::atomic<uint64_t> guest_frame_pace_window_start_frame_count_{0};
+   std::atomic<uint64_t> guest_frame_pace_window_start_vblank_count_{0};
+-  // If output is null or shutdown is true, the signal may not be sent, either
+-  // don't limit the frame rate in this case (an exceptional situation, such as
+-  // a failure to find the output in DXGI), or don't draw at all if the window
+-  // was removed from a connected monitor.
+-  Microsoft::WRL::ComPtr<IDXGIOutput> dxgi_ui_tick_output_;
+-  // To avoid allocating processing resources to the thread when nothing needs
+-  // the ticks (not drawing the UI), the thread waits for vertical blanking
+-  // intervals only when the UI drawing ticks are needed, and sleeping waiting
+-  // for the control condition variable signals otherwise. Modifiable only from
+-  // the UI thread, so readable by it without locking the mutex.
+-  bool dxgi_ui_ticks_needed_ = false;
+-  // The shutdown flag is modifiable only from the UI thread.
+-  bool dxgi_ui_tick_thread_shutdown_ = false;
+-  bool dxgi_ui_tick_force_requested_ = false;
+-
+-  std::condition_variable dxgi_ui_tick_control_condition_;
+-  // May be signaled by guest output refreshing.
+-  std::condition_variable dxgi_ui_tick_signal_condition_;
+-
+-  std::thread dxgi_ui_tick_thread_;
+-#endif  // XE_PLATFORM
+ };
+ 
+ }  // namespace ui
+diff --git a/src/core/threading_posix.cpp b/src/core/threading_posix.cpp
+index 9ac8d15..fe6e541 100644
+--- a/src/core/threading_posix.cpp
++++ b/src/core/threading_posix.cpp
+@@ -414,8 +414,11 @@ class PosixConditionBase {
+       if (timeout == std::chrono::milliseconds::max()) {
+         std::this_thread::sleep_for(std::chrono::milliseconds(1));
+       } else {
+-        auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - now);
+-        auto sleep_time = std::min(remaining, std::chrono::milliseconds(1));
++        // Keep sub-millisecond precision: truncating to whole milliseconds
++        // turns the tail of every wait (and all of a 1 ms alertable poll
++        // slice) into a zero-length sleep, i.e. a busy spin.
++        auto remaining = std::chrono::duration_cast<std::chrono::microseconds>(end_time - now);
++        auto sleep_time = std::min(remaining, std::chrono::microseconds(1000));
+         std::this_thread::sleep_for(sleep_time);
+       }
+     }
+diff --git a/src/graphics/command_processor.cpp b/src/graphics/command_processor.cpp
+index dcbcbbc..9a19434 100644
+--- a/src/graphics/command_processor.cpp
++++ b/src/graphics/command_processor.cpp
+@@ -298,8 +298,19 @@ bool CommandProcessor::ShouldForceReadbackResolve(uint32_t base) const {
+ }
+ 
+ bool CommandProcessor::IsReadbackMemexportEnabled(bool legacy_backend_flag) const {
+-  if (legacy_readback_memexport_cvar_name_ &&
+-      rex::cvar::HasNonDefaultValue(legacy_readback_memexport_cvar_name_)) {
++  // Called for every draw. HasNonDefaultValue takes the cvar registry mutex and
++  // does a string-keyed lookup, so only re-query it now and then; the cvars are
++  // hot-reloadable, and a change still takes effect within a frame or two.
++  constexpr uint32_t kLegacyOverrideRefreshInterval = 1024;
++  static thread_local uint32_t refresh_countdown = 0;
++  static thread_local bool legacy_override = false;
++  if (refresh_countdown == 0) {
++    refresh_countdown = kLegacyOverrideRefreshInterval;
++    legacy_override = legacy_readback_memexport_cvar_name_ &&
++                      rex::cvar::HasNonDefaultValue(legacy_readback_memexport_cvar_name_);
++  }
++  --refresh_countdown;
++  if (legacy_override) {
+     return legacy_backend_flag;
+   }
+   return REXCVAR_GET(readback_memexport);
+@@ -471,9 +482,13 @@ void CommandProcessor::WriteRegister(uint32_t index, uint32_t value) {
+ 
+   // Volatile for the WAIT_REG_MEM loop.
+   const_cast<volatile uint32_t&>(regs.values[index]) = value;
++#ifndef NDEBUG
++  // Diagnostic only, and the lookup is a several-thousand-case switch on the
++  // hottest path of the command processor, so keep it out of release builds.
+   if (!regs.GetRegisterInfo(index)) {
+     REXGPU_DEBUG("GPU: Write to unknown register ({:04X} = {:08X})", index, value);
+   }
++#endif
+ 
+   // Scratch register writeback.
+   if (index >= XE_GPU_REG_SCRATCH_REG0 && index <= XE_GPU_REG_SCRATCH_REG7) {
+@@ -818,10 +833,15 @@ bool CommandProcessor::ExecutePacketType0(memory::RingBuffer* reader, uint32_t p
+ 
+   uint32_t base_index = (packet & 0x7FFF);
+   uint32_t write_one_reg = (packet >> 15) & 0x1;
++  if (!write_one_reg) {
++    // Sequential registers: hand the whole run to the backend, which handles
++    // runs of shader constants in bulk instead of one virtual call each.
++    WriteRegisterRangeFromRing(reader, base_index, count);
++    return true;
++  }
+   for (uint32_t m = 0; m < count; m++) {
+     uint32_t reg_data = reader->ReadAndSwap<uint32_t>();
+-    uint32_t target_index = write_one_reg ? base_index : base_index + m;
+-    WriteRegister(target_index, reg_data);
++    WriteRegister(base_index, reg_data);
+   }
+ 
+   return true;
+diff --git a/src/graphics/shared_memory.cpp b/src/graphics/shared_memory.cpp
+index ec0df7c..7349ec4 100644
+--- a/src/graphics/shared_memory.cpp
++++ b/src/graphics/shared_memory.cpp
+@@ -342,6 +342,51 @@ bool SharedMemory::RequestRanges(const std::pair<uint32_t, uint32_t>* ranges, si
+     return true;
+   }
+ 
++  // Fast path: this runs several times per draw, and in the common case every
++  // requested page is already valid. Check that without taking the global
++  // critical region (which guest threads contend on) or allocating. The valid
++  // bits are only read here, one aligned 64-bit word at a time. A page being
++  // invalidated by a guest write concurrently with this check is
++  // indistinguishable from the write landing just after a locked check, which
++  // the next request picks up either way.
++  {
++    bool all_valid = true;
++    for (size_t i = 0; i < count && all_valid; ++i) {
++      uint32_t start = ranges[i].first;
++      uint32_t length = ranges[i].second;
++      if (!length) {
++        continue;
++      }
++      if (start > kBufferSize || (kBufferSize - start) < length) {
++        return false;
++      }
++      if (!EnsureHostGpuMemoryAllocated(start, length)) {
++        return false;
++      }
++      uint32_t page_first = start >> page_size_log2_;
++      uint32_t page_last = (start + length - 1) >> page_size_log2_;
++      uint32_t block_first = page_first >> 6;
++      uint32_t block_last = page_last >> 6;
++      for (uint32_t block = block_first; block <= block_last; ++block) {
++        uint64_t needed = UINT64_MAX;
++        if (block == block_first) {
++          needed &= ~((uint64_t(1) << (page_first & 63)) - 1);
++        }
++        if (block == block_last && (page_last & 63) != 63) {
++          needed &= (uint64_t(1) << ((page_last & 63) + 1)) - 1;
++        }
++        uint64_t valid = __atomic_load_n(&system_page_flags_valid_[block], __ATOMIC_RELAXED);
++        if ((valid & needed) != needed) {
++          all_valid = false;
++          break;
++        }
++      }
++    }
++    if (all_valid) {
++      return true;
++    }
++  }
++
+   // Some texture or buffer is empty, for example - safe to draw in this case.
+   std::vector<std::pair<uint32_t, uint32_t>> merged_ranges;
+   merged_ranges.reserve(count);
+diff --git a/src/graphics/vulkan/command_processor.cpp b/src/graphics/vulkan/command_processor.cpp
+index f677401..91d099e 100644
+--- a/src/graphics/vulkan/command_processor.cpp
++++ b/src/graphics/vulkan/command_processor.cpp
+@@ -55,6 +55,15 @@ REXCVAR_DEFINE_BOOL(vulkan_readback_memexport, false, "GPU/Vulkan",
+                     "Read data written by memory export in shaders on the CPU")
+     .lifecycle(rex::cvar::Lifecycle::kHotReload);
+ 
++REXCVAR_DEFINE_BOOL(vulkan_readback_memexport_per_occurrence, true, "GPU/Vulkan",
++                    "With readback_memexport_fast, give every memexport draw to the same "
++                    "address range within a frame its own readback slot, so the Nth export "
++                    "of a frame reads back the Nth export of the previous frame. Without "
++                    "this, the second and later exports to a range in one frame find the "
++                    "previous copy still unsubmitted and fall back to a full synchronous "
++                    "readback, which stalls the GPU thread for the whole frame so far")
++    .lifecycle(rex::cvar::Lifecycle::kHotReload);
++
+ REXCVAR_DEFINE_BOOL(vulkan_async_skip_incomplete_frames, true, "GPU/Vulkan",
+                     "When async shader compilation is enabled, skip presenting frames that "
+                     "used placeholder pipelines to avoid visible flashing")
+@@ -4270,8 +4279,26 @@ bool VulkanCommandProcessor::IssueDraw_MemexportReadbackFastPath(uint32_t total_
+   const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
+   const VkDevice device = vulkan_device->device();
+ 
+-  const uint64_t readback_key =
++  uint64_t readback_key =
+       MakeMemexportReadbackKey(memexport_ranges_.front().base_address_dwords, total_size);
++  if (REXCVAR_GET(vulkan_readback_memexport_per_occurrence)) {
++    // A title can export to the same range several times per frame (Fable II
++    // does, about twice per frame for some ranges). With one slot pair per
++    // range, the second export's "previous" copy is the first export's, still
++    // in the open submission, which forces the full synchronous path on every
++    // frame. Key the slots by the export's ordinal within the frame instead,
++    // so its previous copy is the same export from the last frame, which the
++    // GPU has long finished. The ordinal is capped so a frame that never ends
++    // (no swap, e.g. loading) cannot grow the slot table without bound.
++    constexpr uint32_t kMaxOccurrencesPerFrame = 64;
++    if (memexport_readback_counts_frame_ != frame_current_) {
++      memexport_readback_counts_frame_ = frame_current_;
++      memexport_readback_frame_counts_.clear();
++    }
++    uint32_t occurrence =
++        std::min(memexport_readback_frame_counts_[readback_key]++, kMaxOccurrencesPerFrame - 1);
++    readback_key += uint64_t(occurrence) * UINT64_C(0x9E3779B97F4A7C15);
++  }
+   ReadbackBuffer& readback = memexport_readback_buffers_[readback_key];
+   readback.last_used_frame = frame_current_;
+ 
+@@ -4703,21 +4730,21 @@ bool VulkanCommandProcessor::IssueCopy_ReadbackResolvePath() {
+ }
+ 
+ void VulkanCommandProcessor::EvictOldReadbackBuffers(
+-    std::unordered_map<uint64_t, ReadbackBuffer>& buffer_map) {
++    std::unordered_map<uint64_t, ReadbackBuffer>& buffer_map, size_t max_buffers,
++    uint64_t eviction_age_frames) {
+   if (buffer_map.empty()) {
+     return;
+   }
+ 
+-  const uint64_t eviction_frame_floor = (frame_current_ > kReadbackBufferEvictionAgeFrames)
+-                                            ? (frame_current_ - kReadbackBufferEvictionAgeFrames)
+-                                            : 0;
++  const uint64_t eviction_frame_floor =
++      (frame_current_ > eviction_age_frames) ? (frame_current_ - eviction_age_frames) : 0;
+   const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
+   const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
+   const VkDevice device = vulkan_device->device();
+   for (auto it = buffer_map.begin(); it != buffer_map.end();) {
+     ReadbackBuffer& readback = it->second;
+     bool evict =
+-        buffer_map.size() > kMaxReadbackBuffers || readback.last_used_frame < eviction_frame_floor;
++        buffer_map.size() > max_buffers || readback.last_used_frame < eviction_frame_floor;
+     if (!evict) {
+       ++it;
+       continue;
+@@ -5231,8 +5258,10 @@ bool VulkanCommandProcessor::BeginSubmission(bool is_guest_command) {
+       texture_transient_descriptor_sets_used_.pop_front();
+     }
+ 
+-    EvictOldReadbackBuffers(readback_buffers_);
+-    EvictOldReadbackBuffers(memexport_readback_buffers_);
++    EvictOldReadbackBuffers(readback_buffers_, kMaxReadbackBuffers,
++                            kReadbackBufferEvictionAgeFrames);
++    EvictOldReadbackBuffers(memexport_readback_buffers_, kMaxMemexportReadbackBuffers,
++                            kMemexportReadbackBufferEvictionAgeFrames);
+ 
+     primitive_processor_->BeginFrame();
+ 
+diff --git a/src/system/CMakeLists.txt b/src/system/CMakeLists.txt
+index fdfd166..2692659 100644
+--- a/src/system/CMakeLists.txt
++++ b/src/system/CMakeLists.txt
+@@ -58,6 +58,9 @@ add_library(rex::kernel ALIAS rexruntime)
+ # and (importantly) guarantees the Xbox-360 kernel-stub __imp__* symbols are
+ # exported even when the dual-backend (D3D12+Vulkan) build's full symbol set
+ # would otherwise push them out of the linker's export table.
++# (Windows only: a .def file is a PE concept. ELF shared objects export their
++# default-visibility symbols.)
++if(WIN32)
+ set(REXRUNTIME_DEF "${CMAKE_CURRENT_SOURCE_DIR}/rexruntime.def")
+ if(WIN32 AND NOT REXGLUE_USE_VULKAN)
+     # The curated table contains dual-backend imports. D3D12-only builds must
+@@ -76,6 +79,7 @@ file(RELATIVE_PATH REXRUNTIME_DEF_REL "${CMAKE_BINARY_DIR}" "${REXRUNTIME_DEF}")
+ set_target_properties(rexruntime PROPERTIES
+     LINK_DEPENDS "${REXRUNTIME_DEF}"
+     LINK_OPTIONS "-Xlinker;/DEF:${REXRUNTIME_DEF_REL}")
++endif()
+ 
+ rex_target_pch(rexruntime
+     <mutex>
+diff --git a/src/system/mmio_handler.cpp b/src/system/mmio_handler.cpp
+index 2b93005..fbd58a9 100644
+--- a/src/system/mmio_handler.cpp
++++ b/src/system/mmio_handler.cpp
+@@ -21,6 +21,17 @@
+ #include <rex/system/mmio_handler.h>
+ #include <rex/types.h>
+ 
++#if REX_PLATFORM_LINUX
++#include <sys/mman.h>
++
++#include <cerrno>
++#include <cstdint>
++#ifndef MADV_POPULATE_READ
++#define MADV_POPULATE_READ 22
++#define MADV_POPULATE_WRITE 23
++#endif
++#endif
++
+ using namespace rex::arch;
+ 
+ namespace rex::runtime {
+@@ -364,6 +375,37 @@ bool MMIOHandler::TryDecodeLoadStore(const uint8_t* p, DecodedLoadStore& decoded
+ #endif  // REX_ARCH
+ }
+ 
++#if REX_PLATFORM_LINUX
++namespace {
++// Asks the kernel whether the page containing `address` can currently be read
++// or written, without touching its contents and without parsing
++// /proc/self/maps (which memory::QueryProtect does on Linux, at tens of
++// microseconds per call once the guest heaps have been split into thousands
++// of mappings by write watches). MADV_POPULATE_READ / MADV_POPULATE_WRITE
++// (Linux 5.14+) succeed exactly when the access would not fault.
++// Returns 1 if the access is allowed, 0 if it is not, -1 if the kernel does
++// not support the probe and the caller has to use the slow query.
++int ProbeHostPageAccess(void* address, bool is_write) {
++  static const bool probe_supported = [] {
++    static char probe_target[1];
++    void* page = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(probe_target) &
++                                         ~uintptr_t(memory::page_size() - 1));
++    return madvise(page, memory::page_size(), MADV_POPULATE_WRITE) == 0;
++  }();
++  if (!probe_supported) {
++    return -1;
++  }
++  void* page = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(address) &
++                                       ~uintptr_t(memory::page_size() - 1));
++  int saved_errno = errno;
++  int result = madvise(page, memory::page_size(),
++                       is_write ? MADV_POPULATE_WRITE : MADV_POPULATE_READ);
++  errno = saved_errno;
++  return result == 0 ? 1 : 0;
++}
++}  // namespace
++#endif
++
+ bool MMIOHandler::ExceptionCallbackThunk(arch::Exception* ex, void* data) {
+   return reinterpret_cast<MMIOHandler*>(data)->ExceptionCallback(ex);
+ }
+@@ -406,11 +448,21 @@ bool MMIOHandler::ExceptionCallback(arch::Exception* ex) {
+     // clears the watch we just hit).
+     // Do this under the lock so we don't introduce another race condition.
+     auto lock = global_critical_region_.Acquire();
+-    memory::PageAccess cur_access;
+-    size_t page_length = memory::page_size();
+-    memory::QueryProtect(fault_host_address, page_length, cur_access);
+-    if (cur_access != memory::PageAccess::kNoAccess &&
+-        (!is_write || cur_access != memory::PageAccess::kReadOnly)) {
++    bool access_now_allowed;
++#if REX_PLATFORM_LINUX
++    int probe_result = ProbeHostPageAccess(fault_host_address, is_write);
++    if (probe_result >= 0) {
++      access_now_allowed = probe_result != 0;
++    } else
++#endif
++    {
++      memory::PageAccess cur_access;
++      size_t page_length = memory::page_size();
++      memory::QueryProtect(fault_host_address, page_length, cur_access);
++      access_now_allowed = cur_access != memory::PageAccess::kNoAccess &&
++                           (!is_write || cur_access != memory::PageAccess::kReadOnly);
++    }
++    if (access_now_allowed) {
+       // Another thread has cleared this watch. Abort.
+       return true;
+     }

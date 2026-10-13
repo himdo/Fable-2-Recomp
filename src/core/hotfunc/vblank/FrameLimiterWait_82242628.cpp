@@ -48,6 +48,11 @@
 
 #include "fable_2_pch.h"
 
+#include <chrono>
+#include <thread>
+
+#include "fable2_config.h"
+
 extern "C" void FastHelper_821E8D20(PPCContext& ctx, uint8_t* base);
 extern "C" void GpuProgressCheck_82B9BF90(PPCContext& ctx, uint8_t* base);
 extern "C" void __restgprlr_29(PPCContext& ctx, uint8_t* base);
@@ -214,8 +219,19 @@ extern "C" void FrameLimiterWait_82242628(PPCContext& __restrict ctx, uint8_t* b
       break;
     }
     ReadinessR9R11(ctx, base);
+    // Host-side politeness, not guest behaviour: the guest spins here for
+    // the rest of every frame (up to ~33 ms) polling a counter the GPU thread
+    // writes, which pins a host core at 100%. With [perf] idle_yield_sleep_us
+    // > 0 (the non-Windows default) sleep between polls instead; it leaves
+    // the guest state untouched and delays the wake-up by at most one sleep.
+    // 0 (the Windows default) keeps the short PAUSE spin.
     if (ctx.cr6.lt != 0) {
-      SpinPause();
+      const int32_t sleep_us = fable2::config::Get().idle_yield_sleep_us;
+      if (sleep_us > 0) {
+        std::this_thread::sleep_for(std::chrono::microseconds(sleep_us));
+      } else {
+        SpinPause();
+      }
     }
   }
 

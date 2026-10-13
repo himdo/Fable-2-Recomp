@@ -244,6 +244,16 @@ struct Values {
   float photo_mode_mouse_sensitivity = 0.0025f;  // radians per mouse pixel
   float photo_mode_max_distance = 0.0f;   // 0 = no limit
   std::string photo_mode_screenshot_folder = "screenshots";
+  // idle_yield_sleep_us: when a guest thread calls NtYieldExecution back to
+  // back with no work in between (it is polling for another thread), sleep
+  // this many microseconds per yield instead of spinning a core at 100%
+  // (see src/core/hotfunc/hotfunc_yield.h). 0 = never sleep (original).
+  // Off by default on Windows, where a sub-millisecond sleep is not available.
+#ifdef _WIN32
+  int32_t idle_yield_sleep_us = 0;
+#else
+  int32_t idle_yield_sleep_us = 100;
+#endif
 };
 
 // Load the config from `path`.

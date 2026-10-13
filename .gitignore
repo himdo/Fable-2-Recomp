@@ -25,6 +25,9 @@ fable2_func_summary.log
 fable2_func_summary_prev.log
 fps_probe.log
 
+# --- Desktop launcher written by ./run.sh --make-shortcut (absolute paths) ---
+/Fable II.desktop
+
 # --- SDK / runtime artifacts ------------------------------------------------
 .fable2_image.bin
 
@@ -50,6 +53,10 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# --- Root scripts tracked DESPITE the /*.sh rule above (Linux build) ----------
+!build.sh
+!run.sh
 
 # --- Fetched/external toolchain deps (created by tools/setup_sdk_src.cmd). -------
 # The tracked files in thirdparty/ (rexglue-sdk-local.patch,
