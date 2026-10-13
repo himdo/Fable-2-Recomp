@@ -282,3 +282,26 @@ y su diagnóstico del frame rate (es el #507 que ya tenemos arreglado; 25–30 F
 - Trazador de funciones fuera de Release en macOS (`FABLE2_FUNC_TRACE`).
 - Pantalla completa negra (Spaces), teclado y ratón como mando, pruebas de paridad de
   config, graphify.
+
+### T9. Plan tras el análisis del 2026-10-13 (`docs/analysis/`) — pendiente de luz verde para probar
+Estado medido (build `full`, 67,5 ms/frame, 14,8 FPS): GPU ≈ 60 ms y el hilo de comandos de la GPU 54–57 ms
+de CPU. Para 30 FPS hacen falta **las dos cosas**: GPU ≤ 33 ms y ese hilo ≤ 33 ms. Quitar solo el MSAA da ~18 FPS.
+1. **MSAA = sombreado por muestra involuntario** (`msaa-code-path.md`). `spirv_translator.cpp:2976-2980`
+   declara `SampleRateShading` en todo PS que escribe color 0 sin early-Z (alpha test, kill); SPIRV-Cross
+   (MoltenVK) trata cualquier módulo con esa capacidad como per-sample (`[[sample_id]]`) y Metal ejecuta el
+   PS una vez por muestra. Explica el coste binario (passes principales a 2x; los 4x son de solo profundidad).
+   Arreglo de una condición: declararla solo con FSI o `IsSampleRate()`; mantener `gl_SampleMask`.
+   Esperado: la mayor parte de los ~45–50 ms de GPU. Probar base vs `FABLE2_EXP_MSAA1` después.
+2. **Hilo de comandos (CPU)**: grabación/encode de MoltenVK + descriptores ~30 ms, caché de texturas y
+   bookkeeping ~14 ms, subidas y parseo ~8 ms, espera al slot de memexport 10–13 ms. Candidatos:
+   bigmah/rexglue-sdk@38955c4916 (`shared_memory_upload_coalesce_kb`, `vulkan_narrow_render_area`: 218→79
+   passes, 529→42 Mpx; revisar contra nuestro upload-first), deduplicación de barreras y command buffers
+   previos para subidas (rama de andrew17182), variables de MoltenVK (`MVK_CONFIG_PREFILL_METAL_COMMAND_BUFFERS`,
+   `MVK_CONFIG_USE_MTLHEAP`) a medir.
+3. **Estratégico**: andrew17182/Fable-2-Recomp `feature/macos-playtest` lleva Fable 2 a un plugin Metal nativo
+   (de XeniOS; DXBC→DXIL→Metal Shader Converter); dicen 161 FPS sin límite en M5 Max (no verificado). himdo
+   cerró su PR #30 por tamaño (+72k). Evaluar: licencia, dependencias, compilarlo y medirlo en el M3 Pro.
+4. Cuelgue de la T3 en el título: carrera al arrancar con la caché de pipelines fría (salto de presentación
+   por pipelines provisionales). Probar con caché fría y `--vulkan_async_skip_incomplete_frames=false`.
+5. Correcciones a conclusiones previas: "la CPU explica el 8 %" ya no vale (el hilo de comandos es el 80–85 %
+   del frame); el ahorro de la T3 (30 ms) fue en parte CPU; `exp_adjust` no mejora nada medible.
