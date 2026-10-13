@@ -311,6 +311,11 @@ refresh_gpu_memory_each_frame = false
 # instead. The game's frame limiter, which busy-waits for the rest of every
 # frame, sleeps the same amount between polls. 0 = never sleep (original
 # behaviour). Leave commented out to use the platform default.
+# On Windows (10 version 1803 and later) the sleep uses a high-resolution
+# timer whose shortest sleep is about 500 microseconds, so smaller values
+# behave like 500 there and the frame limiter can wake up to ~0.5 ms late;
+# that is why it is off by default on Windows. On older Windows it has no
+# effect.
 # Default: 0 on Windows, 100 elsewhere
 # idle_yield_sleep_us = 100
 

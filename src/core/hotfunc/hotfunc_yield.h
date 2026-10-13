@@ -26,9 +26,8 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
-#include <thread>
-
 #include "fable2_config.h"
+#include "hotfunc_idle_sleep.h"
 
 // Forward declaration resolved against the rexruntime.dll export
 // (.?MaybeYield@thread@rex@@YAXXZ = rex::thread::MaybeYield(), void() -
@@ -48,7 +47,9 @@ namespace fable2::hotfunc {
 // (under kSpinGap apart, i.e. no real work between them) kSpinStreak times in
 // a row are treated as such a poll, and each further one sleeps briefly. Any
 // real work between two yields resets the streak, so work loops that yield
-// once per iteration are unaffected. Returns true if it slept.
+// once per iteration are unaffected. Returns true if it slept; false also
+// when the host has no short sleep (see hotfunc_idle_sleep.h), in which case
+// the caller yields as it always did.
 inline bool IdleSpinBackoff(int32_t sleep_us) {
   using clock = std::chrono::steady_clock;
   constexpr auto kSpinGap = std::chrono::microseconds(3);
@@ -66,9 +67,9 @@ inline bool IdleSpinBackoff(int32_t sleep_us) {
     ++streak;
     return false;
   }
-  std::this_thread::sleep_for(std::chrono::microseconds(sleep_us));
+  const bool slept = IdleSleepMicros(sleep_us);
   last = clock::now();  // the sleep itself is not "work"
-  return true;
+  return slept;
 }
 
 inline void BatchedYield() {

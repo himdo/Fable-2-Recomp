@@ -48,10 +48,8 @@
 
 #include "fable_2_pch.h"
 
-#include <chrono>
-#include <thread>
-
 #include "fable2_config.h"
+#include "hotfunc/hotfunc_idle_sleep.h"
 
 extern "C" void FastHelper_821E8D20(PPCContext& ctx, uint8_t* base);
 extern "C" void GpuProgressCheck_82B9BF90(PPCContext& ctx, uint8_t* base);
@@ -228,7 +226,9 @@ extern "C" void FrameLimiterWait_82242628(PPCContext& __restrict ctx, uint8_t* b
     if (ctx.cr6.lt != 0) {
       const int32_t sleep_us = fable2::config::Get().idle_yield_sleep_us;
       if (sleep_us > 0) {
-        std::this_thread::sleep_for(std::chrono::microseconds(sleep_us));
+        if (!fable2::hotfunc::IdleSleepMicros(sleep_us)) {
+          SpinPause();  // no short sleep on this host (pre-1803 Windows)
+        }
       } else {
         SpinPause();
       }
