@@ -103,6 +103,23 @@ endif()
 # per-configuration variant: rexgpu-xenosd.dll for Debug, rexgpu-xenos.dll
 # for Release). Without it the game runs with no GPU emulation.
 rexglue_setup_target(fable_2 GPU_PLUGINS xenos)
+# In-tree SDK build (REXSDK_DIR, the Linux path): rex/rex_app.h includes
+# <imgui.h>, which an installed SDK ships in its include dir but the in-tree
+# rex::runtime target does not propagate.
+if(TARGET imgui)
+    target_include_directories(fable_2 PRIVATE
+        $<TARGET_PROPERTY:imgui,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
+# Linux: the exe resolves librexruntime.so through its $ORIGIN runpath, so the
+# runtime has to sit next to it (the SDK only stages the GPU plugin there).
+if(UNIX AND NOT APPLE)
+    add_custom_command(TARGET fable_2 POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:rex::runtime>
+            $<TARGET_FILE_DIR:fable_2>
+        COMMENT "Staging the ReXGlue runtime next to fable_2"
+        VERBATIM)
+endif()
 add_custom_command(TARGET fable_2 POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_BINARY_DIR}/fable2_build.json"

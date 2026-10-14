@@ -27,7 +27,7 @@ game_root = "."
 [entrypoint]
 file_path = "default.xex"
 out_directory_path = "generated/default"
-includes = ["fable2_switch_tables.toml"]
+includes = ["fable2_switch_tables.toml", "config/midasm_hooks.toml"]
 
 # setjmp/longjmp: the recompiler redirects these to native implementations.
 # longjmp (0x82CA9260) restores the full guest state from the jmp_buf and
@@ -37,165 +37,12 @@ includes = ["fable2_switch_tables.toml"]
 longjmp_address = 0x82CA9260
 setjmp_address = 0x83000200
 
-# --- Recomp-level patches via mid-asm hooks (see docs/patches.md) ---------
-# Code-region Xenia patches are inert at runtime in this recomp (guest .text
-# is never executed), so they are applied to the RECOMPILED code instead: a
-# hook is injected at a specific guest instruction address and a C++ function
-# (defined in src/core/fable2_hooks.cpp) rewrites a register, mirroring the patch's
-# intent. Codegen emits each hook's extern prototype automatically. Hooks are
-# keyed by address in codegen (a duplicate address overrides the earlier one),
-# so each address appears exactly once below.
-#
-# Unlock Website Items (Xenia "Unlock Website Items" by Guy). sub_8256E368 is
-# the "is a website/Guild-chest item available" check. It is gated by the
-# player's website-registration flags on the chest object (r4): GATE 1 = bit6
-# of *(r4+0x90), GATE 1b = bit0 of *(r4+0x40). Only when BOTH pass does the
-# type-0xf0 item lookup run and the item get GRANTED via a vtable call
-# (bctrl at 0x8256E4CC); every other path funnels to the return-0 tail at
-# 0x8256E4E0. We force each gate's bit-extract result to 1 (r9 after the
-# GATE-1 rlwinm, r8 after the GATE-1b clrlwi) so the function always treats the
-# player as registered and performs the real grant. The getters run at save
-# load, so this populates the chest inventory on load.
-[[entrypoint.midasm_hook]]
-address = 0x8256E384
-name = "fable2_hook_website_g1"
-registers = ["r9"]
-after_instruction = true
-[[entrypoint.midasm_hook]]
-address = 0x8256E3AC
-name = "fable2_hook_website_g1b"
-registers = ["r8"]
-after_instruction = true
+# --- Recomp-level patches via mid-asm hooks --------------------------------
+# The mid-asm hooks (register rewrites injected at specific guest instruction
+# addresses, implemented in src/core/fable2_hooks.cpp) are defined in
+# config/midasm_hooks.toml and pulled in via `includes` above. See
+# docs/patches.md and that file for the full set and per-hook notes.
 
-# Unlock Collectors Edition Content (Xenia "Unlock Collectors Edition Content"
-# by Guy). Same shape: sub_824B3528 is the "is CE-chest content available"
-# check, gated by GATE 1 = bit6 of *(r4+0x90) and GATE 1b = a bit of
-# *(r4+0x28); only when both pass does the type-0x39 item lookup run and the
-# content get GRANTED via a vtable call (bctrl at 0x824B3678). We force each
-# gate's bit-extract result to 1 (r10 after the GATE-1 rlwinm, r9 after the
-# GATE-1b rlwinm) so the function always treats the player as registered.
-[[entrypoint.midasm_hook]]
-address = 0x824B3540
-name = "fable2_hook_ce_g1"
-registers = ["r10"]
-after_instruction = true
-[[entrypoint.midasm_hook]]
-address = 0x824B3568
-name = "fable2_hook_ce_g1b"
-registers = ["r9"]
-after_instruction = true
-
-# --- Unlock grant methods (make the getter report each item as granted) -----
-# Forcing the two registration gates alone is not enough: after the gates the
-# getter finds the item and calls a per-object GRANT vtable method, and the
-# getter returns THAT method's result. For an unregistered player the grant
-# method returns 0 (item not granted), so the getter reports "not available"
-# and the chest stays locked. We force each grant method's return to 1.
-#
-# Website: sub_8256D940 is the website-chest vtable[1] "is this item new?"
-# check. Its final instruction is `xori r3, r9, 1` at 0x8256D9E4; hook right
-# after it and set r3 = 1 so the getter reports the item as granted.
-[[entrypoint.midasm_hook]]
-address = 0x8256D9E4
-name = "fable2_hook_website_grantnew"
-registers = ["r3"]
-after_instruction = true
-
-# Disable Motion Blur. In the camera's per-frame update (sub_822A47C0, the
-# code that eases the camera's current values toward their targets), the
-# current full-screen motion blur amount (camera +0xD4; the value scripts set
-# through Camera.SetBlur / SetBlurCut / SetFullScreenMotionBlurCut) is handed
-# to the renderer: `lfs f12, 0xd4(r31)` at 0x822A49E8, then
-# `stfs f12, 0x7c(r11)`. Right after the load we zero f12 so the renderer
-# always receives 0; the camera's own value (and script reads of it) is
-# untouched. f12 is not read again before it is overwritten.
-# Toggle: [patches] disable_motion_blur.
-[[entrypoint.midasm_hook]]
-address = 0x822A49E8
-name = "fable2_hook_disable_motion_blur"
-registers = ["f12"]
-after_instruction = true
-#
-# CE: sub_824ACAE0 is the CE-chest grant vtable slot called from
-# GetCEContent. Its entire body is `lbz r3, 993(r3)` (returns the byte at
-# item+0x3E1, the "CE content available" flag). Hook right after it and set
-# r3 = 1 so the getter reports the CE content as available.
-[[entrypoint.midasm_hook]]
-address = 0x824ACAE0
-name = "fable2_hook_ce_grantavail"
-registers = ["r3"]
-after_instruction = true
-
-# High Tick Rate (Xenia patch by Guy), code half. The Xenia patch NOPs the
-# store at 0x8233AEB4 that writes the tick-rate double at 0x83319510 every
-# time it runs, and patches that double (be8 0x83319511: 15.0 -> 30.0; written
-# at load by src/core/fable2_patches.cpp). Guest .text never runs here, so the NOP was inert and
-# the game overwrote the patched value. This hook runs BEFORE the store and,
-# while [patches] high_tick_rate is true, jumps past it (= the NOP).
-[[entrypoint.midasm_hook]]
-address = 0x8233AEB4
-name = "fable2_hook_high_tick_rate_skip_store"
-registers = []
-jump_address_on_true = 0x8233AEB8
-
-# Higher HF Tick Rate (Xenia patch by Ultra), code half. Same function: the
-# store at 0x8233AE98 (`stfd f0, -0x6ae8(r9)`) writes the HF tick double at
-# 0x83319518 (30.0, copied from 0x833194F0) every time it runs and would undo
-# the 30 -> 60 Hz data write (src/core/fable2_patches.cpp). Runs BEFORE the
-# store and, while [patches] higher_hf_tick_rate is true, jumps past it.
-[[entrypoint.midasm_hook]]
-address = 0x8233AE98
-name = "fable2_hook_high_hf_tick_rate_skip_store"
-registers = []
-jump_address_on_true = 0x8233AE9C
-
-# Address-space scan fix (src/core/fable2_address_scan.cpp). sub_82B4DDD8
-# finds an aligned block of address space by reserving one candidate address
-# after another (step r28, size r26, limit r27, candidate r31); each taken
-# candidate was a failed NtAllocateVirtualMemory call and an "[error]
-# BaseHeap::AllocFixed attempting to reserve an already reserved range" line
-# (~3,850 at startup). The hook runs at the loop head, before each attempt,
-# and moves r31 to the first candidate whose range is actually free, so the
-# game gets the same address without the failed calls. It returns true only
-# when no candidate is left, jumping to the function's own "nothing found"
-# exit (li r3, 0).
-[[entrypoint.midasm_hook]]
-address = 0x82B4DE50
-name = "fable2_hook_address_scan_skip"
-registers = ["r26", "r27", "r28", "r31"]
-jump_address_on_true = 0x82B4DEF8
-
-# Skip Intro Videos (just-harry's "Skip intro videos" patch from his
-# Unofficial Xenia femtofork, as a hook). sub_822F4958 builds the boot video
-# queue: slot 0 = microsoft_logo.bik, slot 1 = lionhead_logo.bik, slot 2 =
-# terminator, then loops queueing slots until CompareString says "terminator".
-# Right after the first CompareString (bl at 0x822F49B8) we report
-# "terminator" (r3 = 0), so nothing is queued; the three strings are still
-# constructed and released normally. Toggle: [patches] skip_intro_videos.
-[[entrypoint.midasm_hook]]
-address = 0x822F49B8
-name = "fable2_hook_skip_intro_videos"
-registers = ["r3"]
-after_instruction = true
-
-# Hero/dog black textures, fixed without CPU readback
-# (plans/hero-dog-realtime-texture-morphing.md). The hero's and dog's skin
-# textures are built by texture morphing. In the default "baked" mode the morph
-# renderer (sub_82A69728) draws each mip into a scratch render target, resolves
-# it to guest memory (the 0x12704000 scratch texture), locks that READONLY on
-# the CPU and DXT-compresses it into the final texture (sub_83008E98). On a
-# split-memory host that CPU read sees stale memory, so the result is black.
-# The game also has a RealTimeTextureMorphing mode in which the morph is drawn
-# straight into an uncompressed final texture and its mips are made on the
-# GPU, so the CPU never reads the result. Every morph request becomes a morph
-# job in sub_82A76018, which copies the request's realtime byte with
-# `lbz r9, 0x20(r30)` at 0x82A7607C (then `stb r9, 0x60(r31)`); force it to 1.
-# Toggle: [patches] realtime_texture_morphing.
-[[entrypoint.midasm_hook]]
-address = 0x82A7607C
-name = "fable2_hook_realtime_texture_morphing"
-registers = ["r9"]
-after_instruction = true
 
 # Conservative settings: no register optimizations
 skip_lr = true
@@ -41221,9 +41068,18 @@ name = "ProcessAndProcessAndProcess1011_82C50A10"
 [entrypoint.functions."0x82CA6AB0"]
 name = "ProcessAndProcessAndProcess1012_82CA6AB0"
 
-# Read the merged pad state (seven hundred and one hundred and one hundred and one hundred and thirteenth form). It takes a structure and checks its state, with no external sub-operations. This is the guest's XamInputGetState wrapper that reads the final merged pad state (all drivers OR-merged), called from the state probe hook. Part of the 0x822B2 process cluster. 11 lines. 0 callees. 10 callers.
+# Read the merged pad state for the active player (Xbox user index 1). The
+# guest's XamInputGetState wrapper and the single entry point of Fable 2's
+# input path: it takes a destination X_INPUT_STATE pointer (r4), pins the user
+# index to 1, and fills that pointer with the driver-merged pad state (all
+# drivers OR-merged). Called from ~15 per-frame pollers. This is where the
+# synthetic keyboard/gamepad driver's state is observed and where the state and
+# attack probes watch button edges (see src/input/keyboard_gamepad.h,
+# src/diagnostics/fable2_state_probe.h, fable2_attack_probe.h). Renamed from
+# the generic auto-name (ProcessAndProcessAndProcess1013) per the
+# FABLE2_ATTACK_PROBE input-chain analysis.
 [entrypoint.functions."0x822B2D60"]
-name = "ProcessAndProcessAndProcess1013_822B2D60"
+name = "GetUser1InputState_822B2D60"
 
 # Process a structure (seven hundred and one hundred and one hundred and one hundred and fourteenth form). It takes a structure and checks its state, with no external sub-operations. Part of the 0x82204 process cluster. 127 lines. 0 callees. 6 callers (including ProcessAndProcessAndProcess874).
 [entrypoint.functions."0x82204638"]
@@ -42320,9 +42176,9 @@ name = "ProcessAndProcessAndProcess1286_82184D38"
 # Process a large structure by copying data (seven hundred and one hundred and one hundred and one hundred and one hundred and two hundred and eighty-seventh form). It takes a structure, copies its data (MemCpy), and drives sub-operations (sub_829FA5E8, sub_82A666A8, sub_82BE3F30) based on the result. Part of the 0x82185 process cluster. 317 lines. 4 callees. 1 caller (ProcessAndProcessAndProcess1294).
 # Per-frame front-end input poller: walks the menu input-element list and, when
 # a pending button event is queued, builds the event struct and calls
-# FrontMenu_InputEvent. Fires ~once per frame (30 Hz) while the menu is open.
+# InputEvent_Handle. Fires ~once per frame (30 Hz) while the menu is open.
 [entrypoint.functions."0x82185C90"]
-name = "FrontMenu_PollEventQueue"
+name = "InputEvent_PollQueue"
 
 # Process a very large data structure by copying data (seven hundred and one hundred and one hundred and one hundred and one hundred and two hundred and eighty-eighth form). It takes a structure, copies its data (MemCpy), and drives sub-operations (ProcessAndProcessAndProcess1091, ProcessAndProcessAndProcess1092, sub_82188F20, sub_829FA5E8) based on the result. Part of the 0x82189 process cluster. 780 lines. 5 callees. 1 caller (ProcessAndProcessAndProcess1294).
 [entrypoint.functions."0x82189058"]
@@ -47479,7 +47335,7 @@ name = "ProcessAndProcessAndProcess2560_8322BB68"
 # supported buttons (r10, u16 at r4) and drives per-button handling. Fires
 # ~twice per physical press (once per menu input element).
 [entrypoint.functions."0x82188F20"]
-name = "FrontMenu_PressBitDispatch"
+name = "InputEvent_DispatchButtonPress"
 
 # Process a structure by checking its state (two thousand four hundred and one hundred and thirteenth form). It takes a structure (a: field at a->12) and a flag (b); it checks the structure's state, and sets or clears a bit in the structure based on the flag. This is the "process this data" routine (two thousand four hundred and one hundred and thirteenth form), part of the 0x82C5C process cluster. 15 lines. 0 callees. 3 callers (sub_82C5A780, sub_82C5CC60, and sub_82C5A950).
 [entrypoint.functions."0x82C5C748"]
@@ -49102,7 +48958,7 @@ name = "RegisterActionEffectTypeStrings_82514818"
 # ProcessAndProcessAndProcess1287_82185C90 (per-frame event queue poller).
 # Named for the mod-menu hook (see src/diagnostics/fable2_modmenu.h).
 [entrypoint.functions."0x82BE3F30"]
-name = "FrontMenu_InputEvent"
+name = "InputEvent_Handle"
 
 # ===========================================================================
 # Camera system (per-frame camera update)
@@ -49256,3 +49112,83 @@ name = "TextureCompress_Quantized_83008E98"
 # GPU mip generation. PDB: __imp__sub_821FC4A0, 6505 bytes.
 [entrypoint.functions."0x821FC4A0"]
 name = "TextureMips_BuildGPU_821FC4A0"
+
+# =============================================================================
+# Player melee-action trigger chain (identified via FABLE2_ATTACK_PROBE)
+#
+# These names come from the attack-probe diff: functions that are NEW (zero in
+# the 5 s idle baseline) and fire exactly once per melee-X swing (count==1 in
+# all 5 captures). The flow, top to bottom, is:
+#
+#   GetUser1InputState_822B2D60      (input read; see above)
+#     -> InputEvent_DispatchButtonPress  (0x82188F20, raw press-bit dispatch)
+#     -> InputEvent_PollQueue    (0x82185C90) -> InputEvent_Handle
+#                                     (0x82BE3F30, builds the press event)
+#     -> DispatchPlayerAction_82748840   (first attack-specific dispatch call)
+#        -> ResolvePlayerAction_823E8528
+#           -> QueryActivePlayerMethod_821EC8A0   (the active hero)
+#     -> MeleeAction_*   (0x829A-0x829B cluster: the melee-action module)
+#
+# CAVEAT: measured with melee-X (light) presses only. A comparative run with a
+# non-attack press and Y (heavy) is still needed to confirm these are
+# melee-specific rather than the generic player-action path.
+# =============================================================================
+
+# Player-action dispatch -- entry of the attack trigger chain. First
+# attack-specific call after InputEvent_Handle builds the press event; takes
+# an event/context object (r3), reads a handler pointer at r3->16, and
+# dispatches (via ResolvePlayerAction_823E8528) toward QueryActivePlayerMethod.
+# FABLE2_ATTACK_PROBE: NEW, count==1 in all 5 melee-X captures, absent from
+# idle.
+[entrypoint.functions."0x82748840"]
+name = "DispatchPlayerAction_82748840"
+
+# Player-action dispatch -- action resolution. Called by
+# DispatchPlayerAction_82748840; takes the action object (r3) and looks it up
+# against a fixed global action table (lis/addi/lwz of a global at +4). Same
+# FABLE2_ATTACK_PROBE signature as DispatchPlayerAction (NEW, count==1 in all 5
+# melee-X captures); reaches QueryActivePlayerMethod transitively.
+[entrypoint.functions."0x823E8528"]
+name = "ResolvePlayerAction_823E8528"
+
+# Tight address cluster of 12 functions that the FABLE2_ATTACK_PROBE diff found
+# firing exactly once per melee-X swing and never during the idle baseline
+# (NEW, count==1 in all 5 captures). DispatchPlayerAction_82748840 feeds this
+# module, which resolves/executes the action against the active hero. Individual
+# roles are not yet disambiguated, so all 12 carry the shared "MeleeAction"
+# module label. CAVEAT: identified from melee-X captures only.
+[entrypoint.functions."0x829A7128"]
+name = "MeleeAction_829A7128"
+
+[entrypoint.functions."0x829AB980"]
+name = "MeleeAction_829AB980"
+
+[entrypoint.functions."0x829ADFE8"]
+name = "MeleeAction_829ADFE8"
+
+[entrypoint.functions."0x829AF450"]
+name = "MeleeAction_829AF450"
+
+[entrypoint.functions."0x829AF950"]
+name = "MeleeAction_829AF950"
+
+[entrypoint.functions."0x829AFE08"]
+name = "MeleeAction_829AFE08"
+
+[entrypoint.functions."0x829B4F78"]
+name = "MeleeAction_829B4F78"
+
+[entrypoint.functions."0x829B5EF0"]
+name = "MeleeAction_829B5EF0"
+
+[entrypoint.functions."0x829B5F48"]
+name = "MeleeAction_829B5F48"
+
+[entrypoint.functions."0x829B6C78"]
+name = "MeleeAction_829B6C78"
+
+[entrypoint.functions."0x829B76A8"]
+name = "MeleeAction_829B76A8"
+
+[entrypoint.functions."0x829B78A0"]
+name = "MeleeAction_829B78A0"

@@ -41,6 +41,9 @@
 //   0x8224270C  call sub_82B9BEC8(r1+80), then the epilogue at 0x82242714.
 #include "fable_2_pch.h"
 
+#include "fable2_config.h"
+#include "hotfunc/hotfunc_idle_sleep.h"
+
 extern "C" void FastHelper_821E8D20(PPCContext& ctx, uint8_t* base);
 extern "C" void GpuProgressCheck_82B9BF90(PPCContext& ctx, uint8_t* base);
 extern "C" void __restgprlr_29(PPCContext& ctx, uint8_t* base);
@@ -197,6 +200,17 @@ extern "C" void FrameLimiterWait_82242628(PPCContext& __restrict ctx, uint8_t* b
       break;
     }
     ReadinessR9R11(ctx, base);
+    // Host-side politeness, not guest behaviour: the guest spins here for
+    // the rest of every frame (up to ~33 ms) polling a counter the GPU thread
+    // writes, which pins a host core at 100%. Sleeping between polls leaves
+    // the guest state untouched and delays the wake-up by at most one sleep.
+    // [perf] idle_yield_sleep_us; 0 keeps the original spin.
+    if (ctx.cr6.lt != 0) {
+      const int32_t sleep_us = fable2::config::Get().idle_yield_sleep_us;
+      if (sleep_us > 0) {
+        fable2::hotfunc::IdleSleepMicros(sleep_us);
+      }
+    }
   }
 
   ctx.r3.s64 = ctx.r1.s64 + kArgBlock;

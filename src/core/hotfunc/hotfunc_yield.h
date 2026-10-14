@@ -24,9 +24,10 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
-
 #include "fable2_config.h"
+#include "hotfunc_idle_sleep.h"
 
 // Forward declaration resolved against the rexruntime.dll export
 // (.?MaybeYield@thread@rex@@YAXXZ = rex::thread::MaybeYield(), void() -
@@ -39,7 +40,44 @@ void MaybeYield();
 
 namespace fable2::hotfunc {
 
+// Idle-spin backoff ([perf] idle_yield_sleep_us). A guest thread that is
+// waiting for another one polls by yielding in a tight loop; the host yield
+// returns immediately when nothing else wants the core, so the loop burns a
+// full core for as long as the wait lasts. Yields that arrive back to back
+// (under kSpinGap apart, i.e. no real work between them) kSpinStreak times in
+// a row are treated as such a poll, and each further one sleeps briefly. Any
+// real work between two yields resets the streak, so work loops that yield
+// once per iteration are unaffected. Returns true if it slept; false also
+// when the host has no short sleep (see hotfunc_idle_sleep.h), in which case
+// the caller yields as it always did.
+inline bool IdleSpinBackoff(int32_t sleep_us) {
+  using clock = std::chrono::steady_clock;
+  constexpr auto kSpinGap = std::chrono::microseconds(3);
+  constexpr uint32_t kSpinStreak = 1000;
+  static thread_local clock::time_point last{};
+  static thread_local uint32_t streak = 0;
+  const auto now = clock::now();
+  const bool back_to_back = now - last < kSpinGap;
+  last = now;
+  if (!back_to_back) {
+    streak = 0;
+    return false;
+  }
+  if (streak < kSpinStreak) {
+    ++streak;
+    return false;
+  }
+  const bool slept = IdleSleepMicros(sleep_us);
+  last = clock::now();  // the sleep itself is not "work"
+  return slept;
+}
+
 inline void BatchedYield() {
+  const int32_t idle_sleep_us = fable2::config::Get().idle_yield_sleep_us;
+  if (idle_sleep_us > 0 && IdleSpinBackoff(idle_sleep_us)) {
+    std::atomic_thread_fence(std::memory_order_seq_cst);
+    return;
+  }
   const int32_t every = fable2::config::Get().hotfunc_yield_every;
   if (every <= 0) {
     std::atomic_signal_fence(std::memory_order_seq_cst);  // compiler barrier only, no mfence

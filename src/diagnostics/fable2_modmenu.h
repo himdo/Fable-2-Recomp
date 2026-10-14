@@ -12,7 +12,7 @@
 //     same trick as fable2_deadbeef.h). It is therefore always visible as the
 //     3rd item, no scrolling required.
 //   * We keep a mirror of the selection index (0..4) driven by the raw press
-//     dispatcher (FrontMenu_PressBitDispatch). Pressing A while the mirror is
+//     dispatcher (InputEvent_DispatchButtonPress). Pressing A while the mirror is
 //     on index 2 runs fable2::modmenu::Activate() and relabels the row
 //     "LOADED" to confirm it fired.
 //   * Leaving the main menu restores "Downloadable Content".
@@ -23,7 +23,7 @@
 //   FABLE2_MODMENU=1      enable the feature
 //   FABLE2_MODMENU_LOG=1  log to fable2_modmenu.log (exe dir)
 //
-// Button bits measured live from FrontMenu_PressBitDispatch r5 (the
+// Button bits measured live from InputEvent_DispatchButtonPress r5 (the
 // pressed-button mask): Up=1, Down=2, Back=32, A=4096. Each physical press
 // fires the dispatcher ~twice (135..270 ms apart); we time-dedup with a 400 ms
 // gate so one press == one action.
@@ -492,7 +492,7 @@ inline void Activate(const uint8_t* base);
 // (The live "Downloadable Content" string cache is maintained by the background
 // scanner thread; on_frame/on_press only read it via set_row.)
 
-// Called from the FrontMenu_PressBitDispatch hook on every raw press.
+// Called from the InputEvent_DispatchButtonPress hook on every raw press.
 inline void on_press(PPCContext& ctx, uint8_t* base) {
   if (!enabled()) return;
   State& s = st();
@@ -699,11 +699,11 @@ inline void scanner_thread() {
 
 // Strong override of the raw press bit-dispatch. Forwards to the stock body
 // and layers the mod-menu mirror index / activation on top.
-extern "C" void __imp__FrontMenu_PressBitDispatch(PPCContext& ctx,
+extern "C" void __imp__InputEvent_DispatchButtonPress(PPCContext& ctx,
                                                   uint8_t* base);
-extern "C" void FrontMenu_PressBitDispatch(PPCContext& ctx, uint8_t* base) {
+extern "C" void InputEvent_DispatchButtonPress(PPCContext& ctx, uint8_t* base) {
   fable2::modmenu::on_press(ctx, base);
-  __imp__FrontMenu_PressBitDispatch(ctx, base);
+  __imp__InputEvent_DispatchButtonPress(ctx, base);
 }
 
 // NOTE: on_frame is called from the per-frame MainRenderLoop_82B9CD68 hook,

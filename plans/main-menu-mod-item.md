@@ -135,10 +135,10 @@ with summary snapshots around each. Per-press normalized analysis:
 
 - **`sub_82BE3F30`** — exactly **+1 call per menu button press** (Up/Down/A/Back,
   including clamped presses at the ends and Back). The raw menu input-event
-  handler. Called from `FrontMenu_PollEventQueue` (0x82185C90),
+  handler. Called from `InputEvent_PollQueue` (0x82185C90),
   which iterates UI elements (element `->44 == 13`, f64@+64 == time) and calls
   `sub_82BE3F30(r3 = element+8, r5 = local 56B struct)`.
-- **`FrontMenu_PressBitDispatch`** — +2 per raw press (also in the
+- **`InputEvent_DispatchButtonPress`** — +2 per raw press (also in the
   0x8218xxxx "process cluster" — input processing).
 - **Effective-action chain** (fires only when the press changes the selection
   or activates, NOT on clamped presses): `ProcessAndProcessAndProcess2636/2635/
@@ -193,10 +193,10 @@ with summary snapshots around each. Per-press normalized analysis:
 - Activation intercept: A-press edge detector in fable2_state_probe.h
   (`last_a_press_ms`) + mirrored selection index from `sub_82BE3F30`.
 
-### Static: FrontMenu_InputEvent (0x82BE3F30, renamed in manifest) input layout
+### Static: InputEvent_Handle (0x82BE3F30, renamed in manifest) input layout
 
 From the generated body (fable_2_recomp.191.cpp:21862) and its caller
-(FrontMenu_PollEventQueue, fable_2_recomp.271.cpp):
+(InputEvent_PollQueue, fable_2_recomp.271.cpp):
 
 - Called with r3 = r4 = element+8 (queue slot); r5 = pointer to a 56-byte
   event built by the caller from a UI element of type 13 (15 for a second
@@ -211,7 +211,7 @@ From the generated body (fable_2_recomp.191.cpp:21862) and its caller
   +8..+64: event} and links it into the queue list at *(element+12),
   incrementing the counter at element+16. (A rare branch fires when the
   counter reaches 0x49490C — not part of normal menu operation.)
-- So the mod menu mirrors the selection from `FrontMenu_InputEvent` by
+- So the mod menu mirrors the selection from `InputEvent_Handle` by
   reading the button code at r5+16 on every call (clamp to 0..4, plus the
   synthetic index 5).
 
@@ -252,7 +252,7 @@ draw code consumes.
   alpha/flag), and per-item y positions (row pitch) — from
   `FABLE2_UIR_IN_DUMP` (BYTES=64, HOP=1) of
   UITextContainer_ProcessChildren (the 70k/s container draw),
-  FrontMenu_InputEvent (per press), and the effective-action chain.
+  InputEvent_Handle (per press), and the effective-action chain.
 - Where the selection index lives (menu manager object) — from the per-press
   dumps' register/heap context.
 
@@ -267,22 +267,22 @@ draw code consumes.
   responsive (run 14: full-res 3840x2160 screenshots, complete navigation,
   `final state: MainMenu`). So: dump registers freely; only dump guest memory
   when you can afford the crawl (i.e. at the end of a run).
-- **Button mask** (measured live from `FrontMenu_PressBitDispatch` r5): the
+- **Button mask** (measured live from `InputEvent_DispatchButtonPress` r5): the
   function ANDs the pressed-button mask (r5) against the element's supported
   buttons (r10 = u16 at r4). Mask bits: **Up=1, Down=2, Back=32, A=4096**.
   Each physical press fires the dispatcher ~twice (135–270 ms apart, ~4.8 s
   between presses in the driver) → one action per press via a 400 ms time
   gate.
-- **FrontMenu_InputEvent (0x82BE3F30) does NOT fire during main-menu
+- **InputEvent_Handle (0x82BE3F30) does NOT fire during main-menu
   navigation** (zero dumps in a live run), so it is not the reliable per-press
-  source; `FrontMenu_PressBitDispatch` (0x82188F20) is.
+  source; `InputEvent_DispatchButtonPress` (0x82188F20) is.
 
 ### Manifest renames (confirmed roles)
 
-- `0x82188F20` → **`FrontMenu_PressBitDispatch`** — raw press bit-dispatch
+- `0x82188F20` → **`InputEvent_DispatchButtonPress`** — raw press bit-dispatch
   (ANDs pressed-button mask r5 vs supported r10; ~2 calls/press).
-- `0x82185C90` → **`FrontMenu_PollEventQueue`** — per-frame input poller, calls
-  FrontMenu_InputEvent once per pending event.
+- `0x82185C90` → **`InputEvent_PollQueue`** — per-frame input poller, calls
+  InputEvent_Handle once per pending event.
 - `0x82C217B8` → **`FrontMenu_EnsureElement`** — get-or-create UI element node
   (binary-search key, construct node if absent; fires on effective actions).
 
@@ -306,7 +306,7 @@ decomplier placeholders and the manifest's auto-filler descriptions were wrong):
 
 ### Implementation (src/diagnostics/fable2_modmenu.h, gated on FABLE2_MODMENU=1)
 
-- **Mirror index 0..5**: `FrontMenu_PressBitDispatch` strong override keeps a
+- **Mirror index 0..5**: `InputEvent_DispatchButtonPress` strong override keeps a
   mirror of the selection (start 0; Down→+1 capped at 5, Up→-1 floored at 0;
   400 ms time-gate dedups the ~2 calls/press). The stock engine clamps at 0..4,
   so our index 5 maps to the highlighted bottom row (Subtitles position).
@@ -351,8 +351,8 @@ decomplier placeholders and the manifest's auto-filler descriptions were wrong):
   because the stock engine clamps at 0..4, so A on the mod item also activates
   the stock Subtitles. For the demo this is acceptable (our `Activate()` runs);
   a cleaner version would suppress the stock A press when the mirror is at 5.
-- Manifest renames (0x82188F20 → FrontMenu_PressBitDispatch, 0x82185C90 →
-  FrontMenu_PollEventQueue, 0x82C217B8 → FrontMenu_EnsureElement) are applied
+- Manifest renames (0x82188F20 → InputEvent_DispatchButtonPress, 0x82185C90 →
+  InputEvent_PollQueue, 0x82C217B8 → FrontMenu_EnsureElement) are applied
   and regenerate cleanly.
 
 ### Revision — vision-confirmed render + replace "Downloadable Content" (v6)

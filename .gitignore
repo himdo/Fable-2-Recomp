@@ -18,7 +18,11 @@ fable2_func_trace.log
 fable2_func_trace_prev.log
 fable2_func_summary.log
 fable2_func_summary_prev.log
+fable2_attack_probe.log
 fps_probe.log
+
+# --- Desktop launcher written by ./run.sh --make-shortcut (absolute paths) ---
+/Fable II.desktop
 
 # --- SDK / runtime artifacts ------------------------------------------------
 .fable2_image.bin
@@ -45,6 +49,8 @@ __pycache__/
 # POST_BUILD and imports across its modules; the recomp-patch and remote-control
 # helpers are invoked by CMake at build time. A fresh clone must have them or the
 # build fails. Everything else matching the rules above stays out of the repo.
+!build.sh
+!run.sh
 !tools/repro/*.py
 !tools/apply_recomp_patches.py
 !tools/fable2_control.py

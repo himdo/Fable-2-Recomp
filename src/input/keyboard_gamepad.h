@@ -57,6 +57,15 @@ REXCVAR_DECLARE(bool, mouse_look);
 REXCVAR_DECLARE(int32_t, mouse_look_scale);
 REXCVAR_DECLARE(std::string, mouse_unlock_key);
 
+// Input-press function probe (src/diagnostics/fable2_attack_probe.h,
+// single-TU include from main.cpp): fed the buttons this driver contributes
+// so a host-key press is detected even if the guest input wrapper is not
+// observed. No-op unless the probe is enabled (FABLE2_ATTACK_PROBE=1 or
+// Fable2AttackProbeSetEnabled).
+extern "C" void Fable2AttackProbeObserve(uint16_t buttons, uint8_t lt,
+                                        uint8_t rt, int16_t lx, int16_t ly,
+                                        int16_t rx, int16_t ry);
+
 namespace fable2 {
 
 // Bring the SDK input types into scope so the driver overrides below read
@@ -344,6 +353,10 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
       mouse_centered_ = false;  // re-prime on (re)focus to avoid a jump
     }
 #endif
+
+    Fable2AttackProbeObserve(buttons, left_trigger, right_trigger,
+                             static_cast<int16_t>(lx), static_cast<int16_t>(ly),
+                             static_cast<int16_t>(rx), static_cast<int16_t>(ry));
 
     out_state->packet_number.set(packet_number_++);
     out_state->gamepad.buttons.set(buttons);

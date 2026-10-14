@@ -4,14 +4,14 @@
 // render-probe infrastructure (timeline + FABLE2_UIR_IN_DUMP input dumps)
 // can observe them:
 //
-//   - FrontMenu_PollEventQueue (0x82185C90): per-frame UI input-event queue
-//     poller; calls the per-press handler (FrontMenu_InputEvent) once per
+//   - InputEvent_PollQueue (0x82185C90): per-frame UI input-event queue
+//     poller; calls the per-press handler (InputEvent_Handle) once per
 //     pending button press (Up/Down/A/Back).
 //   - FrontMenu_EnsureElement (0x82C217B8): get-or-create UI element node
 //     (fires on effective actions: selection change / activation).
-//   - FrontMenu_InputEvent (0x82BE3F30): the per-press handler itself.
+//   - InputEvent_Handle (0x82BE3F30): the per-press handler itself.
 //
-// NOTE: FrontMenu_PressBitDispatch (0x82188F20, the raw press bit-dispatch)
+// NOTE: InputEvent_DispatchButtonPress (0x82188F20, the raw press bit-dispatch)
 // is overridden in fable2_modmenu.h instead, which layers the mod-menu mirror
 // index / activation on top of the stock body.
 //
@@ -22,17 +22,17 @@
 
 #include "fable2_ui_render_probe.h"
 
-extern "C" void __imp__FrontMenu_InputEvent(PPCContext& ctx, uint8_t* base);
-extern "C" void FrontMenu_InputEvent(PPCContext& ctx, uint8_t* base) {
-  if (fable2::uir::hook("FrontMenu_InputEvent", ctx, base)) return;
-  __imp__FrontMenu_InputEvent(ctx, base);
+extern "C" void __imp__InputEvent_Handle(PPCContext& ctx, uint8_t* base);
+extern "C" void InputEvent_Handle(PPCContext& ctx, uint8_t* base) {
+  if (fable2::uir::hook("InputEvent_Handle", ctx, base)) return;
+  __imp__InputEvent_Handle(ctx, base);
 }
 
-extern "C" void __imp__FrontMenu_PollEventQueue(PPCContext& ctx,
+extern "C" void __imp__InputEvent_PollQueue(PPCContext& ctx,
                                                 uint8_t* base);
-extern "C" void FrontMenu_PollEventQueue(PPCContext& ctx, uint8_t* base) {
-  if (fable2::uir::hook("FrontMenu_PollEventQueue", ctx, base)) return;
-  __imp__FrontMenu_PollEventQueue(ctx, base);
+extern "C" void InputEvent_PollQueue(PPCContext& ctx, uint8_t* base) {
+  if (fable2::uir::hook("InputEvent_PollQueue", ctx, base)) return;
+  __imp__InputEvent_PollQueue(ctx, base);
 }
 
 extern "C" void __imp__FrontMenu_EnsureElement(PPCContext& ctx,

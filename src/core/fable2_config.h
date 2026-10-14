@@ -101,6 +101,13 @@ struct Values {
   // original (yield every call), 0 = never yield. Larger = fewer context
   // switches, less frequent CPU rotation to other guest threads.
   int32_t hotfunc_yield_every = 1;
+  // idle_yield_sleep_us: when a guest thread calls NtYieldExecution back to
+  // back with no work in between (it is polling for another thread), sleep
+  // this many microseconds per yield instead of spinning a core at 100%
+  // (see src/core/hotfunc/hotfunc_yield.h). 0 = never sleep (original).
+  // Windows sleeps in steps of about 500 us whatever the value
+  // (see src/core/hotfunc/hotfunc_idle_sleep.h).
+  int32_t idle_yield_sleep_us = 100;
 };
 
 // Load the config from `path`.

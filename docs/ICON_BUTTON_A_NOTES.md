@@ -22,7 +22,7 @@ Companion document: `TEXT_RENDERING_NOTES.md` (UI text pipeline, probe infrastru
 3. **Yes, the memory is read every frame** while the main menu is up. Runtime evidence:
    `fable2_heap_scan.log` shows the live parsed objects (below), and
    `fable2_func_summary.log` shows the per-frame UI pipeline executing
-   (`UIText_FrameRender` 2775×, `UITextPrompt_Render` 40303×, `FrontMenu_PollEventQueue` 496×
+   (`UIText_FrameRender` 2775×, `UITextPrompt_Render` 40303×, `InputEvent_PollQueue` 496×
    in one session).
 4. **There is no single "DrawIconButtonA" function.** The widget is consumed via vtable
    dispatch from the per-frame render loop. The concrete named functions that touch this
@@ -187,8 +187,8 @@ Per `fable2_func_summary.log` (one full session with main menu), the GUI pipelin
  4129 x UIText_FrameRenderIter          25 x UITextElement_Draw
   4062 x UIText_RenderSegment           25 x UITextElement_PostQuery
   2775 x UIText_FrameRender             25 x UIText_RenderElement
-  2775 x UITextContainer_ProcessChildren   6 x FrontMenu_PressBitDispatch
-  1354 x UIText_RenderCurrentObject       496 x FrontMenu_PollEventQueue
+  2775 x UITextContainer_ProcessChildren   6 x InputEvent_DispatchButtonPress
+  1354 x UIText_RenderCurrentObject       496 x InputEvent_PollQueue
                                           1 x UITextPrompt_RenderElement
 ```
 
@@ -225,9 +225,9 @@ Key facts about the prompt itself:
 Input side (what happens when A is pressed):
 
 ```
-FrontMenu_PollEventQueue    0x82185C90   ~1/frame (30 Hz) while menu open
-FrontMenu_InputEvent        0x82BE3F30   Up/Down/A/Back incl. clamped presses
-FrontMenu_PressBitDispatch  0x82188F20   button mask (A=4096) vs element's supported buttons
+InputEvent_PollQueue    0x82185C90   ~1/frame (30 Hz) while menu open
+InputEvent_Handle        0x82BE3F30   Up/Down/A/Back incl. clamped presses
+InputEvent_DispatchButtonPress  0x82188F20   button mask (A=4096) vs element's supported buttons
 FrontMenu_EnsureElement     0x82C217B8   get-or-create front-end UI element node (on actions)
 ```
 

@@ -744,9 +744,16 @@ extern "C" void ProcessAndProcessAndProcess573_82B458C0(PPCContext& ctx, uint8_t
 // The guest's XamInputGetState wrapper: reads the FINAL merged pad state (all
 // drivers OR-merged: remote + keyboard + physical). Capture the A button from
 // it so the A-press is detected no matter which input source drives it.
-extern "C" void ProcessAndProcessAndProcess1013_822B2D60(PPCContext& ctx, uint8_t* base) {
+namespace fable2::attackprobe {
+// Input-press function probe (src/diagnostics/fable2_attack_probe.h, single-TU
+// include from main.cpp): also feed it the merged pad state for its press
+// edges. Forward-declared here to avoid the include.
+void observe_state(const uint8_t* base, uint32_t state_ptr);
+}
+extern "C" void GetUser1InputState_822B2D60(PPCContext& ctx, uint8_t* base) {
   const uint32_t state_ptr = ctx.r4.u32;
-  __imp__ProcessAndProcessAndProcess1013_822B2D60(ctx, base);
+  __imp__GetUser1InputState_822B2D60(ctx, base);
   fable2::stateprobe::observe_a_button(state_ptr);
+  fable2::attackprobe::observe_state(base, state_ptr);
 }
 #endif  // FABLE2_REMOTE_CONTROL

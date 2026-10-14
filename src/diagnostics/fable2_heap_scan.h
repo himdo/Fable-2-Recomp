@@ -160,6 +160,7 @@ static void needle_search(uint8_t* hp, size_t len, uint32_t guest_lo) {
   if (g_scan_log) std::fflush(g_scan_log);
 }
 
+#ifdef _WIN32
 __declspec(noinline) void seh_dump_runs(uint8_t* hp, size_t len,
                                         uint32_t guest_lo) {
   __try {
@@ -222,6 +223,7 @@ __declspec(noinline) void seh_dump_runs(uint8_t* hp, size_t len,
     if (g_scan_log) std::fflush(g_scan_log);
   }
 }
+#endif  // _WIN32
 
 }  // extern "C"
 
@@ -247,6 +249,11 @@ inline FILE*& logf() {
 inline void scan_all() {
   FILE* f = logf();
   if (!f) return;
+#ifndef _WIN32
+  // The region walk below is built on VirtualQuery + SEH and is not ported.
+  std::fputs("heap scan is not supported on this platform\n", f);
+  std::fflush(f);
+#else
   g_scan_log = f;
   g_ascii_runs = 0;
   g_u16_runs = 0;
@@ -326,6 +333,7 @@ inline void scan_all() {
                 capped ? " (CAPPED)" : "");
   std::fputs(sum, f);
   std::fflush(f);
+#endif  // _WIN32
 }
 
 // Simple flag the render thread sets; a single scanner thread consumes it.
