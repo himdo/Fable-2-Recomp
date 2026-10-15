@@ -335,6 +335,11 @@ Estado: build `macos` `bbadd11` del fork (subido), 14,8 FPS en 3D y 29 en menús
    parpadeo (¿presentación/sincronización, pipelines provisionales, memexport?) con `vulkan_async_skip_incomplete_frames`,
    `readback_memexport*` y la validación de Mesa (`MESA_VK_*`/`KK_DEBUG`); medir con MSAA 1x; reportar a Mesa
    si es un fallo del driver. Para volver a MoltenVK basta con no definir `VK_DRIVER_FILES`.
+   **Aparcado (2026-10-16, decisión del usuario):** con la medida de parpadeo (`FLICKER=30`) MoltenVK da mediana
+   1,8 / máx 2,6 / 0 picos y KosmicKrisp 2,4 / 66,5 / 3 picos, más device lost también con
+   `--readback_memexport=false` y con `--vulkan_shared_memory_upload_first=false` (no es la ruta de memexport).
+   Nos centramos en MoltenVK. Al volver: Mesa main tiene una regresión que reinicia el render pass en cada draw
+   con vértice provocador "last" (mesa#16580); Xenia lo usa.
 2. **Coste del MSAA (28 ms)**: medir las rutas solo-MSAA del emulador (transferencias de propiedad por muestra,
    dump/resolve multisample; `docs/analysis/msaa-code-path.md`, puntos 3 y medidas 3–4): contador de draws de
    transferencia y dispatches por frame, y el interruptor 2x→4x para ver si el coste escala con las muestras.
