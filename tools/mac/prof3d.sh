@@ -35,6 +35,12 @@ fi
 sleep "${HOLD:-0}"
 # Capture the end of the window too: the FPS below comes from its last lines.
 screencapture -x -o -l "$wid" "$OUT/${name}_end.png"
+# FLICKER=N: a burst of N captures, scored by flicker.py (frame-to-frame change).
+if [ "${FLICKER:-0}" -gt 0 ]; then
+  rm -rf "$OUT/${name}_flk"; mkdir -p "$OUT/${name}_flk"
+  for i in $(seq -w 1 "$FLICKER"); do screencapture -x -o -l "$wid" "$OUT/${name}_flk/$i.png"; done
+  python3 "$SP/flicker.py" "$OUT/${name}_flk"
+fi
 kill -INT $pid; sleep 3; kill -9 $pid 2>/dev/null
 L=logs/$(ls -t logs | head -1)
 echo "fps: $(grep 'guest vblank pacer' $L | tail -15 | sed -E 's/.*guest frame \(gate\) ~([0-9.]+) Hz.*/\1/' | tr '\n' ' ')"
