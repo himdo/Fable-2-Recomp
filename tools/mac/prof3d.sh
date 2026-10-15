@@ -18,11 +18,13 @@ sleep 25; key e; sleep 12; key s; sleep 3; key e; sleep 20; key e
 # Three captures: the game fades to black between the load and the first
 # cutscene, so one shot can land on a black frame. The last one is "_3d.png".
 wid=$(osascript -l JavaScript "$SP/winlist.js" | awk '/Fable 2 Recompiled/{print $1; exit}')
-for t in 110 130 150; do
+# The intro cutscene ends at a variable time (up to ~170 s since the intro
+# videos are skipped); measure only from 180 s, in the street scene.
+for t in 180 200 220; do
   while [ $SECONDS -lt $t ]; do sleep 1; done
   screencapture -x -o -l "$wid" "$OUT/${name}_${t}s.png"
 done
-cp "$OUT/${name}_150s.png" "$OUT/${name}_3d.png"
+cp "$OUT/${name}_220s.png" "$OUT/${name}_3d.png"
 # TRACE=1: record a 5 s Metal System Trace instead of sampling the CPU.
 if [ "${TRACE:-0}" = 1 ]; then
   rm -rf "$OUT/mst_$name.trace"

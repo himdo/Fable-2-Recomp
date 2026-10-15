@@ -350,3 +350,21 @@ Estado: build `macos` `bbadd11` del fork (subido), 14,8 FPS en 3D y 29 en menús
 5. Cuelgue ocasional al arrancar con caché fría (T3/T9 punto 4) y PR himdo#8 (cargas rápidas).
 Árbol auxiliar: `/Volumes/EXT/fable2/t3-wt` rama `exp-msaa` con los interruptores TEMPDIAG sin commitear
 (incluida la ruta de escritura de registros en bloque); plugin experimental en `t3-wt/out/mac-arm64/`.
+
+### T10. MSAA en MoltenVK: diagnóstico cerrado (2026-10-16) y modo de 1 muestra en el host
+Medidas en la calle jugable (ventana corregida a 180–220 s; antes algunas medidas caían en la cinemática):
+| Prueba | FPS |
+|---|---|
+| MSAA normal | 14,5 |
+| MSAA a 1x (truco de registro) | 25,8 |
+| sin transferencias a destinos MSAA | 14,8 |
+| transferencias sin sombreado por muestra | 13,3 |
+| MSAA normal sin point sprites | 17,8 |
+| MSAA 1x sin point sprites | 29,0 (tope de 30) |
+Trazas (calle, mismo plugin): fragmentos 45,7 → 17,1 ms/frame con 1x; vértices iguales; el pase principal pasa de
+3,5–5,6 a 17–25 ms de fragmentos. Volcado MSL (`MVK_CONFIG_DEBUG=1`): 42 de 108 PS del juego eran por muestra
+(`[[sample_id]]` vía `SampleRateShading`); con el arreglo del punto 1 de T9 quedan 0, **sin ganancia**. Descartados:
+transferencias, sombreado por muestra, 2x emulado como 4x (MoltenVK anuncia 2x). Los point sprites explican ~9 ms del
+coste del MSAA; el resto (~22 ms) es el coste general de la escena con MSAA en el GPU de Apple vía MoltenVK.
+**Decisión:** implementar un modo macOS que renderice superficies 2x/4x del guest en RTs de 1 muestra del host
+manteniendo el layout de EDRAM del guest (`docs/analysis/msaa-code-path.md`, fix 3). Coste visual: sin antialiasing.

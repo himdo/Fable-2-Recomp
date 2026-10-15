@@ -437,3 +437,5 @@ Hallazgos de la tanda:
 - KosmicKrisp (Homebrew mesa 26.2.4): 17,2 FPS en 3D (vs 14,8 MoltenVK) pero parpadeos y device lost en la
   espera de readback de memexport. Pendiente de aislar.
 - 2026-10-16: KosmicKrisp aparcado (parpadeo y device lost no ligados a memexport). Foco: MoltenVK.
+- 2026-10-16: MSAA = ~28 ms en la calle; no es transferencias ni per-sample (0 PS per-sample y sin ganancia);
+  point sprites ~9 ms del delta. Siguiente: modo de 1 muestra en el host (T10).
