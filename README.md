@@ -514,6 +514,11 @@ Metal). Build the runtime from the SDK fork first, as Windows does: the
 official 0.10.0 runtime recreates the swapchain paint pipeline after a full GPU
 wait on every frame. The fixes live as commits on the fork
 `rasty94/rexglue-sdk`, branch `macos`, which the submodule points at.
+On macOS the fork draws the game's 2x MSAA surfaces into 1-sample host
+render targets (`vulkan_host_msaa_1x`, on by default there): multisampled
+targets are slow on Apple GPUs through MoltenVK, and this roughly doubles
+the 3D frame rate at the cost of edge anti-aliasing. Pass
+`--vulkan_host_msaa_1x=false` to get MSAA back.
 `build.sh` links that runtime whenever it is staged, and keeps the official
 tool for codegen.
 
