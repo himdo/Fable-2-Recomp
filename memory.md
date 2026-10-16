@@ -439,3 +439,5 @@ Hallazgos de la tanda:
 - 2026-10-16: KosmicKrisp aparcado (parpadeo y device lost no ligados a memexport). Foco: MoltenVK.
 - 2026-10-16: MSAA = ~28 ms en la calle; no es transferencias ni per-sample (0 PS per-sample y sin ganancia);
   point sprites ~9 ms del delta. Siguiente: modo de 1 muestra en el host (T10).
+- 2026-10-16: modo de 1 muestra para superficies 2x (vulkan_host_msaa_1x, on en macOS): 3D 14,5 → 24,2 FPS,
+  imagen correcta. Fork macos 2864452.

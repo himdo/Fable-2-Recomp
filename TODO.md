@@ -368,3 +368,10 @@ transferencias, sombreado por muestra, 2x emulado como 4x (MoltenVK anuncia 2x).
 coste del MSAA; el resto (~22 ms) es el coste general de la escena con MSAA en el GPU de Apple vía MoltenVK.
 **Decisión:** implementar un modo macOS que renderice superficies 2x/4x del guest en RTs de 1 muestra del host
 manteniendo el layout de EDRAM del guest (`docs/analysis/msaa-code-path.md`, fix 3). Coste visual: sin antialiasing.
+**Hecho (fork `macos` `2864452`):** `vulkan_host_msaa_1x`, por defecto on en macOS. Solo las superficies **2x** del
+guest pasan a 1 muestra en el host; las 4x siguen 4x (con 4x, sus dos muestras horizontales llevan datos distintos
+cuando el juego reinterpreta la EDRAM entre 2x/4x o 32/64 bpp: la primera versión daba rayas verticales y tinte).
+Resultado sin opciones: **3D 24,2 FPS** (14,5 antes), menús 29, imagen correcta, parpadeo 1,1/1,8/0 picos.
+Costes: sin antialiasing de bordes en 2x, alpha-to-mask con tramado, consultas de oclusión cuentan píxeles.
+Desactivar con `--vulkan_host_msaa_1x=false`. Pendiente: revisar más escenas (interiores, noche, agua, vegetación
+con alpha-to-mask) y posibles filas duplicadas si el juego reinterpreta 1x↔2x.
