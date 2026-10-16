@@ -986,12 +986,6 @@ public partial class MainWindow : Window
             onChecked: () => SetPatchChecked("high_tick_rate", true));
         AddPatchRow("Disable Motion Blur", "disable_motion_blur",
             "Zero the camera's full-screen motion blur amount each frame.", _advanced.DisableMotionBlur);
-        AddPatchRow("Realtime Texture Morphing", "realtime_texture_morphing",
-            "Render the hero/dog morphed skin textures on the GPU (fixes the black hero/dog).",
-            _advanced.RealtimeTextureMorphing);
-        AddPatchRow("Hero/Dog Texture Readback", "hero_dog_texture_readback",
-            "CPU readback of the hero/dog texture resolve. Superseded by realtime morphing.",
-            _advanced.HeroDogTextureReadback);
     }
 
     private void CollectPatches()
@@ -1007,8 +1001,6 @@ public partial class MainWindow : Window
                 case "high_tick_rate": _advanced.HighTickRate = value; break;
                 case "higher_hf_tick_rate": _advanced.HigherHfTickRate = value; break;
                 case "disable_motion_blur": _advanced.DisableMotionBlur = value; break;
-                case "realtime_texture_morphing": _advanced.RealtimeTextureMorphing = value; break;
-                case "hero_dog_texture_readback": _advanced.HeroDogTextureReadback = value; break;
             }
         }
     }

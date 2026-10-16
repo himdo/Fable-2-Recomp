@@ -422,9 +422,6 @@ void fable2_hook_direct_mouse_look(PPCRegister& r31) {
 // a scratch texture that the CPU reads back and DXT-compresses (that CPU read
 // is what returns black on a split-memory host).
 void fable2_hook_realtime_texture_morphing(PPCRegister& r9) {
-  if (!fable2::config::Get().realtime_texture_morphing) {
-    return;
-  }
   static bool logged = false;
   if (!logged) {
     logged = true;
