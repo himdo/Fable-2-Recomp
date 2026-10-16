@@ -10,6 +10,7 @@
 
 #include "fable2_patches.h"
 
+#include <atomic>
 #include <format>
 
 #include <rex/logging.h>
@@ -21,41 +22,10 @@ namespace fable2::patches {
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// The data halves of the Xenia patches from
-// "4D5307F1 - Fable II (GOTY/Platinum Edition).patch.toml"
-// (https://github.com/xenia-canary/game-patches). The code halves (the NOPs
-// of the stores that would overwrite these values) are mid-asm hooks in
-// src/core/fable2_hooks.cpp, gated on the same config keys.
-// ---------------------------------------------------------------------------
-std::vector<Patch> BuildPatches() {
-  const auto& cfg = fable2::config::Get();
-  return {
-      {
-          "High Tick Rate",
-          "Doubles the LF tick to 30 Hz. Vastly improves in-game UI framerate. "
-          "Improves input delay.",
-          "Guy",
-          cfg.high_tick_rate,
-          {
-              // LF tick double at 0x83319510: 15.0 -> 30.0.
-              {Op::Width::kBe8, 0x83319511, 0x3E},
-          },
-      },
-      {
-          "Higher HF Tick Rate",
-          "Doubles the HF tick to 60 Hz, keeping the 2:1 HF:LF ratio with "
-          "High Tick Rate.",
-          "Ultra",
-          // Requires High Tick Rate (same gate as the hook in fable2_hooks.cpp).
-          cfg.high_tick_rate && cfg.higher_hf_tick_rate,
-          {
-              // HF tick double at 0x83319518: 30.0 -> 60.0.
-              {Op::Width::kBe8, 0x83319519, 0x4E},
-          },
-      },
-  };
-}
+// No data patches at the moment. The Xenia "High Tick Rate" / "Higher HF Tick
+// Rate" patches lived here; the dynamic tick rate (src/core/fable2_tick_rate.h)
+// replaced them. ApplyAll still runs: it records the guest base for the hooks.
+std::vector<Patch> BuildPatches() { return {}; }
 
 size_t WidthBytes(Op::Width w) {
   switch (w) {
@@ -161,11 +131,18 @@ const std::vector<Patch>& Patches() {
   return patches;
 }
 
+namespace {
+std::atomic<uint8_t*> g_guest_base{nullptr};
+}  // namespace
+
+uint8_t* GuestBase() { return g_guest_base.load(std::memory_order_acquire); }
+
 size_t ApplyAll(rex::memory::Memory* memory, const rex::PPCImageInfo& image) {
   if (!memory) {
     REXSYS_ERROR("[patches] no guest memory available; not applying patches");
     return 0;
   }
+  g_guest_base.store(memory->virtual_membase(), std::memory_order_release);
 
   size_t applied = 0;
   size_t skipped = 0;
