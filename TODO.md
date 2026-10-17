@@ -383,3 +383,9 @@ passes/frame. Causa: sin geometry shaders cada punto se expande a 4 vértices en
 veces. En curso: rama `native-points` del fork, puntos cuadrados como puntos nativos de Metal (VS una vez por punto,
 `gl_PointSize`/`gl_PointCoord`), cvar `vulkan_native_point_sprites` (on en macOS). Pendiente: por qué los puntos
 rompen ~50 render passes por frame (¿subidas de búferes dinámicos de partículas?).
+**Hecho (fork `macos` `27a82d2`):** puntos cuadrados como puntos nativos (decisión por draw: tamaño cuadrado, sin
+memexport, dentro de `pointSizeRange` 1–511 con `largePoints`, sin polygon offset, `ps_ucp_mode < 2`; el resto sigue
+expandido). Activable en caliente con `--vulkan_native_point_sprites=false`. Resultado por defecto: **3D 29,1 FPS
+(tope de 30)**, cinemática 29, imagen correcta, parpadeo 1,2/2,0/0 picos. Diferencias aceptadas: un punto con el
+centro fuera de pantalla desaparece entero; tamaños por vértice de menos de 1 px se dibujan de 1 px.
+Nota: el runtime también cambia (`VulkanDevice::Properties`); desplegar las dos dylib juntas.

@@ -441,3 +441,4 @@ Hallazgos de la tanda:
   point sprites ~9 ms del delta. Siguiente: modo de 1 muestra en el host (T10).
 - 2026-10-16: modo de 1 muestra para superficies 2x (vulkan_host_msaa_1x, on en macOS): 3D 14,5 → 24,2 FPS,
   imagen correcta. Fork macos 2864452.
+- 2026-10-17: puntos nativos (vulkan_native_point_sprites, on en macOS): 3D 29,1 FPS = tope de 30. Fork macos 27a82d2.

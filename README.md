@@ -518,7 +518,10 @@ On macOS the fork draws the game's 2x MSAA surfaces into 1-sample host
 render targets (`vulkan_host_msaa_1x`, on by default there): multisampled
 targets are slow on Apple GPUs through MoltenVK, and this roughly doubles
 the 3D frame rate at the cost of edge anti-aliasing. Pass
-`--vulkan_host_msaa_1x=false` to get MSAA back.
+`--vulkan_host_msaa_1x=false` to get MSAA back. Square point sprites (the snow) are
+drawn as native Metal points instead of being expanded in the vertex
+shader (`vulkan_native_point_sprites`, also on by default on macOS). With
+both, the 3D scenes run at the game's 30 FPS cap on an M3 Pro.
 `build.sh` links that runtime whenever it is staged, and keeps the official
 tool for codegen.
 
