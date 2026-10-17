@@ -1,65 +1,17 @@
-# PR drafts for himdo/rexglue-sdk (nothing pushed or opened)
+# PRs for himdo/rexglue-sdk
 
-The per-fix branches were lost with the old disk image; every fix is now a commit on rasty94/rexglue-sdk branch `macos` (on himdo a728090). Recreate a PR branch by cherry-picking its commit onto himdo/main.
+All branches pushed to `rasty94/rexglue-sdk` and PRs opened against `himdo/rexglue-sdk:main`.
 
-## Already open
+## Open Pull Requests
 
-- Presenter paint pipeline churn: https://github.com/himdo/rexglue-sdk/pull/11 (branch `fix-vulkan-paint-pipeline-churn`, commit 1ffc649). Upstream issue: rexglue/rexglue-sdk#507.
+- **#11** Presenter paint pipeline churn: https://github.com/himdo/rexglue-sdk/pull/11 (branch `fix-vulkan-paint-pipeline-churn`). Upstream issue: rexglue/rexglue-sdk#507.
+- **#13** ui: declare the presenter pacer counters on all platforms: https://github.com/himdo/rexglue-sdk/pull/13 (branch `fix-pacer-members-non-win32`).
+- **#14** cmake: pass -Xlinker /DEF: only on Windows: https://github.com/himdo/rexglue-sdk/pull/14 (branch `fix-def-only-windows`).
+- **#15** core: restore default action when no exception handler takes a signal: https://github.com/himdo/rexglue-sdk/pull/15 (branch `fix-posix-unhandled-signal`).
+- **#16** vulkan: do not re-request a UI paint when the pacer suppressed it: https://github.com/himdo/rexglue-sdk/pull/16 (branch `fix-ui-paint-spin-when-paced`).
+- **#17** vulkan: upload shared memory before submission render passes (T1): https://github.com/himdo/rexglue-sdk/pull/17 (branch `t1-upload-first`).
 
-## T1 - branch `t1-upload-first` (on top of 1ffc649)
+## Notes on remaining candidates
 
-**Title:** vulkan: upload shared memory before the submission's render passes
-
-Adds the `vulkan_shared_memory_upload_first` cvar (default false). Pages that no GPU command of the current
-submission has accessed yet are uploaded into a second deferred command buffer, replayed before the main
-one, instead of ending the current render pass. Pages already accessed keep the in-order path. The upload
-buffer has its own barriers, so usage tracking of the main command buffer is unaffected.
-
-Fable 2 on MoltenVK (Apple M3 Pro), 3D scene, off -> on: inline shared memory copies 431 -> ~8 per frame,
-render passes 409 -> ~145 per frame, 7.9 -> 9.7 FPS.
-
-## T2 - branch `t2-memexport-no-drain` (on top of T1)
-
-**Title:** vulkan: skip the memexport readback instead of draining the GPU (readback_memexport_no_drain)
-
-When the previous readback slot for a memexport (address, size) key is still in flight, the fast path falls
-back to the full path, which waits for all queue operations and serializes CPU and GPU once per frame. With
-`readback_memexport_no_drain` the read for that draw is skipped and the slot still alternates; the next draw
-with the same key copies it once its submission has completed. Hot reload.
-
-**Warning (data loss):** skipped reads mean the guest sometimes sees data from an earlier draw, or none.
-On Fable 2 this gained only about +0.9 FPS, so we keep it off by default on our side; the PR should make
-the cvar default off everywhere (the commit currently says "default on for macOS"; change before opening) and
-state the trade-off clearly.
-
-## fix-pacer-members-non-win32
-
-**Title:** ui: declare the presenter pacer counters on all platforms
-
-The guest vblank/frame counters and pacer state in `presenter.h` were declared inside
-`#if REX_PLATFORM_WIN32`, but the pacer code that uses them is built everywhere, so the build failed
-outside Windows. Move the members out of the Win32 block. No behaviour change on Windows.
-
-## fix-def-only-windows
-
-**Title:** cmake: pass -Xlinker /DEF: only on Windows
-
-`src/system/CMakeLists.txt` passed `-Xlinker /DEF:<rexruntime.def>` unconditionally. That is an lld-link
-option; on ELF/Mach-O the link fails. Guard it with `if(WIN32)`; other platforms export with default visibility.
-
-## fix-posix-unhandled-signal
-
-**Title:** core: restore the default action when no exception handler takes a signal
-
-`ExceptionHandlerCallback` returned when no registered handler handled SIGSEGV/SIGBUS/SIGILL, so the CPU
-re-ran the faulting instruction forever (silent hang at 100% CPU, no crash report). Reset the signal to
-`SIG_DFL` so the process terminates with a normal crash report. Found debugging a loader crash on macOS.
-
-## fix-ui-paint-spin-when-paced
-
-**Title:** vulkan: do not re-request a UI paint when the pacer suppressed it
-
-When `GuestVblankPaceAllows()` suppressed a paint, `PaintAndPresentImpl` immediately requested another UI
-paint. `RefreshGuestOutput` already requests one when the next guest frame lands, and on platforms where no
-vblank tick throttles paints (everything but Win32) the extra request spun the UI thread. Keep the immediate
-re-request only for the vsync gate. Depends on nothing; touches the same function as #11 but a different hunk.
+- **T2 (`readback_memexport_no_drain`):** skipped reads mean the guest sometimes sees data from an earlier draw. On Fable 2 it gained only ~0.9 FPS; kept internal/off.
+- **T3 (tessellation emulated in VS) & T10 (vulkan_host_msaa_1x) & T11 (native point sprites):** living in `rasty94/rexglue-sdk:macos`. Can be proposed upstream if himdo wants macOS/TBDR optimizations.

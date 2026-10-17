@@ -7,7 +7,7 @@ OUT="${OUT:-$REPO/out/mac-measure}"; mkdir -p "$OUT"
 BUILD="$REPO/out/build/mac-arm64-release"
 cd "$BUILD"
 MVK_CONFIG_PERFORMANCE_TRACKING=1 MVK_CONFIG_PERFORMANCE_LOGGING_FRAME_COUNT=60 MVK_CONFIG_ACTIVITY_PERFORMANCE_LOGGING_STYLE=0 \
-  ./fable_2 --game_data_root "$REPO" --fullscreen=false "$@" > "$OUT/run_$name.log" 2>&1 &
+  ./fable_2 --game_data_root "$REPO" --fullscreen="${FULLSCREEN:-false}" "$@" > "$OUT/run_$name.log" 2>&1 &
 pid=$!
 key() { osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $pid) to true" \
   -e "tell application \"System Events\" to key down \"$1\"" -e 'delay 0.25' -e "tell application \"System Events\" to key up \"$1\"" >/dev/null; }
@@ -18,6 +18,7 @@ sleep 25; key e; sleep 12; key s; sleep 3; key e; sleep 20; key e
 # Three captures: the game fades to black between the load and the first
 # cutscene, so one shot can land on a black frame. The last one is "_3d.png".
 wid=$(osascript -l JavaScript "$SP/winlist.js" | awk '/Fable 2 Recompiled/{print $1; exit}')
+[ -z "$wid" ] && wid=$(osascript -l JavaScript "$SP/winlist.js" | awk '{print $1; exit}')
 # The intro cutscene ends at a variable time (up to ~170 s since the intro
 # videos are skipped); measure only from 180 s, in the street scene.
 for t in 180 200 220; do

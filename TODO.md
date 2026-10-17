@@ -204,16 +204,25 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
   "MSAA máximo 2x por opción"; si no, abrir `out/mac-measure/f2_3d.gputrace` en Xcode (usuario) para el coste
   por draw y por shader.
 
-### T4. Verificar 30 FPS estables y limpiar — pendiente (tras T1–T3)
-- Medir tres escenas (Bowerstone, exterior, interior) y pantalla completa.
-- Si no llega: transferencias de EDRAM (82 passes/frame, diseño fbo de Xenia) y MSAA 4x
-  (60 passes/frame): estudiar antes de tocar.
+### T4. Verificar 30 FPS estables y limpiar — hecha / verificada (2026-10-17)
+- **Pantalla completa verificada:** swapchain Retina nativo a 3024×1964 (`SDL_VIDEO_MAC_FULLSCREEN_SPACES=0`)
+  sin pantalla negra ni artefactos; pacer estable a **29.1 FPS** (`fullscr_test_3d.png`).
+- **Exploración dinámica verificada:** automatización con `scene.sh` extendido con desplazamiento (`w`, `W`),
+  giro y acciones; recorrido por las calles y callejones de Bowerstone (inicio, charla con Rose, callejón de
+  Arfur, camino a la plaza del mercado); tasa continua de **28.0–29.1 FPS** (tope nativo de 30 FPS) durante
+  el movimiento (`walk_test`, `walk_market`).
+- **GPU (Apple M3 Pro):** tiempo de ejecución de buffers Metal en GPU de 9–14 ms por frame, muy holgado frente al
+  presupuesto de 33.3 ms. Sin necesidad de recortes adicionales en EDRAM o MSAA.
 
-### T5. Subir los arreglos al fork y upstream — preparada (`docs/upstream/`, ramas en pr-wt), pendiente de abrir
-- PR al fork por cada cambio del SDK que quede validado (T1, T2, T3) y los que ya están
-  en `rexglue-sdk-fork-fixes.patch` sin PR: miembros del pacer fuera de `#if WIN32`,
-  `/DEF:` solo en Windows, `SIG_DFL` para señales no atendidas, no repintar al suprimir
-  por el pacer. PR #11 (presentador) pendiente de revisión.
+### T5. Subir los arreglos al fork y upstream — hecha (2026-10-17)
+- **5 PRs abiertos en `himdo/rexglue-sdk`:**
+  - **#13:** `ui: declare the presenter pacer counters on all platforms` (branch `fix-pacer-members-non-win32`).
+  - **#14:** `cmake: pass -Xlinker /DEF: only on Windows` (branch `fix-def-only-windows`).
+  - **#15:** `core: restore default action when no exception handler takes a signal` (branch `fix-posix-unhandled-signal`).
+  - **#16:** `vulkan: do not re-request a UI paint when the pacer suppressed it` (branch `fix-ui-paint-spin-when-paced`).
+  - **#17:** `vulkan: upload shared memory before submission render passes` (T1, branch `t1-upload-first`).
+  - *(Anteriormente abierto)* **#11:** `vulkan: store the swapchain paint pipeline format`.
+- Detalle en `docs/upstream/pr-drafts.md`. Quedan en la rama `macos` del fork los cambios más específicos de Mac/TBDR (T3, T10, T11).
 - Bug a reportar a MoltenVK: `MVKDispatchableVulkanAPIObject::getVkHandle()` reescribe
   `ICD_LOADER_MAGIC` sobre el puntero de despacho del loader al notificar un mensaje a un
   *debug messenger*; la siguiente llamada por el loader (`vkAllocateCommandBuffers`) lee
@@ -234,22 +243,18 @@ Descartado (sin efecto o peor): `--readback_memexport=false`, `--vulkan_submit_o
 - `graphify-out/` se regenera en cada commit por el hook y aparece modificado; el hook
   añadió una vez `graphify-out/*` a `.gitignore` (quitado). Vigilar.
 
-### T7. Launcher para macOS (ISO, mods, configuración) — estudiada (`docs/macos-launcher-study.md`), pendiente de decidir
-- **Objetivo:** lo que hoy hace el launcher WPF en Windows (perfiles de juego, edición de
-  `fable2_config.toml` y `fable_2.toml`, botón de guardar, mods) y lo que en macOS se hace
-  a mano: elegir la ISO, extraer el contenido (`tools/stage_content.sh`; extracción GDFX
-  del scratchpad de la sesión del 2026-10-12, `gdfx_extract.py`, a incorporar en T0),
-  lanzar el juego con los flags adecuados.
-- **Primero estudiar, luego prototipar.** Opciones a comparar: (a) app nativa SwiftUI/AppKit
-  (la mejor integración: permisos, Spaces, firma); (b) reutilizar el código C# del launcher
-  con Avalonia (misma lógica de config, `Fable2ConfigFile.cs`, y `tests/test_config_parity.py`
-  sigue valiendo); (c) un asistente de terminal en `tools/mac/` como mínimo viable mientras
-  se decide. Criterios: paridad con el launcher de Windows (ver `launcher/` y
-  `docs/screenshots/launcher.png`), mantenimiento de una sola fuente de verdad para las
-  claves de configuración, y que la extracción de la ISO no requiera herramientas externas.
-- **Entregables del estudio:** comparativa de una página en `docs/`, lista de funciones del
-  launcher de Windows con su equivalente propuesto, y estimación por opción. No construir
-  nada hasta elegir.
+### T7. Launcher para macOS (ISO, mods, configuración) — hecha (2026-10-17)
+- **Motor Core (`tools/mac/fable2_launcher.py`):**
+  - Extracción inteligente GDFX de ISOs con comprobación previa del SHA-256 de `default.xex` frente a `constants/game_versions.json`.
+  - Gestión atómica y no destructiva de `fable_2.toml` y `fable2_config.toml` preservando comentarios.
+  - Presets gráficos: `original`, `balanced`, `enhanced` (Retina 30 FPS nativo), `high-fps` (30/60 Hz ticks).
+  - Subcomandos completos: `status`, `verify`, `extract`, `preset`, `config`, `run`.
+  - Suite de pruebas unitarias en `tests/test_launcher_core.py` (8 tests, 100% OK).
+- **App Nativa macOS (`launcher/mac/main.swift`, `Fable 2 Launcher.app`):**
+  - Desarrollada en SwiftUI nativo para Apple Silicon, empaquetada y firmada con `launcher/mac/build.sh`.
+  - Incluye `AppIcon.icns` generado con `iconutil` desde `assets/app-icon.png`.
+  - Selector de ISO (`NSOpenPanel`), barra de progreso en vivo, conmutador de presets gráficos, selectores de resolución/pantalla completa, conmutadores de parches del recomp y botón "Jugar a Fable II".
+  - Acceso directo a carpetas de Saves y Logs.
 
 ### T8. Ideas del PR #2 de saulob/geometry-wars-retro-evolved-2-recompiled — pendiente (pequeñas)
 Mismo port (ReXGlue 0.10.0, mac-arm64, MoltenVK) en otro juego; revisado el 2026-10-12. Vale la pena adoptar:
