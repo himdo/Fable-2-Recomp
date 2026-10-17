@@ -1,17 +1,17 @@
 # Graph Report - Fable-2-Recomp  (2026-10-17)
 
 ## Corpus Check
-- 170 files · ~279,658 words
+- 174 files · ~285,069 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 42 file(s) not represented in the graph (top: .cmd 19, (none) 8, .patch 6)
 
 ## Summary
-- 2267 nodes · 4220 edges · 163 communities (112 shown, 51 thin omitted)
-- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 102 edges (avg confidence: 0.86)
+- 2378 nodes · 4462 edges · 175 communities (117 shown, 58 thin omitted)
+- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 113 edges (avg confidence: 0.86)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `68db03e0`
+- Built from commit: `6d4175c2`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -21,7 +21,6 @@
 - fable2_state_probe.h
 - VkFns
 - GamepadDriver
-- fable_2_app.h
 - fable2_modmenu.h
 - VulkanApp
 - fable2_av_probe.h
@@ -38,8 +37,8 @@
 - RoutedEventArgs
 - Idx
 - ExtractionProgress
-- load
-- vector
+- sys
+- Patch
 - fable2_deadbeef.h
 - cstdint
 - PageWriteGuard
@@ -48,7 +47,7 @@
 - MainWindow.xaml.cs
 - do_sample
 - gaddr
-- prepare_runtime_sdk.py
+- argparse
 - F5.lua
 - fps_probe.h
 - CallActivePlayerMethod_821A11E8.cpp
@@ -65,26 +64,26 @@
 - Interval
 - Parte A — T3: teselación continua emulada en el vertex shader
 - clean_pe.py
-- argparse
+- json
 - Values
 - X360Disc facade
 - StfsContainer
 - cstdio
 - fable2_stall_dump.h
-- sys
-- gaddr
+- fable2_launcher.py
+- LauncherViewModel
 - dir_manifest_heal.h
 - ProcessGameFrame_82276C30 hand-tuned override
-- cstdlib
-- Read
+- fable2_f5_lua.h
+- fable2_config.cpp
 - fable2_hooks.cpp
 - Tareas
 - fable2_patches.cpp
 - fable2_ui_text_dump.h
 - gaddr
-- walk
+- gdfx_extract.py
 - X360Extract.Core.csproj
-- QueryActivePlayerMethod_821EC8A0.cpp
+- chrono
 - RemoteControlServer
 - ProcessGameFrame_82276C30.cpp
 - .CreateRenderPassAndCommands
@@ -104,19 +103,19 @@
 - Related repositories, forks and upstream work relevant to the Fable 2 Recomp macOS port
 - UITextItem_Dispatch
 - trim_exports.py
-- chrono
+- cstdlib
 - modifyMoney.lua
 - tools/mac: macOS measurement tools
 - Type
 - clean_pe.py build orchestrator
 - HotFuncYieldSlider
 - modifyMoralityPurity.lua
-- vulkan_smoke.cpp
+- cstring
 - rexglue_vulkan_plugin wrapper project
 - Dictionary
 - fable2_hook_disable_motion_blur mid-asm hook
 - test_keyboard_gamepad_map.cpp
-- PR drafts for himdo/rexglue-sdk (nothing pushed or opened)
+- PRs for himdo/rexglue-sdk
 - fable_2 executable target
 - Hooking recompiled functions (weak wrapper and strong override)
 - UIFont_RenderGlyph
@@ -140,7 +139,7 @@
 - .ReadDirectory
 - gaddr
 - menu_arrows.sh
-- .Classify
+- X360Disc.cs
 - State
 - prof3d_hold.sh
 - .KeyboardGamepadDriver
@@ -148,10 +147,22 @@
 - flicker.py
 - FrontEndFlag
 - gaddr
+- State
 - phase.sh
+- Fable2App
+- ThreadState
+- gaddr
 - 1. How the Vulkan backend (fbo path) creates and uses MSAA render targets
+- Probe
+- Fable 2 Recomp on macOS: what the 2026-10-13 measurements say
+- Width
 - gpucapture.sh
-- .PickDevice
+- .SetGameDirectory
+- GetWindowPresenter
+- CatalogueTests
+- fable2_menu_probe.h
+- alloc_watch.h
+- mac/build.sh
 
 ## God Nodes (most connected - your core abstractions)
 1. `VkFns` - 83 edges
@@ -160,22 +171,22 @@
 4. `ControlServer` - 54 edges
 5. `Window` - 52 edges
 6. `Value` - 33 edges
-7. `Slot` - 31 edges
-8. `X360Disc` - 27 edges
-9. `Idx` - 27 edges
-10. `KeyboardGamepadDriver` - 25 edges
+7. `LauncherViewModel` - 31 edges
+8. `Slot` - 31 edges
+9. `X360Disc` - 27 edges
+10. `Idx` - 27 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Otros trabajos de esta sesión` --references--> `Fable2ConfigFile`  [INFERRED]
   memory.md → launcher/Fable2.Launcher/Fable2ConfigFile.cs
-- `4. Estimación y recomendación` --references--> `GraphicsSettings`  [INFERRED]
-  docs/macos-launcher-study.md → launcher/Fable2.Launcher/GraphicsSettings.cs
 - `Cambios hechos en la rama `macos-port`` --references--> `dump_hop_on()`  [INFERRED]
   memory.md → src/diagnostics/fable2_ui_input_probe.h
 - `Trampas conocidas` --references--> `host_of()`  [INFERRED]
   memory.md → src/diagnostics/fable2_ui_input_probe.h
 - `4. Estimación y recomendación` --references--> `Key()`  [INFERRED]
   docs/macos-launcher-study.md → src/core/dir_manifest_heal.h
+- `4. Estimación y recomendación` --references--> `GraphicsSettings`  [INFERRED]
+  docs/macos-launcher-study.md → launcher/Fable2.Launcher/GraphicsSettings.cs
 
 ## Import Cycles
 - None detected.
@@ -190,7 +201,7 @@
 - **Guest function hooking and instrumentation probes** — text_rendering_notes_hook_pattern, text_rendering_notes_ui_render_probe, text_rendering_notes_deadbeef_canary, readme_func_trace [INFERRED 0.75]
 - **UI text per-frame render chain** — text_rendering_notes_uitext_frame_render, text_rendering_notes_uitext_frame_render_iter, text_rendering_notes_uitext_item_dispatch, text_rendering_notes_uitextprompt_render, text_rendering_notes_uitextprompt_renderelement, text_rendering_notes_sub_82c12f18 [INFERRED 0.85]
 
-## Communities (163 total, 51 thin omitted)
+## Communities (175 total, 58 thin omitted)
 
 ### Community 0 - "xex_verify.h"
 Cohesion: 0.05
@@ -229,8 +240,8 @@ Cohesion: 0.11
 Nodes (29): adv(), append_segment(), collect_subitems(), dump_char_cands(), dump_words(), element_is_safe(), find_last_element(), guest_alloc() (+21 more)
 
 ### Community 10 - "fable_2_pch"
-Cohesion: 0.10
-Nodes (26): gaddr(), gload32(), gload8(), gstore32(), gstore8(), gaddr(), gload32(), gload64() (+18 more)
+Cohesion: 0.08
+Nodes (29): gaddr(), gload32(), gload8(), gstore32(), gstore8(), gaddr(), gload32(), gload8() (+21 more)
 
 ### Community 11 - "remote_control_server.h"
 Cohesion: 0.07
@@ -245,7 +256,7 @@ Cohesion: 0.08
 Nodes (20): CloseSock(), Config, host, port, token, ControlServer, cfg_, client_socket_ (+12 more)
 
 ### Community 14 - "Fable2ConfigValues"
-Cohesion: 0.08
+Cohesion: 0.09
 Nodes (17): Fable2ConfigFile, Fable2ConfigValues, DisableMotionBlur, HeroDogTextureReadback, HigherHfTickRate, HighTickRate, HotFuncYieldEvery, KeyboardGamepadMap (+9 more)
 
 ### Community 15 - "Window"
@@ -265,7 +276,7 @@ Cohesion: 0.12
 Nodes (9): KeyboardGamepadDriver, bindings_, cached_text_, console_open_, cursor_hidden_, kDeviceId, mouse_centered_, packet_number_ (+1 more)
 
 ### Community 19 - "RoutedEventArgs"
-Cohesion: 0.11
+Cohesion: 0.12
 Nodes (10): AdvancedOptionsButton, CancelButton, ExtractAnywaysButton, ExtractButton, HotFuncYieldBox, LaunchButton, MouseSensitivityBox, StopButton (+2 more)
 
 ### Community 20 - "Idx"
@@ -276,33 +287,33 @@ Nodes (27): Idx, kCount, kSub_82A6EF40, kSub_82A8D2D0, kSub_82C09018, kSub_82C12
 Cohesion: 0.10
 Nodes (14): ExtractionCancelledException, ExtractionProgress, CompletedBytes, CurrentFile, CurrentFileSize, CurrentFileWritten, Percent, Phase (+6 more)
 
-### Community 22 - "load"
-Cohesion: 0.11
-Nodes (7): load(), T(), T(), T(), T(), load(), val()
+### Community 22 - "sys"
+Cohesion: 0.10
+Nodes (8): main(), load(), T(), T(), T(), T(), load(), val()
 
-### Community 23 - "vector"
-Cohesion: 0.15
-Nodes (10): Op, address, value, width, Patch, author, desc, is_enabled (+2 more)
+### Community 23 - "Patch"
+Cohesion: 0.22
+Nodes (7): BuildPatches(), Patch, author, desc, is_enabled, name, ops
 
 ### Community 24 - "fable2_deadbeef.h"
 Cohesion: 0.12
 Nodes (35): append(), gread(), gwrite(), host_addr(), host_writable(), in_image(), is_heap_ptr(), is_text() (+27 more)
 
 ### Community 26 - "PageWriteGuard"
-Cohesion: 0.17
-Nodes (9): BuildPatches(), Flip, page, size, PageWriteGuard, access_, flipped_, heap_ (+1 more)
+Cohesion: 0.20
+Nodes (8): Flip, page, size, PageWriteGuard, access_, flipped_, heap_, page_size_
 
 ### Community 27 - "fable2_func_trace.h"
-Cohesion: 0.08
-Nodes (20): commit_run(), ensure_sweeper(), file(), final_summary_guard, flush(), flush_buffer(), is_sub_name(), sweeper_loop() (+12 more)
+Cohesion: 0.12
+Nodes (10): commit_run(), ensure_sweeper(), file(), final_summary_guard, flush(), flush_buffer(), is_sub_name(), sweeper_loop() (+2 more)
 
 ### Community 28 - "fable2_ui_render_probe.h"
-Cohesion: 0.08
-Nodes (33): Fable2FuncTraceFlush(), Fable2FuncTraceSetEnabled(), FrontMenu_EnsureElement(), FrontMenu_InputEvent(), FrontMenu_PollEventQueue(), active(), func_trace_auto(), hook() (+25 more)
+Cohesion: 0.18
+Nodes (16): Fable2FuncTraceFlush(), Fable2FuncTraceSetEnabled(), active(), func_trace_auto(), hook(), init_once(), logf(), now_us() (+8 more)
 
 ### Community 29 - "MainWindow.xaml.cs"
-Cohesion: 0.11
-Nodes (4): Fable2Launcher, X360Extract, Application, App
+Cohesion: 0.07
+Nodes (13): GameVersion, GameVersions, Fable2Launcher.Constants, Fable2Launcher, 2. Lo específico de macOS, Application, App, FrameLimitOption (+5 more)
 
 ### Community 30 - "do_sample"
 Cohesion: 0.19
@@ -312,25 +323,21 @@ Nodes (14): Cambios hechos en la rama `macos-port`, aread(), arena(), be32(), do
 Cohesion: 0.53
 Nodes (6): gaddr(), gload32(), gload64(), gload8(), gstore32(), gstore64()
 
-### Community 32 - "prepare_runtime_sdk.py"
-Cohesion: 0.18
-Nodes (9): git(), main(), fail(), git(), libmspack_mode(), main(), patch_state(), sha256() (+1 more)
+### Community 32 - "argparse"
+Cohesion: 0.17
+Nodes (10): generate(), main(), git(), main(), fail(), git(), libmspack_mode(), main() (+2 more)
 
 ### Community 33 - "F5.lua"
 Cohesion: 0.13
 Nodes (15): Memory::AccessViolationCallback, Guest read of 0x00000000 access violation, F5 guest null access violation plan, poll_mainloop MainRenderLoop hook, run_external pre-call validation of this and head, run_external, CScriptManager::RunScript (0x825ADB40), build_page() (+7 more)
 
 ### Community 34 - "fps_probe.h"
-Cohesion: 0.09
-Nodes (29): 1. Per-run MoltenVK numbers, steady 3D window, 2. Where the frame goes (full, 67.5 ms), 3. What changed base -> t3only -> full, vs the design expectations, 4. The t3 hang at the title screen (run_t3, log 002, sample_t3), 5. Ranked remaining bottlenecks (full build, 67.5 ms/frame) and what is measured vs inferred, Fable 2 Recomp on macOS: what the 2026-10-13 measurements say, Method and caveats, DelayMilliseconds_82CC2028() (+21 more)
+Cohesion: 0.27
+Nodes (12): DelayMilliseconds_82CC2028(), MainRenderLoop_82B9CD68(), note(), note_exit(), ProcessAndProcessAndProcess1087_82242628(), ProcessAndProcessAndProcess1260_82BA32C8(), sub_82B9B8D8(), sub_82B9F598() (+4 more)
 
 ### Community 35 - "CallActivePlayerMethod_821A11E8.cpp"
 Cohesion: 0.42
 Nodes (8): gaddr(), gload32(), gload64(), gload8(), gstore32(), gstore64(), gstore8(), vcall()
-
-### Community 36 - "MainWindow"
-Cohesion: 0.11
-Nodes (4): 1. Inventario del launcher de Windows y equivalente en macOS, KeyCaptureField, LauncherState, MainWindow
 
 ### Community 38 - "fable2_glyph_probe.h"
 Cohesion: 0.31
@@ -340,13 +347,9 @@ Nodes (15): dump_block(), dump_glyphrun(), dump_item(), dump_str(), dump_words()
 Cohesion: 0.23
 Nodes (13): add_version_resource(), _align(), _binary_value(), _build_rsrc(), build_vs_version_info(), e_lfanew(), main(), _pad() (+5 more)
 
-### Community 40 - "Action"
-Cohesion: 0.19
-Nodes (7): DiscProgress, DiscProgressPhase, EnteringDirectory, ExpandingStfs, FileWritten, ScanningHeader, WritingFile
-
 ### Community 41 - "IsoImage"
-Cohesion: 0.18
-Nodes (11): IsoEntry, IsDirectory, IsFile, IsoEntryKind, Directory, File, Parent, VolumeTag (+3 more)
+Cohesion: 0.29
+Nodes (6): IsoEntry, IsDirectory, IsFile, IsoImage, ImageLength, Length
 
 ### Community 42 - "Parser"
 Cohesion: 0.35
@@ -357,8 +360,8 @@ Cohesion: 0.14
 Nodes (16): chest_click.txt ready-state breakpoint script, GuildChest_GetCEContent (824B3528), GuildChest_GetWebsiteItem (8256E368), GuildChest_ProcessItem (82228830), GuildChest_ProcessItems (822DE008), chest_debug.txt full WinDbg breakpoint script, Click handler sub_82228C70, GuildChest_GetWebsiteItem (8256E368) sibling entry (+8 more)
 
 ### Community 44 - ".Init"
-Cohesion: 0.17
-Nodes (7): create_device, create_swapchain, create_win32_surface, get_device_queue, get_surface_capabilities, get_surface_formats, get_swapchain_images
+Cohesion: 0.12
+Nodes (11): create_device, create_swapchain, create_win32_surface, enumerate_physical_devices, get_device_queue, get_properties, get_queue_family_properties, get_surface_capabilities (+3 more)
 
 ### Community 46 - "fable2_modmenu.h mod menu module"
 Cohesion: 0.13
@@ -373,15 +376,15 @@ Cohesion: 0.13
 Nodes (14): A.0 Cómo funciona hoy (lo que hay que reproducir), A.1 Tipo nuevo y `Modification`, A.2 Selección e índices (`primitive_processor.cpp`), A.3 Traductor (`spirv_translator.cpp`), A.4 Pipeline y backend, A.5 Riesgos y verificación, A.6 Líneas y orden, B.1 Opción (a'): esperar la fence del slot si ya está enviado; saltar solo si es de la submission abierta (+6 more)
 
 ### Community 49 - "clean_pe.py"
-Cohesion: 0.23
-Nodes (10): clean_dir(), export_names(), import_names_from(), main(), r2o(), read_sections(), sha256(), trim_export_table() (+2 more)
+Cohesion: 0.14
+Nodes (16): clean_dir(), export_names(), import_names_from(), main(), r2o(), read_sections(), sha256(), trim_export_table() (+8 more)
 
-### Community 50 - "argparse"
-Cohesion: 0.27
-Nodes (7): build_state(), conn(), exchange(), main(), run(), generate(), main()
+### Community 50 - "json"
+Cohesion: 0.40
+Nodes (5): build_state(), conn(), exchange(), main(), run()
 
 ### Community 51 - "Values"
-Cohesion: 0.14
+Cohesion: 0.12
 Nodes (14): Values, config_version, disable_motion_blur, hero_dog_texture_readback, high_tick_rate, higher_hf_tick_rate, hotfunc_yield_every, keyboard_gamepad_map (+6 more)
 
 ### Community 52 - "X360Disc facade"
@@ -393,28 +396,28 @@ Cohesion: 0.18
 Nodes (4): DeadbeefDialog, enabled(), register_overlay(), scale()
 
 ### Community 55 - "fable2_stall_dump.h"
-Cohesion: 0.17
-Nodes (12): dump_threads(), fmt_ip(), loop(), ModuleRange, base, end, name, Registrar (+4 more)
+Cohesion: 0.23
+Nodes (10): dump_threads(), fmt_ip(), loop(), ModuleRange, base, end, name, safe_read() (+2 more)
 
-### Community 56 - "sys"
-Cohesion: 0.17
-Nodes (6): main(), e_lfanew(), main(), normalize(), read_sections(), rva_to_offset()
+### Community 56 - "fable2_launcher.py"
+Cohesion: 0.06
+Nodes (13): TestGameCatalog, TestPresets, TestTomlConfigManager, apply_preset(), cli_main(), GameCatalog, GdfxExtractor, recurse() (+5 more)
 
-### Community 57 - "gaddr"
-Cohesion: 0.53
-Nodes (5): gaddr(), gload32(), gload64(), gstore32(), gstore64()
+### Community 57 - "LauncherViewModel"
+Cohesion: 0.08
+Nodes (21): AppKit, BottomBarView, .body, ContentView, .body, DisplaySettingsCard, .body, ExtractionProgress (+13 more)
 
 ### Community 58 - "dir_manifest_heal.h"
-Cohesion: 0.29
+Cohesion: 0.33
 Nodes (3): DetectEol(), EnsureComplete(), Key()
 
 ### Community 59 - "ProcessGameFrame_82276C30 hand-tuned override"
 Cohesion: 0.18
 Nodes (10): decrement_global_counter CAS helper, compute_loop_timing, Goto elimination into if/else and do-while, guest_fma helper (target fma), tools/make_hotfunc_overrides.py, ProcessGameFrame hand-tune plan, ProcessGameFrame_82276C30 hand-tuned override, Region helpers (probe_and_setup and siblings) (+2 more)
 
-### Community 60 - "cstdlib"
-Cohesion: 0.12
-Nodes (8): logf(), logline(), LuaBind_RunScript_82806168(), poll_f5(), poll_mainloop(), run_external(), name(), start_writer()
+### Community 60 - "fable2_f5_lua.h"
+Cohesion: 0.27
+Nodes (6): logf(), logline(), LuaBind_RunScript_82806168(), poll_f5(), poll_mainloop(), run_external()
 
 ### Community 62 - "fable2_hooks.cpp"
 Cohesion: 0.26
@@ -425,8 +428,8 @@ Cohesion: 0.10
 Nodes (20): Hecho (resumen; detalle en `memory.md` y en el log de git), Línea base medida (escena 3D, 1 frame ≈ 142 ms), Para la próxima sesión (anotado 2026-10-13, noche), Reglas para todas las tareas, T0. Herramientas de medida en el repo — hecho, T10. MSAA en MoltenVK: diagnóstico cerrado (2026-10-16) y modo de 1 muestra en el host, T11. Point sprites (nieve): el freno que queda para 30 FPS (2026-10-17), T1. Subidas de shared memory fuera del render pass — hecha (cvar on por defecto en macOS) (+12 more)
 
 ### Community 64 - "fable2_patches.cpp"
-Cohesion: 0.16
-Nodes (10): ApplyAll(), Memory, ToBeHex(), Width, kBe16, kBe32, kBe64, kBe8 (+2 more)
+Cohesion: 0.27
+Nodes (4): ApplyAll(), ToBeHex(), WidthBytes(), WidthName()
 
 ### Community 65 - "fable2_ui_text_dump.h"
 Cohesion: 0.27
@@ -436,17 +439,17 @@ Nodes (10): dump(), env_dbl(), env_long(), now_s(), page_readable(), plausible()
 Cohesion: 0.53
 Nodes (6): gaddr(), gload32(), gload64(), gstore32(), gstore64(), gstore8()
 
-### Community 67 - "walk"
-Cohesion: 1.00
+### Community 67 - "gdfx_extract.py"
+Cohesion: 0.50
 Nodes (3): main(), read_dir(), walk()
 
 ### Community 68 - "X360Extract.Core.csproj"
 Cohesion: 0.17
 Nodes (8): net8.0-windows, Microsoft.NET.Sdk, net8.0, Microsoft.NET.Sdk, net8.0, Microsoft.NET.Sdk, net8.0, Microsoft.NET.Sdk
 
-### Community 69 - "QueryActivePlayerMethod_821EC8A0.cpp"
-Cohesion: 0.49
-Nodes (5): gaddr(), gload32(), gload8(), gstore32(), vcall()
+### Community 69 - "chrono"
+Cohesion: 0.14
+Nodes (4): name(), start_writer(), Registrar, t
 
 ### Community 70 - "RemoteControlServer"
 Cohesion: 0.23
@@ -497,7 +500,7 @@ Cohesion: 0.47
 Nodes (3): consumer_imports(), dll_exports(), main()
 
 ### Community 83 - "fable2_font_probe.h"
-Cohesion: 0.32
+Cohesion: 0.36
 Nodes (10): enabled(), every(), find_prompt(), load_be(), log_line(), maybe_scan(), page_rw(), scan() (+2 more)
 
 ### Community 84 - "Draft issue for KhronosGroup/MoltenVK (not filed)"
@@ -520,8 +523,8 @@ Nodes (9): DEADBEEF canary (UI text append), Localized Press A to start prompt s
 Cohesion: 0.39
 Nodes (7): e_lfanew(), main(), read_def_names(), read_sections(), rva_to_offset(), trim(), name_at()
 
-### Community 89 - "chrono"
-Cohesion: 0.21
+### Community 89 - "cstdlib"
+Cohesion: 0.17
 Nodes (6): Fable2FuncTraceSetFilter(), delay_seconds(), duration_seconds(), enabled(), MainRenderLoop_82B9CD68(), run_window()
 
 ### Community 90 - "modifyMoney.lua"
@@ -548,29 +551,29 @@ Nodes (3): HotFuncYieldSlider, MouseSensitivitySlider, Slider
 Cohesion: 0.47
 Nodes (3): open_menu(), run(), settle_box()
 
-### Community 96 - "vulkan_smoke.cpp"
-Cohesion: 0.22
-Nodes (3): LoadVulkan(), PauseExit(), WinMain()
+### Community 96 - "cstring"
+Cohesion: 0.15
+Nodes (4): Apply(), LoadVulkan(), PauseExit(), WinMain()
 
 ### Community 97 - "rexglue_vulkan_plugin wrapper project"
 Cohesion: 0.33
 Nodes (3): Dual D3D12 and Vulkan rexruntime superset, REXGLUE_SDK_SOURCE variable, rexglue_vulkan_plugin wrapper project
 
 ### Community 98 - "Dictionary"
-Cohesion: 0.13
-Nodes (7): 3. Comparativa de opciones, 4. Estimación y recomendación, 5. Decisiones que necesita el usuario, Cuánto del C# es portable (cuenta en ficheros y líneas), Launcher para macOS: estudio (T7), Tabla, LauncherConfigFile
+Cohesion: 0.16
+Nodes (8): 3. Comparativa de opciones, 4. Estimación y recomendación, 5. Decisiones que necesita el usuario, Cuánto del C# es portable (cuenta en ficheros y líneas), Launcher para macOS: estudio (T7), Tabla, GraphicsSettings, LauncherConfigFile
 
 ### Community 99 - "fable2_hook_disable_motion_blur mid-asm hook"
 Cohesion: 0.60
 Nodes (5): sub_822A47C0 camera per-frame update, [patches] disable_motion_blur toggle, Disable motion blur plan, Renderer blur request (camera +0xD4), fable2_hook_disable_motion_blur mid-asm hook
 
 ### Community 100 - "test_keyboard_gamepad_map.cpp"
-Cohesion: 0.43
-Nodes (3): CheckBinding(), Find(), RegisterFlag()
+Cohesion: 0.39
+Nodes (4): CheckBinding(), Find(), main(), RegisterFlag()
 
-### Community 101 - "PR drafts for himdo/rexglue-sdk (nothing pushed or opened)"
-Cohesion: 0.22
-Nodes (8): Already open, fix-def-only-windows, fix-pacer-members-non-win32, fix-posix-unhandled-signal, fix-ui-paint-spin-when-paced, PR drafts for himdo/rexglue-sdk (nothing pushed or opened), T1 - branch `t1-upload-first` (on top of 1ffc649), T2 - branch `t2-memexport-no-drain` (on top of T1)
+### Community 101 - "PRs for himdo/rexglue-sdk"
+Cohesion: 0.50
+Nodes (3): Notes on remaining candidates, Open Pull Requests, PRs for himdo/rexglue-sdk
 
 ### Community 102 - "fable_2 executable target"
 Cohesion: 0.50
@@ -585,20 +588,20 @@ Cohesion: 0.67
 Nodes (3): UIFont_EmitGlyphQuad, UIFont_RenderGlyph, UIText_RenderElement (per-glyph draw)
 
 ### Community 117 - "keyboard_gamepad.h"
-Cohesion: 0.15
-Nodes (11): ApplyRelativeMouse(), KeyDown(), button, MouseVk(), OnKeyDown(), OnKeyUp(), OnMouseDown(), OnMouseMove() (+3 more)
+Cohesion: 0.14
+Nodes (12): ApplyRelativeMouse(), KeyDown(), button, MouseVk(), OnKeyDown(), OnKeyUp(), OnMouseDown(), OnMouseMove() (+4 more)
 
 ### Community 119 - "DispatchFrameCallback_821A6010.cpp"
 Cohesion: 0.44
 Nodes (6): gaddr(), gload32(), gload64(), gstore32(), gstore64(), vcall()
 
 ### Community 129 - "Mapping"
-Cohesion: 0.25
-Nodes (9): FillGuestTarget(), Mapping, axis, axis_sign, trigger, vk, ParseKey(), ParseMap() (+1 more)
+Cohesion: 0.32
+Nodes (7): FillGuestTarget(), Mapping, axis, axis_sign, trigger, vk, ParseMap()
 
 ### Community 130 - "memory.md — Port de Fable 2 Recomp a macOS (Apple Silicon)"
-Cohesion: 0.05
-Nodes (23): 2026-10-13 — rama `macos` del fork y pérdida de la imagen de EXT, 2026-10-13 (tarde) — T3, PR himdo#12, overlay y vídeos, A/B del sombreado (2026-10-12, interruptores temporales; parche en `out/mac-measure/exp_switches.patch`), Cierre de la sesión del 2026-10-12 (noche): tanda de pruebas y diseños, Contenido del juego, Cuelgue en blanco (resuelto) y rendimiento en 3D (abierto) — 2026-10-12 tarde, Cómo reproducir, Diagnóstico 3D con traza de Metal (2026-10-12 noche) (+15 more)
+Cohesion: 0.10
+Nodes (19): 2026-10-13 — rama `macos` del fork y pérdida de la imagen de EXT, 2026-10-13 (tarde) — T3, PR himdo#12, overlay y vídeos, A/B del sombreado (2026-10-12, interruptores temporales; parche en `out/mac-measure/exp_switches.patch`), Cierre de la sesión del 2026-10-12 (noche): tanda de pruebas y diseños, Contenido del juego, Cuelgue en blanco (resuelto) y rendimiento en 3D (abierto) — 2026-10-12 tarde, Cómo reproducir, Diagnóstico 3D con traza de Metal (2026-10-12 noche) (+11 more)
 
 ### Community 146 - "gaddr"
 Cohesion: 0.53
@@ -608,9 +611,9 @@ Nodes (5): gaddr(), gload32(), gload64(), gstore32(), gstore64()
 Cohesion: 0.70
 Nodes (4): at(), cap(), key(), menu_arrows.sh script
 
-### Community 148 - ".Classify"
-Cohesion: 0.13
-Nodes (11): GameVersion, GameVersions, Fable2Launcher.Constants, 2. Lo específico de macOS, FrameLimitOption, GraphicsOptions, GameCompatibility, GameCompatibilityInspector (+3 more)
+### Community 148 - "X360Disc.cs"
+Cohesion: 0.14
+Nodes (12): X360Extract, IsoEntryKind, Directory, File, Parent, VolumeTag, DiscProgressPhase, EnteringDirectory (+4 more)
 
 ### Community 149 - "State"
 Cohesion: 0.33
@@ -621,8 +624,8 @@ Cohesion: 0.33
 Nodes (5): acquire_next_image, queue_present, queue_submit, reset_fences, wait_for_fences
 
 ### Community 153 - "flicker.py"
-Cohesion: 0.09
-Nodes (6): ConfigParityTests, toml_keys(), CatalogueTests, diff(), luma(), main()
+Cohesion: 0.11
+Nodes (5): ConfigParityTests, toml_keys(), diff(), luma(), main()
 
 ### Community 154 - "FrontEndFlag"
 Cohesion: 0.50
@@ -632,13 +635,41 @@ Nodes (4): FrontEndFlag, value, value_addr, value_found
 Cohesion: 0.53
 Nodes (5): gaddr(), gload32(), gload64(), gstore32(), gstore64()
 
+### Community 156 - "State"
+Cohesion: 0.15
+Nodes (14): parse_list(), parse_rule(), State, end_us, func_trace_on, skip, start_us, suppress (+6 more)
+
+### Community 159 - "ThreadState"
+Cohesion: 0.15
+Nodes (10): ThreadState, buf, counts, dead, last, lastPtr, m, run (+2 more)
+
+### Community 160 - "gaddr"
+Cohesion: 0.52
+Nodes (7): gaddr(), gload32(), gload64(), gload8(), gstore32(), gstore64(), gstore8()
+
 ### Community 161 - "1. How the Vulkan backend (fbo path) creates and uses MSAA render targets"
 Cohesion: 0.09
 Nodes (18): 1.1 Path selection and capability probing, 1.2 Host image creation (`VulkanRenderTarget` creation, RTC:1866-1900), 1.3 Render pass / dynamic rendering (no resolve attachments anywhere), 1.4 Graphics pipelines (pipeline_cache.cpp:3279-3309), 1.5 EDRAM ownership transfers between host render targets (`PerformTransfersAndResolveClears`, RTC:4549), 1.6 Dumps and resolves, 1.7 What the SPIR-V translator emits that depends on MSAA (`spirv_translator.cpp`, `_rb.cpp`), 1. How the Vulkan backend (fbo path) creates and uses MSAA render targets (+10 more)
 
-### Community 166 - ".PickDevice"
-Cohesion: 0.40
-Nodes (4): enumerate_physical_devices, get_properties, get_queue_family_properties, get_surface_support
+### Community 162 - "Probe"
+Cohesion: 0.20
+Nodes (9): Probe, calls, in_flight_us, last_us, logged, max_dur_us, max_us, min_us (+1 more)
+
+### Community 163 - "Fable 2 Recomp on macOS: what the 2026-10-13 measurements say"
+Cohesion: 0.22
+Nodes (8): 1. Per-run MoltenVK numbers, steady 3D window, 2. Where the frame goes (full, 67.5 ms), 3. What changed base -> t3only -> full, vs the design expectations, 4. The t3 hang at the title screen (run_t3, log 002, sample_t3), 5. Ranked remaining bottlenecks (full build, 67.5 ms/frame) and what is measured vs inferred, Fable 2 Recomp on macOS: what the 2026-10-13 measurements say, Method and caveats, Yield_82CBD098()
+
+### Community 164 - "Width"
+Cohesion: 0.22
+Nodes (9): Op, address, value, width, Width, kBe16, kBe32, kBe64 (+1 more)
+
+### Community 170 - "GetWindowPresenter"
+Cohesion: 0.33
+Nodes (3): Rendimiento: de ~6 a 30 FPS (2026-10-12), GetWindowPresenter(), WindowPresenterAccessor
+
+### Community 172 - "fable2_menu_probe.h"
+Cohesion: 0.60
+Nodes (3): FrontMenu_EnsureElement(), FrontMenu_InputEvent(), FrontMenu_PollEventQueue()
 
 ## Ambiguous Edges - Review These
 - `Dog 512x512 fmt6 5-mip chain` → `Shimmer hypothesis: dynamic 256 mip0 overlaps 512 mip0`  [AMBIGUOUS]
@@ -647,23 +678,23 @@ Nodes (4): enumerate_physical_devices, get_properties, get_queue_family_properti
   plans/hero-dog-shifty-texture-mipmap.md · relation: references
 
 ## Knowledge Gaps
-- **420 isolated node(s):** `code_group`, `compatible`, `hash`, `id`, `language` (+415 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 866 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **51 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **426 isolated node(s):** `SwiftUI`, `AppKit`, `.body`, `.body`, `.body` (+421 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 903 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **58 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `ExtractionProgress` connect `ExtractionProgress` to `Dictionary`, `.Classify`, `MainWindow.xaml.cs`?**
-  _High betweenness centrality (0.105) - this node is a cross-community bridge._
+- **Why does `ExtractionProgress` connect `ExtractionProgress` to `Dictionary`, `MainWindow.xaml.cs`?**
+  _High betweenness centrality (0.106) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `Window` (e.g. with `.GetDeviceState()` and `.KeyboardGamepadDriver()`) actually correct?**
   _`Window` has 2 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `code_group`, `compatible`, `hash` to the rest of the system?**
-  _420 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **What connects `SwiftUI`, `AppKit`, `.body` to the rest of the system?**
+  _426 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `xex_verify.h` be split into smaller, more focused modules?**
-  _Cohesion score 0.05367231638418079 - nodes in this community are weakly interconnected._
-- **Why does `VkFns` connect `VkFns` to `vulkan_smoke.cpp`, `1. How the Vulkan backend (fbo path) creates and uses MSAA render targets`, `.PickDevice`, `VulkanApp`, `.CreateRenderPassAndCommands`, `.Init`, `.PresentFrame`?**
-  _High betweenness centrality (0.085) - this node is a cross-community bridge._
+  _Cohesion score 0.05493863237872589 - nodes in this community are weakly interconnected._
+- **Why does `Window` connect `Window` to `MainWindow`, `.SetGameDirectory`, `.GetDeviceState`, `Fable2ConfigValues`, `RoutedEventArgs`, `.KeyboardGamepadDriver`, `HotFuncYieldSlider`?**
+  _High betweenness centrality (0.060) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._
