@@ -328,6 +328,34 @@ class Fable2App : public rex::ReXApp {
       REXSYS_INFO("[fable2-config] seeded cvar {} from fable2_config.toml",
                   cvar);
     };
+#ifdef __APPLE__
+    // macOS: nothing limits UI-thread paints (the vblank tick is Win32-only),
+    // so the presenter repainted at the display rate (120 Hz on ProMotion),
+    // holding the shared Vulkan queue lock while MoltenVK waited for a
+    // CAMetalDrawable and starving the GPU command processor (~6 guest FPS).
+    // One present per guest frame gives the full 30. Config/env/CLI still win.
+    if (rex::cvar::GetFlagSource("pace_to_guest_vblank") ==
+            rex::cvar::Source::kDefault &&
+        rex::cvar::SetFlagByName("pace_to_guest_vblank", "true")) {
+      REXSYS_INFO("[macos] pace_to_guest_vblank defaulted to true");
+    }
+    // MoltenVK's getVkHandle() rewrites ICD_LOADER_MAGIC over the loader's
+    // dispatch pointer whenever it reports a message to a debug messenger,
+    // so the next loader trampoline on that VkDevice (vkAllocateCommandBuffers
+    // when every command buffer is in flight) reads 0x01CDC0DE and faults.
+    // Without a messenger MoltenVK never calls it. Config/env/CLI still win.
+    if (rex::cvar::GetFlagSource("vulkan_log_debug_messages") ==
+            rex::cvar::Source::kDefault &&
+        rex::cvar::SetFlagByName("vulkan_log_debug_messages", "false")) {
+      REXSYS_INFO("[macos] vulkan_log_debug_messages defaulted to false");
+    }
+#endif
+    // Show the guest FPS overlay (F3 toggles it) from the start. Runtimes
+    // without the cvar just keep it closed. Config/env/CLI still win.
+    if (rex::cvar::GetFlagSource("show_debug_overlay") == rex::cvar::Source::kDefault &&
+        rex::cvar::SetFlagByName("show_debug_overlay", "true")) {
+      REXSYS_INFO("show_debug_overlay defaulted to true");
+    }
     const fable2::config::Values& cfg = fable2::config::Get();
     // XLanguage profile default; config, environment and CLI still win.
     std::string profile_hash;

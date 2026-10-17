@@ -73,6 +73,39 @@ class RuntimeStagingTests(unittest.TestCase):
     def test_missing_debug_plugin_library_fails_before_copying(self):
         self.stage("Debug", missing="rexgpu-xenosd.lib")
 
+    def test_mac_stages_dylibs_into_lib(self):
+        with tempfile.TemporaryDirectory(prefix="fable2-sdk-test-") as directory:
+            base = Path(directory)
+            official, source, build, output = [base / name for name in
+                                               ("official", "source", "build", "output")]
+            native = source / "out/mac-arm64"
+            files = {
+                official / "bin/rexglue": "official-codegen",
+                official / "lib/librexruntime.dylib": "old-runtime",
+                official / "lib/libMoltenVK.dylib": "old-moltenvk",
+                official / "share/rexglue/rex_app.cpp": "old-app",
+                native / "librexruntime.dylib": "patched-runtime",
+                native / "librexgpu-xenos.dylib": "patched-plugin",
+                source / "include/rex/test.h": "matched-header",
+                source / "thirdparty/sdl3/include/SDL3/test.h": "matched-sdl",
+                build / "include/rex/version.h": "matched-version",
+                source / "src/ui/rex_app.cpp": "matched-app",
+                source / "src/ui/windowed_app_main_sdl.cpp": "matched-entry",
+            }
+            for path, value in files.items():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(value)
+            args = ["stage_renderer_sdk.py", *map(str, (official, source, build, output)),
+                    "--platform", "mac-arm64"]
+            with patch("sys.argv", args), patch.object(staging.subprocess, "check_output",
+                                                       return_value="synthetic-revision\n"):
+                staging.main()
+            self.assertEqual((output / "lib/librexruntime.dylib").read_text(), "patched-runtime")
+            self.assertEqual((output / "lib/librexgpu-xenos.dylib").read_text(), "patched-plugin")
+            # MoltenVK was not rebuilt: the official one stays.
+            self.assertEqual((output / "lib/libMoltenVK.dylib").read_text(), "old-moltenvk")
+            self.assertEqual((output / "bin/rexglue").read_text(), "official-codegen")
+
 
 if __name__ == "__main__":
     unittest.main()

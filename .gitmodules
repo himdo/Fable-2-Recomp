@@ -1,4 +1,4 @@
 [submodule "thirdparty/rexglue-sdk"]
 	path = thirdparty/rexglue-sdk
-	url = https://github.com/himdo/rexglue-sdk.git
-	branch = main
+	url = https://github.com/rasty94/rexglue-sdk.git
+	branch = macos

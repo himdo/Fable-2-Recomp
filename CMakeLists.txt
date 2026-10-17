@@ -126,7 +126,12 @@ target_compile_definitions(fable_2 PRIVATE
 # only useful for debugging). Defining FABLE2_REMOTE_CONTROL compiles the pad
 # driver registration + server start/stop into the app; without it (non-Debug)
 # those are #ifdef'd out entirely and no port is ever opened.
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+# FABLE2_REMOTE_CONTROL_ANY_CONFIG opts a local Release build into it too (e.g.
+# to grab guest-output screenshots while diagnosing a renderer at full speed);
+# it is OFF by default and such a build must never be distributed.
+option(FABLE2_REMOTE_CONTROL_ANY_CONFIG
+    "Also compile the debug-only remote control server into non-Debug builds (local diagnostics only)" OFF)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR FABLE2_REMOTE_CONTROL_ANY_CONFIG)
     target_compile_definitions(fable_2 PRIVATE FABLE2_REMOTE_CONTROL)
 endif()
 
@@ -170,7 +175,17 @@ endif()
 # bottom of fable2_func_trace.h (which redefines REX_FUNC_PROLOGUE) runs with
 # the generated pch already loaded, and the patched macro is baked into the
 # PCH used by every recompiled TU.
-if(TARGET fable_2_recomp)
+# The hook costs a call + atomic load on every guest function entry even while
+# tracing is off (~a quarter of the 3D Engine thread in a macOS profile), so
+# it is opt-in where the fable2-functrace.cmd launcher does not exist.
+if(APPLE)
+    set(FABLE2_FUNC_TRACE_DEFAULT OFF)
+else()
+    set(FABLE2_FUNC_TRACE_DEFAULT ON)
+endif()
+option(FABLE2_FUNC_TRACE "Hook every recompiled guest function for FABLE2_FUNC_TRACE tracing"
+       ${FABLE2_FUNC_TRACE_DEFAULT})
+if(TARGET fable_2_recomp AND FABLE2_FUNC_TRACE)
     target_precompile_headers(fable_2_recomp PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core/fable2_func_trace.h)
 endif()

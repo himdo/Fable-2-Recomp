@@ -124,7 +124,7 @@ struct Values {
   // Skip the Microsoft and Lionhead logo videos at boot (just-harry's "Skip
   // intro videos"; hook fable2_hook_skip_intro_videos in
   // src/core/fable2_hooks.cpp). false = original.
-  bool skip_intro_videos = false;
+  bool skip_intro_videos = true;
   // [patches] high_tick_rate: LF tick 15 -> 30 Hz (Xenia "High Tick Rate" by
   // Guy; data write in src/core/fable2_patches.cpp + hook
   // fable2_hook_high_tick_rate_skip_store). false = original.

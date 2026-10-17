@@ -27,16 +27,29 @@ public class Fable2ConfigValues
     // Experimental: drive the camera directly (desktop-FPS orbit) instead of the
     // legacy right-stick mapping. Only applies when MouseLook is on.
     public bool DirectMouseLook { get; set; } = false;  // experimental
+    public double MouseLookYawSens { get; set; } = -0.0022;
+    public double MouseLookPitchSens { get; set; } = -0.0022;
+    public int MouseLookYawAxis { get; set; } = 2;
+    public int MouseLookPitchAxis { get; set; } = 0;
+    public double MouseLookPitchFloor { get; set; } = 1.458;
+    public double MouseLookPitchCeil { get; set; } = 4.067;
+    public int CameraRotTgtOff { get; set; } = 160;
+    public int CameraRotCurOff { get; set; } = 176;
+    public int CameraEyeOff { get; set; } = 144;
+    public double CameraDistance { get; set; } = 3.1;
+    public bool MouseLookCameraDiag { get; set; } = false;
+    public bool MouseLookCameraDump { get; set; } = false;
 
     // [patches]
     public bool UnlockWebsite { get; set; } = true;
     public bool UnlockCe { get; set; } = true;
-    public bool SkipIntroVideos { get; set; } = false;
+    public bool SkipIntroVideos { get; set; } = true;
     public bool HighTickRate { get; set; } = false;       // unstable
     public bool HigherHfTickRate { get; set; } = false;    // unstable
     public bool DisableMotionBlur { get; set; } = false;
     public bool RealtimeTextureMorphing { get; set; } = true;
     public bool HeroDogTextureReadback { get; set; } = false;
+    public bool DogFurDepthBias { get; set; } = true;
 
     // [perf]
     public int HotFuncYieldEvery { get; set; } = 1;  // 1 = original, 0 = never yield
@@ -116,6 +129,18 @@ public static class Fable2ConfigFile
                     else if (key == "mouse_look") values.MouseLook = ParseBool(rawValue, values.MouseLook);
                     else if (key == "mouse_look_scale") values.MouseLookScale = ParseInt(rawValue, values.MouseLookScale);
                     else if (key == "direct_mouse_look") values.DirectMouseLook = ParseBool(rawValue, values.DirectMouseLook);
+                    else if (key == "mouse_look_yaw_sens") values.MouseLookYawSens = ParseDouble(rawValue, values.MouseLookYawSens);
+                    else if (key == "mouse_look_pitch_sens") values.MouseLookPitchSens = ParseDouble(rawValue, values.MouseLookPitchSens);
+                    else if (key == "mouse_look_yaw_axis") values.MouseLookYawAxis = ParseInt(rawValue, values.MouseLookYawAxis);
+                    else if (key == "mouse_look_pitch_axis") values.MouseLookPitchAxis = ParseInt(rawValue, values.MouseLookPitchAxis);
+                    else if (key == "mouse_look_pitch_floor") values.MouseLookPitchFloor = ParseDouble(rawValue, values.MouseLookPitchFloor);
+                    else if (key == "mouse_look_pitch_ceil") values.MouseLookPitchCeil = ParseDouble(rawValue, values.MouseLookPitchCeil);
+                    else if (key == "camera_rot_tgt_off") values.CameraRotTgtOff = ParseInt(rawValue, values.CameraRotTgtOff);
+                    else if (key == "camera_rot_cur_off") values.CameraRotCurOff = ParseInt(rawValue, values.CameraRotCurOff);
+                    else if (key == "camera_eye_off") values.CameraEyeOff = ParseInt(rawValue, values.CameraEyeOff);
+                    else if (key == "camera_distance") values.CameraDistance = ParseDouble(rawValue, values.CameraDistance);
+                    else if (key == "mouse_look_camera_diag") values.MouseLookCameraDiag = ParseBool(rawValue, values.MouseLookCameraDiag);
+                    else if (key == "mouse_look_camera_dump") values.MouseLookCameraDump = ParseBool(rawValue, values.MouseLookCameraDump);
                     break;
                 case "patches":
                     if (key == "unlock_website") values.UnlockWebsite = ParseBool(rawValue, values.UnlockWebsite);
@@ -126,6 +151,7 @@ public static class Fable2ConfigFile
                     else if (key == "disable_motion_blur") values.DisableMotionBlur = ParseBool(rawValue, values.DisableMotionBlur);
                     else if (key == "realtime_texture_morphing") values.RealtimeTextureMorphing = ParseBool(rawValue, values.RealtimeTextureMorphing);
                     else if (key == "hero_dog_texture_readback") values.HeroDogTextureReadback = ParseBool(rawValue, values.HeroDogTextureReadback);
+                    else if (key == "dog_fur_depth_bias") values.DogFurDepthBias = ParseBool(rawValue, values.DogFurDepthBias);
                     break;
                 case "perf":
                     if (key == "hotfunc_yield_every") values.HotFuncYieldEvery = ParseInt(rawValue, values.HotFuncYieldEvery);
@@ -163,6 +189,18 @@ public static class Fable2ConfigFile
             ("input", "mouse_look", values.MouseLook ? "true" : "false"),
             ("input", "mouse_look_scale", values.MouseLookScale.ToString(CultureInfo.InvariantCulture)),
             ("input", "direct_mouse_look", values.DirectMouseLook ? "true" : "false"),
+            ("input", "mouse_look_yaw_sens", values.MouseLookYawSens.ToString(CultureInfo.InvariantCulture)),
+            ("input", "mouse_look_pitch_sens", values.MouseLookPitchSens.ToString(CultureInfo.InvariantCulture)),
+            ("input", "mouse_look_yaw_axis", values.MouseLookYawAxis.ToString(CultureInfo.InvariantCulture)),
+            ("input", "mouse_look_pitch_axis", values.MouseLookPitchAxis.ToString(CultureInfo.InvariantCulture)),
+            ("input", "mouse_look_pitch_floor", values.MouseLookPitchFloor.ToString(CultureInfo.InvariantCulture)),
+            ("input", "mouse_look_pitch_ceil", values.MouseLookPitchCeil.ToString(CultureInfo.InvariantCulture)),
+            ("input", "camera_rot_tgt_off", values.CameraRotTgtOff.ToString(CultureInfo.InvariantCulture)),
+            ("input", "camera_rot_cur_off", values.CameraRotCurOff.ToString(CultureInfo.InvariantCulture)),
+            ("input", "camera_eye_off", values.CameraEyeOff.ToString(CultureInfo.InvariantCulture)),
+            ("input", "camera_distance", values.CameraDistance.ToString(CultureInfo.InvariantCulture)),
+            ("input", "mouse_look_camera_diag", values.MouseLookCameraDiag ? "true" : "false"),
+            ("input", "mouse_look_camera_dump", values.MouseLookCameraDump ? "true" : "false"),
             ("patches", "unlock_website", values.UnlockWebsite ? "true" : "false"),
             ("patches", "unlock_ce", values.UnlockCe ? "true" : "false"),
             ("patches", "skip_intro_videos", values.SkipIntroVideos ? "true" : "false"),
@@ -171,6 +209,7 @@ public static class Fable2ConfigFile
             ("patches", "disable_motion_blur", values.DisableMotionBlur ? "true" : "false"),
             ("patches", "realtime_texture_morphing", values.RealtimeTextureMorphing ? "true" : "false"),
             ("patches", "hero_dog_texture_readback", values.HeroDogTextureReadback ? "true" : "false"),
+            ("patches", "dog_fur_depth_bias", values.DogFurDepthBias ? "true" : "false"),
             ("perf", "hotfunc_yield_every", values.HotFuncYieldEvery.ToString(CultureInfo.InvariantCulture)),
         };
 
@@ -300,6 +339,12 @@ public static class Fable2ConfigFile
     {
         return int.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture,
             out int parsed) ? parsed : fallback;
+    }
+
+    private static double ParseDouble(string value, double fallback)
+    {
+        return double.TryParse(value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture,
+            out double parsed) ? parsed : fallback;
     }
 
     private static string Quote(string value)

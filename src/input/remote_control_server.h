@@ -60,6 +60,7 @@ inline void CloseSock(sock_t s) {
 #else
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>  // TCP_NODELAY
 #include <sys/socket.h>
 #include <unistd.h>
 using sock_t = int;

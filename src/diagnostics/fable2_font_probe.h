@@ -22,11 +22,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <chrono>
+#include <thread>
 
 #ifdef _WIN32
 #include <windows.h>
 #else
-#include <thread>
 #include <unistd.h>
 #endif
 
@@ -141,8 +142,7 @@ inline std::atomic<uint32_t>& g_data1() { static std::atomic<uint32_t> v{0}; ret
 inline void vbuf_dump_later(uint8_t* base) {
   bool expect = false;
   if (!vbuf_started().compare_exchange_strong(expect, true)) return;
-  CreateThread(nullptr, 0, [](LPVOID b) -> DWORD {
-    auto* base = (uint8_t*)b;
+  std::thread([](uint8_t* base) {
     for (int i = 0; i < 600; ++i) {
       const uint32_t uv0 = g_uv0().load();
       const uint32_t uv5 = g_uv5().load();
@@ -180,13 +180,12 @@ inline void vbuf_dump_later(uint8_t* base) {
               log_line("%s\n", gdl);
             }
           }
-          return 0;
+          return;
         }
       }
-      Sleep(5);
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
-    return 0;
-  }, base, 0, nullptr);
+  }, base).detach();
 }
 
 // Scan [lo,hi) page-by-page (fast) for the UTF-16BE string "Press A to

@@ -83,17 +83,28 @@
 
 #include <rex/ppc/context.h>
 #include <rex/logging/macros.h>
+#include <rex/system/kernel_state.h>
+#include <rex/system/xmemory.h>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#elif defined(__APPLE__)
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
 #endif
 
 namespace fable2::stateprobe {
 
-constexpr uintptr_t kArena = 0x100000000ull;
+// Host base of the guest arena, or 0 before the runtime has mapped it. It is
+// 0x100000000 on Windows in practice, but macOS reserves it wherever mmap finds
+// room (that address holds the executable there), so always ask the runtime.
+inline uintptr_t arena() {
+  auto* ks = rex::system::kernel_state();
+  return ks ? reinterpret_cast<uintptr_t>(ks->memory()->virtual_membase()) : 0;
+}
 
 // State ids (stable values used by the remote API + the snapshot).
 enum State : int {
@@ -135,15 +146,33 @@ inline bool page_ok(const void* p) {
   return m.State == MEM_COMMIT &&
          (m.Protect & (PAGE_READWRITE | PAGE_READONLY | PAGE_WRITECOPY |
                        PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE)) != 0;
+#elif defined(__APPLE__)
+  // VirtualQuery analogue: the region at or above p must start at p's page
+  // (i.e. p is mapped) and be readable; reserved guest pages are PROT_NONE.
+  mach_vm_address_t addr = reinterpret_cast<mach_vm_address_t>(p);
+  mach_vm_size_t size = 0;
+  vm_region_basic_info_data_64_t info{};
+  mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
+  mach_port_t object = MACH_PORT_NULL;
+  if (mach_vm_region(mach_task_self(), &addr, &size, VM_REGION_BASIC_INFO_64,
+                     reinterpret_cast<vm_region_info_t>(&info), &count,
+                     &object) != KERN_SUCCESS) {
+    return false;
+  }
+  return addr <= reinterpret_cast<mach_vm_address_t>(p) &&
+         (info.protection & VM_PROT_READ) != 0;
 #else
+  // ponytail: Linux has no cheap page query; assumes readable like before.
   (void)p;
   return true;
 #endif
 }
 
-// Safe guest read from the fixed 0x100000000 arena (commit-on-fault).
+// Safe guest read from the guest arena (commit-on-fault).
 inline bool aread(uint32_t ga, void* dst, size_t n) {
-  const uint8_t* p = reinterpret_cast<const uint8_t*>(kArena + ga);
+  const uintptr_t base = arena();
+  if (base == 0) return false;
+  const uint8_t* p = reinterpret_cast<const uint8_t*>(base + ga);
   size_t off = 0;
   while (off < n) {
     size_t chunk = 0x1000u - ((reinterpret_cast<uintptr_t>(p + off)) & 0xFFFu);
@@ -156,7 +185,7 @@ inline bool aread(uint32_t ga, void* dst, size_t n) {
 }
 
 // Safe guest read at `base` + guest address (render-thread hooks pass their
-// own base; it equals kArena).
+// own base; it equals arena()).
 inline bool gread(const uint8_t* base, uint32_t ga, void* dst, size_t n) {
   const uint8_t* p = base + ga;
   size_t off = 0;
@@ -174,7 +203,8 @@ inline bool gread(const uint8_t* base, uint32_t ga, void* dst, size_t n) {
 // arena page is committed + readable.
 inline bool plausible(uint32_t a) {
   if (a < 0x00400000u || a >= 0xC0000000u) return false;
-  return page_ok(reinterpret_cast<const void*>(kArena + a));
+  const uintptr_t base = arena();
+  return base != 0 && page_ok(reinterpret_cast<const void*>(base + a));
 }
 
 inline uint32_t be32(const void* p) {
@@ -560,8 +590,9 @@ inline void do_sample() {
 
   // Before the guest image is mapped (early boot) we cannot read anything:
   // report Unknown.
-  const bool ready = page_ok(
-      reinterpret_cast<const void*>(kArena + 0x820A8064u));  // image strings
+  const uintptr_t arena_base = arena();
+  const bool ready = arena_base != 0 &&
+      page_ok(reinterpret_cast<const void*>(arena_base + 0x820A8064u));  // image strings
 
   // The GUI_FRONT_END runtime value: hunt the heap until the value copy is
   // found (bounded; see fe_flag_hunt), then just re-read it. While it stays a

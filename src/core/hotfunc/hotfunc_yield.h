@@ -39,10 +39,21 @@ void MaybeYield();
 
 namespace fable2::hotfunc {
 
+// Stand-in for the skipped yields' ordering. x86 is TSO, so a compiler-only
+// barrier suffices (no mfence). ARM64 and other weakly ordered hosts have no
+// TSO and need a real hardware fence (dmb ish) to keep the same guarantee.
+inline void SkippedYieldFence() {
+#if defined(__x86_64__) || defined(_M_X64)
+  std::atomic_signal_fence(std::memory_order_seq_cst);
+#else
+  std::atomic_thread_fence(std::memory_order_seq_cst);
+#endif
+}
+
 inline void BatchedYield() {
   const int32_t every = fable2::config::Get().hotfunc_yield_every;
   if (every <= 0) {
-    std::atomic_signal_fence(std::memory_order_seq_cst);  // compiler barrier only, no mfence
+    SkippedYieldFence();
     return;
   }
   static thread_local uint32_t n = 0;
@@ -50,9 +61,7 @@ inline void BatchedYield() {
     n = 0;
     rex::thread::MaybeYield();  // SwitchToThread() + full MemoryBarrier()
   } else {
-    // Compiler-only barrier: no mfence on x86. TSO covers hardware ordering;
-    // this just stops the optimizer reordering guest accesses across the point.
-    std::atomic_signal_fence(std::memory_order_seq_cst);
+    SkippedYieldFence();
   }
 }
 

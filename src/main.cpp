@@ -11,13 +11,20 @@
 #include "fable2_text_probe.h"
 #include "fable2_glyph_probe.h"
 #include "fable2_hotfuncs.h"
+// Windows-only diagnostics (SEH/VEH, VirtualQuery, Toolhelp thread snapshots).
+// All are env-gated and off by default; without heap_scan the generated
+// UIText_FrameRender runs unhooked, same as with the probes disabled.
+#ifdef _WIN32
 #include "fable2_heap_scan.h"
+#endif
 #include "fable2_text_append.h"
 #include "fable2_state_probe.h"
 #include "fable2_menu_probe.h"  // main-menu input path (mod-menu hook points)
 #include "fable2_modmenu.h"  // 6th "MOD OPTION" selectable main-menu item
+#ifdef _WIN32  // Windows-only diagnostics, see above
 #include "fable2_av_probe.h"  // self-installs a guest-PC AV logger (VEH)
 #include "fable2_stall_dump.h"  // self-installs a render-stall thread dumper
+#endif
 // #include "fable2_ui_render_probe.h"
 #include "keyboard_gamepad.h"
 
@@ -90,6 +97,18 @@ extern "C" {
 __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
+#endif
+
+#ifdef __APPLE__
+#include <cstdlib>
+// macOS: native fullscreen moves the window to its own Space and the
+// re-created swapchain presents only black (the game keeps running). SDL's
+// non-Spaces fullscreen covers the screen without that transition and renders
+// fine. Set before main() so the hint is in place when the runtime opens the
+// SDL window; an explicit SDL_VIDEO_MAC_FULLSCREEN_SPACES in the environment
+// still wins (overwrite = 0).
+static const int kMacFullscreenWithoutSpaces =
+    setenv("SDL_VIDEO_MAC_FULLSCREEN_SPACES", "0", 0);
 #endif
 
 REX_DEFINE_APP(fable_2, Fable2App::Create)

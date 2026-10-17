@@ -16,6 +16,12 @@ import sys
 
 # Clean base revision the patches were generated against.
 SDK_PIN = "babc769a94be5618010abfd075ed84f3c2bc09f5"
+# Fork commits known to bake in every patch below (himdo main, which our
+# rasty94/rexglue-sdk `macos` branch builds on). Later fork commits may touch
+# the same lines, so descendants are accepted without re-checking the patches.
+BAKED_IN_BASES = (
+    "a728090e47f84ceed47955d3b87131991d268ead",
+)
 # Public libmspack commit the SDK's broken pin is repointed at.
 MSPACK_PIN = "305907723a4e7ab2018e58040059ffb5e77db837"
 PATCHES = (
@@ -96,6 +102,9 @@ def main():
                 fail(f"SDK patch {name} conflicts with local edits:\n{detail}\n"
                      "The SDK work tree is not at a clean accepted revision. Restore it with:\n"
                      f"  git -C {source} checkout -- . && git -C {source} clean -fd")
+    elif any(git(source, "merge-base", "--is-ancestor", base, "HEAD", check=False).returncode == 0
+             for base in BAKED_IN_BASES):
+        print(f"SDK revision {head} descends from a fork base with the runtime fixes baked in.")
     else:
         # Any other revision is accepted only with every patch baked in.
         pending = [name for name, state in states.items() if state != "applied"]
