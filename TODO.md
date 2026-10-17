@@ -375,3 +375,11 @@ Resultado sin opciones: **3D 24,2 FPS** (14,5 antes), menús 29, imagen correcta
 Costes: sin antialiasing de bordes en 2x, alpha-to-mask con tramado, consultas de oclusión cuentan píxeles.
 Desactivar con `--vulkan_host_msaa_1x=false`. Pendiente: revisar más escenas (interiores, noche, agua, vegetación
 con alpha-to-mask) y posibles filas duplicadas si el juego reinterpreta 1x↔2x.
+
+### T11. Point sprites (nieve): el freno que queda para 30 FPS (2026-10-17)
+Con `vulkan_host_msaa_1x`: 3D 21,4–24,9 FPS según la nieve; sin point sprites (`FABLE2_EXP_NOPOINTS`) 29,2 (tope).
+Trazas (calle): vértices 16,8 → 7,4 ms/frame sin puntos, fragmentos iguales (19,9 / 20,8), y 218 → 169 render
+passes/frame. Causa: sin geometry shaders cada punto se expande a 4 vértices en el VS y el VS del juego corre 4
+veces. En curso: rama `native-points` del fork, puntos cuadrados como puntos nativos de Metal (VS una vez por punto,
+`gl_PointSize`/`gl_PointCoord`), cvar `vulkan_native_point_sprites` (on en macOS). Pendiente: por qué los puntos
+rompen ~50 render passes por frame (¿subidas de búferes dinámicos de partículas?).
