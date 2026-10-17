@@ -282,6 +282,24 @@
                            TextAlignment="Center" VerticalContentAlignment="Center"
                            LostFocus="MouseSensitivityBoxLostFocus" />
                 </Grid>
+                <Border Background="#264A2C2C" CornerRadius="8" Padding="14,10,14,10" Margin="0,16,0,0">
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                      <TextBlock Text="Direct mouse look (camera)  (experimental)"
+                                 FontWeight="SemiBold" Foreground="#FFE06666" />
+                      <TextBlock Text="Aim the camera directly like a desktop FPS, orbiting the hero with native pitch limits, instead of mapping to the gamepad right stick. Only applies when mouse look is on. May feel wrong in some scenes."
+                                 FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,2,0,0"
+                                 TextWrapping="Wrap" />
+                    </StackPanel>
+                    <CheckBox x:Name="DirectMouseLookCheck" Grid.Column="1" IsChecked="False"
+                              VerticalAlignment="Top" Margin="10,0,0,0"
+                              Foreground="{StaticResource TextBrush}" />
+                  </Grid>
+                </Border>
               </StackPanel>
             </Border>
           </StackPanel>

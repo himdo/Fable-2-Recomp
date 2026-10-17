@@ -54,6 +54,9 @@
 #include <rex/ui/virtual_key.h>
 #include <rex/ui/keybinds.h>
 
+#include "fable2_config.h"  // direct_mouse_look toggle
+#include "mouse_look.h"     // fable2::mouselook (accumulates the mouse delta)
+
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -389,9 +392,22 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver
         c.y = rc.top + rc.bottom / 2;
         if (ClientToScreen(hwnd, &c)) {
           if (mouse_centered_) {
-            int32_t scale = REXCVAR_GET(mouse_look_scale);
-            rx = input_detail::ClampStick((p.x - c.x) * scale);
-            ry = input_detail::ClampStick(-(p.y - c.y) * scale);
+            // This poll's cursor displacement in screen pixels. dx>0 = right,
+            // dy>0 = down.
+            const int32_t dx = p.x - c.x;
+            const int32_t dy = p.y - c.y;
+            if (fable2::config::Get().direct_mouse_look) {
+              // Direct mouse look: hand the raw displacement to the camera
+              // hook (fable2_hook_direct_mouse_look) and leave the pad's right
+              // stick neutral, so the mouse no longer drives the joystick.
+              fable2::mouselook::add_delta(dx, dy);
+            } else {
+              // Legacy: map the displacement onto the right stick. Fable 2
+              // inverts Y, so mouse-up (dy<0) maps to +ry (look up).
+              const int32_t scale = REXCVAR_GET(mouse_look_scale);
+              rx = input_detail::ClampStick(dx * scale);
+              ry = input_detail::ClampStick(-dy * scale);
+            }
           }
           SetCursorPos(c.x, c.y);  // recenter: consume this frame's movement
           mouse_centered_ = true;

@@ -75,10 +75,62 @@ keyboard_gamepad_map = "LMB:X,RMB:Y,MMB:B,Shift:A,E:A,Q:LT,Tab:RB,R:RT,Z:LB,B:B,
 # Default: true
 mouse_look = true
 
-# Mouse-look sensitivity: right-stick units per pixel of mouse movement
-# (1..4096; larger = more sensitive).
-# Default: 256
+# Mouse-look sensitivity slider (1..4096; 256 = 1x). Shared by BOTH look modes:
+# for the legacy right-stick mapping it sets the stick units per pixel; for
+# direct mouse look it multiplies mouse_look_yaw_sens / mouse_look_pitch_sens.
+# Larger = more sensitive. Default: 256
 mouse_look_scale = 256
+
+# Direct mouse-to-camera look: apply mouse movement straight to the active
+# camera's orientation (desktop-FPS style, no stick rate cap) instead of
+# writing it into the pad's right stick. false = legacy right-stick mapping.
+# EXPERIMENTAL (default false; may feel wrong in some scenes).
+direct_mouse_look = false
+
+# Camera-look sensitivity: radians of camera rotation per host mouse pixel
+# (signed; make it negative to flip the axis direction).
+mouse_look_yaw_sens = -0.0022
+mouse_look_pitch_sens = -0.0022
+# Native look-orbit angle limits, in the game's own orbit-angle scale (the
+# target angle at camera+68 that the right-stick look integrates and clamps).
+# A full-range stick test shows the native orbit clamps this angle to
+# [floor, ceil]: floor = camera low / looking up, ceil = camera high / looking
+# down. The mouse adds its pitch on top of the native angle and is clamped so
+# the TOTAL (native + mouse) stays within [floor, ceil] — so the mouse and the
+# stick share one orbit and one set of bounds (no compounding past the limits).
+mouse_look_pitch_floor = 1.458
+mouse_look_pitch_ceil = 4.067
+# Camera local axis each look direction rotates around (0=X, 1=Y, 2=Z). The
+# camera looks along its local Y, so a correct orbit turns around the local up
+# (Z) and pitches around the local right (X). Negate the matching *_sens to
+# flip a look direction.
+mouse_look_yaw_axis = 2
+mouse_look_pitch_axis = 0
+
+# Active-camera (CECCamera) field offsets (bytes from the camera object). The
+# look-orbit is reproduced by rotating BOTH the orientation quaternions AND the
+# world-space eye position around the hero, exactly like the game's own
+# right-stick look. The rotation-state quaternions (target +160, current +176,
+# x,y,z,w) keep the camera facing the hero; the eye position (+144) is the
+# world-space camera position that physically sweeps around the hero. The hero
+# pivot is eye + forward * camera_distance (forward = camera local +Y). Verify
+# with mouse_look_camera_diag and adjust if a look axis or radius is off (no
+# rebuild needed).
+camera_rot_tgt_off = 160
+camera_rot_cur_off = 176
+camera_eye_off = 144
+# Distance from the hero to the camera eye (= orbit radius). The native stick
+# orbit's horizontal radius is ~3.1; tune so the mouse orbit matches.
+camera_distance = 3.1
+
+# Log the active camera's orientation fields once, the first frame the mouse
+# moves, to confirm the offsets above. Default: false
+mouse_look_camera_diag = false
+
+# Dump EVERY 4-byte field of the active camera object (offset 0..260) plus the
+# orientation quaternions, once per frame (capped), to the [ml-dump] log. Used
+# to find which fields the game's own right-stick look changes. Default: false
+mouse_look_camera_dump = false
 
 [patches]
 # Toggles for the recomp-level (mid-asm hook) patches, consulted at runtime
@@ -147,6 +199,16 @@ realtime_texture_morphing = true
 # false = original black bug.
 # Default: false
 hero_dog_texture_readback = false
+
+# Dog Fur Depth Bias: the dog's fur is drawn as 15 thin layers over its body
+# that rely on exact depth ties in the Xbox 360's 24-bit depth buffer. The PC's
+# 32-bit depth breaks those ties at random, which shows as flickering, blocky
+# patches on the dog (worse at higher internal resolutions). This gives the fur
+# draws (pixel shader 014F8A02DB7B19CA) a small depth bias so the ties pass as
+# on the console. Seeds the SDK cvars depth_bias_shader(_units).
+# false = no bias (flickering patches).
+# Default: true
+dog_fur_depth_bias = true
 
 [perf]
 # NtYieldExecution batching for the hot-function overrides (see
@@ -245,6 +307,45 @@ bool Load(const std::filesystem::path& path) {
     values.mouse_look_scale = static_cast<int32_t>(Read<int64_t>(
         input_table, "input", "mouse_look_scale", "integer",
         values.mouse_look_scale));
+    values.direct_mouse_look =
+        Read<bool>(input_table, "input", "direct_mouse_look", "boolean",
+                   values.direct_mouse_look);
+    values.mouse_look_yaw_sens = static_cast<float>(
+        Read<double>(input_table, "input", "mouse_look_yaw_sens", "number",
+                     values.mouse_look_yaw_sens));
+    values.mouse_look_pitch_sens = static_cast<float>(
+        Read<double>(input_table, "input", "mouse_look_pitch_sens", "number",
+                     values.mouse_look_pitch_sens));
+    values.mouse_look_pitch_floor = static_cast<float>(
+        Read<double>(input_table, "input", "mouse_look_pitch_floor", "number",
+                     values.mouse_look_pitch_floor));
+    values.mouse_look_pitch_ceil = static_cast<float>(
+        Read<double>(input_table, "input", "mouse_look_pitch_ceil", "number",
+                     values.mouse_look_pitch_ceil));
+    values.mouse_look_yaw_axis = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "mouse_look_yaw_axis", "integer",
+        values.mouse_look_yaw_axis));
+    values.mouse_look_pitch_axis = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "mouse_look_pitch_axis", "integer",
+        values.mouse_look_pitch_axis));
+    values.camera_rot_tgt_off = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "camera_rot_tgt_off", "integer",
+        values.camera_rot_tgt_off));
+    values.camera_rot_cur_off = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "camera_rot_cur_off", "integer",
+        values.camera_rot_cur_off));
+    values.camera_eye_off = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "camera_eye_off", "integer",
+        values.camera_eye_off));
+    values.camera_distance = static_cast<float>(Read<double>(
+        input_table, "input", "camera_distance", "number",
+        values.camera_distance));
+    values.mouse_look_camera_diag =
+        Read<bool>(input_table, "input", "mouse_look_camera_diag", "boolean",
+                   values.mouse_look_camera_diag);
+    values.mouse_look_camera_dump =
+        Read<bool>(input_table, "input", "mouse_look_camera_dump", "boolean",
+                   values.mouse_look_camera_dump);
   }
   const toml::path patches_path{"patches"};
   const auto patches = root[patches_path];
@@ -273,6 +374,9 @@ bool Load(const std::filesystem::path& path) {
     values.hero_dog_texture_readback =
         Read<bool>(patches_table, "patches", "hero_dog_texture_readback", "boolean",
                    values.hero_dog_texture_readback);
+    values.dog_fur_depth_bias =
+        Read<bool>(patches_table, "patches", "dog_fur_depth_bias", "boolean",
+                   values.dog_fur_depth_bias);
   }
   const toml::path perf_path{"perf"};
   const auto perf = root[perf_path];

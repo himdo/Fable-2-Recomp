@@ -35,6 +35,7 @@ local F5_MENU_ITEMS = {
   { name = "Get Player Position", path = "scripts/recomp/getPlayerPos.lua" },
   { name = "Modify Money", path = "scripts/recomp/modifyMoney.lua" },
   { name = "Morality / Purity", path = "scripts/recomp/modifyMoralityPurity.lua" },
+  { name = "Toggle Freecam", path = "scripts/recomp/toggleFreecam.lua" },
 }
 
 -- Run a script from the game VFS. The game's custom loadfile resolves paths
