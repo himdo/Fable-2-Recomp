@@ -21,6 +21,7 @@
 #include <chrono>
 #include <cstdint>
 
+#include <rex/cvar.h>
 #include <rex/graphics/vulkan/command_processor.h>
 #include <rex/logging/macros.h>
 
@@ -48,6 +49,23 @@ class Fable2VulkanCommandProcessor : public rex::graphics::vulkan::VulkanCommand
                                rex::system::KernelState* kernel_state)
       : rex::graphics::vulkan::VulkanCommandProcessor(graphics_system, kernel_state) {
     REXGPU_INFO("[fable2-vk] Fable2VulkanCommandProcessor constructed (profiler active)");
+    // Auto-enable hero/dog texture readback for the Vulkan renderer. Unlike D3D12,
+    // the Vulkan render-to-texture resolve is not naturally aliased with guest
+    // memory, so the explicit readback is required for the hero/dog morph path.
+    if (rex::cvar::GetFlagSource("readback_resolve_force_addresses") ==
+        rex::cvar::Source::kDefault) {
+      if (rex::cvar::SetFlagByName("readback_resolve_force_addresses", "0x12704000")) {
+        REXGPU_INFO("[fable2-vk] auto-seeded readback_resolve_force_addresses=0x12704000 "
+                    "(hero/dog morph path)");
+      }
+    }
+    // Auto-enable dog fur depth bias (matching D3D12 behavior).
+    if (rex::cvar::GetFlagSource("depth_bias_shader") == rex::cvar::Source::kDefault) {
+      if (rex::cvar::SetFlagByName("depth_bias_shader", "014F8A02DB7B19CA") &&
+          rex::cvar::SetFlagByName("depth_bias_shader_units", "16")) {
+        REXGPU_INFO("[fable2-vk] auto-seeded depth_bias_shader (dog fur fix)");
+      }
+    }
   }
 
   // Track the start of the CPU encoding window. The first WriteRegister after
