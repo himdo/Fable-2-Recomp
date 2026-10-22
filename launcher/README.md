@@ -44,8 +44,7 @@ separate from the engine's `fable_2.toml`):
   → guest input, with add/remove). Mouse look and mouse sensitivity are also
   here.
 - **Patches** — a checkbox per recomp-level patch (unlock website/CE, skip
-  intro videos, disable motion blur, realtime texture morphing, hero/dog
-  texture readback, dog-fur depth bias).
+  intro videos, disable motion blur, dog-fur depth bias).
 - **Performance** — the hot-function yield-batching factor.
 
 The Save button writes only the managed keys back to `fable2_config.toml`
