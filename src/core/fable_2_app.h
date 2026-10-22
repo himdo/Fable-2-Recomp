@@ -82,6 +82,11 @@ class Fable2App : public rex::ReXApp {
         PPCImageConfig));
   }
 
+  // True when the custom D3D12 renderer (rexgpu-custom plugin) is the active
+  // GPU plugin for this launch (set in OnPreSetup; consumed by OnCreateDialogs
+  // to register the progress HUD).
+  bool custom_renderer_active_ = false;
+
   // Remote control (AI input channel) - see plans/ai-remote-input-control.md
   // and src/input/remote_control_server.h. The store is shared by the remote pad
   // driver (registered in OnPreSetup) and the command server (started in
@@ -97,17 +102,39 @@ class Fable2App : public rex::ReXApp {
                                                &remote_pad_enabled_};
 #endif  // FABLE2_REMOTE_CONTROL
 
-  // Emulate the Xbox 360 Xenos GPU. Two plugins are staged next to the exe:
+  // Emulate the Xbox 360 Xenos GPU. Three plugins are staged next to the exe:
   //   rexgpu-xenos[d].dll        -> D3D12 (prebuilt SDK plugin; the default)
   //   rexgpu-xenos-vulkan[d].dll -> Vulkan (built from the SDK source via
   //                                   tools/build_sdk_vulkan.cmd)
-  // Swap the renderer at launch with --gpu_plugin, no rebuild required:
-  //   --gpu_plugin=xenos            D3D12 (default)
-  //   --gpu_plugin=xenos-vulkan     Vulkan
+  //   rexgpu-custom[d].dll       -> custom D3D12 renderer, built in this repo
+  //                                   (src/renderer/, see
+  //                                   plans/custom-d3d12-renderer.md)
+  // Select the renderer with the `gpu_plugin` key in fable2_config.toml
+  // ([general]) or --gpu_plugin / the gpu_plugin cvar, no rebuild required:
+  //   --gpu_plugin=xenos            built-in D3D12 (default)
+  //   --gpu_plugin=xenos-vulkan     built-in Vulkan
+  //   --gpu_plugin=custom           custom D3D12 renderer
   void OnPreSetup(rex::RuntimeConfig& config) override {
-    std::string plugin = config.gpu_plugin.empty() ? "xenos" : config.gpu_plugin;
+    // Precedence: --gpu_plugin / cvar > fable2_config.toml > built-in xenos.
+    std::string plugin = config.gpu_plugin;
+    if (plugin.empty()) {
+      const std::string& cfg_plugin = fable2::config::Get().gpu_plugin;
+      plugin = cfg_plugin.empty() ? "xenos" : cfg_plugin;
+    }
     config.gpu_plugin = plugin;
-    if (plugin == "xenos-vulkan") {
+    custom_renderer_active_ = (plugin == "custom");
+    if (plugin == "custom") {
+      // Our project-local plugin (src/renderer/). The backend arg pins D3D12;
+      // a future Vulkan build of the plugin will accept "vulkan" too.
+      config.graphics = rex::system::LoadGpuPlugin("custom", "d3d12");
+      if (!config.graphics) {
+        REXSYS_ERROR(
+            "[fable2-config] custom renderer failed to load (rexgpu-custom[d].dll); "
+            "falling back to the built-in D3D12 renderer");
+        custom_renderer_active_ = false;
+        config.gpu_plugin = "xenos";
+      }
+    } else if (plugin == "xenos-vulkan") {
       // Load the source-built plugin and force the Vulkan backend. It is
       // compiled with both D3D12 and Vulkan; the default "any" would pick
       // D3D12, so pass "vulkan" explicitly to get the VulkanGraphicsSystem.
@@ -572,6 +599,8 @@ class Fable2App : public rex::ReXApp {
   }
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     // fable2::deadbeef_overlay::register_overlay(drawer);
+    // (The custom renderer HUD is a plugin-side Win32 overlay - see
+    // src/renderer/common/progress_report.cpp.)
   }
   // std::unique_ptr<rex::ui::ImGuiDialog> CreateAchievementsOverlay() override;
   // std::unique_ptr<rex::ui::AchievementNotificationDialog>

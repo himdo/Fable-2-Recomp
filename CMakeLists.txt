@@ -110,6 +110,100 @@ add_custom_command(TARGET fable_2 POST_BUILD
     COMMENT "Staging supported game profiles for the launcher"
     VERBATIM)
 
+# --- Custom D3D12 renderer (rexgpu-custom plugin) ---------------------------
+# Project-local replacement for the built-in D3D12 GPU plugin - see
+# plans/custom-d3d12-renderer.md. Loaded at launch with --gpu_plugin=custom
+# (or gpu_plugin = "custom" in fable2_config.toml).
+#
+# The plugin compiles the SDK's backend-agnostic Xenos command-stream layer
+# (graphics system base, command processor base, register file, PM4 decode,
+# shader base) from the SDK *source tree* - exactly the core the SDK's own
+# plugin compiles - and links the prebuilt rexruntime (same import table as
+# the exe). Backend-specific code lives in src/renderer/d3d12/; the tree is
+# split common/ vs. d3d12/ so a future Vulkan renderer adds src/renderer/
+# vulkan/ + its own plugin target reusing the common + SDK lists.
+if(NOT DEFINED REXGLUE_SDK_SOURCE)
+    set(REXGLUE_SDK_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/rexglue-sdk")
+endif()
+set(FABLE2_SDK_SRC "${REXGLUE_SDK_SOURCE}")
+
+# Project sources (split common vs. d3d12 for the future Vulkan backend).
+set(REXGPU_CUSTOM_COMMON_SOURCES
+    src/renderer/common/progress_report.cpp
+    src/renderer/common/cvars.cpp
+)
+set(REXGPU_CUSTOM_D3D12_SOURCES
+    src/renderer/d3d12/renderer_main.cpp
+    src/renderer/d3d12/custom_graphics_system.cpp
+    src/renderer/d3d12/custom_command_processor.cpp
+)
+# Reused SDK Xenos command-stream layer (the backend-agnostic core of the
+# SDK's own plugin build; the D3D12/Vulkan backends, DXBC translator and
+# SPIR-V sources are NOT included - the M0 backend is a no-op and real
+# shaders land in M4, when the DXBC sources are added back in).
+set(REXGPU_CUSTOM_SDK_SOURCES
+    ${FABLE2_SDK_SRC}/src/graphics/graphics_system.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/command_processor.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/register_file.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/registers.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/flags.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/frame_limiter.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/sampler_info.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/packet_disassembler.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/primitive_processor.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/xenos.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/format/ucode.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/shared_memory.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/pipeline/shader/shader.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/pipeline/shader/interpreter.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/util/draw.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/util/draw_extent_estimator.cpp
+)
+
+add_library(rexgpu-custom SHARED
+    ${REXGPU_CUSTOM_COMMON_SOURCES}
+    ${REXGPU_CUSTOM_D3D12_SOURCES}
+    ${REXGPU_CUSTOM_SDK_SOURCES})
+set_target_properties(rexgpu-custom PROPERTIES
+    CXX_STANDARD 23
+    CXX_STANDARD_REQUIRED ON
+    # Match the SDK plugin's per-config naming: rexgpu-customd.dll (Debug),
+    # rexgpu-custom.dll (Release) - LoadGpuPlugin picks it up.
+    DEBUG_POSTFIX "d"
+    RELWITHDEBINFO_POSTFIX "rd"
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON)
+target_include_directories(rexgpu-custom SYSTEM PRIVATE
+    ${FABLE2_SDK_SRC}/include
+    ${FABLE2_SDK_SRC}/thirdparty/renderdoc   # renderdoc_app.h (SDK graphics core)
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/renderer)
+target_compile_definitions(rexgpu-custom PRIVATE
+    REXGLUE_BUILD_CONFIG="$<CONFIG>"
+    $<$<PLATFORM_ID:Windows>:NOMINMAX>
+    $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
+    $<$<PLATFORM_ID:Windows>:_CRT_SECURE_NO_WARNINGS>)
+target_link_libraries(rexgpu-custom PRIVATE
+    rex::runtime
+    $<$<PLATFORM_ID:Windows>:d3d12>
+    $<$<PLATFORM_ID:Windows>:dxgi>
+    $<$<PLATFORM_ID:Windows>:dxguid>)
+if(WIN32)
+    # Same platform/compiler setup the host and recomp targets get.
+    rexglue_apply_target_settings(rexgpu-custom)
+endif()
+
+# Stage the plugin + the custom-renderer launcher next to the exe.
+add_custom_command(TARGET fable_2 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:rexgpu-custom>
+        "$<TARGET_FILE_DIR:fable_2>/$<TARGET_FILE_NAME:rexgpu-custom>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/run_custom_renderer.cmd
+        $<TARGET_FILE_DIR:fable_2>/run_custom_renderer.cmd
+    COMMENT "Staging custom D3D12 renderer (rexgpu-custom) next to the exe"
+    VERBATIM)
+add_dependencies(fable_2 rexgpu-custom)
+
 # The app's probe/diagnostic headers (src/diagnostics/*.h) use the standard CRT
 # functions (fopen, getenv, strcat, strncat, ...), which the MSVC/UCRT headers
 # mark deprecated when compiled with clang (-Wdeprecated-declarations noise).

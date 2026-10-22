@@ -55,6 +55,14 @@ R"TOML_EOF(# ===================================================================
 # Default: 1
 config_version = 1
 
+# GPU renderer plugin: "" or "xenos" = built-in D3D12 (default),
+# "xenos-vulkan" = built-in Vulkan (needs the source-built plugin),
+# "custom" = the custom D3D12 renderer built in this repo
+# (src/renderer/, see plans/custom-d3d12-renderer.md).
+# The --gpu_plugin / gpu_plugin cvar (fable_2.toml) wins over this key.
+# Default: "" (built-in D3D12)
+gpu_plugin = ""
+
 [input]
 # Host keyboard/mouse -> guest gamepad map: "Key:Button,Key:Button,..." (one
 # line; do not add spaces or newlines inside the string). Key = Windows
@@ -317,9 +325,12 @@ bool Load(const std::filesystem::path& path) {
   const toml::path general_path{"general"};
   const auto general = root[general_path];
   if (general.is_table()) {
+    const toml::table& general_table = *general.as_table();
     values.config_version = static_cast<int32_t>(
-        Read<int64_t>(*general.as_table(), "general", "config_version",
+        Read<int64_t>(general_table, "general", "config_version",
                       "integer", 1));
+    values.gpu_plugin = Read<std::string>(general_table, "general", "gpu_plugin",
+                                          "string", values.gpu_plugin);
   }
   const toml::path input_path{"input"};
   const auto input = root[input_path];

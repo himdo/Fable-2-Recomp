@@ -35,6 +35,15 @@ inline constexpr std::string_view kDefaultKeyboardGamepadMap =
 struct Values {
   // [general]
   int32_t config_version = 1;
+  // GPU renderer plugin (see Fable2App::OnPreSetup and
+  // plans/custom-d3d12-renderer.md). Empty = the built-in renderer
+  // (rexgpu-xenos, D3D12). Values:
+  //   "" or "xenos"        built-in D3D12 (default)
+  //   "xenos-vulkan"       built-in Vulkan (needs the source-built plugin)
+  //   "custom"             custom D3D12 renderer (rexgpu-custom[d].dll)
+  // --gpu_plugin / the gpu_plugin cvar (fable_2.toml / command line) wins
+  // over this key when set.
+  std::string gpu_plugin{""};
   // [input]
   std::string keyboard_gamepad_map{std::string{kDefaultKeyboardGamepadMap}};
   // Keep in sync with the cvar defaults in main.cpp (mouse_look,
