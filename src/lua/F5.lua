@@ -32,10 +32,11 @@
 -- data/dir.manifest (the build auto-maintains that for src/lua/*.lua).
 
 local F5_MENU_ITEMS = {
-  { name = "Get Player Position", path = "scripts/recomp/getPlayerPos.lua" },
+  -- { name = "Get Player Position", path = "scripts/recomp/getPlayerPos.lua" },
   { name = "Modify Money", path = "scripts/recomp/modifyMoney.lua" },
   { name = "Morality / Purity", path = "scripts/recomp/modifyMoralityPurity.lua" },
   { name = "Toggle Freecam", path = "scripts/recomp/toggleFreecam.lua" },
+  { name = "Toggle Behind-Cull", path = "scripts/recomp/cullBehindHero.lua" },
 }
 
 -- Run a script from the game VFS. The game's custom loadfile resolves paths
@@ -204,6 +205,12 @@ if not st.registered then
         -- to re-open. This is what keeps a re-opened box from reusing a stale
         -- hovered-item index from the previous box.
         cooldown = 40
+      end
+      -- Drive the behind-cull per-frame pass (if that script has been loaded).
+      -- pcall'd so it can never break the F5 loop; no-op when the cull is off.
+      local cull = rawget(_G, "__cull_internals")
+      if type(cull) == "table" and type(cull.tick) == "function" then
+        pcall(cull.tick)
       end
       coroutine.yield()
     end
