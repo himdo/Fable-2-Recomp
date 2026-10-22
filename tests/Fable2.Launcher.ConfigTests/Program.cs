@@ -296,8 +296,7 @@ try
         UnlockWebsite = true,
         UnlockCe = false,
         SkipIntroVideos = true,
-        HighTickRate = true,
-        HigherHfTickRate = false,
+        Interpolation = false,
         DisableMotionBlur = true,
         RealtimeTextureMorphing = true,
         HeroDogTextureReadback = false,
@@ -313,8 +312,7 @@ try
     Require(!readBack.UnlockCe, "unlock_ce roundtrip failed");
     Require(readBack.SkipIntroVideos, "skip_intro_videos roundtrip failed");
     Require(readBack.DisableMotionBlur, "disable_motion_blur roundtrip failed");
-    Require(readBack.HighTickRate, "high_tick_rate roundtrip failed");
-    Require(!readBack.HigherHfTickRate, "higher_hf_tick_rate roundtrip failed");
+    Require(!readBack.Interpolation, "interpolation roundtrip failed");
     Require(readBack.HotFuncYieldEvery == 4, "hotfunc_yield_every roundtrip failed");
     Require(writtenAdv.Contains("[perf]"), "[perf] section was not written");
     List<KeybindEntry> parsed = Fable2ConfigFile.ParseKeybinds(readBack.KeyboardGamepadMap);

@@ -906,7 +906,7 @@ public partial class MainWindow : Window
 
     // Build one "checkbox + label + description" row in the PatchList.
     private void AddPatchRow(string name, string key, string description, bool value,
-        bool unstable = false, Action? onChecked = null, Action? onUnchecked = null)
+        bool unstable = false)
     {
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -935,8 +935,6 @@ public partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(10, 0, 0, 0),
         };
-        if (onChecked != null) check.Checked += (s, e) => onChecked();
-        if (onUnchecked != null) check.Unchecked += (s, e) => onUnchecked();
 
         Grid.SetColumn(labelStack, 0);
         Grid.SetColumn(check, 1);
@@ -958,14 +956,6 @@ public partial class MainWindow : Window
         _patchChecks.Add((key, check));
     }
 
-    // Set a patch checkbox by key (used to satisfy the higher_hf_tick_rate ->
-    // high_tick_rate requirement).
-    private void SetPatchChecked(string key, bool isChecked)
-    {
-        foreach (var (k, check) in _patchChecks)
-            if (k == key) { check.IsChecked = isChecked; return; }
-    }
-
     private void BuildPatchRows()
     {
         PatchList.Children.Clear();
@@ -976,14 +966,9 @@ public partial class MainWindow : Window
             "Force-grant the Collectors Edition chest content at save load.", _advanced.UnlockCe);
         AddPatchRow("Skip Intro Videos", "skip_intro_videos",
             "Skip the Microsoft and Lionhead logo videos at boot.", _advanced.SkipIntroVideos);
-        AddPatchRow("High Tick Rate", "high_tick_rate",
-            "Double the LF tick from 15 to 30 Hz (Xenia \"High Tick Rate\").",
-            _advanced.HighTickRate, unstable: true,
-            onUnchecked: () => SetPatchChecked("higher_hf_tick_rate", false));
-        AddPatchRow("Higher HF Tick Rate", "higher_hf_tick_rate",
-            "Double the HF tick from 30 to 60 Hz (Xenia \"Higher HF Tick Rate\"). Requires High Tick Rate.",
-            _advanced.HigherHfTickRate, unstable: true,
-            onChecked: () => SetPatchChecked("high_tick_rate", true));
+        AddPatchRow("Interpolation", "interpolation",
+            "Update subtitles and HUD text every frame, and keep cloth in step with the drawn body.",
+            _advanced.Interpolation);
         AddPatchRow("Disable Motion Blur", "disable_motion_blur",
             "Zero the camera's full-screen motion blur amount each frame.", _advanced.DisableMotionBlur);
         AddPatchRow("Realtime Texture Morphing", "realtime_texture_morphing",
@@ -1004,8 +989,7 @@ public partial class MainWindow : Window
                 case "unlock_website": _advanced.UnlockWebsite = value; break;
                 case "unlock_ce": _advanced.UnlockCe = value; break;
                 case "skip_intro_videos": _advanced.SkipIntroVideos = value; break;
-                case "high_tick_rate": _advanced.HighTickRate = value; break;
-                case "higher_hf_tick_rate": _advanced.HigherHfTickRate = value; break;
+                case "interpolation": _advanced.Interpolation = value; break;
                 case "disable_motion_blur": _advanced.DisableMotionBlur = value; break;
                 case "realtime_texture_morphing": _advanced.RealtimeTextureMorphing = value; break;
                 case "hero_dog_texture_readback": _advanced.HeroDogTextureReadback = value; break;

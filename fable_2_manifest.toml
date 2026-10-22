@@ -143,28 +143,64 @@ name = "fable2_hook_ce_grantavail"
 registers = ["r3"]
 after_instruction = true
 
-# High Tick Rate (Xenia patch by Guy), code half. The Xenia patch NOPs the
-# store at 0x8233AEB4 that writes the tick-rate double at 0x83319510 every
-# time it runs, and patches that double (be8 0x83319511: 15.0 -> 30.0; written
-# at load by src/core/fable2_patches.cpp). Guest .text never runs here, so the NOP was inert and
-# the game overwrote the patched value. This hook runs BEFORE the store and,
-# while [patches] high_tick_rate is true, jumps past it (= the NOP).
+# Dynamic tick rate (src/core/fable2_tick_rate.h): game init (sub_8233AE50)
+# writes the HF tick double at 0x83319518 (`stfd` at 0x8233AE98) and the LF
+# tick double at 0x83319510 (at 0x8233AEB4). The dynamic tick rate owns both,
+# so each hook runs BEFORE its store and jumps past it.
+[[entrypoint.midasm_hook]]
+address = 0x8233AE98
+name = "fable2_hook_skip_tick_rate_store"
+registers = []
+jump_address_on_true = 0x8233AE9C
 [[entrypoint.midasm_hook]]
 address = 0x8233AEB4
-name = "fable2_hook_high_tick_rate_skip_store"
+name = "fable2_hook_skip_tick_rate_store"
 registers = []
 jump_address_on_true = 0x8233AEB8
 
-# Higher HF Tick Rate (Xenia patch by Ultra), code half. Same function: the
-# store at 0x8233AE98 (`stfd f0, -0x6ae8(r9)`) writes the HF tick double at
-# 0x83319518 (30.0, copied from 0x833194F0) every time it runs and would undo
-# the 30 -> 60 Hz data write (src/core/fable2_patches.cpp). Runs BEFORE the
-# store and, while [patches] higher_hf_tick_rate is true, jumps past it.
+# Interpolation ([patches] interpolation; hooks in src/core/fable2_hooks.cpp).
+# GUI every HF tick: sub_82278C90 calls the front-end GUI update (vtable[2] at
+# 0x82278D40) only on LF ticks; the check starts with `clrlwi r10,r29,24` at
+# 0x82278D1C. Returning true jumps straight to the call.
 [[entrypoint.midasm_hook]]
-address = 0x8233AE98
-name = "fable2_hook_high_hf_tick_rate_skip_store"
+address = 0x82278D1C
+name = "fable2_hook_gui_every_tick"
 registers = []
-jump_address_on_true = 0x8233AE9C
+jump_address_on_true = 0x82278D40
+
+# Cloth colliders: sub_82A895C0 reads each collider bone from the current
+# animation pose right after `add r11,r11,r9` (four loops). The hook points r11
+# at that bone blended between the previous and current pose at the render
+# time.
+[[entrypoint.midasm_hook]]
+address = 0x82A8965C
+name = "fable2_hook_cloth_collider_bone"
+registers = ["r1", "r11", "r30"]
+after_instruction = true
+[[entrypoint.midasm_hook]]
+address = 0x82A89770
+name = "fable2_hook_cloth_collider_bone"
+registers = ["r1", "r11", "r30"]
+after_instruction = true
+[[entrypoint.midasm_hook]]
+address = 0x82A898A8
+name = "fable2_hook_cloth_collider_bone"
+registers = ["r1", "r11", "r30"]
+after_instruction = true
+[[entrypoint.midasm_hook]]
+address = 0x82A899E4
+name = "fable2_hook_cloth_collider_bone"
+registers = ["r1", "r11", "r30"]
+after_instruction = true
+
+# Dynamic tick rate: the render thread's "draw
+# one LF period in the past" delay uses the smoothed rate, not the per-frame
+# one (sub_8236C520, right after `lfd f0,-27376(r10)`).
+[[entrypoint.midasm_hook]]
+address = 0x8236C5A4
+name = "fable2_hook_render_time_lf"
+registers = ["f0"]
+after_instruction = true
 
 # Address-space scan fix (src/core/fable2_address_scan.cpp). sub_82B4DDD8
 # finds an aligned block of address space by reserving one candidate address

@@ -150,8 +150,7 @@ struct Values {
   bool mouse_look_camera_dump = false;
   // [patches] - toggles for the recomp-level (mid-asm hook) patches. The
   // hook bodies consult these at runtime (src/core/fable2_hooks.cpp), so a patch
-  // can be A/B'd with no rebuild. high_tick_rate / higher_hf_tick_rate also
-  // drive the guest-image data writes in src/core/fable2_patches.cpp.
+  // can be A/B'd with no rebuild.
   // Unlock the Guild-chest items that were obtainable from the (now-dead)
   // Fable 2 website. Forces both the registration gates and the grant-method
   // result in GuildChest_GetWebsiteItem_8256E368 (hooks
@@ -166,14 +165,11 @@ struct Values {
   // intro videos"; hook fable2_hook_skip_intro_videos in
   // src/core/fable2_hooks.cpp). false = original.
   bool skip_intro_videos = false;
-  // [patches] high_tick_rate: LF tick 15 -> 30 Hz (Xenia "High Tick Rate" by
-  // Guy; data write in src/core/fable2_patches.cpp + hook
-  // fable2_hook_high_tick_rate_skip_store). false = original.
-  bool high_tick_rate = false;
-  // [patches] higher_hf_tick_rate: HF tick 30 -> 60 Hz (Xenia "Higher HF Tick
-  // Rate" by Ultra; data write in src/core/fable2_patches.cpp + hook
-  // fable2_hook_high_hf_tick_rate_skip_store). Requires high_tick_rate.
-  bool higher_hf_tick_rate = false;
+  // [patches] interpolation: update the GUI (subtitles, HUD text) on every HF
+  // tick instead of every LF tick, and blend cloth colliders between the last
+  // two animation poses at the render time (hooks fable2_hook_gui_every_tick
+  // and fable2_hook_cloth_collider_bone). false = original.
+  bool interpolation = true;
   // [patches] disable_motion_blur: zero the full-screen motion blur amount the
   // camera passes to the renderer (hook fable2_hook_disable_motion_blur in
   // src/core/fable2_hooks.cpp). false = original.

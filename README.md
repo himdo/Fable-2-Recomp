@@ -116,10 +116,12 @@ game recreates it with defaults on launch if it is ever missing. Loaded in
 - The `[patches]` section holds runtime toggles for the recomp-level
   (mid-asm hook) patches, consulted by the hook bodies on every call
   (`src/core/fable2_hooks.cpp`) — flip one and relaunch to A/B a patch with no
-  rebuild. This includes `high_tick_rate` and `higher_hf_tick_rate` (Xenia
-  "High Tick Rate" / "Higher HF Tick Rate"; turn both on together), which
-  also drive the guest-image data writes below. There is no separate patch
-  file.
+  rebuild. This includes `interpolation`, which updates text every tick and
+  keeps cloth in step with the drawn body. The game's tick rate follows the
+  frame rate on its own (one tick per frame, no frame cap, no setting; a
+  30 fps limit gives the original 30/15 Hz timing). See `docs/patches.md`,
+  "Dynamic tick rate" and "Interpolation". There is no
+  separate patch file.
 
 
 
@@ -227,7 +229,7 @@ Data patches for the loaded `default.xex` guest image (Xenia game-patches
 ops), applied before the guest module launches: `Fable2App::OnPostLoadXexImage()`
 → `fable2::patches::ApplyAll()` (code in `src/core/fable2_patches.{h,cpp}`).
 There is no patch file: each patch is switched on by a `[patches]` key in
-`fable2_config.toml` (currently `high_tick_rate` and `higher_hf_tick_rate`).
+`fable2_config.toml` (currently none).
 **Scope: data patches only** — code-region ops are inert in this recomp
 (guest `.text` is never executed); code patches are mid-asm hooks instead.
 Full details: `docs/patches.md`.

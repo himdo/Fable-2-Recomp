@@ -14,8 +14,8 @@
 // DO take effect, because the recompiled code reads/writes guest memory.
 //
 // There is no separate patch file: each patch is switched on by a [patches]
-// key in fable2_config.toml (high_tick_rate, higher_hf_tick_rate), read via
-// fable2::config::Get(). Patches() builds the table from those switches.
+// key in fable2_config.toml, read via fable2::config::Get(). Patches()
+// builds the table from those switches (none at the moment).
 
 #pragma once
 
@@ -64,5 +64,11 @@ const std::vector<Patch>& Patches();
 // Logs every write (old -> new value) plus a summary. Returns the number of
 // ops applied (out-of-range ops are skipped with an error log).
 size_t ApplyAll(rex::memory::Memory* memory, const rex::PPCImageInfo& image);
+
+// Host base of the guest arena, as recompiled code addresses it (base +
+// address, plus 0x1000 at 0xE0000000 and up). Recorded by ApplyAll, which runs
+// before the game starts; null before that. For mid-asm hooks, which get
+// registers but not the base.
+uint8_t* GuestBase();
 
 }  // namespace fable2::patches

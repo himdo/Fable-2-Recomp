@@ -27,6 +27,9 @@
 // generated copy keeps each statement visible so this file stays a 1:1
 // comparison against the recompiler output.
 //
+// One addition that is not guest code: apply_dynamic_tick_rate runs at the
+// top of each loop pass and locks the HF tick to the presented frames.
+//
 // The recompiler emits recompiled guest functions as WEAK extern "C" aliases
 // of __imp__ProcessGameFrame_82276C30; fable_2_register.cpp registers the ALIAS in the
 // indirect-dispatch table. This strong definition intercepts both direct bl
@@ -98,6 +101,15 @@
 //     if (thresholdMet) { /* indirect call via vtable */ } else YieldAndCheckThreshold();
 //   }
 #include "fable_2_pch.h"
+
+#include <bit>
+#include <cmath>
+#include <format>
+#include <string>
+
+#include <rex/logging/macros.h>
+
+#include "fable2_tick_rate.h"
 
 extern "C" void CallActivePlayerMethod_821A11E8(PPCContext& ctx, uint8_t* base);
 extern "C" void ConstructRefCounted_8222CF18(PPCContext& ctx, uint8_t* base);
@@ -459,6 +471,140 @@ static __attribute__((noinline)) bool frame_gate(PPCContext& ctx, uint8_t* base)
 	}
 	}
 	return true;
+}
+
+// Dynamic tick rate (src/core/fable2_tick_rate.h). Not guest code.
+// Runs at the top of each loop pass, before compute_loop_timing. Loop state
+// (callee-saved, live across the loop):
+//   f27 = HF period, f25 = HF rate, r25 = HF ticks per LF tick (2),
+//   r23/f26 = anchor (HF tick index r23 falls at time f26),
+//   r28 = last HF tick processed.
+// compute_loop_timing makes tick trunc((now - f26) * f25 + r23) due and sets
+// the game clock (self+272) to (due - r23) * f27 + f26. So each pass:
+//   - the anchor moves to the last processed tick (r23 = r28, f26 = that
+//     tick's clock time), which is where the original leaves the clock while
+//     it waits;
+//   - frame-locked (frame rate 30+): f25 = 0 makes nothing due until the next
+//     presented frame (or every Nth one). Then the anchor is placed one period
+//     before the new tick's clock time and f25 = 1.5 / (now - anchor) makes
+//     exactly one tick due. Its period is the real time since the previous
+//     tick (clamped to 1/(2 * max) .. 1/30 s), written to the rate globals
+//     and f27/r25 right before it runs, and its clock time is one period
+//     after the last, nudged by at most 5% of a period toward real time.
+//     A gap over the clamp runs the missed ticks (up to 3) back to back so
+//     game speed holds; a longer one (a stall, a load) resyncs to now;
+//   - otherwise f25 = HF and the game's own timer runs (original behaviour).
+// compute_frame_timing reads the rates only once, on entry, and the loop can
+// run for a whole session, so rate changes are applied here too: the guest
+// globals are written (every other reader agrees) and f27/r25 re-derived the
+// way compute_frame_timing derives them.
+static double guest_now_seconds(PPCContext& ctx, uint8_t* base) {
+	// As compute_loop_timing: (timebase - [0x83496EC0]) / [0x83496EC8].
+	const double tb = static_cast<double>(static_cast<int64_t>(REX_QUERY_TIMEBASE()));
+	const double origin = std::bit_cast<double>(GV64(0x83496EC0));
+	const double scale = std::bit_cast<double>(GV64(0x83496EC8));
+	return (tb - origin) / scale;
+}
+
+static __attribute__((noinline)) void apply_dynamic_tick_rate(PPCContext& ctx, uint8_t* base) {
+	static double applied_hf = fable2::tickrate::kMinHfHz;
+	static double logged_hf = fable2::tickrate::kMinHfHz;
+	static int logged_n = 0;
+	static uint64_t last_tick_frame = 0;
+	static double last_tick_real = 0.0;
+	static int catchup = 0;  // ticks still owed after a frame-rate drop
+	constexpr int kMaxCatchupTicks = 3;
+
+	const double last_tick_time =
+		static_cast<double>(ctx.r28.s32 - ctx.r23.s32) * ctx.f27.f64 + ctx.f26.f64;
+	ctx.r23.s64 = ctx.r28.s32;
+	ctx.f26.f64 = last_tick_time;
+
+	const fable2::tickrate::Plan plan = fable2::tickrate::CurrentPlan();
+	const double one = std::bit_cast<double>(GV64(0x8209FFD8));  // lfd f0,27416(r30)
+	// Sets the HF rate (LF = HF / 2) in the guest globals and the loop
+	// registers. HF must come out as exactly twice LF: ratio =
+	// trunc(HF * (1/LF)). Nudge HF up by an ulp until it does.
+	auto write_rates = [&](double hf) {
+		int32_t ratio = 0;
+		for (int i = 0; i < 16; ++i) {
+			ratio = static_cast<int32_t>((one / (one / hf)) * (one / (hf / 2.0)));
+			if (ratio == 2) break;
+			hf = std::nextafter(hf, 1e9);
+		}
+		if (ratio < 1) ratio = 1;  // as compute_frame_timing (r25 = max(r10, 1))
+		SV64(fable2::tickrate::kLfRateAddr, std::bit_cast<uint64_t>(hf / 2.0));
+		SV64(fable2::tickrate::kHfRateAddr, std::bit_cast<uint64_t>(hf));
+		SV64(fable2::tickrate::kHfRateCopyAddr, std::bit_cast<uint64_t>(hf));
+		ctx.f27.f64 = one / hf;
+		ctx.r25.s64 = ratio;
+	};
+	if (plan.hf_hz != applied_hf) {
+		applied_hf = plan.hf_hz;
+		if (plan.frames_per_tick != logged_n ||
+		    std::fabs(plan.hf_hz - logged_hf) > logged_hf * 0.1) {
+			REXSYS_INFO("[tick-rate] dynamic: HF {:.1f} Hz, LF {:.1f} Hz, {} "
+			            "(frame rate {:.1f} fps)",
+			            plan.hf_hz, plan.hf_hz / 2.0,
+			            plan.frames_per_tick == 0
+			                ? std::string("game timer (under 30 fps)")
+			                : plan.frames_per_tick == 1
+			                      ? std::string("one tick per frame, each as long as its frame")
+			                      : std::format("one tick every {} frames",
+			                                    plan.frames_per_tick),
+			            fable2::tickrate::MeasuredFps());
+			logged_hf = plan.hf_hz;
+			logged_n = plan.frames_per_tick;
+		}
+	}
+
+	if (plan.frames_per_tick == 0) {
+		if (std::fabs(one / ctx.f27.f64 - plan.hf_hz) > 0.01) write_rates(plan.hf_hz);
+		ctx.f25.f64 = one / ctx.f27.f64;  // the game's own timer
+		return;
+	}
+	const uint64_t frames = fable2::tickrate::FramesPresented();
+	const double now = guest_now_seconds(ctx, base);
+	const bool frame_due =
+		frames - last_tick_frame >= static_cast<uint64_t>(plan.frames_per_tick);
+	// A frame right on the heels of the last tick waits a moment (it belongs to
+	// that tick). With no frame for a full original tick (a render stall) the
+	// tick runs anyway. Catch-up ticks run back to back.
+	const double since_real = now - last_tick_real;
+	const double min_period = 1.0 / (2.0 * fable2::tickrate::kMaxHfHz);
+	const double max_period = 1.0 / fable2::tickrate::kMinHfHz;
+	const bool due = catchup > 0 || (frame_due && since_real >= min_period) ||
+	                 since_real >= max_period;
+	if (!due) {
+		ctx.f25.f64 = 0.0;
+		return;
+	}
+	if (catchup == 0) {
+		// Each tick lasts exactly as long as the real time since the last one
+		// (the frame time, clamped), so game time advances by what each frame
+		// actually took. With an uneven frame rate a fixed tick length moves
+		// things too far on short frames and too little on long ones, which
+		// reads as judder. Rates over the clamp are left to catch-up ticks.
+		write_rates(one / std::clamp(since_real, min_period, max_period));
+	}
+	const double period = ctx.f27.f64;
+	double tick_clock = last_tick_time + period;
+	const double error = now - tick_clock;
+	if (catchup > 0) {
+		--catchup;  // exactly one period after the last tick
+	} else if (error > kMaxCatchupTicks * period || error < -0.5 * period) {
+		tick_clock = now;  // a stall or a load: resync, like the original
+	} else if (error >= period) {
+		// More than a whole tick behind (a stall over the clamp): run the
+		// missed ticks now so game time keeps up with real time.
+		catchup = std::min(static_cast<int>(error / period), kMaxCatchupTicks);
+	} else {
+		tick_clock += std::clamp(error, -0.05 * period, 0.05 * period);
+	}
+	ctx.f26.f64 = tick_clock - period;
+	ctx.f25.f64 = 1.5 / (now - ctx.f26.f64);  // now - f26 is at least 0.5 periods
+	last_tick_frame = frames;
+	last_tick_real = now;
 }
 
 static __attribute__((noinline)) void compute_loop_timing(PPCContext& ctx, uint8_t* base) {
@@ -1072,6 +1218,7 @@ extern "C" void ProcessGameFrame_82276C30(PPCContext& __restrict ctx, uint8_t* b
 	// ===== Main per-frame work loop: drain pending work, decrement the budget =====
 	do {
 	if (!frame_gate(ctx, base)) break;
+	apply_dynamic_tick_rate(ctx, base);
 	compute_loop_timing(ctx, base);
 	// ble 0x82277208  (big block runs when cr0.gt, else yield)
 	if (ctx.cr0.gt) {
