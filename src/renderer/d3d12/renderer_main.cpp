@@ -58,8 +58,9 @@ extern "C" REX_GPU_PLUGIN_EXPORT rex::system::IGraphicsSystem* rex_gpu_create(
 
   InitBookkeeping();
   REXSYS_INFO(
-      "[custom-renderer] plugin loaded: ABI {} - D3D12 no-op backend (M0 boot); "
-      "progress via window title, logs/renderer-custom.log and the HUD overlay",
+      "[custom-renderer] plugin loaded: ABI {} - D3D12 backend (M1: front-buffer "
+      "present); progress via window title, logs/renderer-custom.log and the HUD "
+      "overlay",
       int(abi_version));
   return new customrenderer::d3d12::CustomGraphicsSystem();
 }

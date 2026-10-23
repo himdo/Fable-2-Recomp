@@ -97,8 +97,10 @@ inline void Init() {
   AddFeature("mmio_ring", "GPU ring buffer + MMIO register file", "M0", true);
   AddFeature("interrupts", "vblank/GPU interrupt dispatch", "M0", true);
   AddFeature("register_stream", "PM4 register writes (state decode)", "M0", true);
+  // --- M1 -------------------------------------------------------------------
+  AddFeature("swap", "IssueSwap: present the guest front buffer", "M1", true);
+  AddFeature("swap_bytes", "front buffer bytes uploaded (CPU-converted)", "M1", true);
   // --- Counted but no-op until the later milestone -------------------------
-  AddFeature("swap", "IssueSwap: present the guest front buffer", "M1", false);
   AddFeature("textures", "texture cache: guest memory -> GPU textures", "M2", false);
   AddFeature("render_targets", "render target cache + bins", "M3", false);
   AddFeature("copies", "IssueCopy: blits / copy engine", "M3", false);
@@ -124,7 +126,7 @@ inline void FormatHumanCount(uint64_t v, char* out, int size) {
 inline void FormatSnapshot(char* buf, int size) {
   int offset = 0;
   offset += std::snprintf(buf + offset, size_t(size) > size_t(offset) ? size - offset : 0,
-                          "Custom D3D12 renderer (M0 boot) - %d%% implemented",
+                          "Custom D3D12 renderer (M1: front buffer) - %d%% implemented",
                           int(PercentComplete()));
   offset += std::snprintf(buf + offset, size_t(size) > size_t(offset) ? size - offset : 0,
                           "\n  register writes: ");
@@ -144,7 +146,16 @@ inline void FormatSnapshot(char* buf, int size) {
     offset += std::snprintf(buf + offset,
                             size_t(size) > size_t(offset) ? size - offset : 0, "%s", tmp);
   }
-  for (int i = 4; i < FeatureCount() && offset < size - 4; ++i) {
+  offset += std::snprintf(buf + offset, size_t(size) > size_t(offset) ? size - offset : 0,
+                          "  upload: ");
+  {
+    char tmp[16];
+    FormatHumanCount(Find(4) ? Features()[4].count.load(std::memory_order_relaxed) : 0,
+                     tmp, sizeof(tmp));
+    offset += std::snprintf(buf + offset,
+                            size_t(size) > size_t(offset) ? size - offset : 0, "%s bytes", tmp);
+  }
+  for (int i = 5; i < FeatureCount() && offset < size - 4; ++i) {
     const Feature& f = Features()[i];
     if (f.count.load(std::memory_order_relaxed) == 0 && !f.implemented) {
       continue;  // only list features that have actually been seen

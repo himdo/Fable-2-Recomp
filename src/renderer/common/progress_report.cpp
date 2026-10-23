@@ -276,14 +276,15 @@ void UpdateTitle() {
   if (!main_window) {
     return;
   }
-  char reg_s[16], swap_s[16], draw_s[16];
+  char reg_s[16], swap_s[16], up_s[16], draw_s[16];
   progress::FormatHumanCount(CountOf(2), reg_s, sizeof(reg_s));
   progress::FormatHumanCount(CountOf(3), swap_s, sizeof(swap_s));
-  progress::FormatHumanCount(CountOf(9), draw_s, sizeof(draw_s));
+  progress::FormatHumanCount(CountOf(4), up_s, sizeof(up_s));
+  progress::FormatHumanCount(CountOf(10), draw_s, sizeof(draw_s));
   char title[kTitleMax];
   std::snprintf(title, sizeof(title),
-                "Custom D3D12 (M0) %d%% | reg %s | swaps %s | draws %s",
-                int(progress::PercentComplete()), reg_s, swap_s, draw_s);
+                "Custom D3D12 (M1) %d%% | reg %s | swaps %s | upload %s | draws %s",
+                int(progress::PercentComplete()), reg_s, swap_s, up_s, draw_s);
   std::wstring wide(title, title + strnlen(title, sizeof(title)));
   if (!SetWindowTextW(main_window, wide.c_str())) {
     g_main_window = nullptr;  // force re-resolve next tick

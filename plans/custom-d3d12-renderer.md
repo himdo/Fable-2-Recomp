@@ -1,6 +1,8 @@
 # Custom D3D12 Renderer (`rexgpu-custom`)
 
-**STATUS: M0 COMPLETE (2026-10-22)** — `rexgpu-custom.dll` boots the game to the main menu with `--gpu_plugin=custom` (release build, ~70s to menu, stable, no crash). Progress visible via window title, the plugin's click-through overlay window (top-left), and `logs/renderer-custom.log` (2s cadence). M1 (first real pixels) is next.
+**STATUS: M1 present-mechanism COMPLETE; front buffer is still empty (2026-10-22)** — `rexgpu-custom.dll` presents the guest front buffer on `PM4_XE_SWAP` (release build): tiled untile + fetch swizzle + DC-LUT gamma + a 4-slot staging-ring `CopyTextureRegion` into the guest-output surface. Boots to the main menu, stable, no crash. Progress visible via window title, the plugin's click-through overlay window (top-left), and `logs/renderer-custom.log` (2s cadence).
+
+**Key finding that reshapes the roadmap:** the guest front buffer is *empty* (black) until the guest's own GPU renders the scene into it — the front buffer is the active render target the guest draws to. A front-buffer content probe (grid sample) reads `0/1056 nonblack, max channel 0` at the Fable-II title moment, while the built-in shows the full title scene there. The "debug HUD / FPS text" seen in early captures was the **REXGLUE host overlay**, not guest front-buffer content. So presenting the front buffer (M1) is necessary but NOT sufficient to show the splash: the guest only fills the buffer by *rendering* (draws/shaders/textures into the RT). **The Fable-II title screen is GPU-rendered 3D content**, so it appears only once the render pipeline (M2 textures + M3 render targets + M4 shaders/draws) is functional. Next: M3 (front buffer as a real D3D12 render target + clears) to give the draw path a destination.
 
 Goal: replace the built-in D3D12 Xenos renderer (the SDK's prebuilt
 `rexgpu-xenos.dll` plugin) with a new, hand-optimized D3D12 renderer built
@@ -348,26 +350,54 @@ command counters climbing, no crash within 5 min of menu idling.**
 - [x] 0.6 Config wiring: `gpu_plugin` key in `fable2_config.toml`,
       `OnPreSetup` branch, `tools/run_custom_renderer.cmd` staged.
 
-### M1 — First real pixels: present the guest front buffer
+### M1 — Present the guest front buffer (mechanism)
 
-**Acceptance: Xbox boot logo and Fable splash are visible (pixel-correct
-enough to recognize) via `PM4_XE_SWAP` presenting the guest front buffer.**
+**Acceptance (mechanism): `PM4_XE_SWAP` faithfully presents the guest front
+buffer bytes (tiled untile + fetch swizzle + DC-LUT gamma), stable, no crash.
+DONE.**
 
-- [ ] 1.1 `guest_resources`: map guest texture pointers → D3D12Resources
-      (format/width/height from the game's texture table registers /
-      `PM4_SET_CONSTANT` context; Fable 2 front buffer is
-      1920×1080×A8B8G8R8-XR — confirm from log of first `PM4_XE_SWAP`).
-- [ ] 1.2 Upload path: on first touch of a guest buffer, copy guest RAM →
-      upload ring → `CopyResource` into the texture (full-buffer initial
-      upload; front buffer re-uploaded each frame is acceptable here).
-- [ ] 1.3 `IssueSwap` real version: resolve/copy guest front buffer into
-      the presenter's guest-output surface (reuse `D3D12Presenter`'s refresh
-      context exactly as the built-in does, `command_processor.cpp` ~L1991),
-      present.
-- [ ] 1.4 Dirty tracking: track guest writes to the front buffer region
-      (invalidate on MEM writes / `PM4_MEM_WRITE` to that range) so we only
-      re-upload what changed.
-- [ ] 1.5 HUD: swap counts, upload bytes/frame.
+**Important:** the front buffer is the active render target the guest renders
+to; it is *empty* until the guest's GPU draws into it. Because the custom
+renderer's draw/shader/texture path is a stub, the front buffer stays black
+(verified by a content probe reading 0 non-black at the title moment). The
+Fable-II title/splash is GPU-rendered 3D content, so "splash visible" is
+actually achieved at **M4** (once draws render the scene into the RT), not M1.
+M1 delivers the present half; M3/M4/M2 deliver the rendered content.
+
+- [x] 1.1 Front-buffer source: read the guest front buffer directly from
+      guest PHYSICAL memory (`memory_->TranslatePhysical(frontbuffer_ptr)`,
+      not virtual — the fetch-constant base is a GPU physical address, like
+      every other guest-side pointer the command stream uses). Format/dims
+      from fetch constant 0: `k_8_8_8_8`, `tiled=1`, `pitch=1280`, **1280×720**
+      (the boot resolution, not 1920×1080), `swizzle=0xA0A`.
+- [x] 1.2 Upload path: untile guest RAM → persistent mapped D3D12 UPLOAD
+      staging ring (4 buffers, one per in-flight frame) → `CopyTextureRegion`
+      into the presenter's guest-output surface. CPU-decodes the 2D tile
+      layout (port of `texture_util::GetTiledOffset2D`), applies the fetch
+      swizzle (R←byte2, G←byte1, B←byte0) and the DC-LUT gamma ramp
+      (mirrored into our own LUT from the register stream), packs to
+      R10G10B10A2 (opaque A2=3). Full-frame re-upload each swap (allowed).
+- [x] 1.3 `IssueSwap` real version: inside
+      `D3D12Presenter::RefreshGuestOutput`'s refresh context, transition the
+      guest-output resource to `COPY_DEST`, copy from staging, transition
+      back to `PIXEL_SHADER_RESOURCE`, submit on the provider's direct queue
+      (own 4-deep command-allocator + fence ring, `SetIs8bpc(true)`), present.
+- [ ] 1.4 Dirty tracking: track guest writes to the front buffer region so
+      we only re-upload what changed. **Deferred** — full-frame re-upload is
+      acceptable per 1.2 and is the current behavior. Revisit at M6 (CPU fast
+      path) when the per-pixel untile cost matters.
+- [x] 1.5 HUD: swap counts + upload bytes in the window title and the
+      overlay/log (e.g. `swaps 20.4K | upload 20.4B`).
+
+**M1 notes / gotchas discovered:**
+- The front buffer is **2D-tiled** and addressed by a **physical** guest
+  pointer; the naive linear virtual-memory read either crashes (access
+  violation) or stays black. Both handled.
+- `D3D12` buffer staging resources must be created with
+  `D3D12_RESOURCE_STATE_GENERIC_READ` initial state (not `COPY_SOURCE` —
+  returns `E_INVALIDARG` here).
+- Colors verified correct against the `0xA0A` swizzle (guest stores
+  B,G,R,A in memory; swizzle reorders to R,G,B,A + opaque alpha).
 
 ### M2 — Texture cache (game UI becomes readable)
 
