@@ -23,6 +23,9 @@ namespace customrenderer {
 namespace d3d12 {
 
 namespace {
+// Direct stderr debug log (bypasses spdlog buffering so it survives a hard
+// fatal error / crash - used only while debugging the M2 device-remove).
+
 // Progress checklist indices (order fixed by progress::Init()).
 constexpr int kFeatRegisterStream = 2;
 constexpr int kFeatSwap = 3;
@@ -93,7 +96,8 @@ bool CustomCommandProcessor::SetupContext() {
   ok = ok && SUCCEEDED(
                   device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence_)));
   fence_event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-  REXGPU_INFO("[custom-renderer] command processor context ready (M1: front-buffer present)");
+  texture_cache_ = std::make_unique<TextureCache>(device, queue_.Get(), memory_);
+  REXGPU_INFO("[custom-renderer] command processor context ready (M1 front-buffer + M2 texture cache)");
   return ok && fence_event_ != nullptr &&
          rex::graphics::CommandProcessor::SetupContext();
 }
@@ -121,8 +125,15 @@ void CustomCommandProcessor::ShutdownContext() {
 
 void CustomCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbuffer_width,
                                        uint32_t frontbuffer_height) {
+  {
+    static uint64_t s_sw = 0;
+    if (s_sw == 0) {
+    }
+    ++s_sw;
+  }
   progress::Bump(kFeatSwap);
   LogFirstSwap(frontbuffer_ptr, frontbuffer_width, frontbuffer_height);
+  RequestActiveTextures();
 
   if (!frontbuffer_width || !frontbuffer_height) {
     return;
@@ -513,6 +524,25 @@ void CustomCommandProcessor::LogFirstSwap(uint32_t frontbuffer_ptr, uint32_t wid
         "swizzle={:#04x} (swap dims) fetch0=[{:08X} {:08X} {:08X}]",
         frontbuffer_ptr, sw, sh, fmt, tiled, pitch, swizzle, fetch.dword_0, fetch.dword_1,
         fetch.dword_2);
+  }
+}
+
+void CustomCommandProcessor::RequestActiveTextures() {
+  if (!texture_cache_ || !register_file_) {
+    return;
+  }
+  // Exercise the cache with all 32 texture units. Unused units (zero size or
+  // unsupported format) return early in RequestTexture. New textures are
+  // untiled + uploaded on first sight; unchanged ones are cheap cache hits.
+  for (uint32_t i = 0; i < 32; ++i) {
+    texture_cache_->RequestTexture(register_file_->GetTextureFetch(i));
+  }
+  if ((texture_request_count_++ % 30) == 0) {
+    REXGPU_INFO("[custom-renderer] textures: {} resident, {} hits, {} misses, {} uploads, {} "
+                "unsupported, {} MB",
+                texture_cache_->resident(), texture_cache_->hits(), texture_cache_->misses(),
+                texture_cache_->uploads(), texture_cache_->unsupported(),
+                (texture_cache_->bytes() + (1 << 19)) >> 20);
   }
 }
 

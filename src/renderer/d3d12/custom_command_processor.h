@@ -22,8 +22,12 @@
 
 #include <d3d12.h>
 
+#include <memory>
+
 #include <rex/graphics/command_processor.h>
 #include <rex/system/kernel_state.h>
+
+#include "texture_cache.h"
 
 namespace customrenderer {
 namespace d3d12 {
@@ -86,6 +90,10 @@ class CustomCommandProcessor final : public rex::graphics::CommandProcessor {
   uint32_t last_front_fmt_ = 0, last_front_tiled_ = 0, last_front_swizzle_ = 0,
       last_front_pitch_ = 0;
 
+  // M2: texture cache (created in SetupContext; exercised in IssueSwap).
+  std::unique_ptr<TextureCache> texture_cache_;
+  uint64_t texture_request_count_ = 0;
+
   // DC LUT 256-entry gamma table, mirrored from the register stream
   // (30-bit BGR per entry, same layout as reg::DC_LUT_30_COLOR).
   uint32_t gamma_table_[256] = {};
@@ -109,6 +117,9 @@ class CustomCommandProcessor final : public rex::graphics::CommandProcessor {
 
   void LogFirstSwap(uint32_t frontbuffer_ptr, uint32_t width, uint32_t height);
   void LogFirstInterestingRegister(uint32_t index, uint32_t value);
+  // M2: request all 32 texture units from the fetch-constant register file so
+  // the cache is exercised (new textures are untiled + uploaded on first sight).
+  void RequestActiveTextures();
 };
 
 }  // namespace d3d12

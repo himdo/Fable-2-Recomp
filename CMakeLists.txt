@@ -136,6 +136,7 @@ set(REXGPU_CUSTOM_D3D12_SOURCES
     src/renderer/d3d12/renderer_main.cpp
     src/renderer/d3d12/custom_graphics_system.cpp
     src/renderer/d3d12/custom_command_processor.cpp
+    src/renderer/d3d12/texture_cache.cpp
 )
 # Reused SDK Xenos command-stream layer (the backend-agnostic core of the
 # SDK's own plugin build; the D3D12/Vulkan backends, DXBC translator and
@@ -158,6 +159,13 @@ set(REXGPU_CUSTOM_SDK_SOURCES
     ${FABLE2_SDK_SRC}/src/graphics/pipeline/shader/interpreter.cpp
     ${FABLE2_SDK_SRC}/src/graphics/util/draw.cpp
     ${FABLE2_SDK_SRC}/src/graphics/util/draw_extent_estimator.cpp
+    # M2: texture pipeline (backend-agnostic decode + tile math + format info +
+    # mip/extent layout). Reused by the custom texture cache. (conversion.cpp is
+    # deliberately omitted - it needs an unexported rexruntime swap helper; the
+    # custom cache untiles on the CPU with GetTiledOffset2D instead.)
+    ${FABLE2_SDK_SRC}/src/graphics/pipeline/texture/info.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/pipeline/texture/util.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/pipeline/texture/extent.cpp
 )
 
 add_library(rexgpu-custom SHARED
