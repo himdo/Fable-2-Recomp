@@ -137,6 +137,7 @@ set(REXGPU_CUSTOM_D3D12_SOURCES
     src/renderer/d3d12/custom_graphics_system.cpp
     src/renderer/d3d12/custom_command_processor.cpp
     src/renderer/d3d12/texture_cache.cpp
+    src/renderer/d3d12/render_target_cache.cpp
 )
 # Reused SDK Xenos command-stream layer (the backend-agnostic core of the
 # SDK's own plugin build; the D3D12/Vulkan backends, DXBC translator and
@@ -157,6 +158,20 @@ set(REXGPU_CUSTOM_SDK_SOURCES
     ${FABLE2_SDK_SRC}/src/graphics/shared_memory.cpp
     ${FABLE2_SDK_SRC}/src/graphics/pipeline/shader/shader.cpp
     ${FABLE2_SDK_SRC}/src/graphics/pipeline/shader/interpreter.cpp
+    # M4: Xenos ALU -> DXBC translator + HLSL translator (the shared, backend-
+    # agnostic shader-compile machinery). The D3D12 backend then runs DXC to
+    # convert the DXBC to DXIL (see custom_command_processor.cpp LoadShader).
+    ${FABLE2_SDK_SRC}/src/graphics/pipeline/shader/translator.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/pipeline/shader/translator_disasm.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/pipeline/shader/dxbc.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/pipeline/shader/dxbc_translator.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/pipeline/shader/dxbc_translator_alu.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/pipeline/shader/dxbc_translator_fetch.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/pipeline/shader/dxbc_translator_memexport.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/pipeline/shader/dxbc_translator_om.cpp
+    ${FABLE2_SDK_SRC}/thirdparty/dxbc/DXBCChecksum.cpp
+    # D3D12 shader subclass (D3D12Shader : DxbcShader) used by CompileShader.
+    ${FABLE2_SDK_SRC}/src/graphics/d3d12/shader.cpp
     ${FABLE2_SDK_SRC}/src/graphics/util/draw.cpp
     ${FABLE2_SDK_SRC}/src/graphics/util/draw_extent_estimator.cpp
     # M2: texture pipeline (backend-agnostic decode + tile math + format info +
@@ -166,6 +181,20 @@ set(REXGPU_CUSTOM_SDK_SOURCES
     ${FABLE2_SDK_SRC}/src/graphics/pipeline/texture/info.cpp
     ${FABLE2_SDK_SRC}/src/graphics/pipeline/texture/util.cpp
     ${FABLE2_SDK_SRC}/src/graphics/pipeline/texture/extent.cpp
+    # Backend-agnostic base texture / render-target caches (required by the
+    # D3D12 backend caches above).
+    ${FABLE2_SDK_SRC}/src/graphics/pipeline/texture/cache.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/pipeline/render_target/cache.cpp
+    # D3D12 backend (the known-working built-in renderer). Compiled in so the
+    # custom plugin can reuse D3D12CommandProcessor + its caches directly.
+    ${FABLE2_SDK_SRC}/src/graphics/d3d12/graphics_system.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/d3d12/command_processor.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/d3d12/primitive_processor.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/d3d12/render_target_cache.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/d3d12/shared_memory.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/d3d12/texture_cache.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/d3d12/deferred_command_list.cpp
+    ${FABLE2_SDK_SRC}/src/graphics/d3d12/pipeline_cache.cpp
 )
 
 add_library(rexgpu-custom SHARED
@@ -182,6 +211,7 @@ set_target_properties(rexgpu-custom PROPERTIES
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON)
 target_include_directories(rexgpu-custom SYSTEM PRIVATE
+    ${FABLE2_SDK_SRC}                         # thirdparty/dxbc/DXBCChecksum.h
     ${FABLE2_SDK_SRC}/include
     ${FABLE2_SDK_SRC}/thirdparty/renderdoc   # renderdoc_app.h (SDK graphics core)
     ${CMAKE_CURRENT_SOURCE_DIR}/src/renderer)

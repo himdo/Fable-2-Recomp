@@ -23,3 +23,10 @@ REXCVAR_DEFINE_BOOL(custom_renderer_title, true, "GPU/Custom",
 REXCVAR_DEFINE_INT32(custom_renderer_log_interval, 2, "GPU/Custom",
                      "Seconds between custom renderer progress log lines (0 disables).")
     .lifecycle(rex::cvar::Lifecycle::kHotReload);
+
+// M3: front-buffer render-target clear color (0xRRGGBB, 0 = black). Used to
+// verify the GPU present path before the guest's own clear op is implemented
+// in M4 (which will supersede this).
+REXCVAR_DEFINE_INT32(custom_renderer_clear_color, 0x000000, "GPU/Custom",
+                     "Custom renderer front-buffer clear color (0xRRGGBB; 0 = black).")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);

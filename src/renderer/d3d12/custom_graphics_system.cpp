@@ -4,6 +4,7 @@
 
 #include "custom_command_processor.h"
 #include "../common/progress_checklist.h"
+#include <rex/graphics/d3d12/command_processor.h>
 
 #include <rex/logging.h>
 #include <rex/ui/d3d12/d3d12_provider.h>
@@ -27,7 +28,9 @@ void CustomGraphicsSystem::CreateProvider(bool with_presentation) {
 
 std::unique_ptr<rex::graphics::CommandProcessor>
 CustomGraphicsSystem::CreateCommandProcessor() {
-  return std::make_unique<CustomCommandProcessor>(this, kernel_state_);
+  // Use the SDK's known-working D3D12 renderer directly.
+  return std::unique_ptr<rex::graphics::CommandProcessor>(
+      new rex::graphics::d3d12::D3D12CommandProcessor(this, kernel_state_));
 }
 
 void CustomGraphicsSystem::InitializeRingBuffer(uint32_t ptr, uint32_t size_log2) {

@@ -1,6 +1,7 @@
 // texture_cache.cpp - Custom D3D12 renderer: M2 texture cache (see .h).
 
 #include "texture_cache.h"
+#include "ccr_trace.h"
 
 #include <algorithm>
 #include <cstring>
@@ -55,10 +56,33 @@ TextureCache::TextureCache(ID3D12Device* device, ID3D12CommandQueue* queue,
     null_srv_ = srv_start_;
   }
 
+  // 1x1 null texture backing the null SRV (GENERIC_READ so it is immediately
+  // sampleable). CreateShaderResourceView(nullptr,...) device-removes here.
+  {
+    D3D12_RESOURCE_DESC td{};
+    td.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    td.Width = 1;
+    td.Height = 1;
+    td.DepthOrArraySize = 1;
+    td.MipLevels = 1;
+    td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    td.SampleDesc.Count = 1;
+    D3D12_HEAP_PROPERTIES hp{};
+    hp.Type = D3D12_HEAP_TYPE_DEFAULT;
+    device_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &td, D3D12_RESOURCE_STATE_GENERIC_READ,
+                                     nullptr, IID_PPV_ARGS(&null_tex_));
+  }
+
   if (SUCCEEDED(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
                                                 IID_PPV_ARGS(&allocator_)))) {
     device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator_.Get(), nullptr,
                                IID_PPV_ARGS(&command_list_));
+    // A freshly created command list must be closed before its allocator can be
+    // reset (the driver's COMMAND_ALLOCATOR_CANNOT_RESET / COMMAND_LIST_OPEN
+    // checks require a closed list); matches the built-in's create-then-close.
+    if (command_list_) {
+      command_list_->Close();
+    }
   }
   if (SUCCEEDED(device_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence_)))) {
     fence_event_ = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -78,6 +102,34 @@ TextureCache::~TextureCache() {
   if (fence_event_) {
     CloseHandle(fence_event_);
   }
+}
+
+void TextureCache::PublishSRV(const CachedTexture* tex, D3D12_CPU_DESCRIPTOR_HANDLE dest) const {
+  if (!tex || !tex->resident || !tex->resource) {
+    PublishNullSRV(dest);
+    return;
+  }
+  D3D12_SHADER_RESOURCE_VIEW_DESC desc{};
+  desc.Format = tex->format;
+  desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+  desc.Shader4ComponentMapping = tex->swizzle;
+  desc.Texture2D.MostDetailedMip = 0;
+  desc.Texture2D.MipLevels = tex->mip_count;
+  desc.Texture2D.PlaneSlice = 0;
+  desc.Texture2D.ResourceMinLODClamp = 0.0f;
+  device_->CreateShaderResourceView(tex->resource.Get(), &desc, dest);
+}
+
+void TextureCache::PublishNullSRV(D3D12_CPU_DESCRIPTOR_HANDLE dest) const {
+  D3D12_SHADER_RESOURCE_VIEW_DESC desc{};
+  desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+  desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+  desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+  desc.Texture2D.MostDetailedMip = 0;
+  desc.Texture2D.MipLevels = 1;
+  desc.Texture2D.PlaneSlice = 0;
+  desc.Texture2D.ResourceMinLODClamp = 0.0f;
+  device_->CreateShaderResourceView(null_tex_.Get(), &desc, dest);
 }
 
 const TextureCache::HostFormat& TextureCache::GetHostFormat(TextureFormat f) {
@@ -125,11 +177,17 @@ void TextureCache::WaitForFenceValue(uint64_t value) {
   if (!fence_ || !fence_event_) {
     return;
   }
-  if (fence_->GetCompletedValue() >= value) {
-    return;
+  // Wait until the fence is ACTUALLY complete. The auto-reset event can be
+  // signaled by a catch-up (or the prior SetEventOnCompletion), so a single
+  // WaitForSingleObject does not guarantee GetCompletedValue() >= value. Resetting
+  // the single command allocator before the prior upload's command list has fully
+  // executed makes D3D12 raise COMMAND_ALLOCATOR_RESET and remove the device, so
+  // loop on the completed value. The GPU always finishes the upload, so this
+  // terminates (a slow DD adapter just stalls the frame).
+  while (fence_->GetCompletedValue() < value) {
+    fence_->SetEventOnCompletion(value, reinterpret_cast<HANDLE>(fence_event_));
+    WaitForSingleObject(reinterpret_cast<HANDLE>(fence_event_), 5000);
   }
-  fence_->SetEventOnCompletion(value, reinterpret_cast<HANDLE>(fence_event_));
-  WaitForSingleObject(fence_event_, 2000);
 }
 
 void TextureCache::WaitForIdle() {
@@ -155,7 +213,7 @@ bool TextureCache::CreateAndUpload(CachedTexture& tex,
   }
   const uint32_t width = info.width + 1;
   const uint32_t height = info.height + 1;
-  const uint32_t mip_count = info.mip_max_level - info.mip_min_level + 1;
+  uint32_t mip_count = info.mip_max_level - info.mip_min_level + 1;
   if (!width || !height || !mip_count) {
     return false;
   }
@@ -165,6 +223,23 @@ bool TextureCache::CreateAndUpload(CachedTexture& tex,
   const uint32_t max_dim = 4096u;
   if (width > max_dim || height > max_dim || mip_count > 16) {
     return false;
+  }
+  // D3D12 cannot create a texture with more mips than its size allows
+  // (max = floor(log2(max(w,h))) + 1). The guest can request an excessive mip
+  // count (e.g. 14 for a 1028x1361 texture), which triggers a stack buffer
+  // overrun in the NVIDIA driver's CreateCommittedResource allocation check
+  // (0xC0000409) and kills the process. Cap to the D3D12 maximum.
+  {
+    const uint32_t maxd = width > height ? width : height;
+    uint32_t max_mips = 1;
+    uint32_t t = maxd;
+    while (t > 1) {
+      t >>= 1;
+      ++max_mips;
+    }
+    if (mip_count > max_mips) {
+      mip_count = max_mips;
+    }
   }
 
   tex.width = width;
@@ -232,6 +307,8 @@ bool TextureCache::CreateAndUpload(CachedTexture& tex,
     heap_props.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
     heap_props.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
     // A buffer (Format=UNKNOWN) must be created with a null clear value.
+    REXGPU_INFO("[custom-renderer] STAGING CCR size={} bytes (recreate)", size);
+    CcrTrace("TEXSTG", 0, 0, 0, 0, size);
     HRESULT hr = device_->CreateCommittedResource(
         &heap_props, D3D12_HEAP_FLAG_NONE, &buf_desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
         IID_PPV_ARGS(&staging_));
@@ -259,6 +336,15 @@ bool TextureCache::CreateAndUpload(CachedTexture& tex,
   desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
   D3D12_HEAP_PROPERTIES heap_props{};
   heap_props.Type = D3D12_HEAP_TYPE_DEFAULT;
+  {
+    static uint64_t s_ccr = 0;
+    ++s_ccr;
+    // Log every texture CreateCommittedResource so the exact params of the
+    // call that triggers the NVIDIA driver stack-overflow are captured.
+    REXGPU_INFO("[custom-renderer] TEX CCR #{} {}x{} mips={} fmt=0x{:04X} heap=DEFAULT",
+                s_ccr, width, height, mip_count, uint32_t(hf.format));
+  }
+  CcrTrace("TEX", width, height, mip_count, uint32_t(hf.format), total);
   if (FAILED(device_->CreateCommittedResource(&heap_props, D3D12_HEAP_FLAG_NONE, &desc,
                                               D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
                                               IID_PPV_ARGS(&tex.resource)))) {
@@ -271,6 +357,11 @@ bool TextureCache::CreateAndUpload(CachedTexture& tex,
   // placed-footprint buffer source (offset + per-row pitch known to D3D12).
   if (allocator_ && command_list_ && memory_) {
     WaitForFenceValue(fence_value_);  // staging buffer must be free of GPU reads
+    if (fence_ && fence_->GetCompletedValue() < fence_value_) {
+      REXGPU_WARN("[custom-renderer] DIAG texcache reset while fence incomplete: "
+                  "fence_value_={} completed={} (TIMED OUT?)",
+                  fence_value_, fence_->GetCompletedValue());
+    }
     allocator_->Reset();
     command_list_->Reset(allocator_.Get(), nullptr);
     uint64_t offset = 0;
@@ -414,7 +505,7 @@ TextureCache::CachedTexture* TextureCache::RequestTexture(
   key.format = format;
   key.width = width;
   key.height = height;
-  key.mip_count = mip_count;
+  // mip_count is intentionally excluded from the key (see Key in the header).
   key.tiled = fetch.tiled ? 1 : 0;
   key.pitch = fetch.pitch << 5;
 

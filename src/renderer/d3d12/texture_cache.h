@@ -42,13 +42,17 @@ class TextureCache {
     uint32_t format = 0;
     uint32_t width = 0;
     uint32_t height = 0;
-    uint32_t mip_count = 0;
     uint32_t tiled = 0;
     uint32_t pitch = 0;
+    // NOTE: mip_count is deliberately NOT part of the key. The guest
+    // progressively re-requests the same texture (same base address) with a
+    // growing mip count each frame; keying on mip_count would create a new
+    // D3D12 texture for every mip count, thrashing the cache and pushing the
+    // running CreateCommittedResource count up to a point where the NVIDIA
+    // driver's allocation check stack-overflows (0xC0000409).
     bool operator==(const Key& o) const {
       return base_address == o.base_address && format == o.format && width == o.width &&
-             height == o.height && mip_count == o.mip_count && tiled == o.tiled &&
-             pitch == o.pitch;
+             height == o.height && tiled == o.tiled && pitch == o.pitch;
     }
   };
   struct KeyHash {
@@ -57,7 +61,6 @@ class TextureCache {
       h = h * 0x100000001b3ULL + k.format;
       h = h * 0x100000001b3ULL + k.width;
       h = h * 0x100000001b3ULL + k.height;
-      h = h * 0x100000001b3ULL + k.mip_count;
       h = h * 0x100000001b3ULL + k.tiled;
       h = h * 0x100000001b3ULL + k.pitch;
       return static_cast<size_t>(h);
@@ -85,6 +88,12 @@ class TextureCache {
   CachedTexture* RequestTexture(const rex::graphics::xenos::xe_gpu_texture_fetch_t& fetch);
 
   D3D12_CPU_DESCRIPTOR_HANDLE NullSRV() const { return null_srv_; }
+  // Create this texture's 2D SRV at `dest` (a CPU handle in any CBV_SRV_UAV heap).
+  // Used to publish texture SRVs straight into the draw heap (avoids
+  // CopyDescriptorsSimple, which the compat driver rejects for this layout).
+  void PublishSRV(const CachedTexture* tex, D3D12_CPU_DESCRIPTOR_HANDLE dest) const;
+  // Create a 1x1 null-texture SRV at `dest`.
+  void PublishNullSRV(D3D12_CPU_DESCRIPTOR_HANDLE dest) const;
   void WaitForIdle();
 
   uint64_t hits() const { return hits_; }
@@ -118,6 +127,9 @@ class TextureCache {
   uint32_t srv_desc_size_ = 0;
   uint32_t srv_used_ = 0;
   D3D12_CPU_DESCRIPTOR_HANDLE null_srv_{};
+  // 1x1 texture backing the null SRV (CreateShaderResourceView(nullptr,...)
+  // device-removes on this driver, so a real resource is required).
+  Microsoft::WRL::ComPtr<ID3D12Resource> null_tex_;
 
   Microsoft::WRL::ComPtr<ID3D12Resource> staging_;
   uint8_t* staging_map_ = nullptr;

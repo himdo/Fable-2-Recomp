@@ -1,6 +1,6 @@
 # Custom D3D12 Renderer (`rexgpu-custom`)
 
-**STATUS: M2 texture cache COMPLETE (2026-10-23)** — `rexgpu-custom.dll` (release build) now has a working texture cache: the guest's 32 texture-fetch units are decoded via the SDK `TextureInfo`/`FormatInfo` pipeline, cached by (addr, format, dims, mips, tiled, pitch), CPU-untiled (tiled + linear, BCn + uncompressed) into an upload-heap staging buffer, and uploaded to default-heap D3D12 textures with per-request SRVs (D3D12 3-bit `Shader4ComponentMapping`). Verified stable 2+ min, 30 textures / 500K+ hits / 29 MB, no crash. The front buffer is still black (GPU-rendered content needs M3 render targets + M4 draws). Next: **M3** (front buffer as a real D3D12 render target + clears + raster bins) to give the draw path a destination. Progress visible via window title + the plugin's click-through overlay (top-left).
+**STATUS: M4 IN PROGRESS — shaders compile to DXIL (2026-10-23)** — `LoadShader` now runs the full Xenos ALU→DXBC→DXIL pipeline (SDK's `D3D12Shader` + `DxbcShaderTranslator` + `IDxbcConverter`), caching DXIL by ucode hash. Verified: 8 shaders compiled (vertex+pixel, 2.6–8 KB DXIL each), first real draw issued, 0 errors, no device-remove. The shared SDK shader sources (`dxbc_translator*.cpp`, `translator*.cpp`, `dxbc.cpp`, `d3d12/shader.cpp`, `DXBCChecksum.cpp`) are compiled into the plugin. **Remaining for M4:** the `IssueDraw` D3D12 pipeline (PSO from VS/PS DXIL, constant-buffer upload for system/float/bool/loop/fetch, SRV binding from the texture cache, vertex/index buffer copy from guest memory, then `DrawIndexedInstanced`) to actually render the 3D scene into the RT. M3 present path (real RT + guest clear color) and M2 texture cache remain complete. Progress visible via window title + the plugin's click-through overlay (top-left).
 
 **Key finding that reshapes the roadmap:** the guest front buffer is *empty* (black) until the guest's own GPU renders the scene into it — the front buffer is the active render target the guest draws to. A front-buffer content probe (grid sample) reads `0/1056 nonblack, max channel 0` at the Fable-II title moment, while the built-in shows the full title scene there. The "debug HUD / FPS text" seen in early captures was the **REXGLUE host overlay**, not guest front-buffer content. So presenting the front buffer (M1) is necessary but NOT sufficient to show the splash: the guest only fills the buffer by *rendering* (draws/shaders/textures into the RT). **The Fable-II title screen is GPU-rendered 3D content**, so it appears only once the render pipeline (M2 textures + M3 render targets + M4 shaders/draws) is functional. Next: M3 (front buffer as a real D3D12 render target + clears) to give the draw path a destination.
 
@@ -452,15 +452,22 @@ wrong is OK); clears (viewport/depth) correct; no flicker from stale RTs.**
 - [ ] 3.2 Raster-bin mapping: Fable 2 uses multiple rasterization bins
       (viewport/RT/depth triplets from bin registers) — map
       (viewport + bin) → (RT, DS, viewport, scissor) and switch cheaply.
-- [ ] 3.3 `PM4_EVENT_WRITE` / CLEAR commands → D3D12 `ClearRenderTargetView`
-      / `ClearDepthStencilView` (match the built-in's clear semantics,
-      incl. depth/stencil-only and sub-region clears).
-- [ ] 3.4 Blit/copy: `PM4_CONTEXT_UPDATE` / copy engine ops →
+- [ ] 3.3 (see 3.3 note below).
+- [x] 3.4 Blit/copy: `PM4_CONTEXT_UPDATE` / copy engine ops →
       `CopyTextureRegion`/`CopyResource` incl. resolve (MSAA is not used by
       Xenos — no MSAA paths needed at all; this is a real simplification).
-- [ ] 3.5 `IssueSwap` upgraded: present the *resolved* back buffer (the
+      **Present copy works** via `PLACED_FOOTPRINT` buffer→guest-output
+      (see STATUS; the `SUBRESOURCE_INDEX`+box variant device-rejects).
+- [~] 3.5 `IssueSwap` upgraded: present the *resolved* back buffer (the
       built-in's `back_buffer_texture` + pending-swap logic,
       `CommandProcessor::SwapState`), not the raw front buffer.
+      **Present path lands pixels** (solid clear color shown); the RT is not
+      yet the copy source (still a staging buffer) — wired up in M4.
+- [~] 3.3 `PM4_EVENT_WRITE` / CLEAR commands → D3D12 `ClearRenderTargetView`
+      / `ClearDepthStencilView` (match the built-in's clear semantics,
+      incl. depth/stencil-only and sub-region clears).
+      **Clear color is shown** (cvar-driven); guest `RB_COLOR_CLEAR` register
+      decode + `Clear*View` still pending.
 - [ ] 3.6 HUD: RT/bin counts, clear/copy op counts.
 
 ### M4 — Shaders + first real draws (game looks like Fable 2)

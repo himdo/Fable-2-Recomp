@@ -11,11 +11,15 @@
 #include <string>
 
 #include <rex/graphics/graphics_system.h>
+#include <rex/graphics/d3d12/graphics_system.h>
 
 namespace customrenderer {
 namespace d3d12 {
 
-class CustomGraphicsSystem : public rex::graphics::GraphicsSystem {
+// Reuses the SDK's D3D12GraphicsSystem (and therefore its D3D12CommandProcessor
+// + shared-memory / texture / render-target / pipeline caches) as the working
+// reference renderer. Only the name and progress hooks are custom.
+class CustomGraphicsSystem : public rex::graphics::d3d12::D3D12GraphicsSystem {
  public:
   CustomGraphicsSystem() = default;
 

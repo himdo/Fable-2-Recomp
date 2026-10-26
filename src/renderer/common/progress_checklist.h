@@ -126,7 +126,7 @@ inline void FormatHumanCount(uint64_t v, char* out, int size) {
 inline void FormatSnapshot(char* buf, int size) {
   int offset = 0;
   offset += std::snprintf(buf + offset, size_t(size) > size_t(offset) ? size - offset : 0,
-                          "Custom D3D12 renderer (M1: front buffer) - %d%% implemented",
+                          "Custom D3D12 renderer (M3: present path + clear) - %d%% implemented",
                           int(PercentComplete()));
   offset += std::snprintf(buf + offset, size_t(size) > size_t(offset) ? size - offset : 0,
                           "\n  register writes: ");

@@ -12,3 +12,4 @@
 REXCVAR_DECLARE(bool, custom_renderer_hud);
 REXCVAR_DECLARE(bool, custom_renderer_title);
 REXCVAR_DECLARE(int32_t, custom_renderer_log_interval);
+REXCVAR_DECLARE(int32_t, custom_renderer_clear_color);
