@@ -136,8 +136,6 @@ set(REXGPU_CUSTOM_D3D12_SOURCES
     src/renderer/d3d12/renderer_main.cpp
     src/renderer/d3d12/custom_graphics_system.cpp
     src/renderer/d3d12/custom_command_processor.cpp
-    src/renderer/d3d12/texture_cache.cpp
-    src/renderer/d3d12/render_target_cache.cpp
 )
 # Reused SDK Xenos command-stream layer (the backend-agnostic core of the
 # SDK's own plugin build; the D3D12/Vulkan backends, DXBC translator and

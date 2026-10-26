@@ -28,9 +28,10 @@ void CustomGraphicsSystem::CreateProvider(bool with_presentation) {
 
 std::unique_ptr<rex::graphics::CommandProcessor>
 CustomGraphicsSystem::CreateCommandProcessor() {
-  // Use the SDK's known-working D3D12 renderer directly.
+  // The custom renderer IS the guest-facing command processor. It drives the
+  // frame and delegates the actual D3D12 rendering to the built-in engine.
   return std::unique_ptr<rex::graphics::CommandProcessor>(
-      new rex::graphics::d3d12::D3D12CommandProcessor(this, kernel_state_));
+      new CustomCommandProcessor(this, kernel_state_));
 }
 
 void CustomGraphicsSystem::InitializeRingBuffer(uint32_t ptr, uint32_t size_log2) {
