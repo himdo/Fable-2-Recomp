@@ -507,6 +507,32 @@ The build also accepts explicit overrides if you keep the SDK elsewhere:
 - Codegen runs as part of the build and re-runs automatically when `fable_2_manifest.toml` or `default.xex` change (tracked via the generated DEPFILE).
 - A full clean build recompiles ~291 generated translation units (60,462 guest functions).
 
+## Custom D3D12 renderer
+
+A faster D3D12 Xenos backend (`rexgpu-custom.dll`) that reuses the built-in renderer's
+engine (shader translation, texture/RT/pipeline caches, present path) and layers a CPU
+fast path on top. Select it at launch (or set `gpu_plugin = "custom"` in
+`fable2_config.toml`):
+
+```
+out\build\win-amd64-release\fable_2.exe --gpu_plugin=custom
+```
+
+Two env flags toggle the fast path (the built-in `xenos` plugin is unaffected):
+
+- **`FABLE2_M6_FAST_DISPATCH`** (default **on**) — batches PM4 type-0 (SET_CONSTANT)
+  shader-constant writes straight into the register file. Always correct (no visual
+  change); drops the per-write cost.
+- **`FABLE2_M6_FAST_DRAW`** (default **off**; set `=1` to enable) — re-issues draws
+  that share the previous draw's D3D pipeline + texture binding, skipping
+  `ConfigurePipeline` / `RequestTextures` / `Process`. Faster (~60–67% of the
+  built-in's GPU-Commands CPU, vs ~80–85% with just the fast dispatch), but because it
+  skips `RequestTextures` it re-issues with the last base draw's texture page —
+  invisible in 3D scenes but it **smears full-screen splash video and the pause-menu
+  UI**, so it is off by default.
+
+Full design + measurements: `plans/custom-d3d12-renderer.md` (M6).
+
 ## Vulkan renderer
 
 The goal is a Vulkan rendering path for the game (the SDK's Windows GPU plugin only ships a

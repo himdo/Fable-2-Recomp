@@ -13,6 +13,7 @@
 #include <cctype>
 #include <cinttypes>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -153,7 +154,73 @@ ReadbackResolveMode ParseReadbackResolveMode(std::string_view value) {
   return ReadbackResolveMode::kDisabled;
 }
 
+// M6: allow disabling the batched type-0 (SET_CONSTANT) fast path so the stock
+// per-register dispatch can be measured as a baseline. With the fast path off,
+// this file behaves byte-for-byte like the built-in (stock) command_processor.cpp
+// dispatch, so CustomCommandProcessor(FAST_DISPATCH=0, FAST_DRAW=0) is a
+// CPU-equivalent of the built-in renderer. Default ON.
+const bool kFastType0Enabled = [] {
+  const char* e = std::getenv("FABLE2_M6_FAST_DISPATCH");
+  return e == nullptr || (e[0] != '0' && e[0] != '\0');
+}();
+
+// M6 dispatch profiling: FABLE2_M6_DISPATCH_PROFILE=1 enables per-packet QPC
+// sub-op timing (loop / type-0 / type-3 / WAIT_REG_MEM). Gated so the default
+// build has zero dispatch-profile overhead. Custom-only (this file is the
+// custom plugin's base; the built-in compiles the stock command_processor.cpp).
+struct M6DispatchProfile {
+  bool enabled = false;
+  double freq = 1.0;
+  uint64_t loop_ns = 0, loop_n = 0;
+  uint64_t t0_ns = 0, t0_n = 0;
+  uint64_t t3_ns = 0, t3_n = 0;
+  uint64_t wait_ns = 0, wait_n = 0;
+  void Init() {
+    const char* e = std::getenv("FABLE2_M6_DISPATCH_PROFILE");
+    enabled = e != nullptr && e[0] == '1';
+    LARGE_INTEGER f;
+    if (QueryPerformanceFrequency(&f) && f.QuadPart != 0) {
+      freq = static_cast<double>(f.QuadPart);
+    }
+  }
+  void Snap(uint64_t& l, uint64_t& ln, uint64_t& t0, uint64_t& t0n, uint64_t& t3,
+            uint64_t& t3n, uint64_t& w, uint64_t& wn) {
+    l = loop_ns; ln = loop_n; t0 = t0_ns; t0n = t0_n; t3 = t3_ns; t3n = t3_n;
+    w = wait_ns; wn = wait_n;
+    loop_ns = 0; loop_n = 0; t0_ns = 0; t0_n = 0; t3_ns = 0; t3_n = 0;
+    wait_ns = 0; wait_n = 0;
+  }
+} g_m6disp;
+
+struct M6Timer {
+  M6Timer(uint64_t& acc, uint64_t& cnt) : acc_(acc), cnt_(cnt) {
+    if (g_m6disp.enabled) {
+      LARGE_INTEGER t;
+      QueryPerformanceCounter(&t);
+      s_ = t.QuadPart;
+    }
+  }
+  ~M6Timer() {
+    if (g_m6disp.enabled) {
+      LARGE_INTEGER t;
+      QueryPerformanceCounter(&t);
+      acc_ += static_cast<uint64_t>(t.QuadPart - s_);
+      ++cnt_;
+    }
+  }
+  uint64_t& acc_;
+  uint64_t& cnt_;
+  int64_t s_ = 0;
+};
+
 }  // namespace
+
+// Exposes the (custom-only) dispatch profile snapshot for the CustomCommandProcessor
+// M6 profiler. No-op unless FABLE2_M6_DISPATCH_PROFILE=1.
+void M6DispatchProfileSnap(uint64_t& l, uint64_t& ln, uint64_t& t0, uint64_t& t0n,
+                           uint64_t& t3, uint64_t& t3n, uint64_t& w, uint64_t& wn) {
+  g_m6disp.Snap(l, ln, t0, t0n, t3, t3n, w, wn);
+}
 
 CommandProcessor::CommandProcessor(GraphicsSystem* graphics_system,
                                    system::KernelState* kernel_state)
@@ -746,6 +813,15 @@ uint32_t CommandProcessor::ExecutePrimaryBuffer(uint32_t read_index, uint32_t wr
   memory::RingBuffer reader(memory_->TranslatePhysical(primary_buffer_ptr_), primary_buffer_size_);
   reader.set_read_offset(read_index * sizeof(uint32_t));
   reader.set_write_offset(write_index * sizeof(uint32_t));
+  static bool m6disp_init = false;
+  if (!m6disp_init) {
+    g_m6disp.Init();
+    m6disp_init = true;
+  }
+  LARGE_INTEGER lt0;
+  if (g_m6disp.enabled) {
+    QueryPerformanceCounter(&lt0);
+  }
   do {
     if (!ExecutePacket(&reader)) {
       // This probably should be fatal - but we're going to continue anyways.
@@ -754,6 +830,12 @@ uint32_t CommandProcessor::ExecutePrimaryBuffer(uint32_t read_index, uint32_t wr
       break;
     }
   } while (reader.read_count());
+  if (g_m6disp.enabled) {
+    LARGE_INTEGER lt1;
+    QueryPerformanceCounter(&lt1);
+    g_m6disp.loop_ns += static_cast<uint64_t>(lt1.QuadPart - lt0.QuadPart);
+    ++g_m6disp.loop_n;
+  }
 
   OnPrimaryBufferEnd();
 
@@ -816,6 +898,7 @@ bool CommandProcessor::ExecutePacket(memory::RingBuffer* reader) {
 }
 
 bool CommandProcessor::ExecutePacketType0(memory::RingBuffer* reader, uint32_t packet) {
+  M6Timer m6t0(g_m6disp.t0_ns, g_m6disp.t0_n);
   // Type-0 packet.
   // Write count registers in sequence to the registers starting at
   // (base_index << 2).
@@ -836,14 +919,20 @@ bool CommandProcessor::ExecutePacketType0(memory::RingBuffer* reader, uint32_t p
   // register file and let the backend invalidate the constant cbuffer bindings
   // once per batch (OnConstantRegisterRangeWritten) instead of a virtual
   // WriteRegister call per register. This is the hottest packet for Fable 2.
-  if (write_one_reg == 0 && base_index >= XE_GPU_REG_SHADER_CONSTANT_000_X &&
+  if (kFastType0Enabled && write_one_reg == 0 &&
+      base_index >= XE_GPU_REG_SHADER_CONSTANT_000_X &&
       base_index + count <= XE_GPU_REG_SHADER_CONSTANT_LOOP_31 + 1) {
     RegisterFile& regs = *register_file_;
-    // Volatile: the WAIT_REG_MEM guest thread polls these registers; a plain
-    // store could be reordered/eliminated (the GPU-commands thread never reads
-    // them back), so the guest would never observe the write and deadlock.
-    // This matches the volatile store in CommandProcessor::WriteRegister.
-    volatile uint32_t* dst = regs.values + base_index;
+    // These are shader-constant registers (0x4000-0x490C), written by this
+    // GPU-commands thread and read back by this same thread's constant-buffer
+    // upload (UpdateBindings reads register_file_->values[]). The guest thread
+    // only polls *synchronization* registers (WAIT_REG_MEM), which are written
+    // by other handlers - not this shader-constant batch - so a plain (fast)
+    // store is correct here and avoids the volatile-store cost. The writes are
+    // still observable to the same-thread cbuffer read, so they are not
+    // eliminated. (The sync-register volatile requirement lives in
+    // WriteRegister / the REG_TO_MEM / WAIT_REG_MEM paths, not here.)
+    uint32_t* dst = regs.values + base_index;
     for (uint32_t m = 0; m < count; m++) {
       dst[m] = reader->ReadAndSwap<uint32_t>();
     }
@@ -879,6 +968,7 @@ bool CommandProcessor::ExecutePacketType2(memory::RingBuffer* reader, uint32_t p
 }
 
 bool CommandProcessor::ExecutePacketType3(memory::RingBuffer* reader, uint32_t packet) {
+  M6Timer m6t3(g_m6disp.t3_ns, g_m6disp.t3_n);
   // Type-3 packet.
   uint32_t opcode = (packet >> 8) & 0x7F;
   uint32_t count = ((packet >> 16) & 0x3FFF) + 1;
@@ -1145,6 +1235,7 @@ bool CommandProcessor::ExecutePacketType3_INDIRECT_BUFFER(memory::RingBuffer* re
 
 bool CommandProcessor::ExecutePacketType3_WAIT_REG_MEM(memory::RingBuffer* reader, uint32_t packet,
                                                        uint32_t count) {
+  M6Timer m6tw(g_m6disp.wait_ns, g_m6disp.wait_n);
   SCOPE_profile_cpu_f("gpu");
 
   // wait until a register or memory location is a specific value
