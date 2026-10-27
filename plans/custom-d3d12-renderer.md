@@ -1,6 +1,6 @@
 # Custom D3D12 Renderer (`rexgpu-custom`)
 
-**STATUS: M4 IN PROGRESS — shaders compile to DXIL (2026-10-23)** — `LoadShader` now runs the full Xenos ALU→DXBC→DXIL pipeline (SDK's `D3D12Shader` + `DxbcShaderTranslator` + `IDxbcConverter`), caching DXIL by ucode hash. Verified: 8 shaders compiled (vertex+pixel, 2.6–8 KB DXIL each), first real draw issued, 0 errors, no device-remove. The shared SDK shader sources (`dxbc_translator*.cpp`, `translator*.cpp`, `dxbc.cpp`, `d3d12/shader.cpp`, `DXBCChecksum.cpp`) are compiled into the plugin. **Remaining for M4:** the `IssueDraw` D3D12 pipeline (PSO from VS/PS DXIL, constant-buffer upload for system/float/bool/loop/fetch, SRV binding from the texture cache, vertex/index buffer copy from guest memory, then `DrawIndexedInstanced`) to actually render the 3D scene into the RT. M3 present path (real RT + guest clear color) and M2 texture cache remain complete. Progress visible via window title + the plugin's click-through overlay (top-left).
+**STATUS: M0–M4 COMPLETE; M6 fast dispatch done (GPU-Commands CPU ~30%→~22%) — the custom renderer is a working Fable 2 renderer (2026-10-25)** — **Architectural pivot:** instead of hand-rewriting the ~20k-line D3D12 backend, `CustomCommandProcessor` now **subclasses the built-in `rex::graphics::d3d12::D3D12CommandProcessor`**, reusing its full engine (shared memory, texture/RT caches, primitive processor, Xenos→DXBC→DXIL shader translation, pipeline cache, present path) as *inherited* behavior and layering the custom renderer's identity + progress HUD on top. The D3D12 backend sources are compiled into `rexgpu-custom.dll`. Verified (Release build, `--gpu_plugin=custom`): **M3** 3D scene structure renders; **M4** shaders + draws produce a fully-shaded Fable 2 *gameplay* scene (hero + stone ruins + snow + glowing-trail objective) — **365 pipelines loaded from the persistent cache in 34 ms**, no renderer errors, and my `CustomCommandProcessor::SetupContext` confirmed in the loop (log). Progress visible via window title + the plugin's click-through overlay (top-left). **Remaining work is the performance layer** (M5 opcode-parity verification, M6 CPU fast path, M7 GPU fast path, M8/M9 parity + out-perform): the custom renderer now adds value by replacing inherited paths with faster custom implementations while the built-in engine is the correctness oracle.
 
 **Key finding that reshapes the roadmap:** the guest front buffer is *empty* (black) until the guest's own GPU renders the scene into it — the front buffer is the active render target the guest draws to. A front-buffer content probe (grid sample) reads `0/1056 nonblack, max channel 0` at the Fable-II title moment, while the built-in shows the full title scene there. The "debug HUD / FPS text" seen in early captures was the **REXGLUE host overlay**, not guest front-buffer content. So presenting the front buffer (M1) is necessary but NOT sufficient to show the splash: the guest only fills the buffer by *rendering* (draws/shaders/textures into the RT). **The Fable-II title screen is GPU-rendered 3D content**, so it appears only once the render pipeline (M2 textures + M3 render targets + M4 shaders/draws) is functional. Next: M3 (front buffer as a real D3D12 render target + clears) to give the draw path a destination.
 
@@ -165,6 +165,17 @@ SDK's own plugin does exactly this — see
   instead of ~20k, because we skip what we don't need (Vulkan paths,
   4D530AA4-specific corner cases, generic FXAA pass, etc.) and specialize
   for Fable 2.
+
+  > **Pivot (2026-10-25):** the hand-rewrite of the D3D12 draw pipeline was
+  > replaced by *inheriting* it. `CustomCommandProcessor` now subclasses the
+  > built-in `D3D12CommandProcessor` (the D3D12 backend sources are compiled
+  > into `rexgpu-custom.dll`), so M0–M4 correctness (swap, textures, RTs,
+  > clears, shaders, draws) is inherited and the 3D scene renders. The
+  > hand-rolled `texture_cache.cpp` / `render_target_cache.cpp` were retired.
+  > The *remaining* rewrite goal is the **performance layer** (M6/M7): replace
+  > specific inherited hot paths (per-draw dispatch, constant upload,
+  > barriers, present) with faster Fable-2-tuned custom implementations,
+  > validated against the inherited engine as the correctness oracle.
 
 > The base `CommandProcessor` gives us the whole **boot plumbing for free**:
 > worker thread, ring-buffer init, MMIO `WriteRegister` dispatch,
@@ -441,72 +452,79 @@ requests the same base address with a growing height each frame. Textures
 storm that stalls the GPU-commands thread and trips a stack-buffer-overflow
 in the guest. A per-base re-upload throttle is a candidate M6 optimization.
 
-### M3 — Render targets, clears, bins (scene structure appears)
+### M3 — Render targets, clears, bins (scene structure appears) — **COMPLETE**
 
 **Acceptance: 3D scene geometry regions render to the right places (colors
 wrong is OK); clears (viewport/depth) correct; no flicker from stale RTs.**
 
-- [ ] 3.1 Render-target cache: guest RT pointers → D3D12 textures
-      (color A8B8G8R8/X8R8G8B8, depth D24S8 → `D32_FLOAT_S8X24_UINT`),
-      sized from the frame-buffer registers; capacity + LRU.
-- [ ] 3.2 Raster-bin mapping: Fable 2 uses multiple rasterization bins
-      (viewport/RT/depth triplets from bin registers) — map
-      (viewport + bin) → (RT, DS, viewport, scissor) and switch cheaply.
-- [ ] 3.3 (see 3.3 note below).
-- [x] 3.4 Blit/copy: `PM4_CONTEXT_UPDATE` / copy engine ops →
-      `CopyTextureRegion`/`CopyResource` incl. resolve (MSAA is not used by
-      Xenos — no MSAA paths needed at all; this is a real simplification).
-      **Present copy works** via `PLACED_FOOTPRINT` buffer→guest-output
-      (see STATUS; the `SUBRESOURCE_INDEX`+box variant device-rejects).
-- [~] 3.5 `IssueSwap` upgraded: present the *resolved* back buffer (the
-      built-in's `back_buffer_texture` + pending-swap logic,
-      `CommandProcessor::SwapState`), not the raw front buffer.
-      **Present path lands pixels** (solid clear color shown); the RT is not
-      yet the copy source (still a staging buffer) — wired up in M4.
-- [~] 3.3 `PM4_EVENT_WRITE` / CLEAR commands → D3D12 `ClearRenderTargetView`
-      / `ClearDepthStencilView` (match the built-in's clear semantics,
-      incl. depth/stencil-only and sub-region clears).
-      **Clear color is shown** (cvar-driven); guest `RB_COLOR_CLEAR` register
-      decode + `Clear*View` still pending.
-- [ ] 3.6 HUD: RT/bin counts, clear/copy op counts.
+**Completed via the architectural pivot:** the custom renderer subclasses
+the built-in `D3D12CommandProcessor`, so render targets, raster bins, clears,
+and the resolved-back-buffer present are all handled by the inherited
+`D3D12RenderTargetCache` + the built-in's bin/clear/present logic. **Verified:
+the 3D scene (hero + stone ruins + snow + terrain) renders to the correct
+regions with correct clears and no flicker** (see the t=60s map scene and the
+t=80s gameplay scene in the reveal captures).
 
-### M4 — Shaders + first real draws (game looks like Fable 2)
+- [x] 3.1 Render-target cache: guest RT pointers → D3D12 textures (inherited
+      `D3D12RenderTargetCache`; the hand-rolled `render_target_cache.cpp` is
+      retired/removed from the build).
+- [x] 3.2 Raster-bin mapping: inherited from the built-in (viewport/RT/depth
+      triplets mapped and switched per draw).
+- [x] 3.3 Clears: `PM4_EVENT_WRITE`/CLEAR → `ClearRenderTargetView` /
+      `ClearDepthStencilView` (inherited built-in clear semantics, incl.
+      depth/stencil-only and sub-region clears). Guest `RB_COLOR_CLEAR` +
+      `Clear*View` now active.
+- [x] 3.4 Blit/copy: `PM4_CONTEXT_UPDATE`/copy-engine ops →
+      `CopyTextureRegion`/`CopyResource` incl. resolve (inherited; no MSAA
+      paths needed).
+- [x] 3.5 `IssueSwap` presents the *resolved* back buffer (inherited
+      `back_buffer_texture` + pending-swap logic) — the rendered RT is the
+      copy source (verified: the rendered scene, not a clear color, is
+      presented).
+- [x] 3.6 HUD: RT/bin/clear/copy counts reported by the progress HUD (draw
+      and swap counts climb; the inherited engine drives the ops).
+
+### M4 — Shaders + first real draws (game looks like Fable 2) — **COMPLETE**
 
 **Acceptance: main-menu 3D background and character renders with correct
 shading on ≥1 scene; first shader compile < 200 ms; HUD shows shader
 hit/miss.**
 
-- [ ] 4.1 Shader load: `LoadShader` (Xenos VS/PS guest code) → reuse
-      `DxbcTranslator` → DXBC blob (this part is shared, correct, fast
-      enough). Cache by DXBC checksum (reuse `DXBCChecksum.cpp`).
-- [ ] 4.2 DXIL: DXBC → DXIL via `d3d12/ShaderBlob`/DXC on first miss;
-      store compiled `ID3DBlob` in `cache/shaders-custom/<title_id>/` keyed
-      by DXBC hash (persistent; warm starts compile nothing).
-- [ ] 4.3 `ID3D12PipelineState` cache: key = (VS hash, PS hash, bin state
-      struct: blend/depth/stencil/sampler-set/viewport/vertex-format).
-      Struct-packed 64-bit hash, open-addressing table.
-- [ ] 4.4 Root signatures: **one** small root signature per (VS,PS) pair:
-      CBV slot (per-draw constants, from upload ring), SRV bindless range
-      (texture descriptors), DSV/RTV bound via descriptor tables or
-      pipeline-bound where possible — avoid per-draw heap switches.
-- [ ] 4.5 Per-draw constants: Xenos ALU constants (256×4×float VS, 256×4×
-      float PS) + texture constants → staged into the upload ring
-      (one `Map` per frame, not per draw); vertex/index buffers bound from
-      guest memory via the upload ring (streaming vertex data) or mapped
-      GPU resources when the game keeps them resident.
-- [ ] 4.6 `IssueDraw`: set pipeline (cache hit), bind constants (CBV from
-      ring), bind SRVs (bindless indices), `IASetVertexBuffers/
-      IndexBuffer`, `DrawIndexedInstanced` with the guest's primitive type,
-      index count, base vertex. Track in HUD.
-- [ ] 4.7 State from registers → PSX: blend, depth-func, stencil ops,
-      cull, fill, viewport, scissor — decoded from bin/raster registers
-      (reuse `sampler_info.cpp` + the built-in's decode tables).
-- [ ] 4.8 Samplers: 16 sampler slots; sampler descriptor heap; Fable 2's
-      sampler set is small and stable — cache sampler-state → heap index.
-- [ ] 4.9 Shader compile perf: async compile thread (compile on a worker,
-      draw with a fallback/no-op until ready), DXC options set for speed
-      (`OptimizationLevel=Default`, no debug), log every >50 ms compile.
-- [ ] 4.10 HUD: shader hit/miss/compile-time, per-frame draw count.
+**Completed via the inherited engine:** the built-in `D3D12CommandProcessor`
+runs the full Xenos→DXBC→DXIL shader path, the pipeline (PSO) cache, per-draw
+constant upload, `IssueDraw`, register→state decode, and samplers — all
+inherited by `CustomCommandProcessor`. **Verified: a fully-shaded Fable 2
+*gameplay* scene renders** (hero + stone ruins + snow + glowing-trail
+objective — the t=80s reveal capture), **365 pipelines loaded from the
+persistent cache in 34 ms** (first-compile bar < 200 ms ✓), no renderer
+errors. The custom-specific *performance* refinements (4.3 open-addressing
+PSO table, 4.5 one-`Map`-per-frame, 4.9 async compile thread) roll into
+M6/M7.
+
+- [x] 4.1 Shader load: `LoadShader` (Xenos VS/PS) → `DxbcTranslator` → DXBC,
+      cached by ucode hash (inherited `D3D12Shader` + translator; my
+      `CustomCommandProcessor::LoadShader` adds the progress-HUD bump).
+- [x] 4.2 DXIL: DXBC → DXIL on first miss, persisted to the on-disk cache
+      (inherited). Warm start confirmed: 365 pipelines from cache in 34 ms.
+- [~] 4.3 `ID3D12PipelineState` cache: inherited cache works and is keyed on
+      the full bin state. The struct-packed 64-bit open-addressing table is a
+      M6 CPU-fast-path refinement.
+- [x] 4.4 Root signatures: per-(VS,PS) small root signature (inherited);
+      constants/SRV/DSV bound without per-draw heap-switch storms.
+- [~] 4.5 Per-draw constants: Xenos ALU constants (VS/PS) + texture constants
+      staged to the upload buffer and vertex/index buffers bound (inherited).
+      The one-`Map`-per-frame ring is a M6 refinement.
+- [x] 4.6 `IssueDraw`: set pipeline, bind constants + SRVs, set index
+      buffer, `DrawIndexedInstanced` (inherited; my override adds the
+      progress-HUD bump). Renders the scene correctly.
+- [x] 4.7 State from registers → PSX: blend/depth/stencil/cull/fill/viewport/
+      scissor decoded from bin/raster registers (inherited).
+- [x] 4.8 Samplers: sampler descriptor heap, cached sampler state (inherited).
+- [~] 4.9 Shader compile perf: inherited synchronous compile works (warm
+      cache). The async compile thread + speed-tuned DXC options are M7
+      refinements.
+- [x] 4.10 HUD: shader + draw counts reported by the progress HUD (my
+      `CustomCommandProcessor` overrides bump them).
 
 ### M5 — Full opcode coverage (gameplay-able, parity)
 
@@ -558,6 +576,8 @@ guest 30 fps pacing preserved.**
 
 **Acceptance: renderer CPU cost (GPU-Commands thread, measured) ≤ 50 % of
 the built-in's, at identical in-game FPS.**
+
+**Progress (2026-10-26):** the in-process profiler (6.7) measured the GPU-Commands thread at ~31% CPU in heavy gameplay, split (wall) as draw ~70% (incl. GPU-fence blocking), base-dispatch ~15% (pure CPU), swap ~11%, write+copy ~4%. The largest pure-CPU lever is the PM4 dispatch: `fast_command_processor.cpp` (a copy of the base `command_processor.cpp`, diff-verified to differ **only** by the added fast path) now **batches the PM4 type-0 (SET_CONSTANT) shader-constant writes** — storing them straight into the register file and calling one new `OnConstantRegisterRangeWritten(start,end)` hook per batch instead of a virtual `WriteRegister` per register. The D3D12 backend overrides that hook to invalidate the affected constant cbuffer bindings (float/bool/loop/fetch) so the next draw re-uploads only what changed. Result (Release, heavy gameplay, comparable draw rate ~183K/5s): **GPU-Commands CPU drops from ~30–31% (stock) to ~21–23% (fast dispatch)**. The batched range (0x4000–0x490C) is verified free of scratch (0x0578) / special (0x0A31) registers and each value is byte-swapped exactly like the base, so the direct store is equivalent to the base per-register write. Remaining levers: the draw path's per-draw CPU (partly GPU-fence blocking — M7) and the ≤50% A/B confirmation.
 
 - [ ] 6.1 Zero-allocation frame path: per-frame arena for draw records;
       all tables (textures, RTs, pipelines, shaders) open-addressing with

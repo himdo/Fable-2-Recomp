@@ -222,3 +222,80 @@ plugin is dual D3D12+Vulkan, so a plain launch stays D3D12).
     `VdQueryVideoMode().refresh_rate`, `vsync` cvar default **true**)
   - `src/graphics/command_processor.cpp:38` — `vsync` cvar
   - `src/system/xmemory.cpp:134+` — guest arena mapping (4 GB, identity at 0x100000000)
+
+## Main menu pins the GPU at 100% in uncapped mode — root cause + fix
+
+**Symptom:** with `REX_VSYNC=0` (uncapped launch), GPU utilization stays pinned at
+100% (RTX 3070) on the title screen, and the process burns ~2.6 CPU cores.
+Gameplay frames (20-100 fps) are fine; only free-running screens spin.
+
+**Root cause (three stacked effects):**
+
+1. With vsync off the vblank worker ticked at a fixed 1000 Hz
+   (`guest_tick_frequency / 1000` in the `graphics_system.cpp` worker). Fable 2
+   paces itself on the GPU vblank counter advancing **+2 units per frame** (CPU
+   limiter `FrameLimiterWait_82242628` + GPU `WAIT_REG_MEM`), so the per-frame
+   gate was ~2 ms and free-running loops ran at ~450-500 fps.
+2. The GPU command-processor thread busy-polled its per-frame `WAIT_REG_MEM` at
+   ~350-420k iterations/s (log: `WAIT_REG_MEM long-waits: ~380000 in 1000 ms
+   (~380000/s, total sleep 0 ms/s, vsync=0)`): the no-vsync branch only did
+   `MaybeYield()`, a pure spin (~1 core of CPU waste).
+3. With vsync off, host presentation was ungated: the continuous UI repaint
+   loop presented (and re-upscaled 720p -> 1440p) a full frame on **every
+   repaint**, not just when a new guest frame existed. Measured at the
+   interactive main menu: 30 fps -> ~52% GPU, ~90 fps -> 100% GPU, i.e. a
+   ~28% baseline independent of guest frame rate (the extra host presents)
+   plus ~0.8%/fps of guest work. The interactive menu itself is work-bound at
+   ~90 fps, so even a 125 fps guest cap left the GPU pinned.
+
+**Fix (all hot-reloadable, all in the no-vsync path):**
+
+1. New SDK cvar **`no_vsync_vblank_hz`** (GPU category, default **120**): the
+   vblank worker's tick rate while vsync pacing is off (`graphics_system.cpp`).
+   The guest's per-frame floor is 2/hz seconds, so 120 Hz = 16.7 ms = a 60 fps
+   floor (2x native): free-running loops stop at ~60 fps instead of ~500, while
+   gameplay scenes slower than 60 fps are untouched. Set 1000 (env
+   `REX_NO_VSYNCS_VBLANK_HZ`, `fable_2.toml`, or the F3 console) to restore the
+   original fully-uncapped behavior.
+2. The `WAIT_REG_MEM` no-vsync branch now takes a 1 ms high-resolution pause
+   (`FrameLimiter::WaitUntil`, Windows high-resolution waitable timer) per
+   blocked iteration instead of `MaybeYield()`, so the processor thread sleeps
+   while the guest-paced counter/flag it polls is unchanged. The waited-on
+   value only changes on millisecond scales, so wait accuracy is unchanged.
+   The app's fast-dispatch copy
+   (`src/renderer/d3d12/fast_command_processor.cpp`) carries the same change.
+3. Host presents are now paced to guest frames whenever vsync is off:
+   `Presenter::GuestVblankPaceAllows` (`src/ui/presenter.cpp`) applies the
+   existing `pace_to_guest_vblank` pacer by default when the `vsync` cvar is
+   false, so at most one present per guest frame and UI repaints that carry no
+   new guest frame are suppressed. This removes the ~28% baseline GPU (and UI
+   thread) load; the `pace_to_guest_vblank` cvar keeps forcing the same pacing
+   when vsync is on (profiling use).
+4. The launcher (`launcher/Fable2.Launcher/GraphicsSettings.cs`) now writes
+   `no_vsync_vblank_hz` per FPS preset: unlimited -> 1000 (true uncapped),
+   30 -> 120 (the 60-Hz pacing path; cvar unused), N fps -> 2N+20 (60 -> 140,
+   120 -> 260, 144 -> 308, 165 -> 350, 240 -> 500) so the guest gate never caps
+   below the chosen rate. The launcher ConfigTests assert the mapping.
+
+The SDK changes are committed to the `thirdparty/rexglue-sdk` fork (branch
+`CustomD3D12Renderer`) and pinned by the submodule; `tools/prepare_runtime_sdk.py`
+validates the fork work tree and initializes its dependencies. (The old
+`thirdparty/*.patch` flow is retired with this change - new SDK fixes are
+committed to the fork and the submodule pin is advanced.)
+
+**Measured before/after (interactive main menu, `REX_VSYNC=0`, RTX 3070, 144 Hz host):**
+
+| | guest fps | GPU | CPU | note |
+|---|---|---|---|---|
+| before | ~90 (work-bound, gate at ~500) | 100% (pinned) | ~2.6 cores | 380k/s WAIT_REG_MEM spin, host present ungated |
+| after | 60.0 (gate) | 33-64% | ~1.3 cores | pacer log: `host present ~60 Hz, suppressed ~144 Hz` |
+
+(The menu still costs ~60% GPU because the tree-of-life scene is genuinely
+heavy and the UI thread still repaints - now without presenting - at host
+refresh. A 30 fps probe measured ~52% with the old code, so the extra host
+presents were a real chunk of the pin.)
+
+Also added a per-second `Guest frames: N in M ms (~F fps)` log line in
+`ExecutePacketType3_XE_SWAP` (SDK + app fast-dispatch copy), which pairs with
+the existing `WAIT_REG_MEM long-waits` summary: guest fps + wait rate together
+show whether a free-running loop is gate-bound or work-bound.

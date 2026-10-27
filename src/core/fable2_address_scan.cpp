@@ -24,7 +24,7 @@
 // ends up with exactly the address its own loop would have found - just
 // without the failed calls. (Making the failing reserves *succeed* instead is
 // not an option: the game relies on them failing, see
-// thirdparty/sdk_allocfixed_patch.patch.)
+// docs/main_menu_crash_fix.md.)
 //
 // Whenever the hook cannot be sure (no guest heap there, a non-virtual heap,
 // a query failure), it stops skipping and lets the game's own call decide.

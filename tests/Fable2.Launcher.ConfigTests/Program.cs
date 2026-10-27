@@ -61,6 +61,10 @@ try
         var capped = GraphicsSettings.Create("1080p", "2", "4", "none", "windowed", false, cap);
         Require(capped["frame_limit"] == cap, "FPS limit mapping failed");
         Require(capped["guest_vblank_pacing"] == (cap == "30" ? "true" : "false"), "legacy guest 30-FPS gate was not handled");
+        Require(int.TryParse(cap, out int fps) && fps > 0 && fps != 30
+            ? capped["no_vsync_vblank_hz"] == (2 * fps + 20).ToString()
+            : capped["no_vsync_vblank_hz"] == (cap == "unlimited" ? "1000" : "120"),
+            "guest vblank tick rate was not matched to the FPS cap");
         Require(capped["vsync"] == "false", "guest pacing changed host VSync");
         LauncherConfigFile.WriteValues(configPath, capped, GraphicsSettings.ManagedKeys);
         Require(LauncherConfigFile.ReadValues(configPath)["frame_limit"] == cap, "FPS limit roundtrip failed");

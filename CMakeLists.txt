@@ -143,7 +143,10 @@ set(REXGPU_CUSTOM_D3D12_SOURCES
 # shaders land in M4, when the DXBC sources are added back in).
 set(REXGPU_CUSTOM_SDK_SOURCES
     ${FABLE2_SDK_SRC}/src/graphics/graphics_system.cpp
-    ${FABLE2_SDK_SRC}/src/graphics/command_processor.cpp
+    # M6: fast GPU-Commands dispatch (a copy of the stock command_processor.cpp
+    # with a batched constant-register-write fast path). Only the custom plugin
+    # uses this; the built-in (rexgpu-xenos) keeps the stock base dispatch.
+    src/renderer/d3d12/fast_command_processor.cpp
     ${FABLE2_SDK_SRC}/src/graphics/register_file.cpp
     ${FABLE2_SDK_SRC}/src/graphics/registers.cpp
     ${FABLE2_SDK_SRC}/src/graphics/flags.cpp
@@ -487,7 +490,9 @@ add_custom_command(TARGET fable_2 POST_BUILD
 #   -DREXGLUE_SDK_ROOT=<prebuilt SDK root>    (win-amd64 layout: bin/, include/, lib/)
 #   -DREXGLUE_SDK_SOURCE=<SDK source tree>    (optional; Vulkan plugin only)
 # The defaults are created by tools/setup_sdk.cmd (prebuilt, auto-run by
-# build.cmd) and tools/setup_sdk_src.cmd (source, only for the Vulkan path).
+# build.cmd); the source tree is the thirdparty/rexglue-sdk submodule
+# (fork commit with all project SDK fixes baked in; used by the Vulkan
+# plugin build).
 if(NOT DEFINED REXGLUE_SDK_ROOT)
     set(REXGLUE_SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/rexglue-sdk/win-amd64")
 endif()

@@ -1,27 +1,24 @@
-"""Apply the source-only runtime fixes to a known-good SDK revision.
+"""Prepare the ReXGlue SDK source tree for the build.
 
-No game content is read. Conflicting SDK edits are rejected, not overwritten.
-Use --skip-dependencies for patch validation without network/dependency setup.
+The SDK is consumed as a git submodule (thirdparty/rexglue-sdk) pinned to a
+fork commit (himdo/rexglue-sdk, branch CustomD3D12Renderer) that bakes in all
+of this project's SDK fixes. Previously those fixes were applied from patch
+files under thirdparty/ (rexglue-sdk-runtime-fixes.patch,
+rexglue-sdk-debug-exports.patch, rexglue-sdk-local.patch); that flow is
+retired and the patches have been removed - new SDK changes are committed to
+the fork directly and the submodule pin is advanced.
 
-Accepted SDK states:
-  * HEAD at the base pin - a clean SDK checkout; the patches under
-    thirdparty/ are applied on top of it, and
-  * any other revision where every patch is already applied - i.e. a fork
-    commit with the fixes baked into the tree (no pin list to maintain).
+No game content is read. Use --skip-dependencies for a quick work-tree
+validation without network/dependency setup.
 """
 import argparse
 from pathlib import Path
 import subprocess
 import sys
 
-# Clean base revision the patches were generated against.
-SDK_PIN = "babc769a94be5618010abfd075ed84f3c2bc09f5"
-# Public libmspack commit the SDK's broken pin is repointed at.
+# Public libmspack commit the SDK's broken pin is repointed at (only needed
+# for older fork commits that still carry libmspack as a submodule gitlink).
 MSPACK_PIN = "305907723a4e7ab2018e58040059ffb5e77db837"
-PATCHES = (
-    "rexglue-sdk-runtime-fixes.patch",
-    "rexglue-sdk-debug-exports.patch",
-)
 
 
 def fail(message):
@@ -36,15 +33,6 @@ def git(source, *args, check=True):
         detail = (result.stderr or result.stdout).strip()
         fail(f"git {' '.join(args)} failed (exit {result.returncode}):\n{detail}")
     return result
-
-
-def patch_state(source, patch):
-    """Classify the worktree as 'applied', 'clean', or 'conflict' for a patch."""
-    if git(source, "apply", "--reverse", "--check", str(patch), check=False).returncode == 0:
-        return "applied"
-    if git(source, "apply", "--check", str(patch), check=False).returncode == 0:
-        return "clean"
-    return "conflict"
 
 
 def libmspack_mode(source):
@@ -62,7 +50,6 @@ def main():
     parser.add_argument("--skip-dependencies", action="store_true")
     args = parser.parse_args()
     source = args.source.resolve()
-    patch_directory = Path(__file__).resolve().parents[1] / "thirdparty"
 
     if not source.is_dir():
         fail(f"SDK source directory does not exist: {source}")
@@ -73,49 +60,17 @@ def main():
     head = git(source, "rev-parse", "HEAD", check=False).stdout.strip()
     if not head:
         fail(f"{source} has no commits (empty SDK checkout).")
-
-    # Keep follow-up fixes separate so existing patched SDK checkouts can upgrade.
-    states = {}
-    for name in PATCHES:
-        patch = patch_directory / name
-        if not patch.is_file():
-            fail(f"patch file is missing: {patch}")
-        states[name] = patch_state(source, patch)
-
-    if head == SDK_PIN:
-        # Base revision: apply whatever is missing, refuse conflicting edits.
-        for name, state in states.items():
-            if state == "applied":
-                print(f"Already applied: {name}")
-            elif state == "clean":
-                git(source, "apply", str(patch_directory / name))
-                print(f"Applied: {name}")
-            else:
-                detail = git(source, "apply", "--check",
-                             str(patch_directory / name), check=False).stderr.strip()
-                fail(f"SDK patch {name} conflicts with local edits:\n{detail}\n"
-                     "The SDK work tree is not at a clean accepted revision. Restore it with:\n"
-                     f"  git -C {source} checkout -- . && git -C {source} clean -fd")
-    else:
-        # Any other revision is accepted only with every patch baked in.
-        pending = [name for name, state in states.items() if state != "applied"]
-        if pending:
-            fail(f"unexpected SDK revision {head} with unapplied patches: "
-                 f"{', '.join(pending)}.\n"
-                 f"Either check out the base revision ({SDK_PIN}) so the patches "
-                 f"can be applied, or use a fork revision that bakes them in.\n"
-                 f"Restore the base with: git -C {source} checkout {SDK_PIN}")
-        print(f"SDK revision {head} already carries all runtime fixes (baked in).")
+    print(f"SDK revision {head} (fork commit with all project fixes baked in).")
 
     if not args.skip_dependencies:
-        # libmspack is either a submodule gitlink (base pin and older fork
-        # commits) or plain vendored files (newer fork commits). Only the
-        # gitlink form needs the index repin + submodule fetch + Windows
-        # symlink materialization; the original SDK pin for it is unavailable
-        # on its public remote.
+        # libmspack is either a submodule gitlink (older fork commits) or
+        # plain vendored files (current fork commits). Only the gitlink form
+        # needs the index repin + submodule fetch + Windows symlink
+        # materialization; the original SDK pin for it is unavailable on its
+        # public remote.
         mode = libmspack_mode(source)
         if mode == "160000":
-            # git submodule update reads the index, not the patched worktree gitlink.
+            # git submodule update reads the index, not the worktree gitlink.
             git(source, "update-index", "--cacheinfo",
                 f"160000,{MSPACK_PIN},thirdparty/libmspack")
         elif mode != "040000":

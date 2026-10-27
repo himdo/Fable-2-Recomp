@@ -45,7 +45,16 @@ class CustomCommandProcessor : public rex::graphics::d3d12::D3D12CommandProcesso
                  uint32_t frontbuffer_height) override;
 
  private:
+  // M6 (CPU fast path) self-profiling on the GPU-Commands thread.
+  void M6MaybeSample();
+
   uint64_t swap_count_ = 0;
+  uint64_t m6_qpc_freq_ = 0;
+  int64_t m6_last_qpc_ = 0;
+  uint64_t m6_last_cpu100ns_ = 0;
+  bool m6_breakdown_ = false;
+  uint64_t m6_draw_n = 0, m6_copy_n = 0, m6_swap_n = 0, m6_write_n = 0, m6_shader_n = 0;
+  uint64_t m6_draw_ns = 0, m6_copy_ns = 0, m6_swap_ns = 0, m6_write_ns = 0, m6_shader_ns = 0;
 };
 
 }  // namespace d3d12

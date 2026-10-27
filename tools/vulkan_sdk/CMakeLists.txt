@@ -10,8 +10,9 @@
 # Consuming the SDK via add_subdirectory() makes PROJECT_IS_TOP_LEVEL false,
 # which skips that install step entirely. We only need the built
 # rexgpu-xenos.dll (Vulkan), so skipping install/packaging is fine. The
-# wrapper modifies nothing - the SDK tree it consumes is stock upstream plus
-# this project's tracked local patch (thirdparty/rexglue-sdk-local.patch).
+# wrapper modifies nothing - the SDK tree it consumes is the project's fork
+# (thirdparty/rexglue-sdk submodule, branch CustomD3D12Renderer), which
+# bakes in all project SDK fixes as committed state.
 cmake_minimum_required(VERSION 3.25)
 
 # C/CXX enabled so the SDK's C and C++ dependencies configure. The compiler

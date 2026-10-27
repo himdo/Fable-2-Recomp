@@ -1,7 +1,8 @@
 @echo off
 rem ===========================================================================
-rem Build the ReXGlue SDK's Vulkan GPU plugin from the SDK source + this
-rem project's local patch (thirdparty/rexglue-sdk-local.patch).
+rem Build the ReXGlue SDK's Vulkan GPU plugin from the SDK source (the
+rem thirdparty/rexglue-sdk submodule, pinned to the fork commit that bakes
+rem in this project's SDK fixes).
 rem
 rem Uses a thin CMake wrapper (tools/vulkan_sdk) that add_subdirectory()s the
 rem SDK, which skips the SDK's top-level install/export step (it fails on a
@@ -23,9 +24,9 @@ setlocal
 set "REPO=%~dp0.."
 set "WRAPPER=%REPO%\tools\vulkan_sdk"
 set "OUT=%REPO%\out\build\vulkan-sdk"
-rem SDK source: the thirdparty\rexglue-sdk submodule (your fork, branch
-rem vsync-present-gate); its build outputs land in SDKOUT (under the SDK
-rem source root).
+rem SDK source: the thirdparty\rexglue-sdk submodule (the fork, branch
+rem CustomD3D12Renderer, with all project SDK fixes committed); its build
+rem outputs land in SDKOUT (under the SDK source root).
 set "SDKSRC=%REPO%\thirdparty\rexglue-sdk"
 if not exist "%SDKSRC%\CMakeLists.txt" set "SDKSRC=%REPO%\..\rexglue-sdk"
 set "SDKOUT=%SDKSRC%\out"

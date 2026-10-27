@@ -480,14 +480,16 @@ Manual/advanced setup (normally not needed):
 
 ```
 tools\setup_sdk.cmd      # fetch the prebuilt SDK only (what build.cmd auto-runs)
-tools\setup_sdk_src.cmd  # fetch the SDK SOURCE for the Vulkan plugin: clones
-                         # rexglue/rexglue-sdk at the pinned commit
-                         # (f5337cdc), pins its submodules to the SHAs in
-                         # thirdparty/rexglue-sdk-submodule-pins.txt, and
-                         # applies thirdparty/rexglue-sdk-local.patch. LONG
-                         # (several GB).
-git                     # only needed for setup_sdk_src.cmd
+git                     # needed for the SDK source submodule (Vulkan plugin)
 ```
+
+The SDK **source** (used by the Vulkan plugin build, `tools\build_sdk_vulkan.cmd`) is the
+`thirdparty/rexglue-sdk` git submodule, pinned to a fork commit
+(himdo/rexglue-sdk, branch `CustomD3D12Renderer`) that bakes in all of this
+project's SDK fixes. SDK changes are committed to the fork and the submodule
+pin is advanced; the old patch-based flow (`thirdparty/*.patch` applied on top
+of a pinned upstream commit) is retired.
+Fetch it with `git submodule update --init thirdparty/rexglue-sdk`.
 
 The build also accepts explicit overrides if you keep the SDK elsewhere:
 `cmake -DREXGLUE_SDK_ROOT=<prebuilt SDK root> -DREXGLUE_SDK_SOURCE=<SDK source>`
@@ -508,11 +510,12 @@ The build also accepts explicit overrides if you keep the SDK elsewhere:
 ## Vulkan renderer
 
 The goal is a Vulkan rendering path for the game (the SDK's Windows GPU plugin only ships a
-D3D12 Xenos backend; the SDK's own Vulkan backend lives in `rexglue-sdk-src/src/graphics/vulkan/`
-but is not compiled into the shipped plugin). Per the project constraint, all Vulkan work lives in
-this repo. The SDK source itself is built as stock upstream **plus this
-project's tracked local patch** (`thirdparty/rexglue-sdk-local.patch` —
-see below); the upstream repo is never forked or pushed to.
+D3D12 Xenos backend; the SDK's own Vulkan backend lives in
+`thirdparty/rexglue-sdk/src/graphics/vulkan/` but is not compiled into the
+shipped plugin). All Vulkan work lives in the SDK fork: the
+`thirdparty/rexglue-sdk` submodule, pinned to a fork commit that bakes in
+this project's SDK fixes (see the SDK source note in [Build](#build)), so
+the renderer can be rebuilt without touching this repo's game code.
 
 **Stage 1 — foundation (DONE, verified).** A self-contained Vulkan pipeline that creates a window,
 inits Vulkan, and presents a clear color, proving the whole stack on a real GPU:
@@ -541,27 +544,26 @@ Key implementation notes (hard-won):
 
 **Stage 2 — render the game via Vulkan (in progress).** The SDK's Vulkan backend is a complete,
 ~1.4 MB renderer compiled into `rexgpu-xenos` only when `REXGLUE_USE_VULKAN=ON` (OFF by default on
-Windows). Rather than re-implementing it, we build the SDK source **plus the
-project's local patch** (`thirdparty/rexglue-sdk-local.patch`) into a Vulkan GPU
-plugin and load it via the `gpu_plugin` mechanism, so the renderer can be **swapped at launch, no
+Windows). Rather than re-implement it, we build the SDK source (the
+`thirdparty/rexglue-sdk` submodule) into a Vulkan GPU plugin and load it via
+the `gpu_plugin` mechanism, so the renderer can be **swapped at launch, no
 rebuild of the game**:
 
 ```
 tools\build_sdk_vulkan.cmd     # builds the SDK source with REXGLUE_USE_VULKAN=ON
-                               # (auto-fetches it first via tools\setup_sdk_src.cmd:
-                               # clone at the pinned commit + submodule pins +
-                               # thirdparty\rexglue-sdk-local.patch, into
-                               # thirdparty\rexglue-sdk-src) -> the plugin lands
+                               # (the thirdparty\rexglue-sdk submodule; run
+                               # `git submodule update --init thirdparty\rexglue-sdk`
+                               # first on a fresh clone) -> the plugin lands
                                # in <SDK source>\out\win-amd64\Release\rexgpu-xenos.dll
 ```
 
-The SDK source is the stock `rexglue/rexglue-sdk` repo **plus this project's
-local modifications** (`thirdparty/rexglue-sdk-local.patch`: the main-menu
-crash fix in `exception_handler_win.cpp` + `xmemory.cpp`, and the Vulkan/
-FPS instrumentation — see `docs/main_menu_crash_fix.md` and the patch
-header). `tools/setup_sdk_src.cmd` reproduces that exact tree from the
-tracked patch + submodule pins, so the source never has to live outside
-this repo.
+The SDK source is the project's fork (`himdo/rexglue-sdk`, branch
+`CustomD3D12Renderer`), which carries the main-menu crash fix
+(`exception_handler_win.cpp` + `xmemory.cpp` — see
+`docs/main_menu_crash_fix.md`) and the Vulkan/FPS instrumentation as
+committed state. SDK changes are committed to the fork and the submodule pin
+is advanced; the old patch-based flow (`thirdparty/*.patch` applied on top of
+a pinned upstream commit) is retired.
 
 Two plugins are staged next to the exe, selected by the `gpu_plugin` argument:
 

@@ -1,19 +1,20 @@
 # Windows runtime fixes
 
-The tested source baseline is `himdo/rexglue-sdk` commit
-`1338ec1011739c7f00f8df9b9473e34d3dd9f2df` (upstream's dog rendering fix).
-`thirdparty/rexglue-sdk-runtime-fixes.patch` carries the additional audio,
-frame-pacing, Release FPS-counter and Windows export changes as source.
-`thirdparty/rexglue-sdk-debug-exports.patch` adds the performance-counter and cvar
-exports needed by Debug's GPU plugin, shutdown path and debug control server.
-It applies separately so an SDK checkout already carrying the original patch
-can upgrade without resetting it.
-It also removes the hardcoded `LIBRARY rexruntime` name from the export table:
-the linker must use its actual output name, so Debug imports `rexruntimed.dll`
-rather than accidentally loading a leftover Release `rexruntime.dll`.
-No SDK fork, binary download of a patched runtime, game files or saves are
-required from this contribution. Original GOTY game files are still required
-to generate and run the game.
+The SDK source is the `thirdparty/rexglue-sdk` submodule, pinned to fork
+commit `911152d10d10462128d36dbdf3bf6a9752eace56` (`himdo/rexglue-sdk`,
+branch `CustomD3D12Renderer`; includes upstream's dog rendering fix
+`1338ec1011739c7f00f8df9b9473e34d3dd9f2df`). The fork carries the additional
+audio, frame-pacing, Release FPS-counter and Windows export changes as
+committed source, plus the performance-counter and cvar exports needed by
+Debug's GPU plugin, shutdown path and debug control server. It also removes
+the hardcoded `LIBRARY rexruntime` name from the export table: the linker
+must use its actual output name, so Debug imports `rexruntimed.dll` rather
+than accidentally loading a leftover Release `rexruntime.dll`. (The earlier
+`thirdparty/*.patch` files applied these on top of a pinned upstream commit;
+that flow is retired - SDK changes are now committed to the fork and the
+submodule pin is advanced.) No binary download of a patched runtime, game
+files or saves are required from this contribution. Original GOTY game files
+are still required to generate and run the game.
 
 ## Build
 
@@ -27,13 +28,15 @@ tests\run_native_tests.cmd
 dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release
 ```
 
-Both Debug and Release builds prepare the pinned SDK, apply the patch, build D3D12 runtime
-and GPU targets, and stage matched headers, integration sources, import
-libraries and DLLs. The host is rebuilt against that staged SDK. The official
-0.10.0 codegen executable remains in a separate directory with its original
-runtime; mixing newer native DLLs into its directory is not supported.
-Patch conflicts and unexpected SDK revisions fail rather than overwrite edits.
-`build.cmd fable_2` builds the Debug host and a patched Debug SDK;
+Both Debug and Release builds prepare the pinned SDK (the `thirdparty/rexglue-sdk`
+submodule at the fork commit carrying all project SDK fixes), build D3D12
+runtime and GPU targets, and stage matched headers, integration sources,
+import libraries and DLLs. The host is rebuilt against that staged SDK. The
+official 0.10.0 codegen executable remains in a separate directory with its
+original runtime; mixing newer native DLLs into its directory is not
+supported. `tools/prepare_runtime_sdk.py` rejects a missing SDK work tree or
+a missing libmspack tree rather than silently picking a fallback.
+`build.cmd fable_2` builds the Debug host and the Debug SDK;
 `build.cmd -release fable_2` builds the Release pair. Debug SDK build/staging directories
 are `out/build/runtime-sdk-debug` and `out/tooling/runtime-sdk-debug/win-amd64`;
 Release keeps `out/build/runtime-sdk` and `out/tooling/runtime-sdk/win-amd64`.
@@ -84,6 +87,22 @@ uses a private high-resolution waitable timer on Windows, with a standard wait
 fallback, and does not change the guest clock or advertised video mode.
 F3 counts guest swaps in Release, averaged over a short window and including
 stalls; it does not count monitor refreshes or establish unique rendered frames.
+
+Uncapped launches (`REX_VSYNC=0`, e.g. `fable2-uncapped.cmd`) used to pin the
+GPU at 100% on free-running screens like the main menu: the vblank worker
+ticked at 1000 Hz (a ~2 ms guest frame gate, ~500 fps), the command-processor
+thread busy-polled `WAIT_REG_MEM` at ~380k/s, and the host presented a full
+re-upscaled frame on every UI repaint. The fix (see
+`FPS_CAP_INVESTIGATION.md` for the full writeup): a hot-reloadable cvar
+`no_vsync_vblank_hz` (default 120) sets the no-vsync vblank tick rate, giving
+a 60 fps floor (2x native); the no-vsync `WAIT_REG_MEM` branch takes a 1 ms
+high-resolution pause instead of a pure spin; and host presents are paced to
+guest frames whenever vsync is off (`pace_to_guest_vblank` logic in the
+presenter), so UI repaints without a new guest frame are suppressed. `1000` in
+the cvar (env `REX_NO_VSYNC_VBLANK_HZ`, `fable_2.toml`, or the F3 console)
+restores the original fully-uncapped behavior. Measured on the interactive
+menu: guest 60.0 fps, host present 60 Hz, GPU 33-64% (was pinned at 100%),
+process CPU ~1.3 cores (was ~2.6).
 
 Hero/dog resolve readback is the upstream fix, not a new implementation here.
 Credit for the original approach/address goes to just-harry's Unofficial Xenia

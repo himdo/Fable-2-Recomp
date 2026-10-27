@@ -9,7 +9,7 @@ public static class GraphicsSettings
     [
         "resolution", "window_width", "window_height", "resolution_scale",
         "anisotropic_override", "swap_post_effect", "vsync", "fullscreen", "fullscreen_exclusive",
-        "frame_limit", "guest_vblank_pacing"
+        "frame_limit", "guest_vblank_pacing", "no_vsync_vblank_hz"
     ];
 
     public static Dictionary<string, string> Create(string resolution, string scale,
@@ -44,6 +44,17 @@ public static class GraphicsSettings
             // guest pacing therefore caps it at 30 even with a 60-FPS limiter.
             // This does not disable the user's host presentation VSync.
             ["guest_vblank_pacing"] = (frameLimit == "30").ToString().ToLowerInvariant(),
+            // While guest pacing is off the vblank worker ticks at
+            // no_vsync_vblank_hz, so the guest's per-frame floor is 2/hz
+            // seconds. The SDK default (120 Hz = 60 fps floor, 2x native)
+            // keeps idle screens like the main menu from pinning the GPU;
+            // "unlimited" restores the original fully-uncapped 1000 Hz, and a
+            // numeric cap gets 2x its target plus headroom so the host swap
+            // limiter - not the guest vblank gate - is what caps the rate.
+            // (30 uses the 60-Hz pacing path, where this cvar is unused.)
+            ["no_vsync_vblank_hz"] = int.TryParse(frameLimit, out int fps) && fps > 0 && fps != 30
+                ? (2 * fps + 20).ToString(CultureInfo.InvariantCulture)
+                : (frameLimit == "unlimited" ? "1000" : "120"),
             ["fullscreen"] = (displayMode != "windowed").ToString().ToLowerInvariant(),
             ["fullscreen_exclusive"] = (displayMode == "exclusive").ToString().ToLowerInvariant()
         };

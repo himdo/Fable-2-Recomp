@@ -1,13 +1,19 @@
 @echo off
 rem ===========================================================================
-rem Fable 2 - UNCAPPED launcher (60fps+, no frame cap).
+rem Fable 2 - UNCAPPED launcher (no 30fps cap; 60 fps floor by default).
 rem
 rem This is a thin wrapper around fable2.cmd that sets REX_VSYNC=0 before
-rem launching. With vsync off, the ReXGlue vblank worker runs at ~1000 Hz
-rem instead of 60 Hz, so the guest's per-frame "wait for the vblank counter
-rem to advance 2 units" gate (2 x 16.6 ms = 33 ms = 30 fps) no longer paces
-rem the game. The result is an uncapped frame rate (observed 20-100 fps
-rem depending on scene).
+rem launching. With vsync off, the ReXGlue vblank worker ticks at
+rem no_vsync_vblank_hz (120 Hz by default) instead of 60 Hz, so the guest's
+rem per-frame "wait for the vblank counter to advance 2 units" gate is ~16.7
+rem ms (60 fps) instead of 33 ms (30 fps) - 2x native. The host present is
+rem also paced to guest frames, so idle screens like the main menu stop at
+rem ~60 fps instead of spinning the GPU at 100% forever; gameplay scenes
+rem that render slower than 60 fps are unaffected.
+rem
+rem To restore the original fully-uncapped behavior (free-running menu, ~500
+rem fps, GPU pinned), set REX_NO_VSYNC_VBLANK_HZ=1000 in the environment or
+rem raise it live in the F3 console (GPU category).
 rem
 rem Usage (from this folder, next to fable_2.exe):
 rem   fable2-uncapped.cmd             D3D12, uncapped
