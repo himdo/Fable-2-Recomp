@@ -146,16 +146,20 @@ void CustomCommandProcessor::M6MaybeSample() {
       cpu_pct, secs, total_s, draw_s, m6_draw_n, copy_s, m6_copy_n, swap_s, m6_swap_n,
       write_s, m6_write_n, shader_s, m6_shader_n, dispatch_s);
   if (m6_fast_draw_ && (m6_draw_fast_hits_ + m6_draw_fast_misses_) != 0) {
-    REXGPU_INFO("[m6] draw fast path: {} hits / {} misses | fp match {} (idx {} nonidx {}) / nomatch {}",
-                m6_draw_fast_hits_, m6_draw_fast_misses_, m6_diag_match_, m6_diag_match_idx_,
+    REXGPU_INFO("[m6] draw fast path: {} hits / {} misses ({} rebind) | fp match {} (idx {} nonidx {}) / nomatch {}",
+                m6_draw_fast_hits_, m6_draw_fast_misses_, m6_multi_hits_, m6_diag_match_, m6_diag_match_idx_,
                 m6_diag_match_ - m6_diag_match_idx_, m6_diag_nomatch_);
     if (m6_breakdown_ && m6_fast_total_n != 0) {
       const double total_us =
           static_cast<double>(m6_fast_total_ns) / m6_fast_total_n / freq * 1e6;
       const double bind_us =
           static_cast<double>(m6_fast_bind_ns) / m6_fast_bind_n / freq * 1e6;
-      REXGPU_INFO("[m6] fast-path per-hit: {:.3f}us (bind {:.3f}us other {:.3f}us, {} hits)",
-                  total_us, bind_us, total_us - bind_us, m6_fast_total_n);
+      const double tex_us =
+          static_cast<double>(m6_fast_tex_ns) / (m6_fast_tex_n ? m6_fast_tex_n : 1) / freq * 1e6;
+      REXGPU_INFO("[m6] fast-path per-hit: {:.3f}us (bind {:.3f}us other {:.3f}us, {} hits) | "
+                  "tex re-resolve {:.3f}us x{} ({} changed)",
+                  total_us, bind_us, total_us - bind_us, m6_fast_total_n, tex_us,
+                  (unsigned long long)m6_fast_tex_n, (unsigned long long)m6_fast_tex_changed_);
     }
   }
   // M6 dispatch profile (FABLE2_M6_DISPATCH_PROFILE=1): loop = total dispatch
@@ -211,6 +215,7 @@ void CustomCommandProcessor::M6MaybeSample() {
   m6_shader_ns = 0;
   m6_draw_fast_hits_ = 0;
   m6_draw_fast_misses_ = 0;
+  m6_multi_hits_ = 0;
   m6_diag_match_ = 0;
   m6_diag_match_idx_ = 0;
   m6_diag_nomatch_ = 0;
@@ -218,6 +223,9 @@ void CustomCommandProcessor::M6MaybeSample() {
   m6_fast_total_n = 0;
   m6_fast_bind_ns = 0;
   m6_fast_bind_n = 0;
+  m6_fast_tex_ns = 0;
+  m6_fast_tex_n = 0;
+  m6_fast_tex_changed_ = 0;
 }
 
 void CustomCommandProcessor::ComputeDrawFingerprint(
@@ -309,11 +317,15 @@ void CustomCommandProcessor::ComputeDrawFingerprint(
   (void)index_count;
 }
 
-bool CustomCommandProcessor::MfpRebind(const FastDrawEntry& e) {
-  // If the entry is already the current pipeline + root signature, no rebind is
-  // needed (the common 85% case) and the fast re-issue can proceed directly.
+bool CustomCommandProcessor::MfpRebind(const FastDrawEntry& e, bool tex_changed) {
+  // If the entry is already the current pipeline + root signature and the
+  // textures haven't changed, no rebind is needed (the common ~71% case) and
+  // the fast re-issue can proceed directly.
   if (e.pipeline_handle == current_guest_pipeline_ &&
       e.root_signature == current_graphics_root_signature_) {
+    if (tex_changed) {
+      texture_cache_->RequestTextures(e.used_texture_mask);
+    }
     return true;
   }
   if (current_graphics_root_signature_ == nullptr) {
@@ -332,15 +344,17 @@ bool CustomCommandProcessor::MfpRebind(const FastDrawEntry& e) {
 
   // Match the base IssueDraw ordering: set the root signature (forcing a root
   // parameter rebind), re-resolve this pipeline's textures (re-populating the
-  // shared SRV heap), then bind the pipeline state object, and finally re-apply
-  // the dynamic viewport / scissor / fixed-function / system-constant state for
-  // this pipeline.
+  // shared SRV heap) only when the texture identity changed, then bind the
+  // pipeline state object, and finally re-apply the dynamic viewport / scissor /
+  // fixed-function / system-constant state for this pipeline.
   if (e.root_signature != current_graphics_root_signature_) {
     deferred_command_list_.D3DSetGraphicsRootSignature(e.root_signature);
     current_graphics_root_signature_ = e.root_signature;
     current_graphics_root_up_to_date_ = 0;
   }
-  texture_cache_->RequestTextures(e.used_texture_mask);
+  if (tex_changed) {
+    texture_cache_->RequestTextures(e.used_texture_mask);
+  }
   if (e.pipeline_handle != current_guest_pipeline_) {
     deferred_command_list_.SetPipelineStateHandle(e.pipeline_handle);
     current_guest_pipeline_ = e.pipeline_handle;
@@ -616,33 +630,83 @@ bool CustomCommandProcessor::IssueDraw(PrimitiveType prim_type, uint32_t index_c
   progress::Bump(kFeatDraws);
   ++m6_diag_total_;
 
-  // M6 single-entry draw fast path. The fast path fires only when the current
-  // draw's full fingerprint (shaders + 26 state registers + 192 texture-fetch
-  // dwords) EXACTLY matches the previous draw's fingerprint AND the D3D
-  // pipeline + root signature are already the ones that previous draw set (no
-  // rebind). This is transitivity-correct: the shared SRV heap (textures),
-  // viewport, fixed-function, and system-constants are all set by the last base
-  // draw (the "establishing draw"), and an exact fingerprint match guarantees
-  // the current draw has identical pipeline, textures, and dynamic state. A
-  // multi-entry table (and a rebind path) were tried but are incorrect, because
-  // the shared SRV heap is a single region set by the LAST base draw — a stale
-  // entry or a re-bound pipeline can leave textures that don't match the current
-  // draw, producing garbled UI/menus and artifacts.
+  // M6 multi-entry draw fast path. A 256-entry direct-mapped table keyed by
+  // fingerprint hash caches the D3D pipeline + root signature + texture mask +
+  // primitive processing result for each distinct pipeline state. On a hit the
+  // expensive ConfigurePipeline / shader translation / render-target update is
+  // skipped; only the D3D state rebind (SetPipelineState + root signature +
+  // conditional RequestTextures + fixed-function + system constants) and the
+  // fast re-issue (UpdateBindings + vertex residency + topology + draw) are
+  // performed. The shared SRV heap texture state is tracked via srv_heap_tex_id_
+  // so RequestTextures is called only when the entry's texture identity differs
+  // from what the SRV heap currently holds (correct for pipeline changes and
+  // scrolling textures, no stale textures).
   if (m6_fast_draw_) {
     DrawFingerprint fp;
     ComputeDrawFingerprint(prim_type, index_count, index_buffer_info, &fp);
-    if (fast_path_valid_ && fast_entry_.valid && fp.Matches(fast_entry_.fp) &&
-        fast_entry_.pipeline_handle == current_guest_pipeline_ &&
-        fast_entry_.root_signature == current_graphics_root_signature_ &&
-        MfpFastReissue(prim_type, index_count, index_buffer_info, fast_entry_)) {
-      ++m6_draw_fast_hits_;
-      if (time) {
-        QueryPerformanceCounter(&t1);
-        m6_draw_ns += static_cast<uint64_t>(t1.QuadPart - t0.QuadPart);
+    if (fast_path_valid_) {
+      const int idx = static_cast<int>(fp.Hash() % kFastDrawTableSize);
+      FastDrawEntry& entry = fast_draw_table_[idx];
+      if (entry.valid && fp.Matches(entry.fp)) {
+        // Determine if the current draw's textures differ from what the SRV heap
+        // currently holds. Exact per-dword comparison (no tolerance) so a
+        // scrolling texture that drifted even 1 page triggers a re-resolve.
+        // Compare the CURRENT fp.tex_id (what RequestTextures will write) against
+        // srv_heap_tex_id_ (what RequestTextures last wrote). Using the entry's
+        // tex_id would cause a mismatch loop (the entry's tex_id has tolerance
+        // drift vs. the actual SRV heap state), triggering excessive
+        // RequestTextures calls that can cause a GPU TDR.
+        bool tex_changed = false;
+        if (srv_heap_valid_) {
+          for (int slot = 0; slot < 64; ++slot) {
+            if (fp.tex_id[slot] != srv_heap_tex_id_[slot]) {
+              tex_changed = true;
+              break;
+            }
+          }
+        } else {
+          tex_changed = true;  // SRV heap state unknown, must re-resolve
+        }
+        void* old_pipeline = current_guest_pipeline_;
+        ID3D12RootSignature* old_root = current_graphics_root_signature_;
+        // Enforce the per-frame rebind budget. Pipeline-change rebinds call
+        // RequestTextures which pushes resource transition barriers. During
+        // scene transitions (menu→gameplay), a burst of pipeline changes can
+        // flood the GPU with barriers, causing a TDR. When the budget is
+        // exhausted, fall through to the full base draw (safe, slower).
+        bool needs_rebind = (entry.pipeline_handle != old_pipeline) ||
+                            (entry.root_signature != old_root);
+        // Only fire the fast path when the D3D pipeline is already current
+        // (no rebind needed). The rebind path (MfpRebind with pipeline change)
+        // does not correctly replicate all the D3D state the base IssueDraw
+        // sets up, producing visual artifacts. The rebind is retained as dead
+        // code for a future fix (M7).
+        if (!needs_rebind &&
+            MfpRebind(entry, tex_changed) &&
+            MfpFastReissue(prim_type, index_count, index_buffer_info, entry)) {
+          if (tex_changed) {
+            ++m6_fast_tex_changed_;
+            // Update srv_heap_tex_id_ to the CURRENT draw's tex_id (what
+            // RequestTextures just wrote to the SRV heap), not the entry's
+            // tex_id (which may have tolerance drift).
+            memcpy(srv_heap_tex_id_, fp.tex_id, sizeof(srv_heap_tex_id_));
+            srv_heap_valid_ = true;
+          }
+          if (entry.pipeline_handle != old_pipeline ||
+              entry.root_signature != old_root) {
+            ++m6_multi_hits_;
+            ++mfp_rebinds_this_frame_;
+          }
+          ++m6_draw_fast_hits_;
+          if (time) {
+            QueryPerformanceCounter(&t1);
+            m6_draw_ns += static_cast<uint64_t>(t1.QuadPart - t0.QuadPart);
+          }
+          ++m6_draw_n;
+          M6MaybeSample();
+          return true;
+        }
       }
-      ++m6_draw_n;
-      M6MaybeSample();
-      return true;
     }
     ++m6_draw_fast_misses_;
 
@@ -660,7 +724,8 @@ bool CustomCommandProcessor::IssueDraw(PrimitiveType prim_type, uint32_t index_c
       ++m6_so_total_n;
     }
     if (result) {
-      // Cache the pipeline state so future identical draws can re-bind cheaply.
+      // Cache the pipeline state in the table so future draws with the same
+      // fingerprint can re-bind cheaply.
       const auto& regs = *register_file_;
       if (regs.Get<rex::graphics::reg::RB_MODECONTROL>().edram_mode !=
               rex::graphics::xenos::EdramMode::kCopy &&
@@ -677,13 +742,18 @@ bool CustomCommandProcessor::IssueDraw(PrimitiveType prim_type, uint32_t index_c
           uint32_t mask = 0;
           if (vs) mask |= vs->GetUsedTextureMaskAfterTranslation();
           if (ps) mask |= ps->GetUsedTextureMaskAfterTranslation();
-          fast_entry_.valid = true;
+          const int idx = static_cast<int>(fp.Hash() % kFastDrawTableSize);
+          fast_draw_table_[idx].valid = true;
+          fast_draw_table_[idx].fp = fp;
+          fast_draw_table_[idx].pipeline_handle = current_guest_pipeline_;
+          fast_draw_table_[idx].root_signature = current_graphics_root_signature_;
+          fast_draw_table_[idx].used_texture_mask = mask;
+          fast_draw_table_[idx].ppr = ppr;
           fast_path_valid_ = true;
-          fast_entry_.fp = fp;
-          fast_entry_.pipeline_handle = current_guest_pipeline_;
-          fast_entry_.root_signature = current_graphics_root_signature_;
-          fast_entry_.used_texture_mask = mask;
-          fast_entry_.ppr = ppr;
+          // The base draw called RequestTextures, so the SRV heap now holds
+          // this draw's textures.
+          memcpy(srv_heap_tex_id_, fp.tex_id, sizeof(srv_heap_tex_id_));
+          srv_heap_valid_ = true;
         }
       }
     }
@@ -737,8 +807,10 @@ void CustomCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontb
   ++swap_count_;
   D3D12CommandProcessor::IssueSwap(frontbuffer_ptr, frontbuffer_width, frontbuffer_height);
   // The swap closes the frame/submission, so the previously bound state no
-  // longer applies to the next frame.
+  // longer applies to the next frame. Invalidate the table and SRV heap state.
   fast_path_valid_ = false;
+  srv_heap_valid_ = false;
+  mfp_rebinds_this_frame_ = 0;
   if (time) {
     QueryPerformanceCounter(&t1);
     m6_swap_ns += static_cast<uint64_t>(t1.QuadPart - t0.QuadPart);

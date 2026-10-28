@@ -276,15 +276,38 @@ void UpdateTitle() {
   if (!main_window) {
     return;
   }
-  char reg_s[16], swap_s[16], up_s[16], draw_s[16];
+  // Track swap rate for FPS display. The report loop runs at 2 Hz;
+  // accumulate over 2 s (4 ticks) for a stable reading.
+  static uint64_t prev_swaps = 0;
+  static auto prev_time = std::chrono::steady_clock::now();
+  static double fps_ema = 0.0;
+  const uint64_t cur_swaps = CountOf(3);
+  const auto now = std::chrono::steady_clock::now();
+  const double elapsed_s =
+      std::chrono::duration_cast<std::chrono::duration<double>>(now - prev_time).count();
+  if (elapsed_s >= 1.0) {
+    const double inst_fps = (cur_swaps - prev_swaps) / elapsed_s;
+    fps_ema = (fps_ema == 0.0) ? inst_fps : 0.5 * fps_ema + 0.5 * inst_fps;
+    prev_swaps = cur_swaps;
+    prev_time = now;
+  }
+  // Guest FPS = XE_SWAP rate (one swap per guest frame).
+  // Real FPS = host present rate (frames actually displayed).
+  // Currently 1:1 (no interpolation); will diverge when frame interpolation
+  // is added (e.g., 30fps guest -> 60fps real with interpolated frames).
+  char reg_s[16], swap_s[16], up_s[16], draw_s[16], gfps_s[8], rfps_s[8];
   progress::FormatHumanCount(CountOf(2), reg_s, sizeof(reg_s));
   progress::FormatHumanCount(CountOf(3), swap_s, sizeof(swap_s));
   progress::FormatHumanCount(CountOf(4), up_s, sizeof(up_s));
   progress::FormatHumanCount(CountOf(10), draw_s, sizeof(draw_s));
+  std::snprintf(gfps_s, sizeof(gfps_s), "%d", int(fps_ema + 0.5));
+  // Real FPS: currently the same as guest FPS (1:1 present mapping).
+  // Will use a separate counter when interpolation is implemented.
+  std::snprintf(rfps_s, sizeof(rfps_s), "%d", int(fps_ema + 0.5));
   char title[kTitleMax];
   std::snprintf(title, sizeof(title),
-                "Custom D3D12 (M3) %d%% | reg %s | swaps %s | upload %s | draws %s",
-                int(progress::PercentComplete()), reg_s, swap_s, up_s, draw_s);
+                "Custom D3D12 (M3) %d%% | reg %s | swaps %s | upload %s | draws %s | guest %s fps | real %s fps",
+                int(progress::PercentComplete()), reg_s, swap_s, up_s, draw_s, gfps_s, rfps_s);
   std::wstring wide(title, title + strnlen(title, sizeof(title)));
   if (!SetWindowTextW(main_window, wide.c_str())) {
     g_main_window = nullptr;  // force re-resolve next tick

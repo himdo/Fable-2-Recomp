@@ -157,18 +157,22 @@ class CustomCommandProcessor : public rex::graphics::d3d12::D3D12CommandProcesso
     }
   };
 
-  // M6 (CPU fast path) draw fast-path state. Single-entry: the fast path fires
-  // only when the current draw's fingerprint (shaders + 26 state registers +
-  // 192 texture-fetch dwords) EXACTLY matches the previous draw's fingerprint.
-  // This is transitivity-correct: the D3D pipeline + shared SRV heap +
-  // viewport + fixed-function + system-constants are all set by the last base
-  // draw (the "establishing draw"), and a matching fingerprint guarantees the
-  // current draw has identical pipeline, textures, and dynamic state. A
-  // multi-entry table was tried but is incorrect: the shared SRV heap is a
-  // single region set by the *last* base draw, so a stale table entry can match
-  // a draw whose textures no longer match the SRV heap (wrong textures).
+  // M6 (CPU fast path) draw fast-path state. Multi-entry pipeline cache: a
+  // 256-entry direct-mapped table keyed by fingerprint hash. On a hit the D3D
+  // pipeline + root signature + textures + fixed-function + system-constants
+  // are rebound from the cached entry (skipping ConfigurePipeline, shader
+  // translation, render-target update, and the full base IssueDraw). The shared
+  // SRV heap texture state is tracked via srv_heap_tex_id_ so RequestTextures
+  // is called only when the entry's texture identity differs from what the SRV
+  // heap currently holds (correct for pipeline changes, no stale textures).
   bool m6_fast_draw_ = false;
   bool fast_path_valid_ = false;
+  // Diagnostic: count of fast-path hits that had to re-resolve the textures
+  // (tex_changed) because the bound texture identity drifted from what the
+  // SRV heap currently holds. A high count means the fast path is re-resolving
+  // often (the scrolling texture case); a low count means most hits skip the
+  // re-resolve (the stable-texture case).
+  uint64_t m6_fast_tex_changed_ = 0;
   struct FastDrawEntry {
     DrawFingerprint fp{};
     bool valid = false;
@@ -177,19 +181,38 @@ class CustomCommandProcessor : public rex::graphics::d3d12::D3D12CommandProcesso
     uint32_t used_texture_mask = 0;
     rex::graphics::PrimitiveProcessor::ProcessingResult ppr{};
   };
-  FastDrawEntry fast_entry_{};
+  // 256-entry direct-mapped table. Index = fingerprint hash % 256.
+  static constexpr int kFastDrawTableSize = 256;
+  FastDrawEntry fast_draw_table_[kFastDrawTableSize]{};
+  // The texture identity (tex_id[64]) currently in the shared SRV heap, as set
+  // by the last RequestTextures call. Used to determine if a table hit needs to
+  // re-resolve textures (entry's tex_id differs from what the SRV heap holds).
+  uint32_t srv_heap_tex_id_[64]{};
+  bool srv_heap_valid_ = false;
   // Rebind the D3D state (pipeline, root signature, textures, fixed function,
   // system constants) to a cached entry. A no-op when the entry is already the
-  // current pipeline (the cheap common case). Returns false if the rebind cannot
-  // proceed (fall back to the full base draw).
-  bool MfpRebind(const FastDrawEntry& e);
+  // current pipeline + root signature and tex_changed is false (the cheap
+  // common case). When tex_changed is true, RequestTextures is called to
+  // re-populate the shared SRV heap with the entry's textures. Returns false
+  // if the rebind cannot proceed (fall back to the full base draw).
+  bool MfpRebind(const FastDrawEntry& e, bool tex_changed);
   // The fast re-issue: refresh cbuffers, ensure vertex buffers resident, set
-  // topology, issue the draw. Assumes MfpRebind bound the entry's D3D state.
+  // topology, issue the draw. Assumes MfpRebind bound the entry's D3D state
+  // (pipeline, root signature, textures, fixed function, system constants).
   bool MfpFastReissue(rex::graphics::xenos::PrimitiveType prim_type, uint32_t index_count,
                       rex::graphics::CommandProcessor::IndexBufferInfo* index_buffer_info,
                       const FastDrawEntry& e);
   uint64_t m6_draw_fast_hits_ = 0;
   uint64_t m6_draw_fast_misses_ = 0;
+  uint64_t m6_multi_hits_ = 0;  // table hits that required a pipeline rebind
+  // Per-frame rebind budget: limits the number of MfpRebind calls that change
+  // the pipeline state per frame. During scene transitions (menu→gameplay),
+  // a burst of pipeline changes can flood the GPU with resource barrier
+  // transitions (via RequestTextures), causing a TDR. When the budget is
+  // exhausted, table hits fall through to the full base draw (safe, but
+  // slower). Reset in IssueSwap.
+  static constexpr int kMaxRebindsPerFrame = 200;
+  int mfp_rebinds_this_frame_ = 0;
   // Diagnostic fingerprint-match breakdown (accumulated per [m6] 5s window):
   // how many draws match the cached fingerprint (fp_match), of those how many
   // are indexed (re-issuable by the fast path) vs non-indexed (currently
@@ -203,6 +226,7 @@ class CustomCommandProcessor : public rex::graphics::d3d12::D3D12CommandProcesso
   // it. Isolates the per-fast-draw cost to find the dominant component to cut.
   uint64_t m6_fast_total_ns = 0, m6_fast_total_n = 0;
   uint64_t m6_fast_bind_ns = 0, m6_fast_bind_n = 0;
+  uint64_t m6_fast_tex_ns = 0, m6_fast_tex_n = 0;
   // Diagnostic: count of fast-path hits where the vertex-index remapping
   // registers (VGT_INDX_OFFSET / MIN / MAX) changed since the cached state was
   // established. Nonzero means the cached system constants are stale for those
