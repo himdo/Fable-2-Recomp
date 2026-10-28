@@ -211,7 +211,7 @@ class CustomCommandProcessor : public rex::graphics::d3d12::D3D12CommandProcesso
   // transitions (via RequestTextures), causing a TDR. When the budget is
   // exhausted, table hits fall through to the full base draw (safe, but
   // slower). Reset in IssueSwap.
-  static constexpr int kMaxRebindsPerFrame = 200;
+  static constexpr int kMaxRebindsPerFrame = 10;
   int mfp_rebinds_this_frame_ = 0;
   // Diagnostic fingerprint-match breakdown (accumulated per [m6] 5s window):
   // how many draws match the cached fingerprint (fp_match), of those how many

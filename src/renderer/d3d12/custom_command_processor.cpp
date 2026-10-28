@@ -342,15 +342,23 @@ bool CustomCommandProcessor::MfpRebind(const FastDrawEntry& e, bool tex_changed)
   uint32_t normalized_color_mask =
       ps ? rg::draw_util::GetNormalizedColorMask(regs, ps->writes_color_targets()) : 0;
 
-  // Match the base IssueDraw ordering: set the root signature (forcing a root
-  // parameter rebind), re-resolve this pipeline's textures (re-populating the
-  // shared SRV heap) only when the texture identity changed, then bind the
-  // pipeline state object, and finally re-apply the dynamic viewport / scissor /
-  // fixed-function / system-constant state for this pipeline.
-  if (e.root_signature != current_graphics_root_signature_) {
-    deferred_command_list_.D3DSetGraphicsRootSignature(e.root_signature);
-    current_graphics_root_signature_ = e.root_signature;
-    current_graphics_root_up_to_date_ = 0;
+  // Match the base IssueDraw ordering: re-resolve this pipeline's textures
+  // (re-populating the shared SRV heap) only when the texture identity changed,
+  // then bind the pipeline state object, and finally re-apply the dynamic
+  // viewport / scissor / fixed-function / system-constant state for this
+  // pipeline. The root signature is handled by UpdateBindings (called from
+  // MfpFastReissue), which correctly calls GetRootBindfulExtraParameterIndices
+  // when the root signature changes. Setting current_graphics_root_signature_
+  // here would prevent that update and produce wrong texture table bindings.
+  // Match the base IssueDraw ordering: first update the render target (sets
+  // OMSetRenderTargets and transitions render target resources), then
+  // re-resolve textures (transitions texture resources to shader-resource
+  // state), then bind the pipeline state object. The root signature is handled
+  // by UpdateBindings (called from MfpFastReissue).
+  if (!render_target_cache_->Update(/*is_rasterization_done=*/false,
+                                    normalized_depth_control, normalized_color_mask,
+                                    *vs)) {
+    return false;  // render target invalid, skip draw
   }
   if (tex_changed) {
     texture_cache_->RequestTextures(e.used_texture_mask);
@@ -676,13 +684,7 @@ bool CustomCommandProcessor::IssueDraw(PrimitiveType prim_type, uint32_t index_c
         // exhausted, fall through to the full base draw (safe, slower).
         bool needs_rebind = (entry.pipeline_handle != old_pipeline) ||
                             (entry.root_signature != old_root);
-        // Only fire the fast path when the D3D pipeline is already current
-        // (no rebind needed). The rebind path (MfpRebind with pipeline change)
-        // does not correctly replicate all the D3D state the base IssueDraw
-        // sets up, producing visual artifacts. The rebind is retained as dead
-        // code for a future fix (M7).
-        if (!needs_rebind &&
-            MfpRebind(entry, tex_changed) &&
+        if (MfpRebind(entry, tex_changed) &&
             MfpFastReissue(prim_type, index_count, index_buffer_info, entry)) {
           if (tex_changed) {
             ++m6_fast_tex_changed_;
