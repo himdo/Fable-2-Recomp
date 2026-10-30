@@ -299,8 +299,6 @@ try
         HighTickRate = true,
         HigherHfTickRate = false,
         DisableMotionBlur = true,
-        RealtimeTextureMorphing = true,
-        HeroDogTextureReadback = false,
         HotFuncYieldEvery = 4,
     };
     Fable2ConfigFile.Write(advPath, advanced);

@@ -35,8 +35,6 @@ public class Fable2ConfigValues
     public bool HighTickRate { get; set; } = false;       // unstable
     public bool HigherHfTickRate { get; set; } = false;    // unstable
     public bool DisableMotionBlur { get; set; } = false;
-    public bool RealtimeTextureMorphing { get; set; } = true;
-    public bool HeroDogTextureReadback { get; set; } = false;
 
     // [perf]
     public int HotFuncYieldEvery { get; set; } = 1;  // 1 = original, 0 = never yield
@@ -124,8 +122,6 @@ public static class Fable2ConfigFile
                     else if (key == "high_tick_rate") values.HighTickRate = ParseBool(rawValue, values.HighTickRate);
                     else if (key == "higher_hf_tick_rate") values.HigherHfTickRate = ParseBool(rawValue, values.HigherHfTickRate);
                     else if (key == "disable_motion_blur") values.DisableMotionBlur = ParseBool(rawValue, values.DisableMotionBlur);
-                    else if (key == "realtime_texture_morphing") values.RealtimeTextureMorphing = ParseBool(rawValue, values.RealtimeTextureMorphing);
-                    else if (key == "hero_dog_texture_readback") values.HeroDogTextureReadback = ParseBool(rawValue, values.HeroDogTextureReadback);
                     break;
                 case "perf":
                     if (key == "hotfunc_yield_every") values.HotFuncYieldEvery = ParseInt(rawValue, values.HotFuncYieldEvery);
@@ -169,8 +165,6 @@ public static class Fable2ConfigFile
             ("patches", "high_tick_rate", values.HighTickRate ? "true" : "false"),
             ("patches", "higher_hf_tick_rate", values.HigherHfTickRate ? "true" : "false"),
             ("patches", "disable_motion_blur", values.DisableMotionBlur ? "true" : "false"),
-            ("patches", "realtime_texture_morphing", values.RealtimeTextureMorphing ? "true" : "false"),
-            ("patches", "hero_dog_texture_readback", values.HeroDogTextureReadback ? "true" : "false"),
             ("perf", "hotfunc_yield_every", values.HotFuncYieldEvery.ToString(CultureInfo.InvariantCulture)),
         };
 
