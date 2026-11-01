@@ -6,6 +6,19 @@ Recompilation of Fable 2 (Xbox 360, title ID 4D5307F1) using the [ReXGlue SDK](h
 # Important Note:
 **This project does not condone Piracy, any mentions or links will result in removal and an instant ban from this repo!**
 
+# Playing the game
+
+You need your own Fable 2 GOTY disc image (`.iso`) and about 7 GB of free space.
+
+1. Download the `windows` zip from the [latest release](https://github.com/himdo/Fable-2-Recomp/releases/latest) and unzip it anywhere.
+2. Open `Fable2Launcher.exe`.
+3. Click **Extract from ISO** and pick your `.iso`. The game files go into the launcher's folder.
+4. Click **Play Fable II**.
+
+**Updating:** unzip the new release into its own folder and copy your `saves` folder across. Then click **Choose game folder…** and pick the old folder, or extract your `.iso` again.
+
+**Need help?** Ask on the [Discord](https://discord.gg/8TQUZpPNeR). To compile the game yourself, see [Building](#building).
+
 # Current and planned features
 
 Original GOTY USA/Europe and German GOTY dumps are supported by the default
