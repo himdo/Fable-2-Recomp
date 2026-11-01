@@ -67,7 +67,7 @@ Recompiled and use new project-owned icons.
 # Notes for running the game
 - **How to extract (built-in, recommended):** the launcher has an **Extract from ISO** button. Click **Extract from ISO** and pick your disc image (`.iso`). It first checks the iso against the supported-version list, and only once that matches does it extract disc (`default.xex` and `data/`) into the launcher's own folder. No separate tool is required.
 - **How to extract (external GUI tool):** alternatively, rip the disc to an ISO and open it with **[XboxImageExtractor](https://github.com/dromex1/XboxImageExtractor)** — a GUI tool for Xbox 360 game images. It lists the image's filesystem; select `default.xex` and `data` and extract them into the project root (`data` extract as folders).
-- **You must supply the game content yourself** (it is not in the repo): rip the Fable 2 GOTY (USA/EU) disc (the one with SHA-256 above) and put `default.xex` and `data/` in the project root. The build does not copy this into the build directories   
+- **You must supply the game content yourself** (it is not in the repo): rip the Fable 2 GOTY (USA/EU) disc (see the hashes in [German GOTY support](docs/GERMAN_GOTY_SUPPORT.md)) and put `default.xex` and `data/` in the project root. The build does not copy this into the build directories   
 - **Saves live in `<build dir>\saves\`** — back that folder up to keep your progress, and copy it between build trees (Debug/Release) or machines to carry a save over.
 - The `--game_data_root <path>` override still points the content root at a different tree (e.g. to run from a shared content copy without staging); saves/cache still land next to the exe.
 - Although this was made for the US / Europe GOTY version I have been able to run the following regions: Germany, France, Italy, Russia, and Spain. Your milage may very if you use those regions.
@@ -78,7 +78,7 @@ Recompiled and use new project-owned icons.
 To run the game you must:
 1) Extract a downloaded copy release of the game 
 2) Extract the "data" and "default.xex" from your copy of the game — easiest with the launcher's **Extract from ISO** button, or an external GUI tool (see "How to extract")
-3) Run the fable.exe program and if no errors pop up then the game should launch and you are good to go
+3) Run the fable_2.exe program and if no errors pop up then the game should launch and you are good to go
   - If an error pops up about the hash being wrong try to extract a different version of the game and then try again.
 
 
@@ -441,12 +441,10 @@ and Vulkan GPU plugins (each implements `CaptureGuestOutput`). Each capture
 blocks the connection for a few hundred milliseconds. Implementation:
 `src/diagnostics/fable2_frame_capture.h`.
 
-Config (`[remote]` in `fable2_config.toml`): `enabled` (default `true`),
-`host` (`127.0.0.1`; `0.0.0.0` exposes it on all interfaces), `port`
-(`8791`; if busy, `+1..+9` are tried, the bound port is logged at startup),
-`token` (empty = no auth; when set, each connection's first line must be
-`{"cmd":"auth","token":"..."}`). Every received command is logged (audit
-trail) to `logs/`.
+The server has no config options: it is always on in Debug builds, listens on
+`127.0.0.1:8791` (if busy, `+1..+9` are tried and the bound port is logged at
+startup) and needs no token. Every received command is logged (audit trail) to
+`logs/`.
 
 ## Building
 
@@ -566,11 +564,11 @@ this repo.
 Two plugins are staged next to the exe, selected by the `gpu_plugin` argument:
 
 ```
-out\build\win-amd64-release\fable_2.exe --gpu_plugin=xenos           # D3D12 (default; prebuilt plugin)
+out\build\win-amd64-release\fable_2.exe --gpu_plugin=xenos           # D3D12 (default)
 out\build\win-amd64-release\fable_2.exe --gpu_plugin=xenos-vulkan    # Vulkan (source-built plugin)
 ```
 
-- `rexgpu-xenos.dll` is the prebuilt D3D12 plugin (staged by `GPU_PLUGINS xenos`).
+- `rexgpu-xenos.dll` is the D3D12 plugin, built from the patched SDK source.
 - `rexgpu-xenos-vulkan.dll` is the source-built plugin (staged by CMake from the SDK build tree,
   Release-only). `Fable2App::OnPreSetup` loads it with `LoadGpuPlugin("xenos-vulkan", "vulkan")`,
   forcing the Vulkan backend (the plugin is compiled with both; the default `"any"` would pick D3D12).
