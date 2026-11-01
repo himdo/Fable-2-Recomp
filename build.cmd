@@ -163,4 +163,9 @@ set "REXSDK=%~dp0out\tooling\%RUNTIMEDIR%\win-amd64"
 rem (inline -D with quotes at the call site: cmd cannot carry a quoted value
 rem in a variable for paths with spaces)
 cmake --preset %CONFIG% -DCMAKE_PREFIX_PATH="%REXSDK%" -Drexglue_DIR="%REXSDK%\lib\cmake\rexglue" -DREXGLUE_SDK_ROOT="%REXSDK%" -DREXGLUE_SDK_SOURCE="%SDKSRC%" -DFABLE2_CODEGEN_TOOL="%CODEGENSDK%\bin\rexglue.exe" || exit /b 1
+rem CMake can only list the generated sources once codegen has written them.
+if not exist "generated\default\sources.cmake" (
+    cmake --build out\build\%CONFIG% --target fable_2_codegen || exit /b 1
+    cmake out\build\%CONFIG% || exit /b 1
+)
 cmake --build out\build\%CONFIG% --target %TARGET%
