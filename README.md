@@ -15,7 +15,7 @@ You need your own Fable 2 GOTY disc image (`.iso`) and about 7 GB of free space.
 3. Click **Extract from ISO** and pick your `.iso`. The game files go into the launcher's folder.
 4. Click **Play Fable II**.
 
-**Updating:** unzip the new release into its own folder and copy your `saves` folder across. Then click **Choose game folder…** and pick the old folder, or extract your `.iso` again.
+**Updating:** unzip the new release into its own folder, copy your `saves` folder across and extract your `.iso` again.
 
 **Need help?** Ask on the [Discord](https://discord.gg/8TQUZpPNeR). To compile the game yourself, see [Building](#building).
 
