@@ -14,6 +14,7 @@ rem   build.cmd launcher         build the launcher, self-contained by default
 rem                              (bundles the .NET 8 Desktop Runtime, so users don't need to install .NET)
 rem   build.cmd launcher-dev     build the small framework-dependent launcher
 rem                              (needs the .NET 8 Desktop Runtime installed)
+rem   build.cmd package          build the Release game and launcher, then the zips in out\dist
 rem   build.cmd <other target>   build any other CMake target
 rem   build.cmd -release [t]     build as Release (-O3) instead of Debug
 rem   build.cmd -r [t]           (same, short form)
@@ -34,6 +35,12 @@ if /i "%~1"=="launcher" (
 )
 if /i "%~1"=="launcher-dev" (
     call "%~dp0launcher\build-launcher.cmd" dev || exit /b 1
+    exit /b 0
+)
+if /i "%~1"=="package" (
+    call "%~f0" -release fable_2 || exit /b 1
+    call "%~dp0launcher\build-launcher.cmd" || exit /b 1
+    python "%~dp0tools\package_release.py" || exit /b 1
     exit /b 0
 )
 rem LLVM: prefer clang++ already on PATH, else the default install location
