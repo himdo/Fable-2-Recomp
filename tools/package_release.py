@@ -6,6 +6,7 @@ Only the files listed here are packaged, so game content and local saves stay ou
 """
 import argparse
 import hashlib
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -40,7 +41,16 @@ def release_files(root, build, launcher):
 def write_zip(path, folder, files):
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, source in files.items():
-            archive.write(source, f"{folder}/{name}")
+            if isinstance(source, str):
+                archive.writestr(f"{folder}/{name}", source)
+            else:
+                archive.write(source, f"{folder}/{name}")
+
+
+def stamped_build_info(source, version):
+    info = json.loads(source.read_text(encoding="utf8"))
+    info["version"] = version
+    return json.dumps(info, indent=2) + "\n"
 
 
 def sha256(path):
@@ -53,6 +63,7 @@ def sha256(path):
 
 def package(root, build, launcher, output, version):
     files = release_files(root, build, launcher)
+    files["fable2_build.json"] = stamped_build_info(files["fable2_build.json"], version)
     symbols = {name: require(build / name) for name in SYMBOL_FILES}
     shutil.rmtree(output, ignore_errors=True)
     output.mkdir(parents=True)

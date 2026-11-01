@@ -55,6 +55,10 @@ discs with the shared [X360Extract](tools/x360extract/) library, so its output
 matches the `x360extract` tool byte for byte — making the launcher the simplest
 way to get the game files in place, with no separate extractor tool.
 
+Packaged releases check GitHub for a newer release when the launcher opens and
+show a button that opens its page. Local builds don't check, and a failed check
+is ignored.
+
 The game-folder selection defaults to the launcher's own folder on first launch
 and then remembers the user's saved location. Game files can live separately;
 the launcher uses `--game_data_root`. Both applications are named Fable 2
