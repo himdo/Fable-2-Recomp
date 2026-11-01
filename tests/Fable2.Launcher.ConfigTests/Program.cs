@@ -237,6 +237,16 @@ try
             + (cancelEx?.GetType().Name ?? "no exception"));
     }
     Console.WriteLine("Synthetic GDFX two-phase extraction (hash-gated) passed.");
+
+    string extractRoot = Path.Combine(testDirectory, "extract");
+    Require(X360Extract.X360Disc.ResolveInside(extractRoot, "a/b.bin") == Path.Combine(extractRoot, "a", "b.bin"),
+        "A normal disc path must resolve inside the output folder");
+    foreach (string unsafePath in new[] { "../evil.bin", "a/../../evil.bin", "..\\evil.bin", Path.Combine(testDirectory, "evil.bin"), "../extract-sibling/evil.bin" })
+    {
+        RequireThrows(() => X360Extract.X360Disc.ResolveInside(extractRoot, unsafePath),
+            "Disc path escaped the output folder: " + unsafePath);
+    }
+    Console.WriteLine("Disc paths cannot escape the output folder passed.");
     // A synthetic extra locale proves that no classifier branch needs adding.
     GameVersion extra = supported[0] with { Id = "synthetic-locale", Hash = new string('a', 64),
         Name = "Synthetic locale", Language = 6 };

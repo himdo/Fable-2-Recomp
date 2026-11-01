@@ -18,8 +18,7 @@ set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
 
 FetchContent_Declare(zlibng
     GIT_REPOSITORY https://github.com/zlib-ng/zlib-ng.git
-    GIT_TAG 2.2.4
-    GIT_SHALLOW TRUE)
+    GIT_TAG 860e4cff7917d93f54f5d7f0bc1d0e8b1a3cb988) # 2.2.4
 FetchContent_MakeAvailable(zlibng)
 
 if(DEFINED _ni_saved_shared)

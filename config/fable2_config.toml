@@ -56,21 +56,17 @@ mouse_look_scale = 256
 # EXPERIMENTAL (default false; may feel wrong in some scenes).
 direct_mouse_look = false
 
-# Legacy fallback for direct_mouse_look. true = old 2-axis external orbit
-# (independent yaw); false (default) = inject into the native camera angle
-# setter so the orbit matches the game's single-DOF right-stick orbit (1:1).
+# Fallback for direct_mouse_look. true (default) = use the OLD re-implemented
+# 2-axis external orbit (eye rotated around a low-passed hero pivot + look-at
+# quaternion, independent yaw); a working hand-rolled orbit. false = offset the
+# game's target orbit angle (cam+68) and let the native easing drive the camera
+# (the intended 1:1 path, still being tuned -- see plans/plan-direct-mouse-1to1.md).
 mouse_look_legacy_orbit = true
 
 # Camera-look sensitivity: radians of camera rotation per host mouse pixel
 # (signed; make it negative to flip the axis direction).
 mouse_look_yaw_sens = -0.0022
 mouse_look_pitch_sens = -0.0022
-# World axis each look direction orbits around (0=X, 1=Y, 2=Z). A correct orbit
-# turns around world up (Z) and pitches around the resulting right axis. Negate
-# the matching *_sens to flip a look direction.
-mouse_look_yaw_axis = 2
-mouse_look_pitch_axis = 0
-
 # Native look-orbit angle limits, in the game's own orbit-angle scale (the
 # target angle at camera+68 that the right-stick look integrates and clamps).
 # A full-range stick test shows the native orbit clamps this angle to
@@ -80,6 +76,29 @@ mouse_look_pitch_axis = 0
 # stick share one orbit and one set of bounds (no compounding past the limits).
 mouse_look_pitch_floor = 1.458
 mouse_look_pitch_ceil = 4.067
+# Camera local axis each look direction rotates around (0=X, 1=Y, 2=Z). The
+# camera looks along its local Y, so a correct orbit turns around the local up
+# (Z) and pitches around the local right (X). Negate the matching *_sens to
+# flip a look direction.
+mouse_look_yaw_axis = 2
+mouse_look_pitch_axis = 0
+# 1:1 native right-stick injection: RightStickLookProcess_832BB018 adds the
+# per-frame mouse Y delta (scaled by this factor, in stick u16 units per host
+# mouse pixel) to the right-stick Y u16 so the native orbit pipeline runs with
+# combined stick + mouse input (identical bounds to the stick). The stick is an
+# int16 centered at 0 with full deflection ~32768, so 512 px = a full
+# deflection at the default 64. Negative flips the direction.
+mouse_look_stick_scale = 64
+# 1:1 native right-stick injection. true = the RightStickLookProcess_832BB018
+# hotfunc override adds the mouse Y delta to the right-stick Y u16 so the game's
+# OWN orbit/easing/clamp runs with combined stick + mouse input (identical
+# bounds to the stick). The legacy direct-mouse hook then only resets the delta
+# (no orbit). false = the legacy direct-mouse hook's orbit runs (external or
+# native target offset, per mouse_look_legacy_orbit).
+mouse_look_native_inject = false
+# Log the rest (pre-injection) and injected right-stick-Y u16 (capped) to
+# calibrate mouse_look_stick_scale. Off by default.
+mouse_look_stick_diag = false
 
 # Active-camera (CECCamera) field offsets (bytes from the camera object). The
 # look-orbit is reproduced by rotating BOTH the orientation quaternions AND the
@@ -156,7 +175,6 @@ higher_hf_tick_rate = false
 # the game asks for blur. false = blur as in the original game.
 # Default: false
 disable_motion_blur = false
-
 
 # Realtime Texture Morphing (mid-asm hook fable2_hook_realtime_texture_morphing):
 # the hero's and dog's morphed skin textures are rendered straight into their

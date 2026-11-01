@@ -88,5 +88,5 @@ if errorlevel 1 (
 )
 popd
 
-echo OK: ReXGlue SDK source -> %SRC% (commit %PIN_COMMIT% + local patch)
+echo OK: ReXGlue SDK source at %SRC% (commit %PIN_COMMIT% + local patch)
 endlocal

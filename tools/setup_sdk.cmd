@@ -16,6 +16,7 @@ set "REPO=%~dp0.."
 set "VER=0.10.0"
 set "DEST=%REPO%\out\tooling\rexglue-sdk-0.10.0"
 set "ZIPNAME=rexglue-sdk-%VER%-win-amd64.zip"
+set "SHA256=ad4485da853fbe932e9f5dbb643f9b5fe85dc73775ebbad4df6879fe6df0c11b"
 set "URL=https://github.com/rexglue/rexglue-sdk/releases/download/v%VER%/%ZIPNAME%"
 
 if exist "%DEST%\win-amd64\lib\cmake\rexglue\rexglueConfig.cmake" (
@@ -39,6 +40,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
+certutil -hashfile "%TEMP%\%ZIPNAME%" SHA256 | findstr /i /x "%SHA256%" >nul
+if errorlevel 1 (
+    echo Error: SDK download failed its SHA-256 check. 1>&2
+    del /q "%TEMP%\%ZIPNAME%" 2>nul
+    exit /b 1
+)
+
 echo Extracting to %DEST%
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '%TEMP%\%ZIPNAME%' -DestinationPath '%DEST%' -Force"
 if errorlevel 1 (
@@ -51,5 +59,5 @@ if not exist "%DEST%\win-amd64\lib\cmake\rexglue\rexglueConfig.cmake" (
     echo Error: SDK incomplete after extract; expected %DEST%\win-amd64. 1>&2
     exit /b 1
 )
-echo OK: ReXGlue SDK v%VER% -> %DEST%\win-amd64
+echo OK: ReXGlue SDK v%VER% at %DEST%\win-amd64
 endlocal
