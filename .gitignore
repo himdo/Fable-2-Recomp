@@ -35,32 +35,15 @@ fps_probe.log
 # --- Manifest backup (pre-rename safety copy) --------------------------------
 fable_2_manifest.toml.bak
 
-# --- Helper scripts & images (kept out of the repo) ---------------------------
-*.ps1
-*.py
-*.sh
-*.png
+# --- Scratch helpers in the repo root -----------------------------------------
+/*.ps1
+/*.py
+/*.sh
+/*.png
 build_*.log
 rebuild.log
 rebuild2.log
 __pycache__/
-
-# --- Build-critical scripts (tracked DESPITE the rules above) -----------------
-# The reproducible/AV-clean build toolset (tools/repro) is invoked by CMake's
-# POST_BUILD and imports across its modules; the recomp-patch and remote-control
-# helpers are invoked by CMake at build time. A fresh clone must have them or the
-# build fails. Everything else matching the rules above stays out of the repo.
-!tools/repro/*.py
-!tools/apply_recomp_patches.py
-!tools/fable2_control.py
-!tools/prepare_runtime_sdk.py
-!tools/generate_game_versions.py
-!tests/*.py
-!tools/prepare_renderer_mspack.py
-!tools/stage_renderer_sdk.py
-!tools/create_app_icon.ps1
-!assets/app-icon.png
-!docs/screenshots/launcher.png
 
 # --- Fetched/external toolchain deps (created by tools/setup_sdk*.cmd). -------
 # The tracked files in thirdparty/ (rexglue-sdk-local.patch,
