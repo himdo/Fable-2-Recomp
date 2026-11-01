@@ -501,7 +501,6 @@ The build also accepts explicit overrides if you keep the SDK elsewhere:
 - **Release builds:** `build.cmd` defaults to the `win-amd64-debug` preset (`-O0`, `out\build\win-amd64-debug`). Pass the `-release` flag (short form: `-r`) to select the `win-amd64-release` preset (`-O3`, `out\build\win-amd64-release`):
 
   ```
-  build.cmd -release fable_2_codegen
   build.cmd -release fable_2
   ```
 
