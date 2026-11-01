@@ -16,6 +16,7 @@ set "REPO=%~dp0.."
 set "VER=0.10.0"
 set "DEST=%REPO%\out\tooling\rexglue-sdk-0.10.0"
 set "ZIPNAME=rexglue-sdk-%VER%-win-amd64.zip"
+set "SHA256=ad4485da853fbe932e9f5dbb643f9b5fe85dc73775ebbad4df6879fe6df0c11b"
 set "URL=https://github.com/rexglue/rexglue-sdk/releases/download/v%VER%/%ZIPNAME%"
 
 if exist "%DEST%\win-amd64\lib\cmake\rexglue\rexglueConfig.cmake" (
@@ -36,6 +37,13 @@ echo Downloading %URL%
 curl -L --fail -sS -o "%TEMP%\%ZIPNAME%" "%URL%"
 if errorlevel 1 (
     echo Error: SDK download failed. 1>&2
+    exit /b 1
+)
+
+certutil -hashfile "%TEMP%\%ZIPNAME%" SHA256 | findstr /i /x "%SHA256%" >nul
+if errorlevel 1 (
+    echo Error: SDK download failed its SHA-256 check. 1>&2
+    del /q "%TEMP%\%ZIPNAME%" 2>nul
     exit /b 1
 )
 
