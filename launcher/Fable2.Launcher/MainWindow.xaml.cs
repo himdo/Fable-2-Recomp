@@ -327,6 +327,36 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ImportSavesClicked(object sender, RoutedEventArgs e)
+    {
+        if (_extracting || _executableDirectory is null) return;
+        if (Process.GetProcessesByName("fable_2").Length > 0)
+        {
+            MessageBox.Show(this, "Close Fable II before importing saves.",
+                "Import saves", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        var dialog = new OpenFolderDialog
+        {
+            Title = "Choose the folder of your previous version",
+            Multiselect = false
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        try
+        {
+            string source = SaveImporter.FindSavesFolder(dialog.FolderName);
+            string? backup = SaveImporter.Import(source, _executableDirectory);
+            string message = "Your saves were imported.";
+            if (backup is not null) message += $"\n\nThe saves that were here are now in {Path.GetFileName(backup)}.";
+            MessageBox.Show(this, message, "Import saves", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "Could not import saves",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private bool _extracting;
     private volatile bool _stopRequested;
     // Non-null while the "unrecognized XEX" prompt is on screen; the worker

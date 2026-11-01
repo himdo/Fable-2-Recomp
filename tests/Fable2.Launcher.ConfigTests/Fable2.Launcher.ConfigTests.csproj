@@ -16,6 +16,7 @@
     <Compile Include="..\..\launcher\Fable2.Launcher\GameCompatibility.cs" Link="GameCompatibility.cs" />
     <Compile Include="..\..\launcher\Fable2.Launcher\GameLaunchPlan.cs" Link="GameLaunchPlan.cs" />
     <Compile Include="..\..\launcher\Fable2.Launcher\DiscExtraction.cs" Link="DiscExtraction.cs" />
+    <Compile Include="..\..\launcher\Fable2.Launcher\SaveImporter.cs" Link="SaveImporter.cs" />
     <Compile Include="..\..\launcher\Fable2.Launcher\Constants\GraphicsOptions.cs" Link="GraphicsOptions.cs" />
     <Compile Include="..\..\constants\GameVersions.cs" Link="GameVersions.cs" />
     <None Include="..\..\launcher\Fable2.Launcher\App.xaml" Link="TestData\App.xaml" CopyToOutputDirectory="PreserveNewest" />

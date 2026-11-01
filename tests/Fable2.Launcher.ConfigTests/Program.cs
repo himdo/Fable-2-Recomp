@@ -295,6 +295,30 @@ try
         GameCompatibilityInspector.Classify(malformedProbe.Hash, p => HasFile(malformedProbe, p), p => HasDirectory(malformedProbe, p))), "malformed descriptor accepted");
     Console.WriteLine("Catalogue-driven allow/deny, marker, extra-locale and native-profile tests passed.");
 
+    // SaveImporter: copies old saves in and keeps whatever was already there.
+    string importRoot = Path.Combine(testDirectory, "import");
+    string oldVersion = Path.Combine(importRoot, "old");
+    string newVersion = Path.Combine(importRoot, "new");
+    Directory.CreateDirectory(Path.Combine(oldVersion, "saves", "slot"));
+    File.WriteAllText(Path.Combine(oldVersion, "saves", "slot", "game.sav"), "old save");
+    Directory.CreateDirectory(newVersion);
+    string foundSaves = SaveImporter.FindSavesFolder(oldVersion);
+    Require(SaveImporter.FindSavesFolder(foundSaves) == foundSaves, "the saves folder itself was not accepted");
+    RequireThrows(() => SaveImporter.FindSavesFolder(newVersion), "a folder without saves was accepted");
+    Require(SaveImporter.Import(foundSaves, newVersion) is null, "a backup was made with nothing to keep");
+    string importedSave = Path.Combine(newVersion, "saves", "slot", "game.sav");
+    Require(File.ReadAllText(importedSave) == "old save", "save was not imported");
+    Require(File.Exists(Path.Combine(oldVersion, "saves", "slot", "game.sav")), "source save was removed");
+    File.WriteAllText(importedSave, "new save");
+    string? keptSaves = SaveImporter.Import(foundSaves, newVersion);
+    Require(keptSaves is not null && File.ReadAllText(Path.Combine(keptSaves, "slot", "game.sav")) == "new save",
+        "existing saves were not kept");
+    Require(File.ReadAllText(importedSave) == "old save", "second import did not apply");
+    RequireThrows(() => SaveImporter.Import(Path.Combine(newVersion, "saves"), newVersion), "imported saves onto themselves");
+    Require(File.ReadAllText(importedSave) == "old save", "self-import changed the saves");
+    Require(!Directory.Exists(Path.Combine(newVersion, "saves-importing")), "staging folder was left behind");
+    Console.WriteLine("Save import tests passed.");
+
     // Fable2ConfigFile (the Advanced Options page config, fable2_config.toml).
     string advPath = Path.Combine(testDirectory, "fable2_config.toml");
     var advanced = new Fable2ConfigValues
