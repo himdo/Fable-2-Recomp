@@ -61,6 +61,10 @@ the launcher uses `--game_data_root`. Both applications are named Fable 2
 Recompiled and use new project-owned icons.
 
 
+# There is now a discord!
+I've made a custom discord for this project, as well as forks and other recomps and decomps of the fable series
+
+https://discord.gg/8TQUZpPNeR
 
 
 
