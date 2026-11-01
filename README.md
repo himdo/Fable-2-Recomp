@@ -465,7 +465,8 @@ hardcoded paths**. Prerequisites (all standard tools):
   [official release](https://github.com/rexglue/rexglue-sdk/releases/tag/v0.10.0)
   into `out\tooling\rexglue-sdk-0.10.0\`. A compatible official SDK on PATH
   is used instead if present. Downloads never replace the source submodule.
-- **Python and Git** for code generation and source-SDK preparation; **Visual
+- **Python and Git** for code generation and source-SDK preparation, plus the
+  `pefile` package (`pip install pefile`) for Debug builds; **Visual
   Studio Build Tools / Windows SDK** (x64 developer shell) for the native build.
 
 ```

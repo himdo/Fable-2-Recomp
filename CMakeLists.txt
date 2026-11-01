@@ -508,6 +508,11 @@ if(WIN32 AND FABLE2_NO_PE_CLEAN)
 elseif(WIN32)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_FOUND)
+        execute_process(COMMAND ${Python3_EXECUTABLE} -c "import pefile"
+                        RESULT_VARIABLE FABLE2_PEFILE_MISSING OUTPUT_QUIET ERROR_QUIET)
+        if(FABLE2_PEFILE_MISSING)
+            message(FATAL_ERROR "The post-build PE cleaning needs pefile: ${Python3_EXECUTABLE} -m pip install pefile")
+        endif()
         add_custom_command(TARGET fable_2 POST_BUILD
             COMMAND ${Python3_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tools/repro/clean_pe.py
