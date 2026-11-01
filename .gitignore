@@ -59,6 +59,7 @@ __pycache__/
 !tools/prepare_renderer_mspack.py
 !tools/stage_renderer_sdk.py
 !tools/create_app_icon.ps1
+!tools/package_release.py
 !assets/app-icon.png
 !docs/screenshots/launcher.png
 

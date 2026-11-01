@@ -505,6 +505,17 @@ The build also accepts explicit overrides if you keep the SDK elsewhere:
 - Codegen runs as part of the build and re-runs automatically when `fable_2_manifest.toml` or `default.xex` change (tracked via the generated DEPFILE).
 - A full clean build recompiles ~291 generated translation units (60,462 guest functions).
 
+## Packaging a release
+
+```
+build.cmd package
+```
+
+This builds the Release game and the launcher, then writes the player zip, a
+separate zip of debug symbols and `SHA256SUMS` to `out\dist`. The version comes
+from `git describe --tags`, so build from a release tag. Only the files listed
+in `tools/package_release.py` are packaged, so game files, saves and logs stay out.
+
 ## Vulkan renderer
 
 The goal is a Vulkan rendering path for the game (the SDK's Windows GPU plugin only ships a
