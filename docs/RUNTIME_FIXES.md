@@ -11,7 +11,8 @@ can upgrade without resetting it.
 It also removes the hardcoded `LIBRARY rexruntime` name from the export table:
 the linker must use its actual output name, so Debug imports `rexruntimed.dll`
 rather than accidentally loading a leftover Release `rexruntime.dll`.
-No SDK fork, binary download of a patched runtime, game files or saves are
+The SDK source comes from that fork, through the `thirdparty/rexglue-sdk`
+submodule. No binary download of a patched runtime, game files or saves are
 required from this contribution. Original GOTY game files are still required
 to generate and run the game.
 
