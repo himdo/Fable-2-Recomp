@@ -59,5 +59,5 @@ if not exist "%DEST%\win-amd64\lib\cmake\rexglue\rexglueConfig.cmake" (
     echo Error: SDK incomplete after extract; expected %DEST%\win-amd64. 1>&2
     exit /b 1
 )
-echo OK: ReXGlue SDK v%VER% -> %DEST%\win-amd64
+echo OK: ReXGlue SDK v%VER% at %DEST%\win-amd64
 endlocal
