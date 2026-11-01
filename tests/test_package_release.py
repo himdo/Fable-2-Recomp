@@ -51,7 +51,7 @@ class PackageReleaseTests(unittest.TestCase):
             config = archive.read("Fable 2 1.6.0/fable2_config.toml").decode()
         self.assertEqual(names, {f"Fable 2 1.6.0/{name}" for name in (
             "fable_2.exe", "rexruntime.dll", "rexgpu-xenos.dll", "fable2_build.json", "Fable2Launcher.exe",
-            "README.md", "fable2_config.toml", "data/dir.manifest", "data/scripts/recomp/F5.lua")})
+            "README.md", "fable2_config.toml", "data/scripts/recomp/F5.lua")})
         self.assertEqual(config, "repo config")
 
     def test_symbols_are_separate(self):

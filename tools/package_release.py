@@ -28,7 +28,7 @@ def release_files(root, build, launcher):
     files["README.md"] = require(root / "README.md")
     # From the repo: the build folder's copy may hold a developer's own settings.
     files["fable2_config.toml"] = require(root / "config/fable2_config.toml")
-    files["data/dir.manifest"] = require(build / "data/dir.manifest")
+    # dir.manifest stays out: the real one comes from the disc, and the game lists these scripts itself.
     scripts = sorted((build / "data/scripts/recomp").glob("*.lua"))
     if not scripts:
         raise SystemExit("package_release: no Lua scripts in data/scripts/recomp")
