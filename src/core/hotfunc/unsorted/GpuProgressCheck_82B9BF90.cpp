@@ -5,7 +5,10 @@
 // otherwise identical to the generated body, with the same register side
 // effects. The first line makes tools/make_hotfunc_overrides.py skip this file.
 #include "fable_2_pch.h"
-#include "fable_2_funcs.284.h"
+extern "C" void GetGlobalField_8221EE38(PPCContext& ctx, uint8_t* base);
+extern "C" void sub_82BA0E80(PPCContext& ctx, uint8_t* base);
+extern "C" void __restgprlr_29(PPCContext& ctx, uint8_t* base);
+extern "C" void __savegprlr_29(PPCContext& ctx, uint8_t* base);
 
 extern "C" void GpuProgressCheck_82B9BF90(PPCContext& __restrict ctx, uint8_t* base) {
 	REX_FUNC_PROLOGUE();
