@@ -106,7 +106,7 @@
             "inherits": "windows-base",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
-                "FABLE2_NO_PE_CLEAN": "ON"
+                "FABLE2_NO_PE_CLEAN": "OFF"
             }
         },
         {
