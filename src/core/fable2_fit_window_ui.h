@@ -78,7 +78,7 @@ namespace detail {
 // Test builds log the layout whatever fit_window_ui_log says, because L's
 // config file does not reach this cvar. Bump kBuild with each test zip.
 inline constexpr bool kAlwaysLogLayout = true;
-inline constexpr int kBuild = 46;
+inline constexpr int kBuild = 50;
 inline bool LogLayout() {
   return kAlwaysLogLayout || REXCVAR_GET(fit_window_ui_log);
 }
@@ -375,7 +375,7 @@ end
 -- cover and the paper pages move right by dx. Every move is re-applied each
 -- frame with the current dx. cover/page/card are dx times a tuning factor
 -- (fixMenus sets them each frame; __fitwin_tune.cover/page/card).
-local cover, page, card = 0, 0, 0
+local cover, page, card, bookCover, paper = 0, 0, 0, 0, 0
 local staticParts = { Buttons = true, KeyLight = true, MenuHighlight = true,
   Money = true }
 -- The covers and the character cards are keyframe-animated on their own
@@ -531,6 +531,9 @@ local function fixMenus()
   cover = dx * tk("cover", 1)
   page = dx * tk("page", 1.2)
   card = dx * tk("card", 1.8)
+  -- Book screens' right cover (ws tune bookcover), tuned on Items and shops.
+  bookCover = dx * tk("bookcover", 1.2)
+  paper = dx * tk("paper", 1.4)
   if screen == "title" then
     -- Title: left as authored. Its 16:9 box (White) is on the title's
     -- timeline: scale, position.z and the title camera are put back when it
@@ -554,7 +557,7 @@ local function fixMenus()
       -- page keeps its vanilla gap to it (build 44: at cover = dx, "Select
       -- A" slid under it; build 45: moving the text by dx instead put it
       -- out of step with the page's clip mask).
-      childMove(rightFrame, "RightFrame", "^Group$", page)
+      childMove(rightFrame, "RightFrame", "^Group$", bookCover)
     end
     for _, pg in ipairs(kids(pages or {})) do
       local okt, t = pcall(getElementType, pg)
@@ -567,9 +570,13 @@ local function fixMenus()
           end
         end
       elseif okt and t ~= "behavior" and t ~= "material" and t ~= "texture" then
+        -- The paper backing (Page1_Background) moves a little further than
+        -- the page (paper, 1.4 dx; tuned live at 2.22:1 on Items): at 1.3 dx
+        -- its straight left edge showed beside the page's curved frame, from
+        -- 1.5 dx a seam showed inside the page.
         local path = "Pages/" .. n
-        nudge(pg, path, "position.x", page)
-        if (applied[path .. ".position.x"] or 0) > 10 then childMove(pg, path, ".", page, false) end
+        nudge(pg, path, "position.x", paper)
+        if (applied[path .. ".position.x"] or 0) > 10 then childMove(pg, path, ".", paper, false) end
       end
     end
     -- On the main menu the character cards wait just off a 16:9 screen, so
