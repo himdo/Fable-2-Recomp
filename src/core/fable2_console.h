@@ -384,19 +384,9 @@ inline bool run_gui_command(const std::string& name, const std::vector<std::stri
     return true;
   };
   auto num = [&](size_t i, double& v) { return W.size() > i && parse_f(W[i], v); };
-  auto send = [&](const std::string& code) {
-    // First use: find out which captured state holds the HUD (g_HUD).
-    auto& gs = gl::S();
-    for (uint32_t L : gs.states) {
-      bool seen = false;
-      for (uint32_t p : gs.probed) seen = seen || p == L;
-      if (!seen) {
-        gs.probed.push_back(L);
-        gl::enqueue("return (g_HUD and 'HUD' or '-') .. ' scene=' .. tostring(SCENE)", L, true);
-      }
-    }
-    gl::enqueue(code);
-  };
+  // Chunks run on whichever GameFace state calls a hooked native next and
+  // has g_HUD (see guilua::drain); no per-state probing.
+  auto send = [&](const std::string& code) { gl::enqueue(code); };
 
   if (name == "gui") {
     // "gui [on|off]" is the older Lua command (Debug.SetDrawGUI); leave it to Lua.
@@ -416,8 +406,8 @@ inline bool run_gui_command(const std::string& name, const std::vector<std::stri
       if (gs.states.empty()) out("gui", "no GameFace states captured yet (load a save)");
       for (size_t i = 0; i < gs.states.size(); ++i) {
         out("gui", std::to_string(i + 1) + ": 0x" + hex(gs.states[i], 8) +
-                       (gl::valid_state(base, gs.states[i]) ? "" : " (closed)"));
-        gl::enqueue("return (g_HUD and 'HUD' or '-') .. ' scene=' .. tostring(SCENE)", gs.states[i], true);
+                       (gl::valid_state(base, gs.states[i]) ? "" : " (closed)") +
+                       (gs.states[i] == gs.hud ? " (HUD)" : ""));
       }
       return true;
     }

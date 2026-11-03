@@ -50,8 +50,9 @@ constexpr uint32_t kLuaTThread = 8;  // LUA_TTHREAD
 
 struct Pending {
   std::string code;
-  uint32_t L = 0;   // 0 = current target
+  uint32_t L = 0;   // unused since console-v10: chunks run on the calling state
   bool probe = false;
+  int tries = 0;
 };
 
 struct State {
@@ -254,38 +255,42 @@ inline void push_result(const std::string& r) {
 inline void drain(PPCContext& ctx, uint8_t* base) {
   State& s = S();
   if (s.busy) return;
+  // Run only on the state that is calling the hooked native right now: it is
+  // inside a C call, so loading and calling a chunk on it is safe. Other
+  // captured states can be coroutines in the middle of a resume, and running
+  // code on those corrupted the VM (in-game crash, console-v10).
+  const uint32_t L = ctx.r3.u32;
+  if (!valid_state(base, L)) return;
   s.busy = true;
   const PPCContext saved = ctx;
-  for (int n = 0; n < 8; ++n) {
-    Pending p;
-    {
-      std::lock_guard<std::mutex> lock(s.mu);
-      if (s.pending.empty()) break;
-      p = s.pending.front();
-      s.pending.pop_front();
+  Pending p;
+  {
+    std::lock_guard<std::mutex> lock(s.mu);
+    if (s.pending.empty()) {
+      s.busy = false;
+      return;
     }
-    const uint32_t L = p.L ? p.L : target_state(base);
-    if (!L) {
-      push_result("error no GameFace Lua state captured yet (load a save so the HUD starts)");
-      continue;
-    }
-    bool ok = false;
-    std::string r;
-    try {
-      r = run_chunk(ctx, base, L, p.code, ok);
-    } catch (...) {
-      r = "error exception while running GUI Lua";
-    }
-    if (p.probe) {
-      if (r.find("HUD") != std::string::npos) s.hud = L;
-      char b[24];
-      std::snprintf(b, sizeof b, "0x%08X ", L);
-      push_result(std::string("state ") + b + r);
-    } else {
-      push_result(r);
-    }
+    p = s.pending.front();
+    s.pending.pop_front();
+  }
+  bool ok = false;
+  std::string r;
+  try {
+    // Chunks target the HUD: a state without g_HUD answers "__f2_wrong_state"
+    // and the command waits for a call from the HUD's state.
+    r = run_chunk(ctx, base, L, "if g_HUD == nil then return '__f2_wrong_state' end\n" + p.code, ok);
+  } catch (...) {
+    r = "error exception while running GUI Lua";
   }
   ctx = saved;
+  if (r == "ok __f2_wrong_state") {
+    std::lock_guard<std::mutex> lock(s.mu);
+    if (++p.tries < 300) s.pending.push_front(p);
+    else s.results.push_back("error no HUD Lua state answered (is the HUD on screen?)");
+  } else {
+    s.hud = L;
+    push_result(r);
+  }
   s.busy = false;
 }
 
@@ -301,8 +306,7 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
   if (!bridge_on) return;
   s.armed.store(true, std::memory_order_relaxed);
   s.main_tid = std::this_thread::get_id();
-  if (s.pending.empty()) return;
-  if (s.gui_tid_known && s.gui_tid == s.main_tid) drain(ctx, base);
+  // Chunks run only inside the hooked GUI natives (see drain), never from here.
 }
 
 inline void enqueue(const std::string& code, uint32_t L = 0, bool probe = false) {
@@ -321,6 +325,7 @@ inline std::vector<std::string> take_results() {
 
 inline void note_state(const uint8_t* base, uint32_t L, bool active) {
   State& s = S();
+  if (active && L == s.last_active && s.gui_tid_known) return;  // hot path (getAttribute)
   if (!valid_state(base, L)) return;
   if (active) {
     s.last_active = L;
@@ -364,16 +369,28 @@ extern "C" void ProcessAndHandleType3_82BB68D8(PPCContext& ctx, uint8_t* base) {
   auto& s = fable2::guilua::S();
   if (s.armed.load(std::memory_order_relaxed) && !s.busy) {
     fable2::guilua::note_state(base, ctx.r3.u32, true);
-    if (!s.pending.empty() && s.gui_tid != s.main_tid) fable2::guilua::drain(ctx, base);
+    if (!s.pending.empty()) fable2::guilua::drain(ctx, base);
   }
   __imp__ProcessAndHandleType3_82BB68D8(ctx, base);
+}
+
+// Native getAttribute: called constantly by the HUD scripts (~2,700/s in
+// gameplay, where getElement/setAttribute are rare), so it is the drain point
+// that keeps queued GUI commands moving.
+extern "C" void ProcessAndHandleType_82BB6CA0(PPCContext& ctx, uint8_t* base) {
+  auto& s = fable2::guilua::S();
+  if (s.armed.load(std::memory_order_relaxed) && !s.busy) {
+    fable2::guilua::note_state(base, ctx.r3.u32, true);
+    if (!s.pending.empty()) fable2::guilua::drain(ctx, base);
+  }
+  __imp__ProcessAndHandleType_82BB6CA0(ctx, base);
 }
 
 extern "C" void ProcessAndReadAndProcess_82BB7100(PPCContext& ctx, uint8_t* base) {
   auto& s = fable2::guilua::S();
   if (s.armed.load(std::memory_order_relaxed) && !s.busy) {
     fable2::guilua::note_state(base, ctx.r3.u32, true);
-    if (!s.pending.empty() && s.gui_tid != s.main_tid) fable2::guilua::drain(ctx, base);
+    if (!s.pending.empty()) fable2::guilua::drain(ctx, base);
   }
   __imp__ProcessAndReadAndProcess_82BB7100(ctx, base);
 }
