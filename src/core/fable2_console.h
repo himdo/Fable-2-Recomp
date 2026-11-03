@@ -1563,6 +1563,9 @@ inline void hold_paused(uint8_t* base, bool file_mode) {
 
 // Called every frame from the MainRenderLoop hook, right after the F5 poll.
 inline void poll(PPCContext& ctx, uint8_t* base) {
+  // Video letterboxing (fit-window) needs a per-frame tick; it does not
+  // depend on the console being on.
+  fable2::fitwindow::ui::TickVideo();
   State& s = S();
   const bool file_mode = enabled();
   if (!file_mode && !s.active.load(std::memory_order_relaxed)) return;
