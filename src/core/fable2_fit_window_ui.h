@@ -78,7 +78,7 @@ namespace detail {
 // Test builds log the layout whatever fit_window_ui_log says, because L's
 // config file does not reach this cvar. Bump kBuild with each test zip.
 inline constexpr bool kAlwaysLogLayout = true;
-inline constexpr int kBuild = 39;
+inline constexpr int kBuild = 40;
 inline bool LogLayout() {
   return kAlwaysLogLayout || REXCVAR_GET(fit_window_ui_log);
 }
@@ -385,7 +385,9 @@ local function spreadMenu(menu)
   local k = kids(menu)
   for i = 1, #k do
     local okt, t = pcall(getElementType, k[i])
-    if okt and (t == "node" or t == "component") then
+    -- Any drawn child: the book screens' Title (Weapons, Items, ...) is not
+    -- a node or component and stayed put while the menu column moved.
+    if okt and t ~= "behavior" and t ~= "material" and t ~= "texture" then
       local n = tostring(attr(k[i], "name"))
       if n == "LeftFrame" and screen == "mainmenu" then
         -- Build 20: on the main menu the frame pieces are animated and the
@@ -506,10 +508,11 @@ end
 local function fixMenus()
   -- Tuned live against vanilla 16:9 (build 29 screenshots at 4:3, 2.39 and
   -- 32:9): the covers keep their vanilla visible width at the window edges
-  -- (dx), the paper stays under the right cover (dx), and the waiting
+  -- (dx), the paper stays under the right cover (1.2 dx: at dx a strip
+  -- showed beside it on the Weapons screen), and the waiting
   -- cards, in a 0.75-scaled parent, stay off-screen (1.8 dx).
   cover = dx * tk("cover", 1)
-  page = dx * tk("page", 1)
+  page = dx * tk("page", 1.2)
   card = dx * tk("card", 1.8)
   if screen == "title" then
     -- Title: left as authored. Its 16:9 box (White) is on the title's
