@@ -251,6 +251,36 @@ Controls the fit-window module (`src/core/fable2_fit_window.h`), which renders a
 | `ws native` | `ws native on\|off` | `fit_window_native_16x9`: keeps the loading screens and saving banner at 16:9. | |
 | `ws log` | `ws log on\|off` | `fit_window_ui_log`: the `[fit-window]` layout log. | |
 | `ws apply` | `ws apply` | Writes the aspect again now. | |
+| `ws tune` | `ws tune <cover\|page\|card\|bookcover\|paper> <factor>` | Sets one of the layout script's menu offsets live, as a multiple of the extra width per side (so 16:9 stays vanilla). | Defaults 1, 1.2, 1.8, 1.2, 1.5; see `docs/FIT_WINDOW.md`. |
+
+## Gamepad (console-v11)
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `pad` | `pad <A\|B\|X\|Y\|LB\|RB\|LT\|RT\|Up\|Down\|Left\|Right\|Start\|Back\|L3\|R3>[+...] [frames]` | Presses guest buttons through a synthetic gamepad, held for frames (default 12), then released. `+` combines inputs (`pad LB+A`). | Works without window focus. The command queue waits while it is held, so `pad Down; pad A` are two presses. |
+| `pad stick` | `pad stick <lx> <ly> [frames]` | Holds the left stick (-32768..32767, ly positive = forward). | |
+| `pad off` | `pad off` | Releases everything now. | |
+
+Example `console\autoexec.txt` that gets from boot to in-game with the last save (timings depend on the machine):
+
+```
+wait 38s
+pad A
+wait 10s
+pad Down
+wait 2s
+pad A
+wait 6s
+pad A
+```
+
+## GUI states (console-v11)
+
+`ui` and `gui` chunks run in any GameFace screen (title, main menu, book screens, HUD); a chunk whose element is missing is retried in the next screen that calls in.
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `gui where` | `gui where any\|hud\|<lua condition>` | Pins chunks to the screens whose Lua state meets the condition. | e.g. `gui where getElement('Scene.Layer.PressStart') ~= nil` for the title screen. `any` is the default. |
 
 ## Host commands (console-v3)
 
