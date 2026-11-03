@@ -1,4 +1,4 @@
-// fable_2 - developer commands, console-v10.
+// fable_2 - developer commands, console-v11.
 //
 // Typed in the SDK's `~` console as   f2 <command>   for example
 //   f2 warp 1 2 3        f2 god on        f2 warp save a; wait 60; warp a
@@ -21,7 +21,7 @@
 // Host commands: wait, waitfor, exec, echo, peek, poke, expect, find <number>,
 // freeze, unfreeze, trace, status, hosthelp, cvars, dumpmem; v6 adds cvar,
 // history, again, repeat, every, autoexec, peekf, pokef, freezef, peekstr,
-// findstr, findf, fill, scan. Addresses are Xbox 360 guest
+// findstr, findf, fill, scan; v11 adds widescreen (ws). Addresses are Xbox 360 guest
 // virtual addresses (hex, with or without 0x); values are big-endian as in the game.
 
 #pragma once
@@ -44,6 +44,7 @@
 #include <vector>
 
 #include "fable2_f5_lua.h"
+#include "fable2_fit_window.h"
 #include "fable2_gui_lua.h"
 
 // The SDK's `~` console (ImGui overlay) logs through REXLOG_* and can register
@@ -54,7 +55,7 @@
 #define FABLE2_CONSOLE_HAVE_REXLOG 1
 #endif
 
-#define FABLE2_CONSOLE_BUILD "console-v10"
+#define FABLE2_CONSOLE_BUILD "console-v11"
 
 REXCVAR_DEFINE_BOOL(console_enabled, false, "Input",
                     "Enable the developer command line (f2-console.cmd). Off by default.");
@@ -556,14 +557,14 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
   }
   if (name == "help") {
     out("help", "host commands: wait waitfor exec echo peek poke expect find <number> freeze unfreeze trace status cvars dumpmem "
-                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan. "
+                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen. "
                 "Chain with ';'. Lua commands follow (their text appears in the log).");
     return false;  // Lua prints its own command list too
   }
   if (name == "hosthelp") {
     out("help",
         "host commands: wait waitfor exec echo peek poke expect find freeze unfreeze trace status cvars dumpmem "
-        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan. "
+        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen. "
         "Everything else (warp, god, gold, giveall, ...) runs in Lua: type help. "
         "Separate commands with ';'. Addresses are hex guest addresses.");
     return true;
@@ -959,6 +960,76 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     out("every", "#" + std::to_string(s.every.size()) + " every " + W[1] + ": " + cmd);
     return true;
   }
+  if (name == "widescreen" || name == "ws") {
+    // widescreen [status|on|off|aspect <a>|hud|native|log on|off|apply]: the
+    // fit-window module (fable2_fit_window.h) while the game runs.
+    namespace fw = fable2::fitwindow;
+    const std::string sub = W.size() > 1 ? W[1] : "status";
+    auto flag = [](const char* cvar) { return rex::cvar::GetFlagByName(cvar); };
+    auto on_off = [&](const std::string& w, bool& v) {
+      if (w == "on" || w == "1" || w == "true") return v = true, true;
+      if (w == "off" || w == "0" || w == "false") return v = false, true;
+      return false;
+    };
+    if (sub == "status") {
+      uint32_t ww = 0, wh = 0;
+      fw::WindowSize(ww, wh);
+      const float forced = fw::ForcedAspect();
+      out("ws", std::string("fit ") + flag("fit_game_to_window") + (fw::Installed() ? "" : " (not installed)") +
+                    ", window " + std::to_string(ww) + "x" + std::to_string(wh) + ", aspect " +
+                    fstr(fw::CurrentAspect()) + (forced > 0 ? " (forced " + fstr(forced) + ")" : " (window)") +
+                    ", guest 0x8209FE7C=" + fstr(fw::GuestAspect()) + " 0x8209FDF4=" + fstr(fw::GuestReference()));
+      out("ws", std::string("hud ") + flag("fit_window_hud_to_edges") + ", native16x9 " +
+                    flag("fit_window_native_16x9") + ", log " + flag("fit_window_ui_log") + ", letterbox " +
+                    flag("present_letterbox"));
+      return true;
+    }
+    if (sub == "on" || sub == "off") {
+      if (!fw::SetEnabled(sub == "on")) return out("ws", "could not install; see [fit-window] in the log", true), true;
+      out("ws", sub == "on" ? "fit on, aspect " + fstr(fw::CurrentAspect()) : "fit off: original 16:9");
+      return true;
+    }
+    if (sub == "aspect") {
+      if (W.size() < 3) return out("ws", "usage: ws aspect <w:h | number | auto>  e.g. 21:9, 2.39, auto", true), true;
+      double a = 0;
+      const std::string& v = W[2];
+      const size_t colon = v.find(':');
+      if (v == "auto" || v == "window") {
+        a = 0;
+      } else if (colon != std::string::npos) {
+        double num = 0, den = 0;
+        if (!parse_f(v.substr(0, colon), num) || !parse_f(v.substr(colon + 1), den) || den <= 0)
+          return out("ws", "bad ratio '" + v + "'", true), true;
+        a = num / den;
+      } else if (!parse_f(v, a) || a < 0) {
+        return out("ws", "bad aspect '" + v + "'", true), true;
+      }
+      if (a > 0 && (a < fw::kMinAspect || a > fw::kMaxAspect))
+        out("ws", "clamped to " + fstr(fw::kMinAspect) + ".." + fstr(fw::kMaxAspect));
+      fw::SetForcedAspect(static_cast<float>(a));
+      if (!REXCVAR_GET(fit_game_to_window)) out("ws", "saved; fit is off (ws on applies it)");
+      out("ws", a > 0 ? "aspect forced to " + fstr(fw::CurrentAspect()) : "aspect follows the window (" + fstr(fw::CurrentAspect()) + ")");
+      return true;
+    }
+    if (sub == "apply") {
+      fw::Reapply();
+      out("ws", "re-applied, aspect " + fstr(fw::CurrentAspect()));
+      return true;
+    }
+    const char* cvar = sub == "hud" ? "fit_window_hud_to_edges"
+                       : sub == "native" || sub == "native16x9" ? "fit_window_native_16x9"
+                       : sub == "log" ? "fit_window_ui_log" : nullptr;
+    if (cvar) {
+      bool v = false;
+      if (W.size() < 3 || !on_off(W[2], v)) return out("ws", "usage: ws " + sub + " on|off", true), true;
+      rex::cvar::SetFlagByName(cvar, v ? "true" : "false");
+      out("ws", std::string(cvar) + " = " + flag(cvar) +
+                    (sub == "hud" ? " (takes effect when the next UI screen loads)" : ""));
+      return true;
+    }
+    out("ws", "usage: ws [status] | on | off | aspect <w:h|n|auto> | hud on|off | native on|off | log on|off | apply", true);
+    return true;
+  }
   if (name == "cvar") {
     // cvar <name> [value...]: print or set an SDK/game cvar (same as typing it in ~,
     // but usable from exec files, aliases and chains).
@@ -1312,7 +1383,10 @@ inline void start_pump(PPCContext& ctx, uint8_t* base) {
 // Hands one line to the pump: console_run.lua = `return <seq>, [==[line]==]`.
 inline void dispatch_lua(const std::string& line) {
   State& s = S();
-  if (s.lua_seq == 0) s.lua_seq = static_cast<uint64_t>(std::time(nullptr)) % 100000000ull * 100;
+  // The game's Lua numbers are 4-byte floats (exact integers only up to 2^24),
+  // so keep the sequence small; the time-based start avoids matching a stale
+  // console_run.lua left by an earlier session.
+  if (s.lua_seq == 0 || s.lua_seq > 9000000) s.lua_seq = static_cast<uint64_t>(std::time(nullptr)) % 10000 * 100;
   ++s.lua_seq;
   const auto run = s.root / "data" / "scripts" / "recomp" / "console_run.lua";
   std::error_code ec;

@@ -226,6 +226,20 @@ f2 call Debug.AddAllHairstyles
 
 `giveall hairstyles` calls the same function. The `find` match count depends on the build.
 
+## Widescreen (console-v11)
+
+Controls the fit-window module (`src/core/fable2_fit_window.h`), which renders at the window's aspect ratio instead of a letterboxed 16:9 image. `ws` is short for `widescreen`.
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `ws` | `ws` / `ws status` | Shows whether the fit is on, the window size, the aspect in use (window or forced), the two floats the camera reads (0x8209FE7C, 0x8209FDF4) and the UI cvars. | |
+| `ws on` / `ws off` | `ws on\|off` | Turns the fit on or off while the game runs. Off writes the stock 16:9 and 4:3 back and returns `present_letterbox` and the safe area to their defaults. | `on` installs it if `fit_game_to_window` was false at startup. |
+| `ws aspect` | `ws aspect <w:h\|number\|auto>` | Forces an aspect (e.g. `21:9`, `32:9`, `2.39`) instead of the window's; `auto` follows the window again. | Clamped to 4:3..4:1. Not saved between runs; put it in `consoleutoexec.txt`. |
+| `ws hud` | `ws hud on\|off` | `fit_window_hud_to_edges`: moves the HUD and menus out to the window edges. | Takes effect when the next UI screen loads. |
+| `ws native` | `ws native on\|off` | `fit_window_native_16x9`: keeps the loading screens and saving banner at 16:9. | |
+| `ws log` | `ws log on\|off` | `fit_window_ui_log`: the `[fit-window]` layout log. | |
+| `ws apply` | `ws apply` | Writes the aspect again now. | |
+
 ## Host commands (console-v3)
 
 These run in the game's C++ (`fable2_console.h`), not in Lua. They answer in the `~` console and in `console\out.txt`. Lines are queued in order; chain commands with `;`. Addresses are hexadecimal Xbox 360 guest addresses (with or without `0x`); values are big-endian as the game stores them. Raw Lua and `!` lines keep their semicolons.
