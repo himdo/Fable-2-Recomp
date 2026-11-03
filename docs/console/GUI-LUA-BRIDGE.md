@@ -77,3 +77,8 @@ else the one chosen with `gui use`, else the last one that called a native.
 - Changes are not saved by the game; `ui export` prints `ui attr` lines for
   `console\autoexec.txt`. The HUD may re-set some attributes itself (widescreen
   adapter, centre toggle, slides).
+
+## In-game status (2026-11-03)
+
+First real run: 7 GameFace states captured, GUI Lua runs on a separate thread, but queued chunks never ran (`gui status`: pending 19, runs 0). The HUD scripts did not call the native `getElement`/`setAttribute` while idle in gameplay, so the drain point never fired. Next step: drain from a GameFace call that happens every frame on the GUI thread (to be found), or from the GUI's own update.
+
