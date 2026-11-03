@@ -1,4 +1,4 @@
-Fable 2 developer commands - console-v8
+Fable 2 developer commands - console-v9
 =======================================
 
 What it is: one command, "f2", in the ReXGlue SDK's own console. Press ~ in
@@ -25,6 +25,23 @@ shortcuts with their real parameters.
 
 UNTESTED in game. Checked in a mock harness with fake engine tables, and the
 argument lists match the game's compiled scripts.
+
+v9 GUI bridge (position/scale/opacity/tint/text). Do these first, in order,
+with a save loaded and the HUD visible:
+     f2 gui status          expect "states N" with N >= 1 and a gui thread line
+     f2 gui list            expect at least one state line containing "HUD"
+     f2 gui return 1+1      expect "[gui] ok 2"
+     f2 ui tree Layer 2     element names with paths
+     f2 ui get Minimap
+     f2 ui scale Minimap 1.5 | f2 ui move Minimap -50 30 | f2 ui opacity Minimap 40
+     f2 ui rotate Minimap 15 | f2 ui visible Minimap off | f2 ui visible Minimap on
+     f2 ui tint PlayerHealth 255 0 0   (if no change: f2 ui tint PlayerHealth 1 0 0)
+     f2 ui label <a text element from ui tree> Hello
+     f2 ui hudscale 0.8 | f2 ui hudopacity 50
+     f2 ui export | f2 ui reset all
+   If a ui line never answers, send f2 gui status (pending > 0 means the GUI
+   runs on another thread and is waiting for a HUD script call).
+   If the game crashes, send the last command and logs\.
 
 v8 HUD elements (untested names may do nothing; tell me which ones work):
      f2 ui elements | f2 ui hide Minimap | f2 ui show Minimap

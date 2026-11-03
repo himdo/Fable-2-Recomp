@@ -1,6 +1,6 @@
 # Fable 2 Developer Console: Command Reference
 
-Build: **console-v8**. Source: `src/core/fable2_console.h` (host commands) and `src/lua/console_cmds.lua` (Lua commands).
+Build: **console-v9**. Source: `src/core/fable2_console.h` (host commands) and `src/lua/console_cmds.lua` (Lua commands).
 
 ## How the console works
 
@@ -408,7 +408,30 @@ The game-side `GUI` table reaches HUD elements **by name**. Names come from `art
 | `ui icon add\|remove [who] [type]` | Puts a world icon over an entity (default target, type `WI_QUEST_GIVER`). | `GUI.AddWorldIcon(name, entity, "", EWorldIconType.*)`. |
 | `ui timertext <seconds> <TEXT_ID>` | Countdown with a label. | `GUI.SetTimerWithText`. |
 
-**Not reachable yet: position, scale, rotation, opacity, tint, free text.** Those are attributes of the element in the GUI Lua state (the HUD's own scripts do `setAttribute(getElement("Scene.Layer"), "opacity", 0)`, `"position.x"`, `"scale.x"`, `"diffuse.r"`, `"textstring"`...). `f2` runs in the game Lua state, which has no access to them. Reaching them needs a bridge that runs Lua inside the GUI state (finding its `lua_State` and the engine's Lua load/call functions in the recompiled code). The SDK's own UI scale lives in cvars (`cvars ui`).
+#### Position, scale, rotation, opacity, tint, free text (console-v9)
+
+These edit element attributes directly inside the GameFace GUI Lua state, through the bridge described in [GUI-LUA-BRIDGE.md](GUI-LUA-BRIDGE.md). Replies come back as `[gui]` lines (they may arrive a frame later). An element is found by path (`Scene.Layer.Minimap`) or by name anywhere in the tree (`Minimap`).
+
+| Sub-command | What it does |
+|---|---|
+| `ui tree [element] [depth]` | Lists the live element hierarchy with full paths (default `Scene`, depth 3, up to 300 lines). |
+| `ui get <element> [attr...]` | Position, scale, rotation, opacity and visibility, or the named attributes. |
+| `ui pos <element> <x> <y>` / `ui move <element> <dx> <dy>` | Sets or offsets `position.x/y`. |
+| `ui scale <element> <sx> [sy]` | Sets `scale.x/y` (one value scales both). |
+| `ui rotate <element> <degrees>` | Sets `rotation.z`. |
+| `ui opacity <element> <0-100>` | Sets `opacity`. |
+| `ui visible <element> on\|off` | Sets `active`. |
+| `ui tint <element> <r> <g> <b> [a]` | Sets `diffuse.r/g/b[/a]`. The value range is unconfirmed (try 0-255, then 0-1). |
+| `ui textcolor <element> <r> <g> <b>` | Sets `textcolor.r/g/b`. |
+| `ui label <element> <free text>` | Sets `textstring` to any text. |
+| `ui attr <element> <attribute> <value>` | Sets any attribute (numbers, `on`/`off`, or text). |
+| `ui hudscale <s>` / `ui hudopacity <0-100>` | Scales or fades the whole HUD layer (`Layer`). |
+| `ui reset <element>\|all` | Restores every attribute `ui` changed. |
+| `ui export` | Prints `ui attr ...` lines for everything changed; put them in `console\autoexec.txt` to reapply after a restart. |
+| `gui <lua>` | Runs any Lua in the GUI state; `return` a value to see it (`gui on`/`gui off` alone is still the HUD toggle). Helpers: `__f2.need(name)`, `__f2.desc(name, el)`, plus the game's `getElement`, `getAttribute`, `setAttribute`, `getChildren`. |
+| `gui status` / `gui list` / `gui use <n\|auto>` | Bridge state (captured states, target, GUI thread, pending, errors) / every captured GameFace state (probed for `g_HUD`) / pick one. |
+
+Example: `f2 ui tree Layer 2`, then `f2 ui scale Minimap 1.5; ui move Minimap -40 20`, `f2 ui export`, `f2 ui reset all`.
 
 ### Rendering
 

@@ -1,4 +1,4 @@
-// fable_2 - developer commands, console-v8.
+// fable_2 - developer commands, console-v9.
 //
 // Typed in the SDK's `~` console as   f2 <command>   for example
 //   f2 warp 1 2 3        f2 god on        f2 warp save a; wait 60; warp a
@@ -43,6 +43,7 @@
 #include <vector>
 
 #include "fable2_f5_lua.h"
+#include "fable2_gui_lua.h"
 
 // The SDK's `~` console (ImGui overlay) logs through REXLOG_* and can register
 // commands with REXCVAR_DEFINE_COMMAND_ARGS (rex/cvar.h). Both are optional here
@@ -52,7 +53,7 @@
 #define FABLE2_CONSOLE_HAVE_REXLOG 1
 #endif
 
-#define FABLE2_CONSOLE_BUILD "console-v8"
+#define FABLE2_CONSOLE_BUILD "console-v9"
 
 REXCVAR_DEFINE_BOOL(console_enabled, false, "Input",
                     "Enable the developer command line (f2-console.cmd). Off by default.");
@@ -332,6 +333,195 @@ inline void enqueue_text(const std::string& text, bool front = false) {
   } else {
     for (auto& l : lines) s.queue.push_back(l);
   }
+}
+
+//--- GameFace (GUI) Lua commands ---------------------------------------------
+
+// A Lua long-bracket string literal for `s` (empty optional if it cannot be quoted).
+inline bool lua_str(const std::string& s, std::string& lit) {
+  if (s.find("]==]") != std::string::npos) return false;
+  lit = "[==[" + s + "]==]";
+  return true;
+}
+// A typed word as a Lua value: number, true/false, or a string.
+inline std::string lua_val(const std::string& w) {
+  double d;
+  if (parse_f(w, d)) return fstr(d);
+  if (w == "true" || w == "on") return "true";
+  if (w == "false" || w == "off") return "false";
+  std::string lit;
+  return lua_str(w, lit) ? lit : "nil";
+}
+
+// gui <lua> | gui status|list|use <n|auto>, and the ui sub-commands that edit
+// element attributes in the GUI state. Returns false for ui sub-commands that
+// console_cmds.lua handles.
+inline bool run_gui_command(const std::string& name, const std::vector<std::string>& W, const std::string& line,
+                            uint8_t* base) {
+  namespace gl = fable2::guilua;
+  const std::string sub = W.size() > 1 ? W[1] : "";
+  auto el = [&](size_t i, std::string& lit) {
+    if (W.size() <= i || !lua_str(W[i], lit)) {
+      out(name, "missing element name (ui tree lists them)", true);
+      return false;
+    }
+    return true;
+  };
+  auto num = [&](size_t i, double& v) { return W.size() > i && parse_f(W[i], v); };
+  auto send = [&](const std::string& code) {
+    // First use: find out which captured state holds the HUD (g_HUD).
+    auto& gs = gl::S();
+    for (uint32_t L : gs.states) {
+      bool seen = false;
+      for (uint32_t p : gs.probed) seen = seen || p == L;
+      if (!seen) {
+        gs.probed.push_back(L);
+        gl::enqueue("return (g_HUD and 'HUD' or '-') .. ' scene=' .. tostring(SCENE)", L, true);
+      }
+    }
+    gl::enqueue(code);
+  };
+
+  if (name == "gui") {
+    // "gui [on|off]" is the older Lua command (Debug.SetDrawGUI); leave it to Lua.
+    if (sub.empty() || sub == "on" || sub == "off" || sub == "true" || sub == "false") return false;
+    if (sub == "help") {
+      out("gui", "gui <lua> runs Lua in the GameFace GUI state (return a value to see it); gui status | gui list | "
+                 "gui use <n|auto>. Element helpers: __f2.need(name), __f2.desc(name, el), getElement, "
+                 "getAttribute, setAttribute, getChildren.");
+      return true;
+    }
+    if (sub == "status") {
+      out("gui", gl::status_line(base));
+      return true;
+    }
+    if (sub == "list") {
+      auto& gs = gl::S();
+      if (gs.states.empty()) out("gui", "no GameFace states captured yet (load a save)");
+      for (size_t i = 0; i < gs.states.size(); ++i) {
+        out("gui", std::to_string(i + 1) + ": 0x" + hex(gs.states[i], 8) +
+                       (gl::valid_state(base, gs.states[i]) ? "" : " (closed)"));
+        gl::enqueue("return (g_HUD and 'HUD' or '-') .. ' scene=' .. tostring(SCENE)", gs.states[i], true);
+      }
+      return true;
+    }
+    if (sub == "use" && W.size() > 2) {
+      auto& gs = gl::S();
+      uint64_t n;
+      if (W[2] == "auto") gs.chosen = 0;
+      else if (parse_u(W[2], n) && n >= 1 && n <= gs.states.size()) gs.chosen = gs.states[n - 1];
+      else return out("gui", "usage: gui use <n from gui list>|auto", true), true;
+      out("gui", "target 0x" + hex(gl::target_state(base), 8));
+      return true;
+    }
+    send(rest_after(line, 1));
+    return true;
+  }
+
+  // ui sub-commands that need the GUI state.
+  std::string e, lit;
+  double a = 0, b = 0, c = 0, d = 0;
+  if (sub == "tree") {
+    double depth = 3;
+    std::string root = "Scene";
+    if (W.size() > 2 && !parse_f(W[2], depth)) root = W[2];
+    if (W.size() > 3) parse_f(W[3], depth);
+    if (!lua_str(root, lit)) return true;
+    send("local o = {} __f2.tree(__f2.need(" + lit + "), " + fstr(depth) + ", o, 0, nil) return table.concat(o, '\\n')");
+    return true;
+  }
+  if (sub == "get") {
+    if (!el(2, e)) return true;
+    if (W.size() <= 3) return send("return __f2.desc(" + e + ", __f2.need(" + e + "))"), true;
+    std::string code = "local x = __f2.need(" + e + ") local o = {}";
+    for (size_t i = 3; i < W.size(); ++i) {
+      if (!lua_str(W[i], lit)) continue;
+      code += " o[#o+1] = " + lit + " .. '=' .. tostring(__f2.get(x, " + lit + "))";
+    }
+    send(code + " return table.concat(o, ' ')");
+    return true;
+  }
+  if (sub == "pos" || sub == "move") {
+    if (!el(2, e) || !num(3, a) || !num(4, b)) return out("ui", "usage: ui " + sub + " <element> <x> <y>", true), true;
+    if (sub == "pos")
+      send("local x = __f2.need(" + e + ") __f2.set(" + e + ", x, 'position.x', " + fstr(a) + ") __f2.set(" + e +
+           ", x, 'position.y', " + fstr(b) + ") return __f2.desc(" + e + ", x)");
+    else
+      send("local x = __f2.need(" + e + ") __f2.set(" + e + ", x, 'position.x', (__f2.get(x, 'position.x') or 0) + " +
+           fstr(a) + ") __f2.set(" + e + ", x, 'position.y', (__f2.get(x, 'position.y') or 0) + " + fstr(b) +
+           ") return __f2.desc(" + e + ", x)");
+    return true;
+  }
+  if (sub == "scale") {
+    if (!el(2, e) || !num(3, a)) return out("ui", "usage: ui scale <element> <sx> [sy]", true), true;
+    if (!num(4, b)) b = a;
+    send("local x = __f2.need(" + e + ") __f2.set(" + e + ", x, 'scale.x', " + fstr(a) + ") __f2.set(" + e +
+         ", x, 'scale.y', " + fstr(b) + ") return __f2.desc(" + e + ", x)");
+    return true;
+  }
+  if (sub == "rotate" || sub == "opacity") {
+    if (!el(2, e) || !num(3, a)) return out("ui", "usage: ui " + sub + " <element> <value>", true), true;
+    const char* attr = sub == "rotate" ? "rotation.z" : "opacity";
+    send("local x = __f2.need(" + e + ") __f2.set(" + e + ", x, '" + attr + "', " + fstr(a) + ") return __f2.desc(" + e +
+         ", x)");
+    return true;
+  }
+  if (sub == "visible") {
+    if (!el(2, e) || W.size() < 4) return out("ui", "usage: ui visible <element> on|off", true), true;
+    send("local x = __f2.need(" + e + ") __f2.set(" + e + ", x, 'active', " + lua_val(W[3]) + ") return __f2.desc(" + e +
+         ", x)");
+    return true;
+  }
+  if (sub == "tint" || sub == "textcolor") {
+    if (!el(2, e) || !num(3, a) || !num(4, b) || !num(5, c))
+      return out("ui", "usage: ui " + sub + " <element> <r> <g> <b>" + (sub == "tint" ? " [a]" : ""), true), true;
+    const std::string p = sub == "tint" ? "diffuse." : "textcolor.";
+    std::string code = "local x = __f2.need(" + e + ") __f2.set(" + e + ", x, '" + p + "r', " + fstr(a) + ") __f2.set(" +
+                       e + ", x, '" + p + "g', " + fstr(b) + ") __f2.set(" + e + ", x, '" + p + "b', " + fstr(c) + ")";
+    if (sub == "tint" && num(6, d)) code += " __f2.set(" + e + ", x, 'diffuse.a', " + fstr(d) + ")";
+    send(code + " return 'set'");
+    return true;
+  }
+  if (sub == "label") {
+    const std::string text = rest_after(line, 3);
+    if (!el(2, e) || text.empty() || !lua_str(text, lit))
+      return out("ui", "usage: ui label <element> <free text>", true), true;
+    send("local x = __f2.need(" + e + ") __f2.set(" + e + ", x, 'textstring', " + lit + ") return 'text set'");
+    return true;
+  }
+  if (sub == "attr") {
+    if (!el(2, e) || W.size() < 5 || !lua_str(W[3], lit))
+      return out("ui", "usage: ui attr <element> <attribute> <value>", true), true;
+    send("local x = __f2.need(" + e + ") __f2.set(" + e + ", x, " + lit + ", " + lua_val(rest_after(line, 4)) +
+         ") return " + lit + " .. ' = ' .. tostring(__f2.get(x, " + lit + "))");
+    return true;
+  }
+  if (sub == "hudscale" || sub == "hudopacity") {
+    if (!num(2, a)) return out("ui", "usage: ui " + sub + " <value>", true), true;
+    if (sub == "hudscale")
+      send("local x = __f2.need('Layer') __f2.set('Layer', x, 'scale.x', " + fstr(a) + ") __f2.set('Layer', x, 'scale.y', " +
+           fstr(a) + ") return __f2.desc('Layer', x)");
+    else
+      send("local x = __f2.need('Layer') __f2.set('Layer', x, 'opacity', " + fstr(a) + ") return __f2.desc('Layer', x)");
+    return true;
+  }
+  if (sub == "reset") {
+    if (W.size() < 3) return out("ui", "usage: ui reset <element>|all", true), true;
+    std::string which = "nil";
+    if (W[2] != "all" && !lua_str(W[2], which)) return true;
+    send("local n = 0 for name, attrs in pairs(__f2.orig) do if " + which +
+         " == nil or name == " + which + " then local x = __f2.names[name] for k, v in pairs(attrs) do "
+         "pcall(setAttribute, x, k, v) n = n + 1 end __f2.orig[name] = nil end end return n .. ' attributes restored'");
+    return true;
+  }
+  if (sub == "export") {
+    send("local o = {} for name, attrs in pairs(__f2.orig) do local x = __f2.names[name] for k in pairs(attrs) do "
+         "o[#o+1] = 'ui attr ' .. name .. ' ' .. k .. ' ' .. tostring(__f2.get(x, k)) end end "
+         "if #o == 0 then return 'nothing changed' end "
+         "return table.concat(o, '\\n') .. '\\n(copy these lines into console\\\\autoexec.txt to reapply)'");
+    return true;
+  }
+  return false;
 }
 
 //--- Host commands ----------------------------------------------------------
@@ -650,6 +840,12 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     f.write(reinterpret_cast<const char*>(ta::host_addr(base, a)), static_cast<std::streamsize>(n));
     out("dumpmem", "ok: " + std::to_string(n) + " bytes -> " + p.string());
     return true;
+  }
+
+  //--- console-v9: GameFace (GUI) Lua -------------------------------------
+  if (name == "gui" || name == "ui") {
+    if (run_gui_command(name, W, line, base)) return true;
+    return false;  // other ui sub-commands and "gui on|off" are Lua (console_cmds.lua)
   }
 
   //--- console-v6 host commands -------------------------------------------
@@ -1118,6 +1314,19 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
     s.autoexec_done = true;
     std::error_code ec;
     if (fs::exists(s.root / "console" / "autoexec.txt", ec)) run_host_command("autoexec", base);
+  }
+
+  // GUI-state chunks: run them here when GameFace Lua shares this thread, and
+  // print whatever finished (here or in the GUI natives) since the last frame.
+  fable2::guilua::poll(ctx, base);
+  for (const auto& r : fable2::guilua::take_results()) {
+    std::istringstream rs(r);
+    std::string ln;
+    bool first = true;
+    while (std::getline(rs, ln)) {
+      out("gui", ln, first && r.rfind("error", 0) == 0);
+      first = false;
+    }
   }
 
   // `every` timers queue their command when due (skipped while the queue is backed up).

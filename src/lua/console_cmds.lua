@@ -1,4 +1,4 @@
--- console_cmds.lua (console-v8): interprets one `f2 <command>` line from the ~ console.
+-- console_cmds.lua (console-v9): interprets one `f2 <command>` line from the ~ console.
 -- Called as console_cmds.lua(line) by the generated console_run.lua.
 -- Output: cprint (game log). A line starting with "!" also shows a message box.
 --
@@ -1497,6 +1497,21 @@ UI.timertext = { "ui timertext <seconds> <TEXT_ID>  countdown with a label (GUI.
   if not (tonumber(W[3]) and W[4]) then return out("usage: ui timertext <seconds> <TEXT_ID>") end
   try("timer", gui("SetTimerWithText"), "f2timer", tonumber(W[3]), W[4])
 end }
+
+-- These run in the GameFace GUI Lua state through the host bridge
+-- (fable2_gui_lua.h); the host answers them before this file sees them.
+local function host_only() out("handled by the host bridge; if you see this, rebuild the game (console-v9)") end
+for k, h in pairs({
+  tree = "ui tree [element] [depth]  the element hierarchy (default Scene, depth 3)",
+  get = "ui get <element> [attr...]  position, scale, rotation, opacity, active, or the named attributes",
+  pos = "ui pos <element> <x> <y>  set position", move = "ui move <element> <dx> <dy>  move by an offset",
+  scale = "ui scale <element> <sx> [sy]  set scale", rotate = "ui rotate <element> <degrees>  rotation.z",
+  opacity = "ui opacity <element> <0-100>", visible = "ui visible <element> on|off  the 'active' attribute",
+  tint = "ui tint <element> <r> <g> <b> [a]  diffuse colour", textcolor = "ui textcolor <element> <r> <g> <b>",
+  label = "ui label <element> <free text>  textstring", attr = "ui attr <element> <attribute> <value>  any attribute",
+  hudscale = "ui hudscale <s>  scale the whole HUD layer", hudopacity = "ui hudopacity <0-100>  the whole HUD layer",
+  reset = "ui reset <element>|all  restore what ui changed", export = "ui export  print ui attr lines for autoexec.txt",
+}) do UI[k] = { h, host_only } end
 
 add("ui", "ui <sub>  HUD and screen commands; ui list shows them", function(W)
   local s = (W[2] or "list"):lower()
