@@ -57,10 +57,14 @@ What was tried (fit window builds 21-28, console tests):
 Open: find the title timeline's keyframe data for `White.scale.x`, or where
 GameFace sizes that layer.
 
-### "Scene paused" in in-engine cutscenes is 16:9
+### Frozen-scene snapshots are 16:9 ("Scene paused", opening the pause menu)
 
 Pausing an in-engine cutscene shows the frozen scene at 16:9 in the middle
-with dark red at the sides. The picture is not distorted. No GameFace screen
-runs Lua during this pause and no native 2D quad draws it, so it looks like
-the game renders the paused scene through a camera / viewport that does not
-read the patched aspect (0x8209FE7C). Not traced yet.
+with dark red at the sides. Pressing Start in game does the same for a moment
+before the pause menu appears, with stale content from earlier frames at the
+sides. The picture is not distorted: only the middle 16:9 of the frame is
+taken and redrawn. No GameFace screen runs Lua during this pause and no
+native 2D quad draws it (build 38 logs every quad caller), so the snapshot
+is copied and drawn by a path that works in 16:9. Not traced yet: a scan
+for direct `lis 0x820A / lfs -0x184` loads of the patched aspect
+(0x8209FE7C) found none, so the readers build that address another way.
