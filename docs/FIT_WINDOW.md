@@ -28,7 +28,7 @@ Checked with screenshots at 4:3 (1440x1080), 16:9, 21:9 (2560x1080), 2.39:1
 | Setting | Default | Meaning |
 |---|---|---|
 | `f2 ws tune cover <f>` | 1 | Menu covers move by f x the extra width per side. |
-| `f2 ws tune page <f>` | 1 | Menu paper, masks and minimap markers move by f x the extra width. |
+| `f2 ws tune page <f>` | 1.2 | Menu paper, masks and minimap markers move by f x the extra width. |
 | `f2 ws tune card <f>` | 1.8 | Waiting main menu cards move by f x the extra width. |
 | `fit_window_quad_power` | 1 | The game's 2D quads are squeezed by ((16/9)/aspect)^this. |
 | `fit_window_text_power` | 1 | The game's 2D text x moves to the centre by ((16/9)/aspect)^this. |
