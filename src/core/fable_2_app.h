@@ -38,9 +38,10 @@
 // Re-enable to re-measure the frame pacing:
 // #include "fps_probe.h"
 #include "keyboard_gamepad.h"
+// The console pad (f2 pad) uses the remote-pad driver in every build.
+#include "remote_gamepad_driver.h"
 #ifdef FABLE2_REMOTE_CONTROL
 #include "remote_control_server.h"
-#include "remote_gamepad_driver.h"
 // 1-second game-state classifier (src/diagnostics/fable2_state_probe.h, single-TU inline).
 // Forward-declared here; the inline definitions live in the state probe header
 // (included once, in main.cpp), so the app can start/stop it alongside the
@@ -127,6 +128,11 @@ class Fable2App : public rex::ReXApp {
       auto system = rex::input::CreateDefaultInputSystem(tool_mode);
       system->AddDriver(
           std::make_unique<fable2::KeyboardGamepadDriver>(system->window(), 0));
+      // Console pad (`f2 pad`, src/core/fable2_console.h): the remote-pad
+      // driver fed from the console's own store. Always on; idle = no input.
+      system->AddDriver(std::make_unique<fable2::remote::GamepadDriver>(
+          system->window(), 0, &fable2::console::PadStore(),
+          &fable2::console::PadEnabled()));
 #ifdef FABLE2_REMOTE_CONTROL
       // Remote (AI) pad: driven over localhost TCP by an external harness
       // (src/input/remote_control_server.h). OR-merges with the pads above; not

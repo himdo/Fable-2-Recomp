@@ -48,6 +48,7 @@
 #include "fable2_f5_lua.h"
 #include "fable2_fit_window.h"
 #include "fable2_gui_lua.h"
+#include "remote_input_state.h"
 
 // The SDK's `~` console (ImGui overlay) logs through REXLOG_* and can register
 // commands with REXCVAR_DEFINE_COMMAND_ARGS (rex/cvar.h). Both are optional here
@@ -64,6 +65,19 @@ REXCVAR_DEFINE_BOOL(console_enabled, true, "Input",
                     "next to the game data). On by default; false or FABLE2_CONSOLE=0 turns it off.");
 
 namespace fable2::console {
+
+// Console gamepad: `pad` presses guest buttons through a synthetic pad that
+// fable_2_app.h always registers (the remote-pad driver, fed from this store),
+// so menus and the intro can be driven from console\in.txt or autoexec.txt
+// without window focus.
+inline fable2::remote::InputStateStore& PadStore() {
+  static fable2::remote::InputStateStore s;
+  return s;
+}
+inline std::atomic<bool>& PadEnabled() {
+  static std::atomic<bool> on{true};
+  return on;
+}
 
 // Every UI aspect change (window resize, ws on/off/aspect) goes to all GUI
 // screens as __fitwin_A, which the fit-window layout script re-reads each
@@ -139,6 +153,7 @@ struct State {
   std::atomic<uint64_t> lua_done{0};
   bool lua_wait = false;        // a dispatched line has not reported done yet
   Clock::time_point lua_deadline{};
+  uint64_t pad_frames = 0;      // `pad` releases its buttons when this reaches 0
   // pause: the game thread waits at the end of the console poll; see hold_paused.
   bool paused = false;
   uint64_t step_frames = 0;     // frames to run before pausing again ("step")
@@ -577,14 +592,14 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
   }
   if (name == "help") {
     out("help", "host commands: wait waitfor exec echo peek poke expect find <number> freeze unfreeze trace status cvars dumpmem "
-                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step. "
+                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad. "
                 "Chain with ';'. Lua commands follow (their text appears in the log).");
     return false;  // Lua prints its own command list too
   }
   if (name == "hosthelp") {
     out("help",
         "host commands: wait waitfor exec echo peek poke expect find freeze unfreeze trace status cvars dumpmem "
-        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step. "
+        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad. "
         "Everything else (warp, god, gold, giveall, ...) runs in Lua: type help. "
         "Separate commands with ';'. Addresses are hex guest addresses.");
     return true;
@@ -992,6 +1007,52 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     out("pause", s.paused ? "paused (pause off or step <n> to continue)" : "running");
     return true;
   }
+  if (name == "pad") {
+    // pad <A|B|X|Y|LB|RB|LT|RT|Up|Down|Left|Right|Start|Back|L3|R3>[+...] [frames]
+    // pad stick <lx> <ly> [frames]  (-32768..32767, ly + = forward)  |  pad off
+    // Holds the input for frames (default 6), then releases it. While held
+    // the command queue waits, so "pad A; pad Down; pad A" are separate presses.
+    static const std::pair<const char*, uint16_t> kBtn[] = {
+        {"up", 0x0001}, {"down", 0x0002}, {"left", 0x0004}, {"right", 0x0008}, {"start", 0x0010},
+        {"back", 0x0020}, {"l3", 0x0040}, {"r3", 0x0080}, {"lb", 0x0100}, {"rb", 0x0200},
+        {"a", 0x1000}, {"b", 0x2000}, {"x", 0x4000}, {"y", 0x8000}};
+    if (W.size() < 2) return out("pad", "usage: pad <button>[+button] [frames] | pad stick <lx> <ly> [frames] | pad off", true), true;
+    fable2::remote::InputSnapshot snap;
+    size_t fi = 2;
+    std::string what = W[1];
+    for (auto& c : what) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (what == "off") {
+      PadStore().Publish({});
+      s.pad_frames = 0;
+      return out("pad", "released"), true;
+    }
+    if (what == "stick") {
+      int64_t lx = 0, ly = 0;
+      if (W.size() < 4 || !parse_i(W[2], lx) || !parse_i(W[3], ly)) return out("pad", "usage: pad stick <lx> <ly> [frames]", true), true;
+      snap.stk_lx = static_cast<int32_t>(std::clamp<int64_t>(lx, -32768, 32767));
+      snap.stk_ly = static_cast<int32_t>(std::clamp<int64_t>(ly, -32768, 32767));
+      fi = 4;
+    } else {
+      std::stringstream ss(what);
+      std::string b;
+      while (std::getline(ss, b, '+')) {
+        bool found = false;
+        if (b == "lt") snap.left_trigger = 255, found = true;
+        if (b == "rt") snap.right_trigger = 255, found = true;
+        for (const auto& kv : kBtn)
+          if (b == kv.first) snap.buttons |= kv.second, found = true;
+        if (!found) return out("pad", "unknown input '" + b + "'", true), true;
+      }
+    }
+    uint64_t frames = 6;
+    if (W.size() > fi && (!parse_u(W[fi], frames) || frames == 0 || frames > 100000))
+      return out("pad", "bad frame count", true), true;
+    PadStore().Publish(snap);
+    s.pad_frames = frames;
+    s.wait_frames = frames + 2;  // hold, then a short gap before the next command
+    s.wait_time = false;
+    return true;
+  }
   if (name == "step") {
     // step [n]: while paused, run n frames (default 1) and pause again.
     uint64_t n = 1;
@@ -1066,7 +1127,7 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
       // Each is a multiple of the extra width per side, so 16:9 stays vanilla.
       double v = 0;
       if (W.size() < 4 || !parse_f(W[3], v))
-        return out("ws", "usage: ws tune <cover|page|card> <factor>  (defaults 1, 1.2, 1.8)", true), true;
+        return out("ws", "usage: ws tune <cover|page|card|bookcover> <factor>  (defaults 1, 1.2, 1.8, 1.1)", true), true;
       std::string key;
       for (char c : W[2])
         if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') key += c;
@@ -1572,6 +1633,7 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
   if (s.root.empty()) return;
   ++s.frames;
   if (s.step_frames) --s.step_frames;
+  if (s.pad_frames && --s.pad_frames == 0) PadStore().Publish({});
   poll_pause_key();
   if (s.frames == 1)
     f5lua::logline("[console] %s active, root=%s\n", FABLE2_CONSOLE_BUILD, s.root.string().c_str());
