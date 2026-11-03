@@ -1,0 +1,53 @@
+Fable 2 developer commands - console-v5
+=======================================
+
+What it is: one new command, "f2", in the ReXGlue SDK's own console. Press ~
+in game, type  f2 <command>,  press Enter. Nothing runs until you type the first
+f2 command, so a normal launch is unchanged. No separate window, no .cmd.
+
+How it works: "f2 ..." drops the text into a queue; the game's main loop runs it
+one command per frame. Host commands (peek, poke, wait...) print straight into
+the ~ console. Lua commands (warp, god, gold...) call the game's own Lua API; their
+replies are printed with cprint, so they should appear in the ~ console if cprint
+feeds the log, otherwise only in logs\ (look for [console] lines).
+
+UNTESTED in game. Guesses to confirm: cprint output location, Debug.LoadLevel's
+argument, hero:SetPosition(CVector3), and the argument shapes of the Debug.*
+functions (failed calls print the game's own error text, which is useful).
+
+Steps
+1. Unzip into the repo root, double-click install-console.cmd, wait for "Done".
+   If the build fails with an error about REXCVAR_DEFINE_COMMAND_ARGS or
+   rex/logging.h, your SDK is older than the ~ console; send the error.
+2. Start the game normally. Press ~ . Type:  f2 help
+   Expect a "[help] host commands: ..." line, then the Lua command list.
+3. Load a save. Then, one at a time:
+     f2 pos | f2 level | f2 info
+     f2 gold 1000
+     f2 warp save here   (walk away)   f2 warp here
+     f2 warp rel 0 0 10 | f2 up
+     f2 god on | f2 god off | f2 freecam
+     f2 giveall list | f2 giveall potions
+     f2 time 12 | f2 herolevel 20
+     f2 find hero | f2 dump Debug | f2 call Debug.SetHeroLevel 20
+   Memory (needs a real guest address):
+     f2 peek <addr> 32 | f2 poke <addr> 0x0000 | f2 expect <addr> <value>
+     f2 freeze <addr> <value> | f2 unfreeze all | f2 trace <addr> 16 20
+     f2 find 300 32 40000000 40100000
+   Dump everything (so you can see what can be edited):
+     f2 dumpall            every Lua global, function and value (depth 3) into the log
+     f2 dumpall 2 gui      only paths containing "gui"
+     f2 dump GUI 2 | f2 dump Debug | f2 methods hero | f2 methods Debug
+     f2 cvars [text]       every cvar with value, default, range -> console\cvars.txt
+     f2 dumpmem <addr> <bytes> [file]   raw guest memory -> console\<file>
+   Edit what you find:  f2 set Some.Path 5 | f2 call GUI.SetGUIText ... | f2 poke ...
+   Dump lines go to the log (logs\, search for [console]) because Lua cannot write
+   files; send back the dumpall lines, they are the map of what can be edited.
+   Scripting:  f2 warp save a; wait 60; warp a   (chains run in order)
+               f2 wait 2s | f2 waitfor ram <addr> == 5 timeout 10s | f2 status
+4. Close the game, start it normally, do NOT type f2: nothing console-related
+   should run, and F5 must still work.
+
+Send back: what the ~ console printed for each step (screenshot is fine), the
+[console] lines from logs\ if Lua replies did not show in the ~ console, which
+commands worked, and anything that crashed.
