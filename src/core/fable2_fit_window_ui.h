@@ -70,7 +70,7 @@ namespace detail {
 // Test builds log the layout whatever fit_window_ui_log says, because L's
 // config file does not reach this cvar. Bump kBuild with each test zip.
 inline constexpr bool kAlwaysLogLayout = true;
-inline constexpr int kBuild = 27;
+inline constexpr int kBuild = 28;
 inline bool LogLayout() {
   return kAlwaysLogLayout || REXCVAR_GET(fit_window_ui_log);
 }
@@ -448,59 +448,12 @@ local boy = cards and child(cards, "Boy")
 local girl = cards and child(cards, "Girl")
 if screen == "other" and (leftFrame or rightFrame) then screen = "book" end
 out("screen kind now: " .. screen)
--- Builds 6-13 widened the title's White plane and the black box stayed
--- 16:9, so also put a wide copy of it into the dialog component (clone
--- works into components, not into Layer), and log White's material so the
--- next log says what colour it really is.
-local titleCovered, titleCopy = false, nil
-local function titleCover()
-  -- The copy fades with White, so it only ever shows what White shows.
-  if titleCopy then
-    local o = attr(child(layer, "White"), "opacity")
-    if o ~= nil then pcall(setAttribute, titleCopy.e, "opacity", o) end
-    local sx = 12.8 * r * 1.05
-    if titleCopy.sx ~= sx then
-      pcall(setAttribute, titleCopy.e, "scale.x", sx)
-      titleCopy.sx = sx
-    end
-    return
-  end
-  if titleCovered then return end
-  titleCovered = true
-  local white = child(layer, "White")
-  local dialog = child(layer, "dialog")
-  if not white or not dialog then out("title cover: no White or dialog") return end
-  local m = kids(white)[1]
-  if m then
-    local line = ""
-    for _, a in ipairs({ "diffuse.r", "diffuse.g", "diffuse.b", "opacity",
-      "emissive.r", "emissive.g", "emissive.b", "blendmode" }) do
-      local v = attr(m, a)
-      if v ~= nil then line = line .. " " .. a .. "=" .. tostring(v) end
-    end
-    out("title White material:" .. line)
-  end
-  local okc, c = pcall(clone, white, dialog)
-  if not okc or not c then out("title cover: clone failed: " .. tostring(c)) return end
-  local dz = attr(dialog, "position.z") or 0
-  pcall(setAttribute, c, "position.x", 0)
-  pcall(setAttribute, c, "position.y", 0)
-  pcall(setAttribute, c, "position.z", 0 - dz)
-  pcall(setAttribute, c, "scale.x", 12.8 * r * 1.05)
-  pcall(setAttribute, c, "scale.y", 7.2 * 1.05)
-  pcall(setAttribute, c, "opacity", attr(white, "opacity") or 100)
-  titleCopy = { e = c, sx = 12.8 * r * 1.05 }
-  out(string.format("title cover: wide copy of White in dialog, scale.x %.2f",
-    12.8 * r * 1.05))
-end
 local masks = nil
 -- Pressing Start shows a 16:9 black box before the book: BackgroundTint
 -- fading in from black. The game draws it at its animated scale while that
 -- runs, so the camera zooms in by the window's extra width while the tint is
 -- dark and goes back once it lights up. Logs the first frames to tune it.
 local fadeCam, fadeZ, fadeLogs, fadeSet = nil, nil, 0, nil
-local scrolling = child(layer, "Scrolling")
-local panoTick, panoStill = -1, 1000
 local function pauseFade()
   local tint = child(layer, "BackgroundTint")
   if not tint then return end
@@ -532,42 +485,13 @@ local function fixMenus()
   page = dx * tk("page", 245 / 220)
   card = dx * tk("card", 1)
   if screen == "title" then
-    -- The title's box (White) is animated: its scale and the title camera
-    -- are put back when it draws, so it stays 16:9 whatever is set here, and
-    -- clone() refuses it ("different time context"). The screens behind it
-    -- show at the sides instead (console test: only the panorama). So the
-    -- title ticks a shared counter each frame and publishes the box's
-    -- opacity, and the panorama hides while the box is showing (see below).
-    -- The box fades out by itself after the legal text, as in vanilla, and
-    -- then the panorama shows behind the logo. The three GUI screens share
-    -- one Lua state, so plain globals reach the panorama's script.
-    rawset(_G, "__fitwin_titleTick", (rawget(_G, "__fitwin_titleTick") or 0) + 1)
-    rawset(_G, "__fitwin_titleBox", attr(child(layer, "White"), "opacity") or 0)
-    widen(layer, "White")
-    -- L's build 20 screenshots: White is the box (white, fading to grey and
-    -- black), but the game draws it at its animated scale whatever scale.x
-    -- says. So the title camera moves closer instead: everything in the
-    -- title grows by the window's extra width and the box fills the window.
-    -- Only for windows wider than 16:9: a narrower one keeps the camera.
-    local cam = child(layer, "Camera")
-    if cam then
-      local z = first["TitleCamera.position.z"] or attr(cam, "position.z")
-      if z and z < 0 then scaleBy(cam, "TitleCamera", "position.z", r > 1 and 1 / r or 1) end
-    end
-  elseif screen == "other" then
-    -- The main menu's scrolling panorama: out of sight while the title's
-    -- box is showing on a window wider than 16:9, so the title's sides are
-    -- dark like its 16:9 box (vanilla shows only the box). The title's
-    -- update runs less often than this one, so it counts as up until its
-    -- counter has stood still for 30 of these frames.
-    if scrolling then
-      local t = rawget(_G, "__fitwin_titleTick") or 0
-      if t ~= panoTick then panoTick, panoStill = t, 0 else panoStill = panoStill + 1 end
-      local box = rawget(_G, "__fitwin_titleBox") or 0
-      local hide = panoStill < 30 and box > 50 and r > 1
-      nudge(scrolling, "Scrolling", "position.y", hide and 100000 or 0)
-    end
-  else
+    -- Title: left as authored. Its 16:9 box (White) is on the title's
+    -- timeline: scale, position.z and the title camera are put back when it
+    -- draws (console tests, build 26-27), and clone() refuses it ("different
+    -- time context"); only its opacity sticks. The main menu's panorama runs
+    -- in another Lua state and shows at the box's sides until the box fades
+    -- out after the legal text. Open: finding the box's keyframe data.
+  elseif screen ~= "other" then
     spreadMenu(menu)
     if not menu and leftFrame then childMove(leftFrame, "LeftFrame", "^frame_new", -cover) end
     if screen == "mainmenu" then
