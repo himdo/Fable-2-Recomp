@@ -54,7 +54,8 @@ struct Pending {
   uint32_t L = 0;   // unused since console-v10: chunks run on the calling state
   bool probe = false;
   int tries = 0;
-  std::vector<uint32_t> tried;  // states that answered "no element"
+  std::vector<uint32_t> tried;  // states that answered "no element" (broadcast: states done)
+  std::string tag;              // non-empty: a broadcast (enqueue_all); a newer one with the tag replaces it
 };
 
 struct State {
@@ -281,6 +282,24 @@ inline void drain(PPCContext& ctx, uint8_t* base) {
   }
   bool ok = false;
   std::string r;
+  if (!p.tag.empty()) {
+    // Broadcast: once in each state that calls in, quietly; it stays queued
+    // (at the back) until every captured state has had it or 600 calls pass.
+    if (std::find(p.tried.begin(), p.tried.end(), L) == p.tried.end()) {
+      try {
+        run_chunk(ctx, base, L, p.code, ok);
+      } catch (...) {
+      }
+      ctx = saved;
+      p.tried.push_back(L);
+    }
+    {
+      std::lock_guard<std::mutex> lock(s.mu);
+      if (++p.tries < 600 && p.tried.size() < s.states.size()) s.pending.push_back(p);
+    }
+    s.busy = false;
+    return;
+  }
   try {
     // Chunks run in a state meeting "gui where" (any state by default); any
     // other answers "__f2_wrong_state" and the command waits for the next call.
@@ -332,6 +351,20 @@ inline void enqueue(const std::string& code, uint32_t L = 0, bool probe = false)
   State& s = S();
   std::lock_guard<std::mutex> lock(s.mu);
   if (s.pending.size() < 64) s.pending.push_back({code, L, probe});
+}
+
+// Runs code once in every GameFace state (as each next calls a hooked
+// native), with no "gui where" check and no reply. A newer broadcast with the
+// same tag replaces one still queued.
+inline void enqueue_all(const std::string& tag, const std::string& code) {
+  State& s = S();
+  std::lock_guard<std::mutex> lock(s.mu);
+  for (auto it = s.pending.begin(); it != s.pending.end();)
+    it = it->tag == tag ? s.pending.erase(it) : it + 1;
+  Pending p;
+  p.code = code;
+  p.tag = tag;
+  s.pending.push_back(p);
 }
 
 inline std::vector<std::string> take_results() {

@@ -64,6 +64,16 @@ REXCVAR_DEFINE_BOOL(console_enabled, true, "Input",
 
 namespace fable2::console {
 
+// Every UI aspect change (window resize, ws on/off/aspect) goes to all GUI
+// screens as __fitwin_A, which the fit-window layout script re-reads each
+// frame, so open menus and the HUD follow it without reloading.
+inline void send_ui_aspect(float aspect) {
+  char code[64];
+  std::snprintf(code, sizeof(code), "__fitwin_A = %.5f", aspect);
+  fable2::guilua::enqueue_all("fitwin_A", code);
+}
+inline const bool kUiAspectListener = (fable2::fitwindow::SetAspectListener(&send_ui_aspect), true);
+
 namespace fs = std::filesystem;
 namespace ta = fable2::textappend;
 using Clock = std::chrono::steady_clock;
@@ -1044,7 +1054,25 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     }
     if (sub == "apply") {
       fw::Reapply();
-      out("ws", "re-applied, aspect " + fstr(fw::CurrentAspect()));
+      if (!fw::Installed() || !REXCVAR_GET(fit_game_to_window)) fable2::guilua::enqueue_all("fitwin_A",
+          "__fitwin_A = " + fstr(fw::UiAspect()));
+      out("ws", "re-applied, aspect " + fstr(fw::UiAspect()));
+      return true;
+    }
+    if (sub == "tune") {
+      // ws tune <name> <factor>: a menu offset factor of the layout script
+      // (__fitwin_tune), sent to every GUI screen and applied next frame.
+      // Each is a multiple of the extra width per side, so 16:9 stays vanilla.
+      double v = 0;
+      if (W.size() < 4 || !parse_f(W[3], v))
+        return out("ws", "usage: ws tune <cover|page|card> <factor>  (defaults 1.045, 1.114, 1)", true), true;
+      std::string key;
+      for (char c : W[2])
+        if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') key += c;
+      if (key.empty()) return out("ws", "bad tune name", true), true;
+      fable2::guilua::enqueue_all("fitwin_tune_" + key, "if type(__fitwin_tune) ~= 'table' then __fitwin_tune = {} end "
+                                  "__fitwin_tune." + key + " = " + fstr(v));
+      out("ws", "tune " + key + " = " + fstr(v) + " sent to the GUI screens");
       return true;
     }
     const char* cvar = sub == "hud" ? "fit_window_hud_to_edges"
@@ -1058,7 +1086,8 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
                     (sub == "hud" ? " (takes effect when the next UI screen loads)" : ""));
       return true;
     }
-    out("ws", "usage: ws [status] | on | off | aspect <w:h|n|auto> | hud on|off | native on|off | log on|off | apply", true);
+    out("ws", "usage: ws [status] | on | off | aspect <w:h|n|auto> | hud on|off | native on|off | log on|off | apply | "
+              "tune <name> <factor>", true);
     return true;
   }
   if (name == "cvar") {
