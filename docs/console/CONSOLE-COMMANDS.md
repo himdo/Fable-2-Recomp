@@ -234,6 +234,7 @@ Stops the game itself, not just the game's pause menu: the game thread waits at 
 |---|---|---|---|
 | `pause` | `pause [on\|off\|toggle]` | Holds the game at the end of the current frame. With no argument it toggles. | `console\state.txt` shows `paused 1` while held. |
 | `step` | `step [n]` | While paused, runs n frames (default 1) and pauses again. | Up to 100000 frames. |
+| F9 key | press F9 in the game window | Toggles pause, like `pause`. | Picks the exact moment by hand. To start paused, put `pause on` in `console\autoexec.txt`. |
 
 While paused, only host commands that read or write memory and console state run: `pause`, `step`, `status`, `echo`, `hosthelp`, `peek`, `poke`, `peekf`, `pokef`, `peekstr`, `freeze`, `freezef`, `unfreeze`, `cvar`, `cvars`, `ws`, `history`, `dumpmem`, `find`, `findf`, `findstr`. Anything that needs the game running (Lua commands, `ui`/`gui`, `wait`) stays queued and runs after `pause off`. `freeze` values are still held. The UI does not redraw while paused, so `ui` edits need `pause off` or `step` to show.
 

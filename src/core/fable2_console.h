@@ -1480,6 +1480,25 @@ inline void run_lua_line(const std::string& line, PPCContext& ctx, uint8_t* base
   if (!s.pump_requested) start_pump(ctx, base);
 }
 
+// F9 (game window focused) toggles pause, so the moment to stop can be picked
+// by hand. Edge-detected; checked every frame and while paused.
+inline void poll_pause_key() {
+#ifdef _WIN32
+  static bool prev = false;
+  const bool down = (GetAsyncKeyState(0x78 /* VK_F9 */) & 0x8000) != 0;
+  const bool edge = down && !prev;
+  prev = down;
+  if (!edge) return;
+  DWORD pid = 0;
+  GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+  if (pid != GetCurrentProcessId()) return;
+  State& s = S();
+  s.paused = !s.paused;
+  s.step_frames = 0;
+  out("pause", s.paused ? "paused (F9)" : "running (F9)");
+#endif
+}
+
 // Host commands that work while the game thread is held: they only read or
 // write memory and console state, and pause/step end the hold.
 inline bool runs_while_paused(const std::string& line) {
@@ -1530,6 +1549,7 @@ inline void hold_paused(uint8_t* base, bool file_mode) {
       }
     }
     if (!line.empty()) run_host_command(line, base);
+    poll_pause_key();
     for (auto& kv : s.frozen) write_be(base, kv.first, kv.second.size, kv.second.value);
     if (Clock::now() - last_state > std::chrono::milliseconds(500)) {
       write_state_file();
@@ -1546,6 +1566,7 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
   if (s.root.empty()) return;
   ++s.frames;
   if (s.step_frames) --s.step_frames;
+  poll_pause_key();
   if (s.frames == 1)
     f5lua::logline("[console] %s active, root=%s\n", FABLE2_CONSOLE_BUILD, s.root.string().c_str());
 
