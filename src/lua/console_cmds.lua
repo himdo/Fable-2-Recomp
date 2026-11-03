@@ -26,7 +26,9 @@ line = line:gsub("^%s+", ""):gsub("%s+$", "")
 local box_buf = {}
 local function out(s)
   s = tostring(s)
-  pcall(cprint, "[console] " .. s)
+  -- Keep each cprint short (fixed-size buffer in the release cprint).
+  for i = 1, #s, 380 do pcall(cprint, "[console] " .. s:sub(i, i + 379)) end
+  if #s == 0 then pcall(cprint, "[console] ") end
   box_buf[#box_buf + 1] = s
 end
 
@@ -643,16 +645,22 @@ local function walk(v, path, depth, seen, emit, filter)
 end
 
 -- Emit lines in chunks so a very long dump is a few log writes, not thousands.
+-- Chunks stay under ~400 characters: the release cprint copies into a fixed-size
+-- buffer and longer strings overran it (the host hook also takes [console]
+-- lines away from it, console-v9).
 local function chunked_emit(limit)
-  local buf, count = {}, 0
+  local buf, count, chars = {}, 0, 0
   local function flush()
-    if #buf > 0 then pcall(cprint, "[console] " .. table.concat(buf, "\n")) buf = {} end
+    if #buf > 0 then pcall(cprint, "[console] " .. table.concat(buf, "\n")) buf = {} chars = 0 end
   end
   local function emit(line)
     if count >= limit then return end
     count = count + 1
+    line = tostring(line)
+    if #line > 380 then line = line:sub(1, 377) .. "..." end
+    if chars + #line > 380 then flush() end
     buf[#buf + 1] = line
-    if #buf >= 25 then flush() end
+    chars = chars + #line + 1
     if count == limit then
       buf[#buf + 1] = "... output limit " .. limit .. " reached; narrow with a path or filter"
       flush()

@@ -26,6 +26,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <deque>
@@ -68,6 +69,7 @@ struct State {
   uint32_t buf = 0, buf_size = 0;
   uint64_t runs = 0, errors = 0;
   bool busy = false;              // re-entrancy guard (our chunk calls the natives too)
+  std::atomic<bool> armed{false}; // set once the console is in use; native hooks pass through until then
 };
 inline State& S() {
   static State s;
@@ -292,6 +294,12 @@ inline void note_main_thread() { S().main_tid = std::this_thread::get_id(); }
 // Called by the console every frame (game thread).
 inline void poll(PPCContext& ctx, uint8_t* base) {
   State& s = S();
+  static const bool bridge_on = [] {
+    const char* e = std::getenv("FABLE2_GUI_BRIDGE");
+    return !(e && *e == '0');
+  }();
+  if (!bridge_on) return;
+  s.armed.store(true, std::memory_order_relaxed);
   s.main_tid = std::this_thread::get_id();
   if (s.pending.empty()) return;
   if (s.gui_tid_known && s.gui_tid == s.main_tid) drain(ctx, base);
@@ -354,7 +362,7 @@ extern "C" void ProcessAndProcessAndProcess53_82BB2528(PPCContext& ctx, uint8_t*
 // here when that thread is not the console's.
 extern "C" void ProcessAndHandleType3_82BB68D8(PPCContext& ctx, uint8_t* base) {
   auto& s = fable2::guilua::S();
-  if (!s.busy) {
+  if (s.armed.load(std::memory_order_relaxed) && !s.busy) {
     fable2::guilua::note_state(base, ctx.r3.u32, true);
     if (!s.pending.empty() && s.gui_tid != s.main_tid) fable2::guilua::drain(ctx, base);
   }
@@ -363,7 +371,7 @@ extern "C" void ProcessAndHandleType3_82BB68D8(PPCContext& ctx, uint8_t* base) {
 
 extern "C" void ProcessAndReadAndProcess_82BB7100(PPCContext& ctx, uint8_t* base) {
   auto& s = fable2::guilua::S();
-  if (!s.busy) {
+  if (s.armed.load(std::memory_order_relaxed) && !s.busy) {
     fable2::guilua::note_state(base, ctx.r3.u32, true);
     if (!s.pending.empty() && s.gui_tid != s.main_tid) fable2::guilua::drain(ctx, base);
   }

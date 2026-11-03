@@ -1,4 +1,4 @@
-// fable_2 - developer commands, console-v9.
+// fable_2 - developer commands, console-v10.
 //
 // Typed in the SDK's `~` console as   f2 <command>   for example
 //   f2 warp 1 2 3        f2 god on        f2 warp save a; wait 60; warp a
@@ -33,6 +33,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <deque>
 #include <filesystem>
 #include <fstream>
@@ -53,7 +54,7 @@
 #define FABLE2_CONSOLE_HAVE_REXLOG 1
 #endif
 
-#define FABLE2_CONSOLE_BUILD "console-v9"
+#define FABLE2_CONSOLE_BUILD "console-v10"
 
 REXCVAR_DEFINE_BOOL(console_enabled, false, "Input",
                     "Enable the developer command line (f2-console.cmd). Off by default.");
@@ -114,6 +115,16 @@ struct State {
   bool scan_float = false;
   bool scan_active = false;
   bool autoexec_done = false;
+  // Lua command pump (console_pump.lua): the game runs it inside its own
+  // script update; the cprint hook sets pump_ready / lua_done from its markers.
+  std::atomic<bool> pump_ready{false};
+  bool pump_requested = false;
+  Clock::time_point pump_req_time{};
+  std::string lua_pending;      // a Lua line held until the pump is ready
+  uint64_t lua_seq = 0;
+  std::atomic<uint64_t> lua_done{0};
+  bool lua_wait = false;        // a dispatched line has not reported done yet
+  Clock::time_point lua_deadline{};
 };
 inline State& S() {
   static State s;
@@ -134,6 +145,10 @@ inline bool enabled() {
 
 inline void out(const std::string& tag, const std::string& msg, bool err = false) {
   State& s = S();
+  // Called from the console thread and, through the cprint hook, from the
+  // game's script thread: serialise the shared string and file appends.
+  static std::mutex out_mu;
+  std::lock_guard<std::mutex> lock(out_mu);
   const std::string line = "[" + tag + "] " + (err ? "ERR " : "") + msg;
   s.last = line;
   if (err) ++s.errors;
@@ -1278,25 +1293,57 @@ inline void write_state_file() {
   fs::rename(tmp, s.root / "console" / "state.txt", ec);
 }
 
-inline void run_lua_line(const std::string& line, PPCContext& ctx, uint8_t* base) {
-  if (line.find("]==]") != std::string::npos) {
-    out("lua", "line contains ]==] and was refused", true);
-    return;
-  }
-  const auto run = S().root / "data" / "scripts" / "recomp" / "console_run.lua";
-  {
-    std::ofstream f(run, std::ios::binary | std::ios::trunc);
-    f << "local fn = loadfile(\"scripts/recomp/console_cmds.lua\")\n"
-         "if fn then fn([==["
-      << line << "]==]) else pcall(cprint, \"console: console_cmds.lua not found\") end\n";
-  }
+// Lua commands run inside the game's own script update (console_pump.lua), not
+// from this hook: calling RunScript per command from MainRenderLoop raced the
+// game's Lua and corrupted the VM. RunScript is used once, to install the pump.
+inline void start_pump(PPCContext& ctx, uint8_t* base) {
+  State& s = S();
+  s.pump_requested = true;
+  s.pump_req_time = Clock::now();
   const PPCContext saved = ctx;
   try {
-    const std::string path = "scripts/recomp/console_run.lua";
+    const std::string path = "scripts/recomp/console_pump.lua";
     f5lua::run_external(ctx, base, &path);
   } catch (...) {
   }
   ctx = saved;
+}
+
+// Hands one line to the pump: console_run.lua = `return <seq>, [==[line]==]`.
+inline void dispatch_lua(const std::string& line) {
+  State& s = S();
+  if (s.lua_seq == 0) s.lua_seq = static_cast<uint64_t>(std::time(nullptr)) % 100000000ull * 100;
+  ++s.lua_seq;
+  const auto run = s.root / "data" / "scripts" / "recomp" / "console_run.lua";
+  std::error_code ec;
+  fs::create_directories(s.root / "console", ec);
+  const auto tmp = s.root / "console" / "run.tmp";
+  {
+    std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
+    f << "return " << s.lua_seq << ", [==[" << line << "]==]\n";
+  }
+  fs::rename(tmp, run, ec);
+  if (ec) {  // e.g. a different volume: fall back to a direct write
+    std::ofstream f(run, std::ios::binary | std::ios::trunc);
+    f << "return " << s.lua_seq << ", [==[" << line << "]==]\n";
+  }
+  s.lua_wait = true;
+  s.lua_deadline = Clock::now() + std::chrono::seconds(30);
+}
+
+inline void run_lua_line(const std::string& line, PPCContext& ctx, uint8_t* base) {
+  State& s = S();
+  if (line.find("]==]") != std::string::npos) {
+    out("lua", "line contains ]==] and was refused", true);
+    return;
+  }
+  if (s.pump_ready.load()) {
+    dispatch_lua(line);
+    return;
+  }
+  // Pump not running yet: start it and hold this line until it reports ready.
+  s.lua_pending = line;
+  if (!s.pump_requested) start_pump(ctx, base);
 }
 
 // Called every frame from the MainRenderLoop hook, right after the F5 poll.
@@ -1380,8 +1427,39 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
     }
   }
 
+  auto idle_if_empty = [&] {
+    bool empty;
+    {
+      std::lock_guard<std::mutex> lock(s.qmu);
+      empty = s.queue.empty();
+    }
+    if (empty && !s.waitfor && !s.wait_frames && !s.wait_time && !s.lua_wait && s.lua_pending.empty())
+      out("console", "IDLE");
+  };
+
   // Pending waits hold the queue; otherwise run one command per frame.
-  if (s.wait_frames > 0) {
+  if (!s.lua_pending.empty()) {
+    // Waiting for console_pump.lua to register (it needs a loaded game).
+    if (s.pump_ready.load()) {
+      const std::string l = s.lua_pending;
+      s.lua_pending.clear();
+      dispatch_lua(l);
+    } else if (Clock::now() - s.pump_req_time > std::chrono::seconds(20)) {
+      out("lua", "the Lua command pump did not start (load a save first); dropped: " + s.lua_pending, true);
+      s.lua_pending.clear();
+      s.pump_requested = false;  // retry on the next Lua command
+      idle_if_empty();
+    }
+  } else if (s.lua_wait) {
+    if (s.lua_done.load() == s.lua_seq) {
+      s.lua_wait = false;
+      idle_if_empty();
+    } else if (Clock::now() >= s.lua_deadline) {
+      s.lua_wait = false;
+      out("lua", "no reply from the Lua command pump within 30 s", true);
+      idle_if_empty();
+    }
+  } else if (s.wait_frames > 0) {
     --s.wait_frames;
   } else if (s.wait_time) {
     if (Clock::now() >= s.wait_until) s.wait_time = false;
@@ -1419,12 +1497,7 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
         if (s.history.size() > 200) s.history.pop_front();
       }
       if (line[0] == '!' || !run_host_command(line, base)) run_lua_line(line, ctx, base);
-      bool empty;
-      {
-        std::lock_guard<std::mutex> lock(s.qmu);
-        empty = s.queue.empty();
-      }
-      if (empty && !s.waitfor && !s.wait_frames && !s.wait_time) out("console", "IDLE");
+      idle_if_empty();
     }
   }
 
@@ -1432,6 +1505,62 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
 }
 
 }  // namespace fable2::console
+
+// The game Lua's native cprint/print (0x82A19CD8, registered by the script API
+// setup at 0x82A19FC4). In release builds its text goes nowhere, so the console's
+// Lua replies (console_cmds.lua prefixes them "[console] ") were invisible.
+// Forward those lines to the console output; everything else passes through.
+// Game Lua: L->top +8, L->base +0xC, 8-byte TValues, string TValue tt 4,
+// TString length +12 and text +16.
+extern "C" void sub_82A19CD8(PPCContext& ctx, uint8_t* base) {
+  namespace ta = fable2::textappend;
+  auto& s = fable2::console::S();
+  const uint32_t L = ctx.r3.u32;
+  static const bool hook_on = [] {
+    const char* e = std::getenv("FABLE2_CPRINT_HOOK");
+    return !(e && *e == '0');
+  }();
+  if (hook_on && (s.active.load(std::memory_order_relaxed) || fable2::console::enabled())) {
+    if (L && ta::rdable2(base, L, 0x10)) {
+      const uint32_t top = ta::load_be(base, L + 8), bot = ta::load_be(base, L + 0xC);
+      if (bot && top > bot && top - bot <= 8 * 16 && ta::rdable2(base, bot, top - bot)) {
+        const uint32_t tt = ta::load_be(base, bot + 4);
+        const uint32_t ts = ta::load_be(base, bot);
+        if (tt == 4 && ta::rdable2(base, ts, 16)) {
+          uint32_t len = ta::load_be(base, ts + 12);
+          if (len > 64000) len = 64000;
+          if (ta::rdable2(base, ts + 16, len)) {
+            std::string text(reinterpret_cast<const char*>(ta::host_addr(base, ts + 16)), len);
+            static const std::string kTag = "[console] ";
+            if (text.rfind(kTag, 0) == 0) {
+              const std::string body = text.substr(kTag.size());
+              if (body == "__f2 ready") {
+                s.pump_ready.store(true);
+                ctx.r3.u64 = 0;
+                return;
+              }
+              if (body.rfind("__f2 done ", 0) == 0) {
+                s.lua_done.store(std::strtoull(body.c_str() + 10, nullptr, 10));
+                ctx.r3.u64 = 0;
+                return;
+              }
+              std::istringstream is(body);
+              std::string ln;
+              while (std::getline(is, ln)) fable2::console::out("lua", ln);
+              // Handled here: the release cprint copies into a fixed-size guest
+              // stack buffer, and long console output overran it (exit
+              // 0xC0000409 / garbage reads). A Lua C function returns its result
+              // count in r3; cprint returns none.
+              ctx.r3.u64 = 0;
+              return;
+            }
+          }
+        }
+      }
+    }
+  }
+  __imp__sub_82A19CD8(ctx, base);
+}
 
 // `f2 <command>` in the SDK's `~` console. One registered name, so it cannot
 // collide with the SDK's own cvars and commands (echo, find, ...). Skipped when
