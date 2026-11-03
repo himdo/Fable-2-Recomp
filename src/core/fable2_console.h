@@ -75,27 +75,6 @@ inline void send_ui_aspect(float aspect) {
 }
 inline const bool kUiAspectListener = (fable2::fitwindow::SetAspectListener(&send_ui_aspect), true);
 
-// The title box's opacity, reported by the title's layout script, goes to
-// every GUI state as __fitwin_titleBox so the main menu's panorama (another
-// Lua state) can hide behind the 16:9 box. Reports come every few frames;
-// once they stop for 60 frames (title gone) the value is reset to 0.
-inline std::atomic<float> g_title_box{0.0f};
-inline std::atomic<uint64_t> g_title_box_frame{0};
-inline void send_title_box(float opacity) {
-  g_title_box_frame.store(fable2::guilua::S().frame.load(std::memory_order_relaxed));
-  if (g_title_box.exchange(opacity) == opacity) return;
-  char code[64];
-  std::snprintf(code, sizeof(code), "__fitwin_titleBox = %.1f", opacity);
-  fable2::guilua::enqueue_all("fitwin_box", code);
-}
-inline void expire_title_box() {
-  if (g_title_box.load() <= 0.0f) return;
-  if (fable2::guilua::S().frame.load(std::memory_order_relaxed) - g_title_box_frame.load() < 60) return;
-  g_title_box.store(0.0f);
-  fable2::guilua::enqueue_all("fitwin_box", "__fitwin_titleBox = 0");
-}
-inline const bool kTitleBoxListener = (fable2::fitwindow::ui::SetTitleBoxListener(&send_title_box), true);
-
 namespace fs = std::filesystem;
 namespace ta = fable2::textappend;
 using Clock = std::chrono::steady_clock;
@@ -1591,7 +1570,6 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
   ++s.frames;
   if (s.step_frames) --s.step_frames;
   poll_pause_key();
-  expire_title_box();
   if (s.frames == 1)
     f5lua::logline("[console] %s active, root=%s\n", FABLE2_CONSOLE_BUILD, s.root.string().c_str());
 
