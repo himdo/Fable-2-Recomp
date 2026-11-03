@@ -70,7 +70,7 @@ namespace detail {
 // Test builds log the layout whatever fit_window_ui_log says, because L's
 // config file does not reach this cvar. Bump kBuild with each test zip.
 inline constexpr bool kAlwaysLogLayout = true;
-inline constexpr int kBuild = 28;
+inline constexpr int kBuild = 30;
 inline bool LogLayout() {
   return kAlwaysLogLayout || REXCVAR_GET(fit_window_ui_log);
 }
@@ -295,6 +295,7 @@ end
 -- re-applied, a new aspect retargets it, and a running animation is left
 -- alone. At 16:9 the target is the authored value.
 local first, applied, last = {}, {}, {}
+local fixTick = 0  -- per-frame counter (the onUpdate hook below)
 local function track(e, key, name, mul, p)
   if not e then return end
   local v = attr(e, name)
@@ -305,7 +306,18 @@ local function track(e, key, name, mul, p)
   -- cards) is one it animates; fighting it only flickers, so give up.
   if applied[k] > 10 then return end
   local want = mul and first[k] * p or first[k] + p
-  if math.abs(v - want) < 0.01 then return end
+  if math.abs(v - want) < 0.01 then
+    -- Already reads as wanted, but a value set while the element's own
+    -- animation runs is overridden when it draws, and once that animation
+    -- ends its last frame stays (console test: the main menu covers read
+    -- -466 but drew at -236). Setting the same value again does nothing, so
+    -- every 15 frames it goes to a hair off and back, which sticks.
+    if want ~= first[k] and fixTick % 15 == 0 then
+      pcall(setAttribute, e, name, want + 0.001)
+      pcall(setAttribute, e, name, want)
+    end
+    return
+  end
   local atFirst = math.abs(v - first[k]) < 0.01
   if not atFirst and not (last[k] and math.abs(v - last[k]) < 0.01) then return end
   if atFirst then applied[k] = applied[k] + 1 end
@@ -479,11 +491,13 @@ local function pauseFade()
   end
 end
 local function fixMenus()
-  -- Defaults keep build 25's offsets at 21:9-ish dx 220: cover dx + 10,
-  -- page dx + 25, as multiples of dx so 16:9 stays authored.
-  cover = dx * tk("cover", 230 / 220)
-  page = dx * tk("page", 245 / 220)
-  card = dx * tk("card", 1)
+  -- Tuned live against vanilla 16:9 (build 29 screenshots at 4:3, 2.39 and
+  -- 32:9): the covers keep their vanilla visible width at the window edges
+  -- (dx), the paper stays under the right cover (dx), and the cards, in a
+  -- 0.75-scaled parent, stay off-screen (1.4 dx).
+  cover = dx * tk("cover", 1)
+  page = dx * tk("page", 1)
+  card = dx * tk("card", 1.4)
   if screen == "title" then
     -- Title: left as authored. Its 16:9 box (White) is on the title's
     -- timeline: scale, position.z and the title camera are put back when it
@@ -551,6 +565,7 @@ if type(GUI) == "table" and not GUI.fitwinHooked then
   GUI.onUpdate = function(...)
     if prev then pcall(prev, ...) end
     frames = frames + 1
+    fixTick = frames
     if frames == 1 then out("per-frame re-apply running (" .. screen .. ")") end
     if frames == 90 then dumpMenu(menu or find(layer, "Foreground", 0), screen) end
     live()
