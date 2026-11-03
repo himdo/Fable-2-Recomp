@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <deque>
@@ -54,6 +55,10 @@ struct Pending {
   uint32_t L = 0;   // unused since console-v10: chunks run on the calling state
   bool probe = false;
   int tries = 0;
+  // Retries stop after this console frame, not after a count of calls: busy
+  // states call in thousands of times a frame, so a count ran out before a
+  // quiet one got a turn. Frames, not seconds, so `pause` does not use it up.
+  uint64_t expires = 0;
   std::vector<uint32_t> tried;  // states that answered "no element" (broadcast: states done)
   std::string tag;              // non-empty: a broadcast (enqueue_all); a newer one with the tag replaces it
 };
@@ -76,6 +81,7 @@ struct State {
   std::vector<uint32_t> probed;
   uint32_t buf = 0, buf_size = 0;
   uint64_t runs = 0, errors = 0;
+  std::atomic<uint64_t> frame{0};  // console frames (poll calls), for Pending::expires
   bool busy = false;              // re-entrancy guard (our chunk calls the natives too)
   std::atomic<bool> armed{false}; // set once the console is in use; native hooks pass through until then
 };
@@ -295,7 +301,7 @@ inline void drain(PPCContext& ctx, uint8_t* base) {
     }
     {
       std::lock_guard<std::mutex> lock(s.mu);
-      if (++p.tries < 600 && p.tried.size() < s.states.size()) s.pending.push_back(p);
+      if (s.frame < p.expires && p.tried.size() < s.states.size()) s.pending.push_back(p);
     }
     s.busy = false;
     return;
@@ -322,7 +328,7 @@ inline void drain(PPCContext& ctx, uint8_t* base) {
   const bool retry = r == "ok __f2_wrong_state" || (missing && p.tried.size() < s.states.size());
   if (retry) {
     std::lock_guard<std::mutex> lock(s.mu);
-    if (++p.tries < 300) s.pending.push_front(p);
+    if (s.frame < p.expires) s.pending.push_front(p);
     else s.results.push_back(missing ? r + " (in " + std::to_string(p.tried.size()) + " GUI states)"
                                      : "error no GUI Lua state met 'gui where " + s.where + "' (is that screen up?)");
   } else {
@@ -344,13 +350,21 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
   if (!bridge_on) return;
   s.armed.store(true, std::memory_order_relaxed);
   s.main_tid = std::this_thread::get_id();
+  s.frame.fetch_add(1, std::memory_order_relaxed);
   // Chunks run only inside the hooked GUI natives (see drain), never from here.
 }
 
 inline void enqueue(const std::string& code, uint32_t L = 0, bool probe = false) {
   State& s = S();
   std::lock_guard<std::mutex> lock(s.mu);
-  if (s.pending.size() < 64) s.pending.push_back({code, L, probe});
+  if (s.pending.size() < 64) {
+    Pending p;
+    p.code = code;
+    p.L = L;
+    p.probe = probe;
+    p.expires = s.frame + 300;
+    s.pending.push_back(p);
+  }
 }
 
 // Runs code once in every GameFace state (as each next calls a hooked
@@ -364,6 +378,7 @@ inline void enqueue_all(const std::string& tag, const std::string& code) {
   Pending p;
   p.code = code;
   p.tag = tag;
+  p.expires = s.frame + 300;
   s.pending.push_back(p);
 }
 
