@@ -1,4 +1,4 @@
-// fable_2 - developer commands, console-v5.
+// fable_2 - developer commands, console-v6.
 //
 // Typed in the SDK's `~` console as   f2 <command>   for example
 //   f2 warp 1 2 3        f2 god on        f2 warp save a; wait 60; warp a
@@ -19,7 +19,9 @@
 // the game log via cprint while host results go to out.txt.
 //
 // Host commands: wait, waitfor, exec, echo, peek, poke, expect, find <number>,
-// freeze, unfreeze, trace, status, hosthelp. Addresses are Xbox 360 guest
+// freeze, unfreeze, trace, status, hosthelp, cvars, dumpmem; v6 adds cvar,
+// history, again, repeat, every, autoexec, peekf, pokef, freezef, peekstr,
+// findstr, findf, fill, scan. Addresses are Xbox 360 guest
 // virtual addresses (hex, with or without 0x); values are big-endian as in the game.
 
 #pragma once
@@ -27,6 +29,7 @@
 #include <atomic>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -49,7 +52,7 @@
 #define FABLE2_CONSOLE_HAVE_REXLOG 1
 #endif
 
-#define FABLE2_CONSOLE_BUILD "console-v5"
+#define FABLE2_CONSOLE_BUILD "console-v6"
 
 REXCVAR_DEFINE_BOOL(console_enabled, false, "Input",
                     "Enable the developer command line (f2-console.cmd). Off by default.");
@@ -88,6 +91,28 @@ struct State {
   uint32_t tr_addr = 0, tr_words = 1;
   int tr_lines_left = 0;
   std::vector<uint32_t> tr_prev;
+  // History (newest last) for `history` / `again`.
+  std::deque<std::string> history;
+  // `every`: commands re-queued on a period (frames or real time).
+  struct Every {
+    bool is_frames;
+    uint64_t period_frames;
+    Clock::duration period_time;
+    uint64_t next_frame;
+    Clock::time_point next_time;
+    std::string cmd;
+  };
+  std::vector<Every> every;
+  // `scan`: value scanner candidates (address + last value seen).
+  struct ScanHit {
+    uint32_t addr;
+    uint64_t prev;
+  };
+  std::vector<ScanHit> scan;
+  uint32_t scan_size = 4;
+  bool scan_float = false;
+  bool scan_active = false;
+  bool autoexec_done = false;
 };
 inline State& S() {
   static State s;
@@ -207,6 +232,49 @@ inline bool is_op(const std::string& s) {
   return s == "==" || s == "!=" || s == "<" || s == ">" || s == "<=" || s == ">=" || s == "&";
 }
 
+// Guest floats are big-endian IEEE-754; read_be/write_be already swap bytes.
+inline float bits_to_float(uint32_t u) {
+  float f;
+  std::memcpy(&f, &u, 4);
+  return f;
+}
+inline uint32_t float_to_bits(float f) {
+  uint32_t u;
+  std::memcpy(&u, &f, 4);
+  return u;
+}
+inline bool parse_f(const std::string& s, double& v) {
+  if (s.empty()) return false;
+  char* end = nullptr;
+  v = std::strtod(s.c_str(), &end);
+  return end && *end == 0;
+}
+inline std::string fstr(double v) {
+  char buf[48];
+  std::snprintf(buf, sizeof buf, "%.6g", v);
+  return buf;
+}
+
+// The raw text after the first `n` words of `line` (keeps inner spacing).
+inline std::string rest_after(const std::string& line, size_t n) {
+  size_t p = 0;
+  for (size_t i = 0; i < n; ++i) {
+    p = line.find_first_not_of(" \t", p);
+    if (p == std::string::npos) return "";
+    p = line.find_first_of(" \t", p);
+    if (p == std::string::npos) return "";
+  }
+  p = line.find_first_not_of(" \t", p);
+  return p == std::string::npos ? "" : line.substr(p);
+}
+
+// Value of a scan candidate as a signed number of its size (floats as their bits).
+inline int64_t as_signed(uint64_t v, uint32_t size) {
+  if (size == 1) return static_cast<int8_t>(v);
+  if (size == 2) return static_cast<int16_t>(v);
+  return static_cast<int32_t>(v);
+}
+
 // "30" -> frames, "500ms"/"5s" -> real time.
 inline bool parse_duration(const std::string& t, bool& is_frames, uint64_t& frames,
                            Clock::time_point& deadline) {
@@ -282,13 +350,15 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     return true;
   }
   if (name == "help") {
-    out("help", "host commands: wait waitfor exec echo peek poke expect find <number> freeze unfreeze trace status cvars dumpmem. "
+    out("help", "host commands: wait waitfor exec echo peek poke expect find <number> freeze unfreeze trace status cvars dumpmem "
+                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan. "
                 "Chain with ';'. Lua commands follow (their text appears in the log).");
     return false;  // Lua prints its own command list too
   }
   if (name == "hosthelp") {
     out("help",
-        "host commands: wait waitfor exec echo peek poke expect find freeze unfreeze trace status cvars dumpmem. "
+        "host commands: wait waitfor exec echo peek poke expect find freeze unfreeze trace status cvars dumpmem "
+        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan. "
         "Everything else (warp, god, gold, giveall, ...) runs in Lua: type help. "
         "Separate commands with ';'. Addresses are hex guest addresses.");
     return true;
@@ -581,6 +651,418 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     out("dumpmem", "ok: " + std::to_string(n) + " bytes -> " + p.string());
     return true;
   }
+
+  //--- console-v6 host commands -------------------------------------------
+
+  if (name == "history") {
+    // history [n] | history save <file> | history clear
+    if (W.size() > 1 && W[1] == "clear") {
+      s.history.clear();
+      out("history", "cleared");
+      return true;
+    }
+    if (W.size() > 2 && W[1] == "save") {
+      std::error_code ec;
+      fs::create_directories(s.root / "console", ec);
+      const fs::path p = s.root / "console" / fs::path(W[2]).filename();
+      std::ofstream f(p, std::ios::trunc);
+      for (const auto& h : s.history) f << h << "\n";
+      out("history", std::to_string(s.history.size()) + " lines -> " + p.string() + " (run it with: exec " +
+                         p.filename().string() + ")");
+      return true;
+    }
+    uint64_t n = 20;
+    if (W.size() > 1) parse_u(W[1], n);
+    const size_t from = s.history.size() > n ? s.history.size() - static_cast<size_t>(n) : 0;
+    for (size_t i = from; i < s.history.size(); ++i) out("history", std::to_string(i + 1) + ": " + s.history[i]);
+    if (s.history.empty()) out("history", "(empty)");
+    return true;
+  }
+  if (name == "again") {
+    // again [n]: re-run the last command, or history entry n.
+    if (s.history.empty()) {
+      out("again", "history is empty", true);
+      return true;
+    }
+    uint64_t n = s.history.size();
+    if (W.size() > 1 && (!parse_u(W[1], n) || n == 0 || n > s.history.size())) {
+      out("again", "no history entry " + W[1], true);
+      return true;
+    }
+    const std::string cmd = s.history[static_cast<size_t>(n - 1)];
+    out("again", cmd);
+    enqueue_text(cmd, true);
+    return true;
+  }
+  if (name == "repeat") {
+    // repeat <n> <command...>: queue a command n times (one per frame).
+    uint64_t n;
+    const std::string cmd = rest_after(line, 2);
+    if (W.size() < 3 || !parse_u(W[1], n) || n == 0 || n > 1000 || cmd.empty()) {
+      out("repeat", "usage: repeat <1-1000> <command...>", true);
+      return true;
+    }
+    std::lock_guard<std::mutex> lock(s.qmu);
+    for (uint64_t i = 0; i < n; ++i) s.queue.push_front(cmd);
+    return true;
+  }
+  if (name == "every") {
+    // every <frames|Ns|Nms> <command...> | every list | every stop <n>|all
+    if (W.size() > 1 && W[1] == "list") {
+      for (size_t i = 0; i < s.every.size(); ++i) out("every", std::to_string(i + 1) + ": " + s.every[i].cmd);
+      if (s.every.empty()) out("every", "(none)");
+      return true;
+    }
+    if (W.size() > 2 && W[1] == "stop") {
+      if (W[2] == "all") {
+        s.every.clear();
+        out("every", "stopped all");
+        return true;
+      }
+      uint64_t i;
+      if (!parse_u(W[2], i) || i == 0 || i > s.every.size()) {
+        out("every", "no entry " + W[2], true);
+        return true;
+      }
+      s.every.erase(s.every.begin() + static_cast<ptrdiff_t>(i - 1));
+      out("every", "stopped " + W[2]);
+      return true;
+    }
+    bool is_fr = false;
+    uint64_t fr = 0;
+    Clock::time_point dl{};
+    const std::string cmd = rest_after(line, 2);
+    if (W.size() < 3 || cmd.empty() || !parse_duration(W[1], is_fr, fr, dl) || (is_fr && fr == 0)) {
+      out("every", "usage: every <frames|Ns|Nms> <command...> | every list | every stop <n>|all", true);
+      return true;
+    }
+    State::Every e{};
+    e.is_frames = is_fr;
+    e.period_frames = fr;
+    e.period_time = dl - Clock::now();
+    if (!is_fr && e.period_time < std::chrono::milliseconds(16)) e.period_time = std::chrono::milliseconds(16);
+    e.next_frame = s.frames + fr;
+    e.next_time = Clock::now() + e.period_time;
+    e.cmd = cmd;
+    s.every.push_back(e);
+    out("every", "#" + std::to_string(s.every.size()) + " every " + W[1] + ": " + cmd);
+    return true;
+  }
+  if (name == "cvar") {
+    // cvar <name> [value...]: print or set an SDK/game cvar (same as typing it in ~,
+    // but usable from exec files, aliases and chains).
+    if (W.size() < 2) {
+      out("cvar", "usage: cvar <name> [value]  (cvars [filter] lists them)", true);
+      return true;
+    }
+    const rex::cvar::FlagEntry* entry = nullptr;
+    for (const auto& e : rex::cvar::GetRegistry())
+      if (e.name == W[1]) entry = &e;
+    if (!entry) {
+      out("cvar", "unknown cvar " + W[1] + " (cvars " + W[1] + " searches)", true);
+      return true;
+    }
+    if (entry->type == rex::cvar::FlagType::Command) {
+      out("cvar", W[1] + " is a command; type it in the ~ console", true);
+      return true;
+    }
+    if (W.size() == 2) {
+      out("cvar", W[1] + " = " + rex::cvar::GetFlagByName(W[1]) + "  (default " + entry->default_value + ")");
+      return true;
+    }
+    const std::string v = rest_after(line, 2);
+    if (!rex::cvar::SetFlagByName(W[1], v)) {
+      out("cvar", "rejected: " + W[1] + " = " + v, true);
+      return true;
+    }
+    out("cvar", W[1] + " = " + rex::cvar::GetFlagByName(W[1]));
+    return true;
+  }
+  if (name == "autoexec") {
+    const fs::path p = s.root / "console" / "autoexec.txt";
+    std::ifstream f(p, std::ios::binary);
+    if (!f) {
+      out("autoexec", "no " + p.string() + " (one command per line; runs on the first f2 command)");
+      return true;
+    }
+    std::stringstream ss;
+    ss << f.rdbuf();
+    enqueue_text(ss.str(), true);
+    out("autoexec", "queued " + p.string());
+    return true;
+  }
+  if (name == "peekf") {
+    // peekf <addr> [count]: big-endian floats.
+    uint32_t a;
+    uint64_t n = 1;
+    if (W.size() < 2 || !parse_addr(W[1], a) || (W.size() > 2 && !parse_u(W[2], n))) {
+      out("peekf", "usage: peekf <addr> [count]", true);
+      return true;
+    }
+    if (n == 0 || n > 64) n = 64;
+    std::string row;
+    for (uint64_t i = 0; i < n; ++i) {
+      uint64_t v;
+      if (!read_be(base, a + static_cast<uint32_t>(4 * i), 4, v)) {
+        out("peekf", hex(a + 4 * i, 8) + " not readable", true);
+        break;
+      }
+      row += (i % 4 == 0 ? (row.empty() ? "" : "\n") + hex(a + 4 * i, 8) + ":" : std::string()) + " " +
+             fstr(bits_to_float(static_cast<uint32_t>(v)));
+    }
+    if (!row.empty()) out("peekf", row);
+    return true;
+  }
+  if (name == "pokef" || name == "freezef") {
+    uint32_t a;
+    double v;
+    if (W.size() < 3 || !parse_addr(W[1], a) || !parse_f(W[2], v) || (a % 4) != 0) {
+      out(name, "usage: " + name + " <4-aligned addr> <float>", true);
+      return true;
+    }
+    const uint32_t bits = float_to_bits(static_cast<float>(v));
+    if (name == "pokef") {
+      uint64_t back = 0;
+      if (!write_be(base, a, 4, bits) || !read_be(base, a, 4, back)) {
+        out("pokef", hex(a, 8) + " not writable", true);
+        return true;
+      }
+      out("pokef", "ok: " + hex(a, 8) + " = " + fstr(bits_to_float(static_cast<uint32_t>(back))));
+    } else {
+      if (!ta::wr2(base, a, 4)) {
+        out("freezef", hex(a, 8) + " not writable", true);
+        return true;
+      }
+      s.frozen[a] = {bits, 4};
+      out("freezef", "ok: " + hex(a, 8) + " held at " + fstr(v));
+    }
+    return true;
+  }
+  if (name == "peekstr") {
+    // peekstr <addr> [max]: a NUL-terminated string (ASCII; other bytes shown as \xNN).
+    uint32_t a;
+    uint64_t mx = 256;
+    if (W.size() < 2 || !parse_addr(W[1], a) || (W.size() > 2 && !parse_u(W[2], mx))) {
+      out("peekstr", "usage: peekstr <addr> [max bytes]", true);
+      return true;
+    }
+    if (mx == 0 || mx > 4096) mx = 4096;
+    std::string str;
+    uint64_t i = 0;
+    for (; i < mx; ++i) {
+      if (!ta::rdable2(base, a + static_cast<uint32_t>(i), 1)) break;
+      const uint8_t b = *reinterpret_cast<const uint8_t*>(ta::host_addr(base, a + static_cast<uint32_t>(i)));
+      if (b == 0) break;
+      if (b >= 32 && b < 127) str += static_cast<char>(b);
+      else str += "\\x" + hex(b, 2);
+    }
+    out("peekstr", hex(a, 8) + " (" + std::to_string(i) + " bytes): \"" + str + "\"");
+    return true;
+  }
+  if (name == "findstr" || name == "findf") {
+    // findstr <text> [from] [to] | findf <float> [tolerance] [from] [to]
+    if (W.size() < 2) {
+      out(name, name == "findstr" ? "usage: findstr <text> [from] [to]" : "usage: findf <float> [tol] [from] [to]", true);
+      return true;
+    }
+    size_t i = 2;
+    double fv = 0, tol = 0.001;
+    if (name == "findf") {
+      if (!parse_f(W[1], fv)) {
+        out("findf", "bad float", true);
+        return true;
+      }
+      if (i < W.size() && W[i].find('.') != std::string::npos && parse_f(W[i], tol)) ++i;
+    }
+    uint32_t from = 0x40000000, to = 0x50000000;
+    if (i < W.size() && !parse_addr(W[i++], from)) {
+      out(name, "bad from", true);
+      return true;
+    }
+    if (i < W.size() && !parse_addr(W[i++], to)) {
+      out(name, "bad to", true);
+      return true;
+    }
+    uint64_t hits = 0;
+    std::string first;
+    if (name == "findstr") {
+      const std::string& needle = W[1];
+      const uint32_t len = static_cast<uint32_t>(needle.size());
+      for (uint64_t a = from; a + len <= to; ++a) {
+        if ((a & 0xFFF) == 0 && !ta::rdable2(base, static_cast<uint32_t>(a), 1)) {
+          a |= 0xFFF;
+          continue;
+        }
+        if (!ta::rdable2(base, static_cast<uint32_t>(a), len)) continue;
+        if (std::memcmp(reinterpret_cast<const void*>(ta::host_addr(base, static_cast<uint32_t>(a))), needle.data(),
+                        len) == 0) {
+          if (hits < 32) first += " " + hex(a, 8);
+          ++hits;
+        }
+      }
+    } else {
+      for (uint64_t a = from; a + 4 <= to; a += 4) {
+        if (!ta::rdable2(base, static_cast<uint32_t>(a), 4)) {
+          a |= 0xFFF;
+          a -= 3;
+          continue;
+        }
+        uint64_t v;
+        if (!read_be(base, static_cast<uint32_t>(a), 4, v)) continue;
+        const double cur = bits_to_float(static_cast<uint32_t>(v));
+        if (cur == cur && std::abs(cur - fv) <= tol) {
+          if (hits < 32) first += " " + hex(a, 8);
+          ++hits;
+        }
+      }
+    }
+    out(name, std::to_string(hits) + " hits in " + hex(from, 8) + "-" + hex(to, 8) + ":" + first);
+    return true;
+  }
+  if (name == "fill") {
+    // fill <addr> <bytes> <byte>
+    uint32_t a;
+    uint64_t n, b;
+    if (W.size() < 4 || !parse_addr(W[1], a) || !parse_u(W[2], n, 0) || !parse_u(W[3], b, 0) || n == 0 ||
+        n > 65536 || b > 0xFF) {
+      out("fill", "usage: fill <addr> <1-65536 bytes> <byte 0-255>", true);
+      return true;
+    }
+    if (!ta::wr2(base, a, n)) {
+      out("fill", hex(a, 8) + " +" + std::to_string(n) + " not writable", true);
+      return true;
+    }
+    std::memset(reinterpret_cast<void*>(ta::host_addr(base, a)), static_cast<int>(b), static_cast<size_t>(n));
+    out("fill", "ok: " + std::to_string(n) + " bytes at " + hex(a, 8) + " = 0x" + hex(b, 2));
+    return true;
+  }
+  if (name == "scan") {
+    // Value scanner (narrow down an unknown address):
+    //   scan start <value>|any [8|16|32|f] [from] [to]
+    //   scan next <value> | changed | same | inc | dec | gt <v> | lt <v>
+    //   scan list [n] | scan clear
+    const std::string sub = W.size() > 1 ? W[1] : "";
+    auto read_cand = [&](uint32_t a, uint64_t& v) { return read_be(base, a, s.scan_size, v); };
+    auto matches_value = [&](uint64_t cur, const std::string& txt, const std::string& op) -> bool {
+      if (s.scan_float) {
+        double want;
+        if (!parse_f(txt, want)) return false;
+        const double c = bits_to_float(static_cast<uint32_t>(cur));
+        if (op == "gt") return c > want;
+        if (op == "lt") return c < want;
+        return std::abs(c - want) <= 0.001;
+      }
+      int64_t want;
+      if (!parse_i(txt, want)) return false;
+      const int64_t c = as_signed(cur, s.scan_size);
+      if (op == "gt") return c > want;
+      if (op == "lt") return c < want;
+      const uint64_t mask = s.scan_size == 4 ? 0xFFFFFFFFull : (s.scan_size == 2 ? 0xFFFFull : 0xFFull);
+      return (cur & mask) == (static_cast<uint64_t>(want) & mask);
+    };
+    if (sub == "start") {
+      if (W.size() < 3) {
+        out("scan", "usage: scan start <value>|any [8|16|32|f] [from] [to]", true);
+        return true;
+      }
+      size_t i = 3;
+      s.scan_size = 4;
+      s.scan_float = false;
+      if (i < W.size() && W[i] == "f") {
+        s.scan_float = true;
+        ++i;
+      } else if (i < W.size() && parse_size(W[i], s.scan_size)) {
+        ++i;
+      }
+      uint32_t from = 0x40000000, to = 0x50000000;
+      if (i < W.size() && !parse_addr(W[i++], from)) {
+        out("scan", "bad from", true);
+        return true;
+      }
+      if (i < W.size() && !parse_addr(W[i++], to)) {
+        out("scan", "bad to", true);
+        return true;
+      }
+      const bool any = W[2] == "any";
+      if (any && to - from > (16u << 20)) {
+        out("scan", "'any' needs a range of 16 MB or less; give from/to", true);
+        return true;
+      }
+      s.scan.clear();
+      const size_t cap = 4u << 20;
+      bool capped = false;
+      for (uint64_t a = from; a + s.scan_size <= to; a += s.scan_size) {
+        if ((a & 0xFFF) == 0 && !ta::rdable2(base, static_cast<uint32_t>(a), 0x1000)) {
+          a += 0x1000 - s.scan_size;
+          continue;
+        }
+        uint64_t v;
+        if (!read_cand(static_cast<uint32_t>(a), v)) continue;
+        if (any || matches_value(v, W[2], "==")) {
+          if (s.scan.size() >= cap) {
+            capped = true;
+            break;
+          }
+          s.scan.push_back({static_cast<uint32_t>(a), v});
+        }
+      }
+      s.scan_active = true;
+      out("scan", std::to_string(s.scan.size()) + " candidates (" + (s.scan_float ? "float" : std::to_string(s.scan_size * 8) + "-bit") +
+                      ")" + (capped ? ", capped at 4M: narrow the range" : "") +
+                      ". Change the value in game, then: scan next <value>|changed|same|inc|dec");
+      return true;
+    }
+    if (sub == "next") {
+      if (!s.scan_active || W.size() < 3) {
+        out("scan", s.scan_active ? "usage: scan next <value>|changed|same|inc|dec|gt <v>|lt <v>" : "no scan; use scan start", true);
+        return true;
+      }
+      const std::string how = W[2];
+      const std::string arg = W.size() > 3 ? W[3] : "";
+      std::vector<State::ScanHit> keep;
+      keep.reserve(s.scan.size());
+      for (const auto& h : s.scan) {
+        uint64_t cur;
+        if (!read_cand(h.addr, cur)) continue;
+        bool ok;
+        const double cf = bits_to_float(static_cast<uint32_t>(cur)), pf = bits_to_float(static_cast<uint32_t>(h.prev));
+        const int64_t ci = as_signed(cur, s.scan_size), pi = as_signed(h.prev, s.scan_size);
+        if (how == "changed") ok = cur != h.prev;
+        else if (how == "same") ok = cur == h.prev;
+        else if (how == "inc") ok = s.scan_float ? cf > pf : ci > pi;
+        else if (how == "dec") ok = s.scan_float ? cf < pf : ci < pi;
+        else if (how == "gt" || how == "lt") ok = matches_value(cur, arg, how);
+        else ok = matches_value(cur, how, "==");
+        if (ok) keep.push_back({h.addr, cur});
+      }
+      s.scan.swap(keep);
+      out("scan", std::to_string(s.scan.size()) + " candidates left" +
+                      (s.scan.size() <= 8 && !s.scan.empty() ? " (scan list shows them)" : ""));
+      return true;
+    }
+    if (sub == "list") {
+      uint64_t n = 20;
+      if (W.size() > 2) parse_u(W[2], n);
+      for (size_t i = 0; i < s.scan.size() && i < n; ++i) {
+        uint64_t cur = 0;
+        read_cand(s.scan[i].addr, cur);
+        out("scan", hex(s.scan[i].addr, 8) + " = " +
+                        (s.scan_float ? fstr(bits_to_float(static_cast<uint32_t>(cur)))
+                                      : std::to_string(as_signed(cur, s.scan_size)) + " (0x" + hex(cur, s.scan_size * 2) + ")"));
+      }
+      if (s.scan.size() > n) out("scan", "... " + std::to_string(s.scan.size() - n) + " more");
+      return true;
+    }
+    if (sub == "clear") {
+      s.scan.clear();
+      s.scan.shrink_to_fit();
+      s.scan_active = false;
+      out("scan", "cleared");
+      return true;
+    }
+    out("scan", "usage: scan start <value>|any [8|16|32|f] [from] [to] | scan next ... | scan list [n] | scan clear", true);
+    return true;
+  }
   return false;
 }
 
@@ -630,6 +1112,26 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
   ++s.frames;
   if (s.frames == 1)
     f5lua::logline("[console] %s active, root=%s\n", FABLE2_CONSOLE_BUILD, s.root.string().c_str());
+
+  // console\autoexec.txt runs once, ahead of the command that activated the console.
+  if (!s.autoexec_done) {
+    s.autoexec_done = true;
+    std::error_code ec;
+    if (fs::exists(s.root / "console" / "autoexec.txt", ec)) run_host_command("autoexec", base);
+  }
+
+  // `every` timers queue their command when due (skipped while the queue is backed up).
+  if (!s.every.empty()) {
+    const auto now = Clock::now();
+    for (auto& e : s.every) {
+      const bool due = e.is_frames ? s.frames >= e.next_frame : now >= e.next_time;
+      if (!due) continue;
+      if (e.is_frames) e.next_frame = s.frames + e.period_frames;
+      else e.next_time = now + e.period_time;
+      std::lock_guard<std::mutex> lock(s.qmu);
+      if (s.queue.size() < 256) s.queue.push_back(e.cmd);
+    }
+  }
 
   // New input file (checked every 10 frames; cheap).
   if (file_mode && (s.frames % 10) == 0) {
@@ -701,6 +1203,12 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
       }
     }
     if (!line.empty()) {
+      // Record typed commands for history/again (not the history commands themselves).
+      const std::string head = line.substr(0, line.find_first_of(" \t"));
+      if (head != "again" && head != "history" && (s.history.empty() || s.history.back() != line)) {
+        s.history.push_back(line);
+        if (s.history.size() > 200) s.history.pop_front();
+      }
       if (line[0] == '!' || !run_host_command(line, base)) run_lua_line(line, ctx, base);
       bool empty;
       {

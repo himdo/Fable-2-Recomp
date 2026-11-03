@@ -1,23 +1,27 @@
 # Fable 2 Developer Console: Command Reference
 
-> **console-v4 usage:** every command below is typed in the SDK's `~` console behind the word `f2`, for example `f2 warp 1 2 3` or `f2 god on`. Chain with `;` inside one line: `f2 warp save a; wait 60; warp a`. `f2-console.cmd` and its separate window are no longer needed, and nothing runs until the first `f2` command is typed. `find <word>` is the name search; the SDK's own `find` and `echo` commands are untouched.
-
-Source: `console/build/console_cmds.lua` (console-v2). Every command below is registered with `add()` in that file.
+Build: **console-v6**. Source: `src/core/fable2_console.h` (host commands) and `src/lua/console_cmds.lua` (Lua commands).
 
 ## How the console works
 
-- Double-click `f2-console.cmd` to open the `f2>` prompt. Each line you type is passed to the game. If the game is not running, the script starts it with the console enabled.
-- The game ignores commands unless it was started through `f2-console.cmd` or has `console_enabled=true` set.
-- Replies go to the game log as `[console] ...` lines (via `cprint`). The `f2-console.cmd` window shows the last few of them.
-- A leading `!` (for example `!info`) also shows the reply in a message box.
+- Every command is typed in the SDK's `~` console behind the word `f2`, for example `f2 warp 1 2 3` or `f2 god on`. Chain commands with `;` inside one line: `f2 warp save a; wait 60; warp a`.
+- Nothing runs until the first `f2` command is typed, so a normal launch is unchanged. On that first command, `console\autoexec.txt` (if present) runs first.
+- The queue runs one command per frame on the game thread (from the `MainRenderLoop` hook). Host commands (memory, files, cvars, timers) are handled in C++; every other line goes to Lua.
+- Host replies go to the `~` console (`REXLOG_INFO`) and to `<game root>\console\out.txt`. Lua replies go through `cprint` as `[console] ...` lines; whether `cprint` reaches the `~` console is unconfirmed, so check `logs\` if they do not show.
+- A leading `!` (for example `f2 !info`) also shows the Lua reply in a message box.
 - If the first word is a command, that command runs. Anything else runs as Lua. Lua results print as `= <value>` and errors as `error: ...`.
 - Command names are case-insensitive. Arguments are split on spaces.
 - Engine calls print `<label>: ok -> <values>` on success, `<label> failed: <error>` on error, or `<label>: not available in this game build` if the function is missing.
 - Typed values are converted as follows: numbers become numbers, `true`/`on`/`yes` become `true`, `false`/`off`/`no` become `false`, `nil` becomes nil, and anything else stays a string.
 - Hero lookup tries `QuestManager.HeroEntity`, then `Debug.GetHero`, then `GetPlayerHero`. Commands that need the hero print `no hero (load a save first)` when none is found.
 - **Name clashes:** a line whose first word is a command runs that command, even if you meant Lua. For example, `level = 3` runs `level`. Write `lua level = 3` instead.
+- `help` lists commands by group; `help <group>` shows the usage of every command in a group; `help <command>` shows one.
 
-**args unconfirmed** marks a command that passes arguments to an engine `Debug.*` or `Timing.*` function. The script header says these argument shapes are not all confirmed, and the script does not record which ones are. Commands whose Debug/Timing calls take no arguments are not marked.
+**args unconfirmed** marks a command whose engine call's argument shape comes from names and call counts in `FABLE2_LUA_API.md`, not from a confirmed call. Many of these use *shape probing*: the console tries `(entity, args)` first and then `(args)`, and the reply ends in `[shape 1]` or `[shape 2]` to say which one the game accepted. Please send those lines back; they turn guesses into facts.
+
+**Who:** commands that take `[who]` accept `hero` (or `me`), `target` (what the hero is targeting), `dog`, `henchman`, or an entity name (looked up with `Debug.GetEntityWithName`).
+
+**Crash risk:** `pcall` catches Lua errors, not a fault inside the engine. Calling a method on a dead or unloaded entity can still crash the game; prefer live targets.
 
 ## Info
 
@@ -170,53 +174,53 @@ Numbers and entity names in the outputs below are illustrative.
 ### 1. Warping
 
 ```
-f2> pos
+f2 pos
 [console] pos 412.000 -87.500 3.250
-f2> warp save bridge
+f2 warp save bridge
 [console] saved place bridge
-f2> warp rel 0 0 40
+f2 warp rel 0 0 40
 [console] warped to 412.00 -87.50 43.25
-f2> warp bridge
+f2 warp bridge
 [console] warped to 412.00 -87.50 3.25
-f2> warp list
+f2 warp list
 [console] places: bridge
 ```
 
 ### 2. Debugging combat
 
 ```
-f2> god on all
+f2 god on all
 [console] hero god: ok
 [console] henchman god: ok
-f2> combatdebug on
+f2 combatdebug on
 [console] behaviour names: ok
 [console] combat multiplier: ok
-f2> combatants 4
+f2 combatants 4
 [console] combatants: ok
-f2> target
+f2 target
 [console] target <entity>
-f2> !info
+f2 !info
 (message box shows the info lines)
-f2> killall
+f2 killall
 [console] killall: ok
-f2> resetcreatures
+f2 resetcreatures
 [console] reset: ok
-f2> combatdebug off
-f2> god off all
+f2 combatdebug off
+f2 god off all
 ```
 
 ### 3. Discovering an unknown function
 
 ```
-f2> find hairstyle
+f2 find hairstyle
 [console] 1 matches
 [console] Debug.AddAllHairstyles
-f2> get Debug.AddAllHairstyles
+f2 get Debug.AddAllHairstyles
 [console] Debug.AddAllHairstyles = function: 0x...
-f2> dump Timing
+f2 dump Timing
 [console] N members
 [console] ...
-f2> call Debug.AddAllHairstyles
+f2 call Debug.AddAllHairstyles
 [console] Debug.AddAllHairstyles: ok
 ```
 
@@ -224,7 +228,7 @@ f2> call Debug.AddAllHairstyles
 
 ## Host commands (console-v3)
 
-These run in the game's C++ (`fable2_console.h`), not in Lua. They answer in the `f2>` window (via `console\out.txt`). Lines are queued in order; chain commands with `;`. Addresses are hexadecimal Xbox 360 guest addresses (with or without `0x`); values are big-endian as the game stores them. Raw Lua and `!` lines keep their semicolons.
+These run in the game's C++ (`fable2_console.h`), not in Lua. They answer in the `~` console and in `console\out.txt`. Lines are queued in order; chain commands with `;`. Addresses are hexadecimal Xbox 360 guest addresses (with or without `0x`); values are big-endian as the game stores them. Raw Lua and `!` lines keep their semicolons.
 
 | Command | Usage | What it does | Notes |
 |---|---|---|---|
@@ -254,3 +258,176 @@ Use these to find what can be read and edited, then change it with `set`, `call`
 | `methods` | `methods <path>` | Lists the methods of an object or class, for example `methods hero` or `methods Debug`. | Reads the object's metatable. |
 | `cvars` | `cvars [text]` | Writes every SDK and game cvar with value, default, range and description to `console\cvars.txt`. | Change one by typing its name and a value in the `~` console. |
 | `dumpmem` | `dumpmem <addr> <bytes> [file]` | Writes raw guest memory (up to 64 MB) to `console\<file>`. | Default file `mem-<addr>.bin`. |
+
+## Host commands added in console-v6
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `cvar` | `cvar <name> [value]` | Prints an SDK/game cvar with its default, or sets it. | Same as typing the cvar in `~`, but works in `exec` files, `autoexec.txt`, aliases and `;` chains. `cvars <text>` finds names. |
+| `history` | `history [n]` / `history save <file>` / `history clear` | Lists the last n commands (default 20, keeps 200). `save` writes them to `console\<file>` for `exec`. | `again` and `history` themselves are not recorded. |
+| `again` | `again [n]` | Re-runs the last command, or history entry n. | |
+| `repeat` | `repeat <n> <command...>` | Queues a command n times (1-1000), one per frame. | Works for host and Lua commands. |
+| `every` | `every <frames\|Ns\|Nms> <command...>` / `every list` / `every stop <n>\|all` | Re-queues a command on a period, e.g. `every 2s hp`. | Skipped while more than 256 commands are queued. Stops when the game closes. |
+| `autoexec` | `autoexec` | Runs `console\autoexec.txt` again. | It also runs once automatically, before the first `f2` command. One command per line, `#` comments. |
+| `peekf` | `peekf <addr> [count]` | Reads big-endian floats (up to 64), 4 per line. | |
+| `pokef` | `pokef <addr> <float>` | Writes a float and prints the read-back. | Address must be 4-aligned. |
+| `freezef` | `freezef <addr> <float>` | Holds a float every frame. | `unfreeze` releases it. |
+| `peekstr` | `peekstr <addr> [max]` | Reads a NUL-terminated string (default 256, max 4096 bytes). | Non-printable bytes show as `\xNN`. |
+| `findstr` | `findstr <text> [from] [to]` | Searches memory for ASCII text; lists the first 32 hits. | Default range 40000000-50000000. Matches within one word (no spaces); case-sensitive. |
+| `findf` | `findf <float> [tolerance] [from] [to]` | Searches for a float within a tolerance (default 0.001). | The tolerance must contain a `.` so it is not read as an address. |
+| `fill` | `fill <addr> <bytes> <byte>` | Writes one byte value over a range (up to 64 KB). | |
+| `scan start` | `scan start <value>\|any [8\|16\|32\|f] [from] [to]` | Starts a value scan: records every address holding the value. | `any` needs a range of 16 MB or less. Up to 4 million candidates. `f` scans floats. |
+| `scan next` | `scan next <value>\|changed\|same\|inc\|dec\|gt <v>\|lt <v>` | Keeps only candidates matching the new condition. | Change the value in game between steps. |
+| `scan list` / `scan clear` | `scan list [n]` / `scan clear` | Shows candidates (default 20) / frees them. | |
+
+Finding an address with `scan`: note your gold, `f2 scan start 1234`; spend or gain some, `f2 scan next 1180`; repeat until a few remain; `f2 scan list`; then `f2 freeze <addr> 99999` or `f2 trace <addr>`.
+
+## Lua commands added in console-v6
+
+### Health
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `hp` | `hp [n\|full] [who]` | Prints health as `cur / max`, or sets it. | Sets by calling `Health.Modify(ent, n - cur)`. |
+| `heal` | `heal [who]` | Restores full health. | |
+| `maxhp` | `maxhp <n> [who]` | `Health.SetMax`. | args unconfirmed. |
+| `invuln` | `invuln [on\|off] [who]` | `Health.SetAsInvulnerable(ent, bool)`. | Works on any entity, including the dog. |
+| `cantdie` | `cantdie [on\|off] [who]` | `Health.SetCantDie`: takes damage, never dies. | |
+| `regen` | `regen <rate> [who]` | `Health.SetRegeneration`. | args unconfirmed. |
+| `kill` | `kill [who]` | Reduces health below 0 (default: target). | |
+| `deplete` | `deplete` | `Debug.DepleteHealth` (the game's own debug helper). | |
+
+### Hero
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `mana` | `mana [on\|off]` | Infinite Will energy (`Debug.SetHeroManaInfinite`). | Used by the game's GDC/E3 startup scripts. |
+| `sprint` | `sprint [on\|off]` | `Debug.SetHeroSprintingEnabled`. | Same source. |
+| `speed` | `speed <multiplier>\|off` | Overrides hero movement speed (`Player.SetPlayerMovementSpeedOverridden` + `SetOverriddenMovementSpeedMultiplier`). | args unconfirmed, shape probed. |
+| `footlock` | `footlock [on\|off]` | Foot IK locking (`Debug.SetHeroFootLockingEnabled`). | |
+| `safety` | `safety [on\|off]` | `Player.SetSafetyMode`. | args unconfirmed, shape probed. |
+| `orbpickup` | `orbpickup [on\|off]` | `Player.SetAbleToCollectExperienceOrbs`. | args unconfirmed, shape probed. |
+| `orbspawn` | `orbspawn` | `Debug.SpawnExperienceOrbs`. | |
+| `scar` | `scar [face\|random]` | Adds a scar (`Debug.AddHeroFaceScar` / `AddHeroRandomScar`). | |
+| `outfit` | `outfit <name>\|list` | Debug outfits: barbarian brawler crossdresser goth martialarts pirate pureevil swashbuckler year. | `Debug.SetHeroWearing<Name>Outfit`. |
+| `dye` | `dye <slot> <dye>` | `Debug.SetHeroWornItemDye`. | args unconfirmed. |
+| `expressions` | `expressions all\|extend\|succeed [on\|off]` | Unlock all expressions / make all extendable / force extended ones to succeed. | |
+| `entitytype` | `entitytype <type>` | `Debug.ChangePlayerEntityType` (play as another creature). | args unconfirmed. |
+
+### Money and stats
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `money` | `money` / `money set <n>` | Prints gold (`Money.Get(hero)`) or sets it exactly (`Money.Set`). | `gold <n>` still adds. |
+| `stats` | `stats` | Prints morality, purity, renown, strength, will, skill, fat, tan, height, title, chapter, seconds played, metres travelled, combat multiplier, affordable abilities, gold and difficulty. | Each getter is shape probed; `n/a` means neither shape worked. |
+| `renown`, `addmorality`, `addpurity`, `addstrength`, `addwill`, `addfat`, `addtan`, `height` | `<command> <n>` | Adds to the stat (`Stats.Modify*`). | args unconfirmed, shape probed. `morality`/`purity` (set exactly) still exist. |
+| `ability` | `ability <name> <level>` | `Stats.SetHeroAbilityLevel`. | args unconfirmed; ability names unknown until dumped. |
+| `title` | `title` / `title <name>` | Prints the title, or unlocks one (`Stats.AddUnlockedTitle`). | args unconfirmed. |
+| `chapter` | `chapter [n]` | Prints or sets chapter progress. | args unconfirmed. |
+| `trackedstat` | `trackedstat <name> [n]` | Prints or sets a tracked stat. | args unconfirmed. |
+
+### Items
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `give` | `give <itemtype> [count]` | `Inventory.AddItemOfType(hero, type)`, up to 999 times. | The item type is an object record name; the exact form is unconfirmed. |
+| `have` | `have <itemtype>` | Count of that item. | |
+| `take` | `take <itemtype>` | Removes all of that item. | |
+| `invcount` | `invcount` | Number of items carried. | |
+| `weapons` | `weapons rusty\|iron\|steel\|masterwork\|legendary\|gun\|pistol\|all` | The game's debug weapon sets. | |
+| `henchweapon` | `henchweapon <name>` | `Debug.GiveHenchmanWeapon`. | |
+| `giveall` (new categories) | `giveall dlc1\|dlc1weapons\|dlc1clothing\|dlc1potions\|dlc1misc\|dlc1augs\|dlc1augweapons\|dlc2\|augweapons\|suits\|dogitems\|randomaug\|laser` | More `Debug.AddAll*` sets. | |
+
+### World and time
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `dayspeed` | `dayspeed [n]` | Sets day speed (`Timing.SetDaySpeed`); alone prints world seconds per second. | Used by the startup scripts. |
+| `stoptime` | `stoptime [on\|off]` | `Timing.SetTimeAsStopped`. | |
+| `midnight` | `midnight` | Stops time at midnight. | |
+| `day` | `day [n]` | Prints or sets the day count. | |
+| `nextday` | `nextday` | Advances the day count. | |
+| `moon` | `moon <phase>` | `Timing.SetMoonPhase`. | args unconfirmed. |
+| `clock` | `clock` | World/program frame, tick rate, time step, day, time of day, world seconds per second, real-world time. | |
+| `season` | `season winter\|summer` | `Debug.SwapToWinter` / `SwapToSummer`. | |
+| `ground` | `ground [x y z]` | Landscape height and water depth (default: under the hero). | args unconfirmed, shape probed. |
+| `snap` | `snap` | Drops the hero onto the landscape surface. | Uses `ground`'s height. |
+| `autosave` | `autosave` | `AutoSaveGame()`. | |
+| `sfx` | `sfx <event>` | `Sound.PlayEvent`. | args unconfirmed, shape probed. |
+| `havok` | `havok friction\|restitution\|angulardamping\|maxlinear\|maxangular\|minmass <value>` | Physics tuning. | From the E3 startup script. |
+
+### Camera
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `fov`, `zoom`, `roll`, `blur`, `dof` | `<command> [value]` | Print or set the camera value (`Camera.Get*/Set*`). | args unconfirmed. |
+| `shake` | `shake [amount]` | Camera shake (`Camera.AddCameraShake`, then `Player.AddScreenShake`). | args unconfirmed. |
+| `campos` | `campos` | Camera position, forward vector and angles. | |
+| `camto` | `camto <x> <y> <z>` | Moves the camera (`Debug.MoveCameraToPosition`). | |
+| `camlook` | `camlook <x> <y> <z>` | Points the camera focus (`Debug.MoveCameraFocusToPosition`). | |
+| `canopy` | `canopy [on\|off]` | Tree canopy fading. | |
+| `trackcam` | `trackcam` | Toggles the target-tracking camera. | |
+
+### UI
+
+`ui <sub>`; `ui list` shows all of them.
+
+| Sub-command | What it does | Notes |
+|---|---|---|
+| `ui hud on\|off` | Draws the whole HUD (`Debug.SetDrawGUI`). | Same as `gui`. |
+| `ui msg <text>` / `msg <text>` | Message box. | |
+| `ui info <text>` | Info box. | args unconfirmed. |
+| `ui close` | Removes the current display box. | |
+| `ui fadeout [s]` / `ui fadein [s]` | Screen fades. | args unconfirmed. |
+| `ui toggle <element> [on\|off]` | `GUI.ToggleElement`. | Element names unknown until dumped. |
+| `ui icons on\|off` | Player icons and world icons. | |
+| `ui vignette on\|off`, `ui dpad on\|off`, `ui highlight on\|off`, `ui version on\|off`, `ui pausedtext on\|off`, `ui expmeter on\|off` | Individual HUD parts. | |
+| `ui interesting on\|off`, `ui suggestions on\|off` | Object highlighting / automatic HUD suggestions. | args unconfirmed, shape probed. |
+| `ui counter <n>\|off`, `ui timer <s>\|off` | On-screen counter / timer. | args unconfirmed. |
+| `ui state` | Whether a UI, quick menu, display box or movie is active, and whether the screen is faded. | |
+| `ui credits` | Credits screen. | |
+| `ui consolescale <n>` | Engine debug console scale. | |
+
+Not adjustable from the Lua API as far as the reference shows: HUD element position and scale. The SDK's own UI scale lives in cvars (`cvars ui`).
+
+### Rendering
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `engine` | `engine [field] [value]` | Lists `Debug.EngineConfig`, or reads/sets one field. | |
+| `shadows`, `tonemap`, `lightmaps`, `prt`, `pointlights`, `spotlights`, `whitetex`, `trees`, `mist`, `repeatedmeshes` | `<command> [on\|off]` | Toggles that `EngineConfig` switch (no argument flips it). | Field names come from the startup scripts. |
+| `vis` | `vis <mode>\|off\|list` | Engine visualisation modes: lightcache lightcount lightpass lightzone lod sortprim vertexcost shadowcasters. | |
+| `lightdebug` | `lightdebug off\|nomain\|nolightmaps\|noambient\|nolocal\|missing` | Lighting debug functions from `StartupConsoleScript.lua`. | May only exist when that script ran. |
+| `particles` | `particles [on\|off]` | Particle updates. | |
+| `entdebug` | `entdebug [on\|off]` | Per-entity debug info. | |
+| `facing`, `generators`, `combatdraw`, `memstats` | | Entity facing, creature generators, combat debug drawing, memory stats. | |
+
+### Entities
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `inspect` | `inspect [who]` | Name, id, position, distance to hero, health, invulnerability, gold, can-fight (default: target). | |
+| `tp` | `tp <who>` | Teleports the hero next to an entity. | |
+| `bring` | `bring <who> [distance]` | Moves an entity next to the hero (default 2 m). | |
+| `near` | `near [radius]` | Lists entities around the hero (`Debug.GetAllEntitiesAroundHero`). | args unconfirmed. |
+| `follow` | `follow` | Makes the target follow the hero. | |
+| `combat` | `combat <who> fight\|flee\|attackable on\|off` | `Combat.SetCanFight` / `SetCanFlee` / `SetCanBeAttacked`. | |
+| `damage` | `damage <who> <multiplier>` | `Combat.SetDamageMultiplier`. | args unconfirmed. |
+| `dog` | `dog here\|pos\|bark\|growl\|whimper\|worms on\|off\|god on\|off\|inspect` | The hero's dog. | |
+
+### Debug functions
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `dbg` | `dbg list [filter]` / `dbg <Name> [args]` | Lists every function in the `Debug` table, or calls one (case-insensitive name). | Covers the ~250 Lua-defined debug helpers the game ships. |
+| `probe` | `probe <path> [args]` | Calls a function with `(hero, args)` then `(args)` and reports which shape worked. | The fastest way to confirm an argument shape. |
+| `quick` | `quick <name>\|list [args]` | One-word shortcuts for the game's own debug helpers (zombies, trolls, bandits, marryall, winter, openshops, beamup, ...). | `quick list` shows each name and the function it calls. Several change the save; use a throwaway save. |
+
+### Places
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `place` | `place set <name> <x> <y> <z>` / `place del <name>` / `place export` | Defines or removes a warp place; `export` prints `place set` lines. | Put exported lines in `console\autoexec.txt` and the places survive restarts. |
+| `near_place` | `near_place` | The saved place closest to the hero. | |
+
+Status: everything in console-v6 was checked in a mock harness (fake engine tables) only. Nothing has run in the game yet.
