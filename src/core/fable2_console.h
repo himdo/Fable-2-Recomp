@@ -1127,7 +1127,7 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
       // Each is a multiple of the extra width per side, so 16:9 stays vanilla.
       double v = 0;
       if (W.size() < 4 || !parse_f(W[3], v))
-        return out("ws", "usage: ws tune <cover|page|card|bookcover|paper> <factor>  (defaults 1, 1.2, 1.8, 1.2, 1.4)", true), true;
+        return out("ws", "usage: ws tune <cover|page|card|bookcover|paper> <factor>  (defaults 1, 1.2, 1.8, 1.4, 1.4)", true), true;
       std::string key;
       for (char c : W[2])
         if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') key += c;
