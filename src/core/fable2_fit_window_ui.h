@@ -78,7 +78,7 @@ namespace detail {
 // Test builds log the layout whatever fit_window_ui_log says, because L's
 // config file does not reach this cvar. Bump kBuild with each test zip.
 inline constexpr bool kAlwaysLogLayout = true;
-inline constexpr int kBuild = 55;
+inline constexpr int kBuild = 56;
 inline bool LogLayout() {
   return kAlwaysLogLayout || REXCVAR_GET(fit_window_ui_log);
 }
@@ -315,22 +315,23 @@ local function track(e, key, name, mul, p)
   -- cards) is one it animates; fighting it only flickers, so give up.
   if applied[k] > 10 then return end
   local want = mul and first[k] * p or first[k] + p
-  if math.abs(v - want) < 0.01 then
+  if math.abs(v - want) < 0.0005 or (math.abs(v - want) < 0.01 and not (last[k] and math.abs(want + 0.002 - v) < 0.0005)) then
     -- Already reads as wanted, but a value set while the element's own
     -- animation runs is overridden when it draws, and once that animation
     -- ends its last frame stays (console test: the main menu covers read
     -- -466 but drew at -236). Setting the same value again does nothing, and
     -- so does a hair off and back within one frame (build 31: the cards), so
     -- every 15 frames it goes a hair off on one frame and back on the next.
-    -- Only for the first 12 re-sends (about 3 s) after the value was set:
-    -- running forever made menu text shake (build 50).
-    if want ~= first[k] and fixTick % 15 == 0 and (resent[k] or 0) < 12 then
+    -- Only for the first 6 re-sends (about 1.5 s) after the value was set,
+    -- with a 0.002 offset: forever made menu text shake (build 50), and a
+    -- 0.05 offset for 3 s still made it shake briefly (build 55).
+    if want ~= first[k] and fixTick % 15 == 0 and (resent[k] or 0) < 6 then
       resent[k] = (resent[k] or 0) + 1
-      pcall(setAttribute, e, name, want + 0.05)
-      last[k] = want + 0.05
+      pcall(setAttribute, e, name, want + 0.002)
+      last[k] = want + 0.002
     end
     return
-  elseif last[k] and math.abs(want + 0.05 - v) < 0.001 then
+  elseif last[k] and math.abs(want + 0.002 - v) < 0.0005 then
     pcall(setAttribute, e, name, want)  -- the frame after the hair-off write
     last[k] = want
     return
