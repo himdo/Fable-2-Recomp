@@ -78,7 +78,7 @@ namespace detail {
 // Test builds log the layout whatever fit_window_ui_log says, because L's
 // config file does not reach this cvar. Bump kBuild with each test zip.
 inline constexpr bool kAlwaysLogLayout = true;
-inline constexpr int kBuild = 50;
+inline constexpr int kBuild = 52;
 inline bool LogLayout() {
   return kAlwaysLogLayout || REXCVAR_GET(fit_window_ui_log);
 }
@@ -302,7 +302,7 @@ end
 -- at the authored one or at the last value set here, so a slide change gets
 -- re-applied, a new aspect retargets it, and a running animation is left
 -- alone. At 16:9 the target is the authored value.
-local first, applied, last, settle, settleN = {}, {}, {}, {}, {}
+local first, applied, last, settle, settleN, resent = {}, {}, {}, {}, {}, {}
 local fixTick = 0  -- per-frame counter (the onUpdate hook below)
 local function track(e, key, name, mul, p)
   if not e then return end
@@ -321,7 +321,10 @@ local function track(e, key, name, mul, p)
     -- -466 but drew at -236). Setting the same value again does nothing, and
     -- so does a hair off and back within one frame (build 31: the cards), so
     -- every 15 frames it goes a hair off on one frame and back on the next.
-    if want ~= first[k] and fixTick % 15 == 0 then
+    -- Only for the first 12 re-sends (about 3 s) after the value was set:
+    -- running forever made menu text shake (build 50).
+    if want ~= first[k] and fixTick % 15 == 0 and (resent[k] or 0) < 12 then
+      resent[k] = (resent[k] or 0) + 1
       pcall(setAttribute, e, name, want + 0.05)
       last[k] = want + 0.05
     end
@@ -351,6 +354,7 @@ local function track(e, key, name, mul, p)
   end
   settle[k] = nil
   if atFirst then applied[k] = applied[k] + 1 end
+  resent[k] = 0
   pcall(setAttribute, e, name, want)
   last[k] = want
   if applied[k] > 10 then
@@ -531,8 +535,9 @@ local function fixMenus()
   cover = dx * tk("cover", 1)
   page = dx * tk("page", 1.2)
   card = dx * tk("card", 1.8)
-  -- Book screens' right cover (ws tune bookcover), tuned on Items and shops.
-  bookCover = dx * tk("bookcover", 1.2)
+  -- Book screens' right cover (ws tune bookcover, 1.4): at 1.2 the pause
+  -- menu's R stick up/down icons on the map page sat under it (2.22:1).
+  bookCover = dx * tk("bookcover", 1.4)
   paper = dx * tk("paper", 1.4)
   if screen == "title" then
     -- Title: left as authored. Its 16:9 box (White) is on the title's
@@ -542,6 +547,9 @@ local function fixMenus()
     -- in another Lua state and shows at the box's sides until the box fades
     -- out after the legal text. Open: finding the box's keyframe data.
   elseif screen ~= "other" then
+    -- Tell the host a menu is open: menus play small Bink previews (the
+    -- Abilities pages), which must not letterbox the whole screen.
+    if fixTick % 10 == 0 then pcall(output, "[fitwin-menu]") end
     spreadMenu(menu)
     if not menu and leftFrame then childMove(leftFrame, "LeftFrame", "^frame_new", -cover) end
     -- Build 42-43 (shop, 2.39:1): the game positions each page's Contents
@@ -738,10 +746,18 @@ inline void OnPresentationLoaded(PPCContext& ctx, uint8_t* base,
 }
 
 // A message from Gameface's report callback (r3 = level, r4 = text).
+inline std::atomic<int64_t> g_menu_ms{0};  // last "[fitwin-menu]" report
+
 inline void OnGamefaceMessage(uint32_t level, uint32_t text) {
-  if (!detail::LogLayout()) return;
   std::string message;
   if (!detail::ReadGuestString(text, message) || message.empty()) return;
+  if (message.rfind("[fitwin-menu]", 0) == 0) {
+    g_menu_ms.store(std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch())
+                        .count());
+    return;
+  }
+  if (!detail::LogLayout()) return;
   while (!message.empty() &&
          (message.back() == '\n' || message.back() == '\r')) {
     message.pop_back();
@@ -914,7 +930,9 @@ namespace fable2::fitwindow::ui {
 inline void TickVideo() {
   static bool playing = false;
   const int64_t last = detail::g_bink_last_ms.load(std::memory_order_relaxed);
-  const bool now_playing = last != 0 && detail::NowMs() - last < 300;
+  // A menu's own preview video (Abilities) is not a full-screen video.
+  const bool menu_up = detail::NowMs() - g_menu_ms.load(std::memory_order_relaxed) < 600;
+  const bool now_playing = last != 0 && detail::NowMs() - last < 300 && !menu_up;
   if (now_playing == playing) return;
   playing = now_playing;
   if (rex::cvar::GetFlagByName("fit_game_to_window") != "true") return;
