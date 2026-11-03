@@ -38,6 +38,14 @@ Checked with screenshots at 4:3 (1440x1080), 16:9, 21:9 (2560x1080), 2.39:1
 
 ## Known issues
 
+### Menus at 4:3 and very wide windows
+
+Book screens and the main menu are tuned from 16:9 up to about 2.4:1 (21:9,
+2.22:1, 2.39:1). Narrower than 16:9 (4:3, 16:10) the menus keep their 16:9
+layout and lose their edges. Around 32:9 the menus' plain background does not
+reach the covers (black bars between them) and the book screen header stays
+in the middle.
+
 ### Title screen box stays 16:9
 
 On a window wider than 16:9, the title screen's black/grey box ("Press A to
