@@ -72,6 +72,12 @@ inline std::atomic<float> g_forced_aspect{0.0f};  // console override; 0 = follo
 inline std::atomic<rex::memory::Memory*> g_memory{nullptr};
 inline std::atomic<rex::ui::Window*> g_window{nullptr};
 inline std::atomic<bool> g_listening{false};
+// Told the new UI aspect (16/9 when the fit is off) whenever it changes; the
+// console points it at the GUI bridge so live screens follow (__fitwin_A).
+inline std::atomic<void (*)(float)> g_aspect_listener{nullptr};
+inline void NotifyAspect(float aspect) {
+  if (auto* f = g_aspect_listener.load()) f(aspect);
+}
 
 inline uint32_t ToGuestFloat(float value) {
   uint32_t bits;
@@ -148,6 +154,7 @@ inline void ApplySize(uint32_t width, uint32_t height) {
 
   detail::Store(aspect_ptr, aspect);
   detail::Store(reference_ptr, reference);
+  detail::NotifyAspect(aspect);
   REXSYS_INFO("[fit-window] window {}x{}: aspect {:.4f} (0x{:08X}), 4:3 "
               "reference {:.4f} (0x{:08X})",
               width, height, aspect, kAspectAddress, reference,
@@ -244,6 +251,15 @@ inline void Install(rex::memory::Memory* memory, rex::ui::Window* window) {
 // True once the two floats are writable and checked (Install succeeded).
 inline bool Installed() { return detail::g_aspect.load() != nullptr; }
 
+// Called with the UI aspect each time it changes (16/9 when the fit is off).
+inline void SetAspectListener(void (*f)(float)) { detail::g_aspect_listener.store(f); }
+
+// The aspect the UI layout should use now: the written one, or 16/9 when off.
+inline float UiAspect() {
+  const float a = CurrentAspect();
+  return a > 0.0f ? a : kOriginalAspect;
+}
+
 // The aspect forced from the console, or 0 when following the window.
 inline float ForcedAspect() { return detail::g_forced_aspect.load(); }
 
@@ -293,6 +309,7 @@ inline bool SetEnabled(bool on) {
   detail::RestorePresenterCvar("present_letterbox");
   detail::RestorePresenterCvar("present_safe_area_x");
   detail::RestorePresenterCvar("present_safe_area_y");
+  detail::NotifyAspect(kOriginalAspect);
   REXSYS_INFO("[fit-window] off from the console: original 16:9");
   return true;
 }

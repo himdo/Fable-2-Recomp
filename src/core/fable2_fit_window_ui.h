@@ -70,7 +70,7 @@ namespace detail {
 // Test builds log the layout whatever fit_window_ui_log says, because L's
 // config file does not reach this cvar. Bump kBuild with each test zip.
 inline constexpr bool kAlwaysLogLayout = true;
-inline constexpr int kBuild = 25;
+inline constexpr int kBuild = 26;
 inline bool LogLayout() {
   return kAlwaysLogLayout || REXCVAR_GET(fit_window_ui_log);
 }
@@ -140,39 +140,86 @@ local shown = { "position.x", "position.y", "position.z", "scale.x",
   "scale.y", "pivot.x", "active", "opacity", "widescreenXPos",
   "widescreenYPos", "WidescreenXWidth", "fov", "aspect", "orthographic",
   "width", "height" }
+-- Live aspect: the host sets __fitwin_A in every GUI state when the window
+-- or `f2 ws` changes the aspect, and each per-frame update re-reads it, so
+-- every offset below follows it without reloading the screen (16:9 gives
+-- dx 0 and r 1: the authored layout). This screen's load value goes in
+-- first so a state never keeps an older one.
+rawset(_G, "__fitwin_A", A)
+local r = 360 * A / 640
+local function live()
+  local g = rawget(_G, "__fitwin_A")
+  if type(g) == "number" and g > 0 and g ~= A then
+    A = g
+    dx = 360 * A - 640
+    r = 360 * A / 640
+  end
+end
+-- Tuning factors, also read every frame, so `f2 gui __fitwin_tune.x = v`
+-- can adjust them live. Each is a multiple of dx, so 16:9 stays authored.
+local tune = rawget(_G, "__fitwin_tune")
+if type(tune) ~= "table" then
+  tune = {}
+  rawset(_G, "__fitwin_tune", tune)
+end
+local function tk(name, default)
+  local v = tune[name]
+  if type(v) == "number" then return v end
+  tune[name] = default
+  return default
+end
 local moved, lines = 0, 0
+-- HUD edge elements: recorded once, then re-applied with the current dx/r.
+local hudItems = {}
+local function applyHud(it)
+  if it.side ~= 0 then
+    local nx = it.wx + it.side * dx
+    if it.nx ~= nx then
+      pcall(setAttribute, it.b, "widescreenXPos", nx)
+      if it.moveParent then pcall(setAttribute, it.p, "position.x", nx) end
+      it.nx = nx
+    end
+  end
+  if it.ww then
+    local w = it.ww * r
+    if it.w ~= w then
+      pcall(setAttribute, it.b, "WidescreenXWidth", w)
+      if it.scaleParent then pcall(setAttribute, it.p, "scale.x", w) end
+      it.w = w
+    end
+  end
+end
 local function adapt(b, depth)
   local wx = attr(b, "widescreenXPos")
   if not wx then return end
   local okp, p = pcall(getElement, "parent", b)
   if not okp or not p then return end
   local pname = tostring(attr(p, "name"))
+  local it = { b = b, p = p, wx = wx, side = 0 }
   if wx ~= 0 then
     local cx = attr(p, "position.x") or wx
-    local side = 0
     if math.abs(wx - cx) > 1 then
-      if wx > cx then side = 1 else side = -1 end
-    elseif wx < 440 then side = -1
-    elseif wx > 840 then side = 1 end
-    if side ~= 0 then
-      local nx = wx + side * dx
-      pcall(setAttribute, b, "widescreenXPos", nx)
-      if math.abs(cx - wx) <= 1 then pcall(setAttribute, p, "position.x", nx) end
+      if wx > cx then it.side = 1 else it.side = -1 end
+    elseif wx < 440 then it.side = -1
+    elseif wx > 840 then it.side = 1 end
+    it.moveParent = math.abs(cx - wx) <= 1
+    if it.side ~= 0 then
       moved = moved + 1
       out(string.format("move %s: x now %.1f, 16:9 %.1f -> %.1f",
-        pname, cx, wx, nx))
+        pname, cx, wx, wx + it.side * dx))
     else
       out(string.format("keep %s: 16:9 x %.1f is near the centre", pname, wx))
     end
   end
   local ww = attr(b, "WidescreenXWidth")
   if ww and ww ~= 0 then
-    local r = 360 * A / 640
     local cs = attr(p, "scale.x") or ww
-    pcall(setAttribute, b, "WidescreenXWidth", ww * r)
-    if math.abs(cs - ww) < 0.001 then pcall(setAttribute, p, "scale.x", ww * r) end
+    it.ww = ww
+    it.scaleParent = math.abs(cs - ww) < 0.001
     out(string.format("widen %s: scale.x %.3f -> %.3f", pname, ww, ww * r))
   end
+  hudItems[#hudItems + 1] = it
+  applyHud(it)
 end
 local function walk(e, depth)
   local okc, kids = pcall(getChildren, e)
@@ -191,7 +238,7 @@ local function walk(e, depth)
       out(line)
     end
     if t == "behavior" then
-      if moveHud and dx > 0.5 then adapt(c, depth) end
+      if moveHud then adapt(c, depth) end
     elseif t ~= "material" and t ~= "texture" then
       walk(c, depth + 1)
     end
@@ -207,8 +254,7 @@ out("moved " .. moved .. " widescreen elements")
 
 -- Menus. They have no widescreen layout, so each known screen gets its own
 -- fix, found by element names from the layout log.
-if not moveHud or dx <= 0.5 then return end
-local r = 360 * A / 640
+if not moveHud then return end
 local function kids(e)
   local okc, k = pcall(getChildren, e)
   if okc and type(k) == "table" then return k end
@@ -242,22 +288,14 @@ local fixLines = 0
 local function fout(s)
   if fixLines < 40 then fixLines = fixLines + 1 out(s) end
 end
--- A full-screen plane authored at 1280 wide: widen it to the window. Slide
--- changes put authored values back, so this runs again every frame.
-local function widen(layer, name)
-  local e = child(layer, name)
-  local sx = e and attr(e, "scale.x")
-  if not sx or math.abs(sx - 12.8) > 0.01 then return false end
-  pcall(setAttribute, e, "scale.x", sx * r)
-  fout(string.format("widen %s: scale.x %.2f -> %.2f", name, sx, sx * r))
-  return true
-end
--- Moves attribute `name` of an element away from its authored value by
--- delta. This runs every frame and only touches the value while it sits at
--- the authored one (the first value seen, at load), so a slide change gets
--- re-applied and a running animation is left alone.
-local first, applied = {}, {}
-local function nudge(e, key, name, delta)
+-- Sets attribute `name` of an element to a value derived from its authored
+-- one (the first value seen, at load): first + p (nudge) or first * p
+-- (scaleBy). This runs every frame and only touches the value while it sits
+-- at the authored one or at the last value set here, so a slide change gets
+-- re-applied, a new aspect retargets it, and a running animation is left
+-- alone. At 16:9 the target is the authored value.
+local first, applied, last = {}, {}, {}
+local function track(e, key, name, mul, p)
   if not e then return end
   local v = attr(e, name)
   if v == nil then return end
@@ -266,21 +304,36 @@ local function nudge(e, key, name, delta)
   -- A value the game puts back every frame (build 8: the Boy and Girl
   -- cards) is one it animates; fighting it only flickers, so give up.
   if applied[k] > 10 then return end
-  if math.abs(v - first[k]) < 0.01 then
-    applied[k] = applied[k] + 1
-    pcall(setAttribute, e, name, first[k] + delta)
-    if applied[k] > 10 then
-      out(key .. " " .. name .. " is driven by the game every frame, left alone")
-    else
-      fout(string.format("%s %s %.2f -> %.2f", key, name, v, first[k] + delta))
-    end
+  local want = mul and first[k] * p or first[k] + p
+  if math.abs(v - want) < 0.01 then return end
+  local atFirst = math.abs(v - first[k]) < 0.01
+  if not atFirst and not (last[k] and math.abs(v - last[k]) < 0.01) then return end
+  if atFirst then applied[k] = applied[k] + 1 end
+  pcall(setAttribute, e, name, want)
+  last[k] = want
+  if applied[k] > 10 then
+    out(key .. " " .. name .. " is driven by the game every frame, left alone")
+  else
+    fout(string.format("%s %s %.2f -> %.2f", key, name, v, want))
   end
+end
+local function nudge(e, key, name, delta) track(e, key, name, false, delta) end
+local function scaleBy(e, key, name, f) track(e, key, name, true, f) end
+-- A full-screen plane authored at 1280 wide: widen it to the window.
+local function widen(layer, name)
+  local e = child(layer, name)
+  local k = name .. ".scale.x"
+  local sx = first[k] or (e and attr(e, "scale.x"))
+  if not sx or math.abs(sx - 12.8) > 0.01 then return false end
+  scaleBy(e, name, "scale.x", r)
+  return true
 end
 -- Book screens spread to the window: the left cover and the menu column
 -- (everything in the ExpandableMenu component) move left by dx, the right
--- cover and the paper pages move right by dx. Other menu children are
--- shifted once; the named static parts are re-applied every frame.
-local menuShifted = false
+-- cover and the paper pages move right by dx. Every move is re-applied each
+-- frame with the current dx. cover/page/card are dx times a tuning factor
+-- (fixMenus sets them each frame; __fitwin_tune.cover/page/card).
+local cover, page, card = 0, 0, 0
 local staticParts = { Buttons = true, KeyLight = true, MenuHighlight = true,
   Money = true }
 -- The covers and the character cards are keyframe-animated on their own
@@ -312,20 +365,17 @@ local function spreadMenu(menu)
       if n == "LeftFrame" and screen == "mainmenu" then
         -- Build 20: on the main menu the frame pieces are animated and the
         -- moves on them never showed, so the frame node moves instead.
-        nudge(k[i], "LeftFrame", "position.x", -(dx + 10))
+        nudge(k[i], "LeftFrame", "position.x", -cover)
       elseif n == "LeftFrame" then
-        childMove(k[i], "LeftFrame", "^frame_new", -(dx + 10))
-      elseif staticParts[n] then
+        childMove(k[i], "LeftFrame", "^frame_new", -cover)
+      else
+        -- Build 13 also shifted g_MenuPositionSlots, but those slots are
+        -- relative to Buttons, so items moved twice and their labels slid
+        -- under the cover.
         nudge(k[i], "ExpandableMenu/" .. n, "position.x", -dx)
-      elseif not menuShifted then
-        local x = attr(k[i], "position.x")
-        if x then pcall(setAttribute, k[i], "position.x", x - dx) end
       end
     end
   end
-  -- Build 13 also shifted g_MenuPositionSlots, but those slots are relative
-  -- to Buttons, so items moved twice and their labels slid under the cover.
-  menuShifted = true
 end
 local dumped = false
 local function dumpMenu(root, label)
@@ -407,7 +457,12 @@ local function titleCover()
   -- The copy fades with White, so it only ever shows what White shows.
   if titleCopy then
     local o = attr(child(layer, "White"), "opacity")
-    if o ~= nil then pcall(setAttribute, titleCopy, "opacity", o) end
+    if o ~= nil then pcall(setAttribute, titleCopy.e, "opacity", o) end
+    local sx = 12.8 * r * 1.05
+    if titleCopy.sx ~= sx then
+      pcall(setAttribute, titleCopy.e, "scale.x", sx)
+      titleCopy.sx = sx
+    end
     return
   end
   if titleCovered then return end
@@ -434,7 +489,7 @@ local function titleCover()
   pcall(setAttribute, c, "scale.x", 12.8 * r * 1.05)
   pcall(setAttribute, c, "scale.y", 7.2 * 1.05)
   pcall(setAttribute, c, "opacity", attr(white, "opacity") or 100)
-  titleCopy = c
+  titleCopy = { e = c, sx = 12.8 * r * 1.05 }
   out(string.format("title cover: wide copy of White in dialog, scale.x %.2f",
     12.8 * r * 1.05))
 end
@@ -443,7 +498,7 @@ local masks = nil
 -- fading in from black. The game draws it at its animated scale while that
 -- runs, so the camera zooms in by the window's extra width while the tint is
 -- dark and goes back once it lights up. Logs the first frames to tune it.
-local fadeCam, fadeZ, fadeLogs, fadeZoomed = nil, nil, 0, false
+local fadeCam, fadeZ, fadeLogs, fadeSet = nil, nil, 0, nil
 local function pauseFade()
   local tint = child(layer, "BackgroundTint")
   if not tint then return end
@@ -461,12 +516,19 @@ local function pauseFade()
     out(string.format("pause fade: tint diffuse.r %s opacity %s -> %s",
       tostring(d), tostring(o), dark and "zoomed" or "normal"))
   end
-  if dark ~= fadeZoomed then
-    fadeZoomed = dark
-    pcall(setAttribute, fadeCam, "position.z", dark and fadeZ / r or fadeZ)
+  -- Zoom only for a window wider than 16:9 (r > 1); the z follows r live.
+  local want = (dark and r > 1) and fadeZ / r or fadeZ
+  if want ~= fadeSet then
+    fadeSet = want
+    pcall(setAttribute, fadeCam, "position.z", want)
   end
 end
 local function fixMenus()
+  -- Defaults keep build 25's offsets at 21:9-ish dx 220: cover dx + 10,
+  -- page dx + 25, as multiples of dx so 16:9 stays authored.
+  cover = dx * tk("cover", 230 / 220)
+  page = dx * tk("page", 245 / 220)
+  card = dx * tk("card", 1)
   if screen == "title" then
     -- Title: the dark backdrop.
     widen(layer, "White")
@@ -474,18 +536,19 @@ local function fixMenus()
     -- black), but the game draws it at its animated scale whatever scale.x
     -- says. So the title camera moves closer instead: everything in the
     -- title grows by the window's extra width and the box fills the window.
+    -- Only for windows wider than 16:9: a narrower one keeps the camera.
     local cam = child(layer, "Camera")
     if cam then
-      local z = attr(cam, "position.z")
-      if z and z < 0 then nudge(cam, "TitleCamera", "position.z", -z - (-z) / r) end
+      local z = first["TitleCamera.position.z"] or attr(cam, "position.z")
+      if z and z < 0 then scaleBy(cam, "TitleCamera", "position.z", r > 1 and 1 / r or 1) end
     end
   elseif screen ~= "other" then
     spreadMenu(menu)
-    if not menu and leftFrame then childMove(leftFrame, "LeftFrame", "^frame_new", -(dx + 10)) end
+    if not menu and leftFrame then childMove(leftFrame, "LeftFrame", "^frame_new", -cover) end
     if screen == "mainmenu" then
-      nudge(rightFrame, "RightFrame", "position.x", dx + 10)
+      nudge(rightFrame, "RightFrame", "position.x", cover)
     else
-      childMove(rightFrame, "RightFrame", "^Group$", dx + 10)
+      childMove(rightFrame, "RightFrame", "^Group$", cover)
     end
     -- The paper follows the right cover, which also hides the shop's next
     -- page behind it again. Build 15 moved the pages' children, but the
@@ -495,11 +558,13 @@ local function fixMenus()
     -- Build 16 moved Pages itself and nothing moved, so it is the children
     -- again (build 15, right for pause); a child the game keeps putting back
     -- (Page1_Background) gets its own children moved instead.
-    childMove(pages, "Pages", ".", dx + 25, true)
+    childMove(pages, "Pages", ".", page, true)
     -- On the main menu the character cards wait just off a 16:9 screen, so
-    -- they move out by the extra width too.
-    childMove(boy, "Boy", "^Group$", -dx)
-    childMove(girl, "Girl", "^Group$", dx)
+    -- they move out by the extra width too. Their Group's x runs the other
+    -- way (console test: Boy.Group -400 moved the Boy card toward the
+    -- centre), so Boy gets +card and Girl -card.
+    childMove(boy, "Boy", "^Group$", card)
+    childMove(girl, "Girl", "^Group$", -card)
     -- Build 19: widening BackgroundTint stretched the pause emblem (Options,
     -- which leaves it alone, looked right), so it is not touched any more.
     -- The minimap's quest markers are clones of ReusableTokens, which sits
@@ -520,10 +585,10 @@ local function fixMenus()
       walkMasks(layer, false)
     end
     for i = 1, #masks do
-      nudge(masks[i][1], "Mask" .. i .. "/" .. masks[i][2], "position.x", dx + 25)
+      nudge(masks[i][1], "Mask" .. i .. "/" .. masks[i][2], "position.x", page)
     end
     local tokens = find(layer, "ReusableTokens", 0)
-    if tokens then nudge(tokens, "ReusableTokens", "position.x", dx + 25) end
+    if tokens then nudge(tokens, "ReusableTokens", "position.x", page) end
     pauseFade()
   end
 end
@@ -539,6 +604,8 @@ if type(GUI) == "table" and not GUI.fitwinHooked then
     frames = frames + 1
     if frames == 1 then out("per-frame re-apply running (" .. screen .. ")") end
     if frames == 90 then dumpMenu(menu or find(layer, "Foreground", 0), screen) end
+    live()
+    for i = 1, #hudItems do pcall(applyHud, hudItems[i]) end
     pcall(fixMenus)
   end
   out("hooked GUI.onUpdate (" .. screen .. ")")
@@ -576,8 +643,11 @@ inline void OnPresentationLoaded(PPCContext& ctx, uint8_t* base,
   if (!memory || !presentation) return;
   const bool move_hud = REXCVAR_GET(fit_window_hud_to_edges);
   const bool log_tree = detail::LogLayout();
-  const float aspect = fable2::fitwindow::CurrentAspect();
-  if (aspect <= 0.0f || (!move_hud && !log_tree)) return;
+  // 0 = the fit is off right now (`f2 ws off`): load the script at 16:9 so
+  // the screen still follows a later `ws on` or `ws aspect`.
+  float aspect = fable2::fitwindow::CurrentAspect();
+  if (aspect <= 0.0f) aspect = 16.0f / 9.0f;
+  if (!move_hud && !log_tree) return;
 
   const uint32_t index = detail::g_presentations.fetch_add(1) + 1;
   REXSYS_INFO("[fit-window] UI screen #{} loaded (0x{:08X}): running the HUD "
