@@ -70,7 +70,7 @@ namespace detail {
 // Test builds log the layout whatever fit_window_ui_log says, because L's
 // config file does not reach this cvar. Bump kBuild with each test zip.
 inline constexpr bool kAlwaysLogLayout = true;
-inline constexpr int kBuild = 30;
+inline constexpr int kBuild = 35;
 inline bool LogLayout() {
   return kAlwaysLogLayout || REXCVAR_GET(fit_window_ui_log);
 }
@@ -310,12 +310,17 @@ local function track(e, key, name, mul, p)
     -- Already reads as wanted, but a value set while the element's own
     -- animation runs is overridden when it draws, and once that animation
     -- ends its last frame stays (console test: the main menu covers read
-    -- -466 but drew at -236). Setting the same value again does nothing, so
-    -- every 15 frames it goes to a hair off and back, which sticks.
+    -- -466 but drew at -236). Setting the same value again does nothing, and
+    -- so does a hair off and back within one frame (build 31: the cards), so
+    -- every 15 frames it goes a hair off on one frame and back on the next.
     if want ~= first[k] and fixTick % 15 == 0 then
-      pcall(setAttribute, e, name, want + 0.001)
-      pcall(setAttribute, e, name, want)
+      pcall(setAttribute, e, name, want + 0.05)
+      last[k] = want + 0.05
     end
+    return
+  elseif last[k] and math.abs(want + 0.05 - v) < 0.001 then
+    pcall(setAttribute, e, name, want)  -- the frame after the hair-off write
+    last[k] = want
     return
   end
   local atFirst = math.abs(v - first[k]) < 0.01
@@ -493,11 +498,11 @@ end
 local function fixMenus()
   -- Tuned live against vanilla 16:9 (build 29 screenshots at 4:3, 2.39 and
   -- 32:9): the covers keep their vanilla visible width at the window edges
-  -- (dx), the paper stays under the right cover (dx), and the cards, in a
-  -- 0.75-scaled parent, stay off-screen (1.4 dx).
+  -- (dx), the paper stays under the right cover (dx), and the waiting
+  -- cards, in a 0.75-scaled parent, stay off-screen (1.8 dx).
   cover = dx * tk("cover", 1)
   page = dx * tk("page", 1)
-  card = dx * tk("card", 1.4)
+  card = dx * tk("card", 1.8)
   if screen == "title" then
     -- Title: left as authored. Its 16:9 box (White) is on the title's
     -- timeline: scale, position.z and the title camera are put back when it
@@ -523,11 +528,27 @@ local function fixMenus()
     -- (Page1_Background) gets its own children moved instead.
     childMove(pages, "Pages", ".", page, true)
     -- On the main menu the character cards wait just off a 16:9 screen, so
-    -- they move out by the extra width too. Their Group's x runs the other
-    -- way (console test: Boy.Group -400 moved the Boy card toward the
-    -- centre), so Boy gets +card and Girl -card.
-    childMove(boy, "Boy", "^Group$", card)
-    childMove(girl, "Girl", "^Group$", -card)
+    -- they move out too (Boy left, Girl right), but only while they wait
+    -- there: on New Game the game slides Boy and Girl in to the middle, and
+    -- there the offset goes back to 0 so they land where vanilla puts them
+    -- at any aspect (no overlap at 4:3). Waiting = Boy far out to the side
+    -- (it rests at -831 after loading and -880 after New Game is backed out
+    -- of; the slide-in spots are near +-150). Their parents' scale is
+    -- animated, so stretching them distorts the cards (build 31), and the
+    -- Group x did not draw right after loading, so the card's two faces
+    -- (front, back) are moved.
+    if boy and girl then
+      local bx = attr(boy, "position.x")
+      local waiting = bx and math.abs(bx) > 500
+      local bg, gg = child(boy, "Group"), child(girl, "Group")
+      -- The back face is turned, so its x runs the other way: Boy's back
+      -- moves +card, its front -card (console tests: the back shows after
+      -- loading, the front after backing out of New Game).
+      childMove(bg, "Boy/Group", "^front$", waiting and -card or 0)
+      childMove(bg, "Boy/Group", "^back$", waiting and card or 0)
+      childMove(gg, "Girl/Group", "^front$", waiting and card or 0)
+      childMove(gg, "Girl/Group", "^back$", waiting and -card or 0)
+    end
     -- Build 19: widening BackgroundTint stretched the pause emblem (Options,
     -- which leaves it alone, looked right), so it is not touched any more.
     -- The minimap's quest markers are clones of ReusableTokens, which sits
