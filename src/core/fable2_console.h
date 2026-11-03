@@ -26,6 +26,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <cctype>
 #include <chrono>
@@ -73,6 +74,27 @@ inline void send_ui_aspect(float aspect) {
   fable2::guilua::enqueue_all("fitwin_A", code);
 }
 inline const bool kUiAspectListener = (fable2::fitwindow::SetAspectListener(&send_ui_aspect), true);
+
+// The title box's opacity, reported by the title's layout script, goes to
+// every GUI state as __fitwin_titleBox so the main menu's panorama (another
+// Lua state) can hide behind the 16:9 box. Reports come every few frames;
+// once they stop for 60 frames (title gone) the value is reset to 0.
+inline std::atomic<float> g_title_box{0.0f};
+inline std::atomic<uint64_t> g_title_box_frame{0};
+inline void send_title_box(float opacity) {
+  g_title_box_frame.store(fable2::guilua::S().frame.load(std::memory_order_relaxed));
+  if (g_title_box.exchange(opacity) == opacity) return;
+  char code[64];
+  std::snprintf(code, sizeof(code), "__fitwin_titleBox = %.1f", opacity);
+  fable2::guilua::enqueue_all("fitwin_box", code);
+}
+inline void expire_title_box() {
+  if (g_title_box.load() <= 0.0f) return;
+  if (fable2::guilua::S().frame.load(std::memory_order_relaxed) - g_title_box_frame.load() < 60) return;
+  g_title_box.store(0.0f);
+  fable2::guilua::enqueue_all("fitwin_box", "__fitwin_titleBox = 0");
+}
+inline const bool kTitleBoxListener = (fable2::fitwindow::ui::SetTitleBoxListener(&send_title_box), true);
 
 namespace fs = std::filesystem;
 namespace ta = fable2::textappend;
@@ -1243,18 +1265,20 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
         }
       }
     } else {
-      for (uint64_t a = from; a + 4 <= to; a += 4) {
-        if (!ta::rdable2(base, static_cast<uint32_t>(a), 4)) {
-          a |= 0xFFF;
-          a -= 3;
-          continue;
-        }
-        uint64_t v;
-        if (!read_be(base, static_cast<uint32_t>(a), 4, v)) continue;
-        const double cur = bits_to_float(static_cast<uint32_t>(v));
-        if (cur == cur && std::abs(cur - fv) <= tol) {
-          if (hits < 32) first += " " + hex(a, 8);
-          ++hits;
+      // One readability check per 4 KB page, then a straight scan of it (a
+      // check per word made a 256 MB search take many minutes).
+      for (uint64_t page = from & ~0xFFFull; page < to; page += 0x1000) {
+        if (!ta::rdable2(base, static_cast<uint32_t>(page), 0x1000)) continue;
+        const uint8_t* p = reinterpret_cast<const uint8_t*>(ta::host_addr(base, static_cast<uint32_t>(page)));
+        const uint64_t lo = std::max<uint64_t>(page, (from + 3) & ~3ull), hi = std::min<uint64_t>(page + 0x1000, to);
+        for (uint64_t a = lo; a + 4 <= hi; a += 4) {
+          uint32_t v;
+          std::memcpy(&v, p + (a - page), 4);
+          const double cur = bits_to_float(__builtin_bswap32(v));
+          if (cur == cur && std::abs(cur - fv) <= tol) {
+            if (hits < 64) first += " " + hex(a, 8);
+            ++hits;
+          }
         }
       }
     }
@@ -1567,6 +1591,7 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
   ++s.frames;
   if (s.step_frames) --s.step_frames;
   poll_pause_key();
+  expire_title_box();
   if (s.frames == 1)
     f5lua::logline("[console] %s active, root=%s\n", FABLE2_CONSOLE_BUILD, s.root.string().c_str());
 
