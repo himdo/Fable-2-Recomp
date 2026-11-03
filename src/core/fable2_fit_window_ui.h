@@ -70,7 +70,7 @@ namespace detail {
 // Test builds log the layout whatever fit_window_ui_log says, because L's
 // config file does not reach this cvar. Bump kBuild with each test zip.
 inline constexpr bool kAlwaysLogLayout = true;
-inline constexpr int kBuild = 26;
+inline constexpr int kBuild = 27;
 inline bool LogLayout() {
   return kAlwaysLogLayout || REXCVAR_GET(fit_window_ui_log);
 }
@@ -499,6 +499,8 @@ local masks = nil
 -- runs, so the camera zooms in by the window's extra width while the tint is
 -- dark and goes back once it lights up. Logs the first frames to tune it.
 local fadeCam, fadeZ, fadeLogs, fadeSet = nil, nil, 0, nil
+local scrolling = child(layer, "Scrolling")
+local panoTick, panoStill = -1, 1000
 local function pauseFade()
   local tint = child(layer, "BackgroundTint")
   if not tint then return end
@@ -530,7 +532,17 @@ local function fixMenus()
   page = dx * tk("page", 245 / 220)
   card = dx * tk("card", 1)
   if screen == "title" then
-    -- Title: the dark backdrop.
+    -- The title's box (White) is animated: its scale and the title camera
+    -- are put back when it draws, so it stays 16:9 whatever is set here, and
+    -- clone() refuses it ("different time context"). The screens behind it
+    -- show at the sides instead (console test: only the panorama). So the
+    -- title ticks a shared counter each frame and publishes the box's
+    -- opacity, and the panorama hides while the box is showing (see below).
+    -- The box fades out by itself after the legal text, as in vanilla, and
+    -- then the panorama shows behind the logo. The three GUI screens share
+    -- one Lua state, so plain globals reach the panorama's script.
+    rawset(_G, "__fitwin_titleTick", (rawget(_G, "__fitwin_titleTick") or 0) + 1)
+    rawset(_G, "__fitwin_titleBox", attr(child(layer, "White"), "opacity") or 0)
     widen(layer, "White")
     -- L's build 20 screenshots: White is the box (white, fading to grey and
     -- black), but the game draws it at its animated scale whatever scale.x
@@ -542,7 +554,20 @@ local function fixMenus()
       local z = first["TitleCamera.position.z"] or attr(cam, "position.z")
       if z and z < 0 then scaleBy(cam, "TitleCamera", "position.z", r > 1 and 1 / r or 1) end
     end
-  elseif screen ~= "other" then
+  elseif screen == "other" then
+    -- The main menu's scrolling panorama: out of sight while the title's
+    -- box is showing on a window wider than 16:9, so the title's sides are
+    -- dark like its 16:9 box (vanilla shows only the box). The title's
+    -- update runs less often than this one, so it counts as up until its
+    -- counter has stood still for 30 of these frames.
+    if scrolling then
+      local t = rawget(_G, "__fitwin_titleTick") or 0
+      if t ~= panoTick then panoTick, panoStill = t, 0 else panoStill = panoStill + 1 end
+      local box = rawget(_G, "__fitwin_titleBox") or 0
+      local hide = panoStill < 30 and box > 50 and r > 1
+      nudge(scrolling, "Scrolling", "position.y", hide and 100000 or 0)
+    end
+  else
     spreadMenu(menu)
     if not menu and leftFrame then childMove(leftFrame, "LeftFrame", "^frame_new", -cover) end
     if screen == "mainmenu" then
