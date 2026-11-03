@@ -26,6 +26,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -53,6 +54,7 @@ struct Pending {
   uint32_t L = 0;   // unused since console-v10: chunks run on the calling state
   bool probe = false;
   int tries = 0;
+  std::vector<uint32_t> tried;  // states that answered "no element"
 };
 
 struct State {
@@ -61,6 +63,10 @@ struct State {
   uint32_t last_active = 0;       // L of the latest native getElement/setAttribute call
   uint32_t hud = 0;               // L whose globals have g_HUD
   uint32_t chosen = 0;            // set by "gui use"
+  // Lua condition a state must meet before a chunk runs in it ("gui where").
+  // "true" = any GameFace state (HUD, menus, title); a chunk that cannot find
+  // its element moves on to the next state that calls in.
+  std::string where = "true";
   std::thread::id gui_tid{};
   bool gui_tid_known = false;
   std::thread::id main_tid{};
@@ -276,19 +282,32 @@ inline void drain(PPCContext& ctx, uint8_t* base) {
   bool ok = false;
   std::string r;
   try {
-    // Chunks target the HUD: a state without g_HUD answers "__f2_wrong_state"
-    // and the command waits for a call from the HUD's state.
-    r = run_chunk(ctx, base, L, "if g_HUD == nil then return '__f2_wrong_state' end\n" + p.code, ok);
+    // Chunks run in a state meeting "gui where" (any state by default); any
+    // other answers "__f2_wrong_state" and the command waits for the next call.
+    std::string where;
+    {
+      std::lock_guard<std::mutex> lock(s.mu);
+      where = s.where;
+    }
+    r = run_chunk(ctx, base, L,
+                  "local __w_ok, __w = pcall(function() return " + where + " end)\n"
+                  "if not (__w_ok and __w) then return '__f2_wrong_state' end\n" + p.code, ok);
   } catch (...) {
     r = "error exception while running GUI Lua";
   }
   ctx = saved;
-  if (r == "ok __f2_wrong_state") {
+  // A missing element means another screen's state may have it: try each
+  // state that calls in once before giving up.
+  const bool missing = r.rfind("error no element '", 0) == 0;
+  if (missing && std::find(p.tried.begin(), p.tried.end(), L) == p.tried.end()) p.tried.push_back(L);
+  const bool retry = r == "ok __f2_wrong_state" || (missing && p.tried.size() < s.states.size());
+  if (retry) {
     std::lock_guard<std::mutex> lock(s.mu);
     if (++p.tries < 300) s.pending.push_front(p);
-    else s.results.push_back("error no HUD Lua state answered (is the HUD on screen?)");
+    else s.results.push_back(missing ? r + " (in " + std::to_string(p.tried.size()) + " GUI states)"
+                                     : "error no GUI Lua state met 'gui where " + s.where + "' (is that screen up?)");
   } else {
-    s.hud = L;
+    if (r.rfind("ok", 0) == 0) s.hud = L;  // the state that last answered
     push_result(r);
   }
   s.busy = false;

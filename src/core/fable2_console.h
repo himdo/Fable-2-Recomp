@@ -393,7 +393,7 @@ inline bool run_gui_command(const std::string& name, const std::vector<std::stri
     if (sub.empty() || sub == "on" || sub == "off" || sub == "true" || sub == "false") return false;
     if (sub == "help") {
       out("gui", "gui <lua> runs Lua in the GameFace GUI state (return a value to see it); gui status | gui list | "
-                 "gui use <n|auto>. Element helpers: __f2.need(name), __f2.desc(name, el), getElement, "
+                 "gui use <n|auto> | gui where any|hud|<lua condition>. Element helpers: __f2.need(name), __f2.desc(name, el), getElement, "
                  "getAttribute, setAttribute, getChildren.");
       return true;
     }
@@ -407,8 +407,21 @@ inline bool run_gui_command(const std::string& name, const std::vector<std::stri
       for (size_t i = 0; i < gs.states.size(); ++i) {
         out("gui", std::to_string(i + 1) + ": 0x" + hex(gs.states[i], 8) +
                        (gl::valid_state(base, gs.states[i]) ? "" : " (closed)") +
-                       (gs.states[i] == gs.hud ? " (HUD)" : ""));
+                       (gs.states[i] == gs.hud ? " (last answered)" : ""));
       }
+      return true;
+    }
+    if (sub == "where") {
+      // gui where any|hud|<lua condition>: which GameFace states run chunks.
+      // any (default): every screen; a chunk whose element is missing moves
+      // on to the next state. e.g. gui where getElement('PressStart') ~= nil
+      auto& gs = gl::S();
+      std::string w = rest_after(line, 2);
+      if (w == "hud") w = "g_HUD ~= nil";
+      else if (w == "any") w = "true";
+      std::lock_guard<std::mutex> lock(gs.mu);
+      if (!w.empty()) gs.where = w;
+      out("gui", "chunks run where: " + gs.where);
       return true;
     }
     if (sub == "use" && W.size() > 2) {
