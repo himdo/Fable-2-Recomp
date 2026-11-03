@@ -78,7 +78,7 @@ namespace detail {
 // Test builds log the layout whatever fit_window_ui_log says, because L's
 // config file does not reach this cvar. Bump kBuild with each test zip.
 inline constexpr bool kAlwaysLogLayout = true;
-inline constexpr int kBuild = 40;
+inline constexpr int kBuild = 46;
 inline bool LogLayout() {
   return kAlwaysLogLayout || REXCVAR_GET(fit_window_ui_log);
 }
@@ -302,7 +302,7 @@ end
 -- at the authored one or at the last value set here, so a slide change gets
 -- re-applied, a new aspect retargets it, and a running animation is left
 -- alone. At 16:9 the target is the authored value.
-local first, applied, last = {}, {}, {}
+local first, applied, last, settle, settleN = {}, {}, {}, {}, {}
 local fixTick = 0  -- per-frame counter (the onUpdate hook below)
 local function track(e, key, name, mul, p)
   if not e then return end
@@ -332,7 +332,24 @@ local function track(e, key, name, mul, p)
     return
   end
   local atFirst = math.abs(v - first[k]) < 0.01
-  if not atFirst and not (last[k] and math.abs(v - last[k]) < 0.01) then return end
+  if not atFirst and not (last[k] and math.abs(v - last[k]) < 0.01) then
+    -- Somewhere else: an animation is running, or the element has settled
+    -- at its real place. The first value seen can be mid-animation (book
+    -- screen Title: seen at 181 while sliding in, rests at -39, so first +
+    -- delta landed on the rest spot and it never moved). A value that holds
+    -- for 10 frames becomes the base.
+    if settle[k] and math.abs(v - settle[k]) < 0.01 then
+      settleN[k] = settleN[k] + 1
+      if settleN[k] >= 10 then
+        first[k], applied[k], settle[k] = v, 0, nil
+        fout(string.format("%s %s settled at %.2f, now the base", key, name, v))
+      end
+    else
+      settle[k], settleN[k] = v, 0
+    end
+    return
+  end
+  settle[k] = nil
   if atFirst then applied[k] = applied[k] + 1 end
   pcall(setAttribute, e, name, want)
   last[k] = want
@@ -524,20 +541,37 @@ local function fixMenus()
   elseif screen ~= "other" then
     spreadMenu(menu)
     if not menu and leftFrame then childMove(leftFrame, "LeftFrame", "^frame_new", -cover) end
+    -- Build 42-43 (shop, 2.39:1): the game positions each page's Contents
+    -- itself when it flips pages, so moving Contents left the next page at
+    -- its vanilla x, beside the current one; moving the Book or a page
+    -- component reads back but does not draw. So a component page moves its
+    -- grandchildren (the nodes inside Contents and the page's Group), which
+    -- the game leaves alone.
     if screen == "mainmenu" then
       nudge(rightFrame, "RightFrame", "position.x", cover)
     else
-      childMove(rightFrame, "RightFrame", "^Group$", cover)
+      -- Book screens: the right cover moves with the paper (page), so the
+      -- page keeps its vanilla gap to it (build 44: at cover = dx, "Select
+      -- A" slid under it; build 45: moving the text by dx instead put it
+      -- out of step with the page's clip mask).
+      childMove(rightFrame, "RightFrame", "^Group$", page)
     end
-    -- The paper follows the right cover, which also hides the shop's next
-    -- page behind it again. Build 15 moved the pages' children, but the
-    -- page backgrounds are animated and stayed put, so move Pages itself.
-    -- Build 18: the paper stopped about 35 units short of the right cover
-    -- (a dark gap), so it moves a little further than the cover.
-    -- Build 16 moved Pages itself and nothing moved, so it is the children
-    -- again (build 15, right for pause); a child the game keeps putting back
-    -- (Page1_Background) gets its own children moved instead.
-    childMove(pages, "Pages", ".", page, true)
+    for _, pg in ipairs(kids(pages or {})) do
+      local okt, t = pcall(getElementType, pg)
+      local n = tostring(attr(pg, "name"))
+      if okt and t == "component" then
+        for _, c in ipairs(kids(pg)) do
+          local okc, ct = pcall(getElementType, c)
+          if okc and ct ~= "behavior" and ct ~= "material" and ct ~= "texture" then
+            childMove(c, "Pages/" .. n .. "/" .. tostring(attr(c, "name")), ".", page, false)
+          end
+        end
+      elseif okt and t ~= "behavior" and t ~= "material" and t ~= "texture" then
+        local path = "Pages/" .. n
+        nudge(pg, path, "position.x", page)
+        if (applied[path .. ".position.x"] or 0) > 10 then childMove(pg, path, ".", page, false) end
+      end
+    end
     -- On the main menu the character cards wait just off a 16:9 screen, so
     -- they move out too (Boy left, Girl right), but only while they wait
     -- there: on New Game the game slides Boy and Girl in to the middle, and
