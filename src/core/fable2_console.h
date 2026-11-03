@@ -1,4 +1,4 @@
-// fable_2 - developer commands, console-v6.
+// fable_2 - developer commands, console-v7.
 //
 // Typed in the SDK's `~` console as   f2 <command>   for example
 //   f2 warp 1 2 3        f2 god on        f2 warp save a; wait 60; warp a
@@ -52,7 +52,7 @@
 #define FABLE2_CONSOLE_HAVE_REXLOG 1
 #endif
 
-#define FABLE2_CONSOLE_BUILD "console-v6"
+#define FABLE2_CONSOLE_BUILD "console-v7"
 
 REXCVAR_DEFINE_BOOL(console_enabled, false, "Input",
                     "Enable the developer command line (f2-console.cmd). Off by default.");

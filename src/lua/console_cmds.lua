@@ -1,4 +1,4 @@
--- console_cmds.lua (console-v6): interprets one `f2 <command>` line from the ~ console.
+-- console_cmds.lua (console-v7): interprets one `f2 <command>` line from the ~ console.
 -- Called as console_cmds.lua(line) by the generated console_run.lua.
 -- Output: cprint (game log). A line starting with "!" also shows a message box.
 --
@@ -311,7 +311,7 @@ end)
 
 -- Warp ----------------------------------------------------------------------
 section("warp")
-add("warp", "warp <x> <y> <z> | save <name> | <name> | list | level <levelname> | rel <dx> <dy> <dz>", function(W)
+add("warp", "warp <x> <y> <z> | save <name> | <name> | list | level <region> [marker] [world] | rel <dx> <dy> <dz>", function(W)
   local a = (W[2] or ""):lower()
   if a == "save" and W[3] then
     local x, y, z = hero_pos()
@@ -325,7 +325,9 @@ add("warp", "warp <x> <y> <z> | save <name> | <name> | list | level <levelname> 
     table.sort(names)
     out("places: " .. (#names > 0 and table.concat(names, ", ") or "(none)"))
   elseif a == "level" and W[3] then
-    try("LoadLevel " .. W[3], dbgf("LoadLevel"), W[3])
+    -- Debug.LoadLevel(world, region, marker): every script call passes "Albion" (or
+    -- "TestWorld"), a region path and a start marker ("" = default). See travel list.
+    try("LoadLevel " .. W[3], dbgf("LoadLevel"), W[5] or "Albion", W[3], W[4] or "")
   elseif a == "rel" and tonumber(W[3]) and tonumber(W[4]) and tonumber(W[5]) then
     local x, y, z = hero_pos()
     if not x then return out("no position") end
@@ -379,13 +381,13 @@ add("navgraph", "navgraph [on|off]  draw the navigation graph", function(W)
 end)
 
 add("debugpage", "debugpage <n>  set the on-screen debug page", function(W)
-  try("debug page", dbgf("SetDrawDebugPage"), val(W[2]) or 0)
+  try("debug page", dbgf("SetDrawDebugPage"), W[2] or "player")
 end)
 
 add("combatdebug", "combatdebug [on|off]  draw combat group debug / behaviour names", function(W)
   local on = val(W[2]) ~= false
   try("behaviour names", dbgf("SetDrawBehaviourNames"), on)
-  try("combat multiplier", dbgf("SetDrawCombatMultiplier"), on and 1 or 0)
+  try("combat multiplier", dbgf("SetDrawCombatMultiplier"), on)
 end)
 
 add("magic", "magic [on|off]  global magic enabled", function(W)
@@ -423,18 +425,19 @@ local function stat(name, fname, hint)
     try(name, dbgf(fname), n)
   end)
 end
-stat("herolevel", "SetHeroLevel", "set hero level")
-stat("will", "SetHeroWill", "set hero Will")
-stat("strength", "SetHeroStrength", "set hero Strength")
+stat("herolevel", "SetHeroLevel", "set hero level (scripts use 1-5)")
+stat("will", "SetHeroWill", "set hero Will, 0 to 1")
+stat("strength", "SetHeroStrength", "set hero Strength, 0 to 1")
 stat("morality", "SetHeroMorality", "1000 good, -1000 evil, 0 neutral")
 stat("purity", "SetHeroPurity", "1000 pure, -1000 corrupt, 0 neutral")
-stat("age", "SetHeroAge", "set hero age")
-stat("fat", "SetHeroFat", "set hero fat")
-stat("tan", "SetHeroTan", "set hero tan")
+stat("age", "SetHeroAge", "set hero age (scripts use 20-34)")
+stat("fat", "SetHeroFat", "set hero fat, 0 to 1")
+stat("tan", "SetHeroTan", "set hero tan, 0 to 1")
 
-add("skill", "skill <name> <n>  Debug.SetHeroSkill(name, n) (arguments unconfirmed)", function(W)
-  if not W[2] then return out("usage: skill <name> <n>") end
-  try("skill", dbgf("SetHeroSkill"), val(W[2]), val(W[3]) or 1)
+add("skill", "skill <0-1>  Debug.SetHeroSkill (the game's scripts pass 0 to 1, e.g. 0.5)", function(W)
+  local n = tonumber(W[2])
+  if not n then return out("usage: skill <0-1>") end
+  try("skill", dbgf("SetHeroSkill"), n)
 end)
 
 add("gold", "gold <n>  add (or subtract) gold", function(W)
@@ -472,12 +475,21 @@ add("giveall", "giveall <category>  add every item of a kind (giveall list shows
   local fname = ALL[c]
   if not fname then return out("unknown category (giveall list)") end
   local f = dbgf(fname)
-  if c == "wear" then try(c, f, true) else try(c, f) end
+  -- Debug.AddAll*(entity) take the entity to fill; GiveAll*Weapons take nothing;
+  -- AddAllWeaponsWithSlots(entity, slots); SetHeroWearingAllClothing(bool).
+  local hero = get_hero()
+  if c == "wear" then try(c, f, true)
+  elseif fname == "AddAllWeaponsWithSlots" then
+    if hero then try(c, f, hero, tonumber(W[3]) or 4) else out("no hero (load a save first)") end
+  elseif fname:sub(1, 4) == "Give" then try(c, f)
+  elseif hero then try(c, f, hero)
+  else out("no hero (load a save first)") end
 end)
 
 add("weapon", "weapon <name>  give the hero a weapon by name (Debug.GiveHeroWeapon)", function(W)
   if not W[2] then return out("usage: weapon <name>") end
-  try("weapon", dbgf("GiveHeroWeapon"), W[2])
+  -- Debug.GiveHeroWeapon(weapon_name, start_sheathed), e.g. ObjectInventory_L_LongSword_Iron
+  try("weapon", dbgf("GiveHeroWeapon"), W[2], true)
 end)
 
 -- Time ----------------------------------------------------------------------
@@ -494,38 +506,51 @@ add("ffwd", "ffwd <hour>  fast-forward time of day to an hour", function(W)
   if type(Timing) ~= "table" then return out("Timing table not available") end
   local h = tonumber(W[2])
   if not h then return out("usage: ffwd <hour>") end
-  try("ffwd " .. h, Timing.FastForwardTimeOfDayTo, h)
+  try("ffwd " .. h, Timing.FastForwardTimeOfDayTo, h, 0)
 end)
 
 -- Spawning / cleanup --------------------------------------------------------
 section("spawn")
-add("spawn", "spawn <name> [count]  create an entity next to the hero (Debug.CreateEntityByHero)", function(W)
-  if not W[2] then return out("usage: spawn <name> [count]") end
-  local n = tonumber(W[3]) or 1
-  for _ = 1, n do
-    if not try("spawn " .. W[2], dbgf("CreateEntityByHero"), W[2]) then return end
+-- Debug.CreateEntityByHero(record_name, entity_name, extra_params)
+add("spawn", "spawn <record> [count] [entityname]  create an entity next to the hero, e.g. spawn CreatureFaunaChicken 3", function(W)
+  if not W[2] then return out("usage: spawn <record> [count] [entityname]") end
+  local n = math.max(1, math.min(tonumber(W[3]) or 1, 50))
+  for i = 1, n do
+    local name = W[4] and (n > 1 and (W[4] .. i) or W[4]) or nil
+    if not try("spawn " .. W[2], dbgf("CreateEntityByHero"), W[2], name) then return end
   end
 end)
 
-add("spawnat", "spawnat <name> <x> <y> <z>  create an entity at a position", function(W)
+-- Debug.CreateEntityAtPosition(record_name, entity_name, position)
+add("spawnat", "spawnat <record> <x> <y> <z> [entityname]  create an entity at a position", function(W)
   if not (W[2] and tonumber(W[3]) and tonumber(W[4]) and tonumber(W[5])) then
-    return out("usage: spawnat <name> <x> <y> <z>")
+    return out("usage: spawnat <record> <x> <y> <z> [entityname]")
   end
-  try("spawnat", dbgf("CreateEntityAtPosition"), W[2],
+  try("spawnat", dbgf("CreateEntityAtPosition"), W[2], W[6] or ("f2_" .. W[2]),
       CVector3(tonumber(W[3]), tonumber(W[4]), tonumber(W[5])))
 end)
 
-add("creatures", "creatures <family> [count]  spawn a creature family (Debug.SpawnCreatureFamily)", function(W)
-  if not W[2] then return out("usage: creatures <family> [count]") end
-  try("creatures", dbgf("SpawnCreatureFamily"), val(W[2]), val(W[3]) or 1)
+local FAMILIES = {
+  "CreatureFamilyBalverineEasy03", "CreatureFamilyBanditMedium02a", "CreatureFamilyBeetleHard04",
+  "CreatureFamilyHighwaymanEasy03", "CreatureFamilyHobbeMedium03a", "CreatureFamilyHollowmanEasy04",
+  "CreatureFamilyLuciansGuardsHard", "CreatureFamilyLucienArmyHard03",
+}
+add("creatures", "creatures <family>|list  spawn a creature family (Debug.SpawnCreatureFamily)", function(W)
+  if not W[2] or W[2]:lower() == "list" then
+    return out("families used by the game's scripts: " .. table.concat(FAMILIES, " "))
+  end
+  try("creatures", dbgf("SpawnCreatureFamily"), W[2])
 end)
 
-add("combatants", "combatants [n]  create n combatants around the hero", function(W)
-  try("combatants", dbgf("CreateCombatantsAroundHero"), tonumber(W[2]) or 3)
+-- Debug.CreateCombatantsAroundHero(type, num, preserve_faction, radius)
+add("combatants", "combatants [record] [n]  create combatants around the hero (default CreatureHobbe 3)", function(W)
+  local rec, n = W[2], tonumber(W[3])
+  if tonumber(rec) then rec, n = nil, tonumber(rec) end
+  try("combatants", dbgf("CreateCombatantsAroundHero"), rec or "CreatureHobbe", n or 3)
 end)
 
 add("killall", "killall  destroy all creature entities", function()
-  try("killall", dbgf("DestroyAllCreatureEntities"))
+  try("killall", dbgf("DestroyAllCreatureEntities"), false)
 end)
 
 add("destroytype", "destroytype <type>  Debug.DestroyAllEntitiesOfType(type)", function(W)
@@ -727,7 +752,7 @@ add("lua", "lua <code>  run Lua (also: type Lua directly)", function()
 end)
 
 ---------------------------------------------------------------------------
--- console-v6 commands. Shapes marked "unconfirmed" use try_shapes, which
+-- console-v6 commands (v7: argument shapes matched to the game's scripts). Where a shape is still a guess, try_shapes
 -- prints "[shape N]" for the argument list that worked; please send those.
 ---------------------------------------------------------------------------
 
@@ -808,7 +833,7 @@ add("hp", "hp [n|full] [who]  print or set health (who: hero, target, dog, hench
   if arg == nil then return out(label .. " health " .. tostring(cur) .. " / " .. tostring(mx)) end
   local want = (arg:lower() == "full") and mx or tonumber(arg)
   if not (want and cur) then return out("health not readable for " .. label) end
-  try_shapes(label .. " health -> " .. want, member("Health", "Modify"), { pack(e, want - cur) })
+  try_shapes(label .. " health -> " .. want, member("Health", "Modify"), { pack(e, want - cur, get_hero()) })
 end)
 
 add("heal", "heal [who]  restore full health", function(W)
@@ -816,7 +841,7 @@ add("heal", "heal [who]  restore full health", function(W)
   if not e then return end
   local cur, mx = hp_of(e)
   if not (cur and mx) then return out("health not readable for " .. label) end
-  try_shapes("heal " .. label, member("Health", "Modify"), { pack(e, mx - cur) })
+  try_shapes("heal " .. label, member("Health", "Modify"), { pack(e, mx - cur, get_hero()) })
 end)
 
 add("maxhp", "maxhp <n> [who]  set maximum health (Health.SetMax, args unconfirmed)", function(W)
@@ -836,18 +861,18 @@ add("cantdie", "cantdie [on|off] [who]  Health.SetCantDie: takes damage but neve
   if e then try_shapes("cant die " .. label, member("Health", "SetCantDie"), { pack(e, onoff(W[2], true)) }) end
 end)
 
-add("regen", "regen <rate> [who]  Health.SetRegeneration (args unconfirmed)", function(W)
+add("regen", "regen <rate> [who] [third]  Health.SetRegeneration(entity, rate, 100); the one script call passes 100 last", function(W)
   local n = tonumber(W[2])
-  if not n then return out("usage: regen <rate> [who]") end
+  if not n then return out("usage: regen <rate> [who] [third]") end
   local e, label = need_ent(W[3])
-  if e then try_shapes("regen " .. label, member("Health", "SetRegeneration"), { pack(e, n) }) end
+  if e then try("regen " .. label, member("Health", "SetRegeneration"), e, n, tonumber(W[4]) or 100) end
 end)
 
 add("kill", "kill [who]  reduce health to 0 (default: target)", function(W)
   local e, label = need_ent(W[2] or "target")
   if not e then return end
   local cur = hp_of(e)
-  try_shapes("kill " .. label, member("Health", "Modify"), { pack(e, -((cur or 100000) + 1)) })
+  try_shapes("kill " .. label, member("Health", "Modify"), { pack(e, -((cur or 100000) + 1), get_hero()) })
 end)
 
 add("deplete", "deplete  Debug.DepleteHealth (script debug helper)", function()
@@ -894,8 +919,8 @@ add("orbpickup", "orbpickup [on|off]  Player.SetAbleToCollectExperienceOrbs (arg
   end
 end)
 
-add("orbspawn", "orbspawn  Debug.SpawnExperienceOrbs (script debug helper)", function()
-  try("spawn orbs", dbgf("SpawnExperienceOrbs"))
+add("orbspawn", "orbspawn [count]  spawn experience orbs (Debug.SpawnExperienceOrbs(count), default 10)", function(W)
+  try("spawn orbs", dbgf("SpawnExperienceOrbs"), tonumber(W[2]) or 10)
 end)
 
 add("scar", "scar [face|random]  add a scar to the hero", function(W)
@@ -922,9 +947,10 @@ add("outfit", "outfit <name>|list  dress the hero in a debug outfit", function(W
   try("outfit " .. o, dbgf(OUTFITS[o]))
 end)
 
-add("dye", "dye <slot> <dye>  Debug.SetHeroWornItemDye (args unconfirmed)", function(W)
-  if not (W[2] and W[3]) then return out("usage: dye <slot> <dye>") end
-  try("dye", dbgf("SetHeroWornItemDye"), val(W[2]), val(W[3]))
+add("dye", "dye <clothing record> <dye record>  e.g. dye ObjectClothingCoatPoshM ObjectInventoryDyeClothingBasicBlue01", function(W)
+  if not (W[2] and W[3]) then return out("usage: dye <clothing record> <dye record>") end
+  -- Debug.SetHeroWornItemDye(clothing, true, dye), as the game's scripts call it
+  try("dye", dbgf("SetHeroWornItemDye"), W[2], true, W[3])
 end)
 
 add("expressions", "expressions all|extend|succeed [on|off]  unlock expressions / force extended ones to succeed", function(W)
@@ -935,8 +961,8 @@ add("expressions", "expressions all|extend|succeed [on|off]  unlock expressions 
   else out("usage: expressions all|extend|succeed [on|off]") end
 end)
 
-add("entitytype", "entitytype <type>  Debug.ChangePlayerEntityType (play as another creature; args unconfirmed)", function(W)
-  if not W[2] then return out("usage: entitytype <type>") end
+add("entitytype", "entitytype <record>  Debug.ChangePlayerEntityType; scripts use CreatureHero and CreatureHeroFemale", function(W)
+  if not W[2] then return out("usage: entitytype <record>  (scripts use CreatureHero, CreatureHeroFemale)") end
   try("change player entity type", dbgf("ChangePlayerEntityType"), val(W[2]))
 end)
 
@@ -989,20 +1015,61 @@ stat_mod("addwill", "ModifyWill", "add to will")
 stat_mod("addfat", "ModifyFat", "add to fat")
 stat_mod("addtan", "ModifyTan", "add to tan")
 stat_mod("height", "ModifyHeight", "add to height")
+stat_mod("addskill", "ModifySkill", "add to skill")
 
-add("ability", "ability <name> <level>  Stats.SetHeroAbilityLevel (args unconfirmed)", function(W)
-  if not (W[2] and tonumber(W[3])) then return out("usage: ability <name> <level>") end
-  local hero = need_hero()
-  if hero then
-    try_shapes("ability " .. W[2], member("Stats", "SetHeroAbilityLevel"), ent_shapes(hero, val(W[2]), tonumber(W[3])))
+-- Enum lookup: "fireball" -> EHeroAbilityType.HERO_ABILITY_WILL_FIREBALL (unique substring match).
+local function enum_lookup(tname, word)
+  local t = rawget(_G, tname)
+  if type(t) ~= "table" then return nil, tname .. " not available" end
+  local w = word:upper()
+  local ok, exact = pcall(function() return t[w] end)
+  if ok and exact ~= nil then return exact, w end
+  local hits = {}
+  for _, k in ipairs(member_names(t) or {}) do
+    if tostring(k):find(w, 1, true) then hits[#hits + 1] = tostring(k) end
   end
-end)
+  if #hits == 1 then return t[hits[1]], hits[1] end
+  if #hits == 0 then return nil, "no " .. tname .. " matches " .. word end
+  return nil, "ambiguous: " .. table.concat(hits, " ", 1, math.min(#hits, 12))
+end
 
-add("title", "title <name>  unlock a title (Stats.AddUnlockedTitle, args unconfirmed); title alone prints it", function(W)
+local function enum_list(tname, filter)
+  local t = rawget(_G, tname)
+  if type(t) ~= "table" then return out(tname .. " not available") end
+  local names = {}
+  for _, k in ipairs(member_names(t) or {}) do
+    if not filter or tostring(k):lower():find(filter:lower(), 1, true) then names[#names + 1] = tostring(k) end
+  end
+  local emit, flush = chunked_emit(1000)
+  for i = 1, #names, 4 do emit(table.concat(names, " ", i, math.min(i + 3, #names))) end
+  flush()
+  out(#names .. " " .. tname .. " values")
+end
+
+add("ability", "ability <name> <level> | ability list  Stats.SetHeroAbilityLevel(hero, EHeroAbilityType.*, level), e.g. ability fireball 5", function(W)
+  if (W[2] or ""):lower() == "list" then return enum_list("EHeroAbilityType", W[3]) end
+  if not W[2] then return out("usage: ability <name> [level] | ability list") end
   local hero = need_hero()
   if not hero then return end
-  if not W[2] then return try_shapes("title", member("Stats", "GetTitle"), ent_shapes(hero)) end
-  try_shapes("unlock title " .. W[2], member("Stats", "AddUnlockedTitle"), ent_shapes(hero, val(W[2])))
+  local e, label = enum_lookup("EHeroAbilityType", W[2])
+  if e == nil then return out(label) end
+  if not tonumber(W[3]) then return try(label, member("Stats", "GetHeroAbilityLevel"), hero, e) end
+  try("ability " .. label, member("Stats", "SetHeroAbilityLevel"), hero, e, tonumber(W[3]))
+end)
+
+local TITLES = {
+  "Avenger", "Blade", "BountyHunter", "Brute", "Butcher", "ChickenChaser", "ChosenOne", "Conjurer",
+  "Desperado", "DogLover", "Dumpling", "Executioner", "Fearmonger", "Gunslinger", "Joker", "Lionheart",
+  "MasterChief", "Mayor", "Nobhead", "SaladDodger", "Shadowfiend", "Sparrow",
+}
+add("title", "title [<name>|list]  print the title, or unlock one, e.g. title ChickenChaser", function(W)
+  local hero = need_hero()
+  if not hero then return end
+  local a = W[2]
+  if not a then return try_shapes("title", member("Stats", "GetTitle"), ent_shapes(hero)) end
+  if a:lower() == "list" then return out("titles: " .. table.concat(TITLES, " ")) end
+  local rec = a:find("^ObjectInventory") and a or ("ObjectInventoryHeroTitle" .. a)
+  try("unlock title " .. rec, member("Stats", "AddUnlockedTitle"), hero, rec)
 end)
 
 add("chapter", "chapter [n]  print or set chapter progress (args unconfirmed)", function(W)
@@ -1013,14 +1080,17 @@ add("chapter", "chapter [n]  print or set chapter progress (args unconfirmed)", 
   end
 end)
 
-add("trackedstat", "trackedstat <name> [n]  print or set a tracked stat (args unconfirmed)", function(W)
-  if not W[2] then return out("usage: trackedstat <name> [n]") end
+add("trackedstat", "trackedstat <name> [n] | trackedstat list [filter]  ETrackedStatType stats, e.g. trackedstat groin_shots", function(W)
+  if not W[2] then return out("usage: trackedstat <name> [n] | trackedstat list [filter]") end
+  if W[2]:lower() == "list" then return enum_list("ETrackedStatType", W[3]) end
   local hero = need_hero()
   if not hero then return end
+  local e, label = enum_lookup("ETrackedStatType", W[2])
+  if e == nil then return out(label) end
   if W[3] then
-    return try_shapes("set stat " .. W[2], member("Stats", "SetTrackedStat"), ent_shapes(hero, val(W[2]), tonumber(W[3])))
+    return try("set " .. label, member("Stats", "SetTrackedStat"), hero, e, tonumber(W[3]))
   end
-  try_shapes("stat " .. W[2], member("Stats", "GetTrackedStat"), ent_shapes(hero, val(W[2])))
+  try(label, member("Stats", "GetTrackedStat"), hero, e)
 end)
 
 -- Inventory -----------------------------------------------------------------
@@ -1071,7 +1141,7 @@ end)
 
 add("henchweapon", "henchweapon <name>  give the henchman a weapon (Debug.GiveHenchmanWeapon)", function(W)
   if not W[2] then return out("usage: henchweapon <name>") end
-  try("henchman weapon", dbgf("GiveHenchmanWeapon"), W[2])
+  try("henchman weapon", dbgf("GiveHenchmanWeapon"), W[2], true)
 end)
 
 -- Extra giveall categories found in the Debug table.
@@ -1110,11 +1180,11 @@ add("day", "day [n]  print or set the day count", function(W)
   getset("day", member("Timing", "GetDayCount"), member("Timing", "SetDayCount"), W[2])
 end)
 
-add("nextday", "nextday  Timing.AdvanceDayCount", function()
-  try("advance day", member("Timing", "AdvanceDayCount"))
+add("nextday", "nextday [n]  Timing.AdvanceDayCount(n), default 1", function(W)
+  try("advance day", member("Timing", "AdvanceDayCount"), tonumber(W[2]) or 1)
 end)
 
-add("moon", "moon <phase>  Timing.SetMoonPhase (args unconfirmed)", function(W)
+add("moon", "moon <phase>  Timing.SetMoonPhase (the scripts pass 4)", function(W)
   if not tonumber(W[2]) then return out("usage: moon <phase>") end
   try("moon phase", member("Timing", "SetMoonPhase"), tonumber(W[2]))
 end)
@@ -1156,13 +1226,13 @@ add("snap", "snap  drop the hero onto the landscape surface below", function()
 end)
 
 add("autosave", "autosave  AutoSaveGame()", function()
-  try("autosave", rawget(_G, "AutoSaveGame"))
+  try("autosave", rawget(_G, "AutoSaveGame"), true, true)
 end)
 
-add("sfx", "sfx <event>  play a sound event (Sound.PlayEvent, args unconfirmed)", function(W)
+add("sfx", "sfx <event>  play a sound event on the hero, e.g. sfx SE_GOLD_PAYMENT (Sound.PlayEvent(entity, event, ''))", function(W)
   if not W[2] then return out("usage: sfx <event>") end
   local hero = get_hero()
-  try_shapes("sound " .. W[2], member("Sound", "PlayEvent"), { pack(W[2]), pack(hero, W[2]) })
+  try_shapes("sound " .. W[2], member("Sound", "PlayEvent"), { pack(hero, W[2], "") })
 end)
 
 add("havok", "havok friction|restitution|angulardamping|maxlinear|maxangular|minmass <value>  physics tuning (E3 startup script)", function(W)
@@ -1183,35 +1253,57 @@ section("camera")
 
 local function cam(name) return member("Camera", name) end
 
-add("fov", "fov [degrees]  print or set the camera field of view (args unconfirmed)", function(W)
-  getset("fov", cam("GetFOV"), cam("SetFOV"), W[2])
+-- Camera.* functions take the camera object first. The game's scripts get it as
+-- CameraManager.GetCurrentCamera().Camera (e.g. Camera.SetFOV(cur.Camera, fov)).
+local function cam_obj()
+  local ok, c = pcall(function() return CameraManager.GetCurrentCamera().Camera end)
+  if ok and c ~= nil then return c end
+  out("no current camera (CameraManager.GetCurrentCamera().Camera)")
+  return nil
+end
+
+local function cam_getset(label, gname, sname, arg)
+  local c = cam_obj()
+  if c == nil then return end
+  if arg == nil then return try(label, cam(gname), c) end
+  local v = tonumber(arg)
+  if not v then return out("usage: " .. label .. " [number]") end
+  try(label .. " " .. v, cam(sname), c, v)
+end
+
+add("fov", "fov [degrees]  print or set the camera field of view", function(W)
+  if W[2] and tonumber(W[2]) and dbgf("SetFOV") then
+    -- the game's own helper: Debug.SetFOV(fov)
+    return try("fov " .. W[2], dbgf("SetFOV"), tonumber(W[2]))
+  end
+  cam_getset("fov", "GetFOV", "SetFOV", W[2])
 end)
-add("zoom", "zoom [level]  print or set the camera zoom level (args unconfirmed)", function(W)
-  getset("zoom", cam("GetZoomLevel"), cam("SetZoomLevel"), W[2])
+add("zoom", "zoom [level]  print or set the camera zoom level", function(W)
+  cam_getset("zoom", "GetZoomLevel", "SetZoomLevel", W[2])
 end)
-add("roll", "roll [angle]  print or set camera roll (args unconfirmed)", function(W)
-  getset("roll", cam("GetRoll"), cam("SetRoll"), W[2])
+add("roll", "roll [angle]  print or set camera roll", function(W)
+  cam_getset("roll", "GetRoll", "SetRoll", W[2])
 end)
-add("blur", "blur [amount]  print or set camera blur (args unconfirmed)", function(W)
-  getset("blur", cam("GetBlur"), cam("SetBlur"), W[2])
+add("blur", "blur [amount]  print or set camera blur", function(W)
+  cam_getset("blur", "GetBlur", "SetBlur", W[2])
 end)
-add("dof", "dof [value]  print or set depth of field (args unconfirmed)", function(W)
-  getset("dof", cam("GetDOF"), cam("SetDOF"), W[2])
+add("dof", "dof  print depth of field (setting it takes 7 values; use call Camera.SetDOF)", function()
+  local c = cam_obj()
+  if c ~= nil then try("dof", cam("GetDOF"), c) end
 end)
 
-add("shake", "shake [amount]  add camera shake (args unconfirmed)", function(W)
-  local n = tonumber(W[2]) or 1
-  local hero = get_hero()
-  if not try_shapes("camera shake", cam("AddCameraShake"), { pack(n), pack(n, 1) }) then
-    try_shapes("screen shake", member("Player", "AddScreenShake"), { pack(hero, n), pack(n) })
-  end
+add("shake", "shake  screen shake on the hero (Player.AddScreenShake(hero, {}); table fields unknown)", function()
+  local hero = need_hero()
+  if hero then try("screen shake", member("Player", "AddScreenShake"), hero, {}) end
 end)
 
 add("campos", "campos  camera position, angles and forward vector", function()
-  local hero = get_hero()
-  try_shapes("camera position", member("Player", "GetPositionOfCameraAssociatedWithPlayer"), { pack(), pack(hero) })
-  try_shapes("camera forward", member("Player", "GetForwardOfCameraAssociatedWithPlayer"), { pack(), pack(hero) })
-  try("camera angles", cam("GetAngles"))
+  local hero = need_hero()
+  if not hero then return end
+  try("camera position", member("Player", "GetPositionOfCameraAssociatedWithPlayer"), hero)
+  try("camera forward", member("Player", "GetForwardOfCameraAssociatedWithPlayer"), hero)
+  local c = cam_obj()
+  if c ~= nil then try("camera angles", cam("GetAngles"), c) end
 end)
 
 add("camto", "camto <x> <y> <z>  move the camera to a position (Debug.MoveCameraToPosition)", function(W)
@@ -1245,16 +1337,19 @@ end }
 UI.info = { "ui info <text>  show an info box (args unconfirmed)", function(W)
   try("info box", gui("DisplayInfoBox"), line:match("^%S+%s+%S+%s+(.*)$") or "")
 end }
-UI.close = { "ui close  remove the current display box", function() try("remove box", gui("RemoveDisplayBox")) end }
+UI.close = { "ui close <boxname>  remove a named display box (GUI.RemoveDisplayBox(name))", function(W)
+  if not W[3] then return out("usage: ui close <boxname>") end
+  try("remove box " .. W[3], gui("RemoveDisplayBox"), W[3])
+end }
 UI.fadeout = { "ui fadeout [seconds]  fade the screen to black", function(W)
-  try_shapes("fade out", gui("FadeScreenOut"), { pack(tonumber(W[3]) or 1), pack() })
+  try("fade out", gui("FadeScreenOut"), tonumber(W[3]) or 1)
 end }
 UI.fadein = { "ui fadein [seconds]  fade the screen back in", function(W)
-  try_shapes("fade in", gui("FadeScreenIn"), { pack(tonumber(W[3]) or 1), pack() })
+  try("fade in", gui("FadeScreenIn"), tonumber(W[3]) or 1)
 end }
-UI.toggle = { "ui toggle <element> [on|off]  GUI.ToggleElement (element names unconfirmed)", function(W)
-  if not W[3] then return out("usage: ui toggle <element> [on|off]") end
-  try_shapes("toggle " .. W[3], gui("ToggleElement"), { pack(val(W[3]), onoff(W[4], true)), pack(val(W[3])) })
+UI.toggle = { "ui toggle <element> [on|off]  GUI.ToggleElement(name, bool); scripts use DPadUp DPadDown DPadRight", function(W)
+  if not W[3] then return out("usage: ui toggle <element> [on|off]  (scripts use DPadUp DPadDown DPadRight)") end
+  try("toggle " .. W[3], gui("ToggleElement"), W[3], onoff(W[4], true))
 end }
 UI.icons = { "ui icons on|off  player icons and world icons", function(W)
   local on = onoff(W[3], true)
@@ -1282,13 +1377,15 @@ UI.suggestions = { "ui suggestions on|off  automatic HUD suggestions (args uncon
   try_shapes("hud suggestions", member("Player", "SetAutomaticHUDSuggestionsAsEnabled"),
              ent_shapes(get_hero(), onoff(W[3], true)))
 end }
-UI.counter = { "ui counter <n>|off  on-screen counter (args unconfirmed)", function(W)
-  if (W[3] or ""):lower() == "off" then return try("remove counter", gui("RemoveCounter")) end
-  try_shapes("counter", gui("SetCounter"), { pack(tonumber(W[3]) or 0), pack("", tonumber(W[3]) or 0) })
+UI.counter = { "ui counter <n> [max]|off  on-screen counter (GUI.SetCounter(name, textkey, value[, max]))", function(W)
+  if (W[3] or ""):lower() == "off" then return try("remove counter", gui("RemoveCounter"), "f2counter") end
+  local n, mx = tonumber(W[3]) or 0, tonumber(W[4])
+  if mx then try("counter", gui("SetCounter"), "f2counter", "", n, mx)
+  else try("counter", gui("SetCounter"), "f2counter", "", n) end
 end }
-UI.timer = { "ui timer <seconds>|off  on-screen timer (args unconfirmed)", function(W)
-  if (W[3] or ""):lower() == "off" then return try("remove timer", gui("RemoveTimer")) end
-  try("timer", gui("SetTimer"), tonumber(W[3]) or 60)
+UI.timer = { "ui timer <seconds>|off  on-screen countdown (GUI.SetTimer(name, seconds))", function(W)
+  if (W[3] or ""):lower() == "off" then return try("remove timer", gui("RemoveTimer"), "f2timer") end
+  try("timer", gui("SetTimer"), "f2timer", tonumber(W[3]) or 60)
 end }
 UI.state = { "ui state  is a UI/menu/box/movie active", function()
   try("ui active", gui("IsUIActive"))
@@ -1412,8 +1509,9 @@ add("entdebug", "entdebug [on|off]  per-entity debug info (Debug.SetEnableEntity
   try("entity debug info", dbgf("SetEnableEntityDrawDebugInfo"), onoff(W[2], true))
 end)
 
-add("facing", "facing  draw entity facing directions (Debug.DrawEntityFacing)", function()
-  try("entity facing", dbgf("DrawEntityFacing"))
+add("facing", "facing [who]  draw an entity's facing direction (Debug.DrawEntityFacing(entity))", function(W)
+  local e, label = need_ent(W[2] or "target")
+  if e then try("facing " .. label, dbgf("DrawEntityFacing"), e) end
 end)
 
 add("generators", "generators [on|off]  draw creature generators", function(W)
@@ -1469,12 +1567,12 @@ add("bring", "bring <who> [distance]  move an entity next to the hero", function
   out(ok and ("brought " .. label) or ("bring failed: " .. tostring(err)))
 end)
 
-add("near", "near [radius]  list entities around the hero (Debug.GetAllEntitiesAroundHero, args unconfirmed)", function(W)
+add("near", "near [radius] [type]  list entities around the hero (Debug.GetAllEntitiesAroundHero(type, range))", function(W)
   local r = tonumber(W[2]) or 10
   local f = dbgf("GetAllEntitiesAroundHero")
   if not f then return out("Debug.GetAllEntitiesAroundHero not available") end
-  local list, ok = get_shapes(f, { pack(r), pack() })
-  if not ok then return try("near", f, r) end
+  local list, ok = get_shapes(f, { pack(W[3], r) })
+  if not ok then return try("near", f, W[3], r) end
   if type(list) ~= "table" then return out("near: " .. fmt(list)) end
   local n = 0
   for _, e in pairs(list) do
@@ -1500,7 +1598,22 @@ add("combat", "combat <who> fight|flee|attackable on|off  Combat.SetCanFight / S
   try_shapes(label .. " " .. k, member("Combat", F[k]), { pack(e, onoff(W[4], true)) })
 end)
 
-add("damage", "damage <who> <multiplier>  Combat.SetDamageMultiplier (args unconfirmed)", function(W)
+add("flee", "flee [who]  make a combatant flee (Debug.MakeFlee(combatant), default target)", function(W)
+  local e, label = need_ent(W[2] or "target")
+  if e then try("flee " .. label, dbgf("MakeFlee"), e) end
+end)
+
+add("control", "control [who]  take control of a creature (Debug.ControlCreature(dood, targ)); experimental", function(W)
+  local e, label = need_ent(W[2] or "target")
+  if e then try("control " .. label, dbgf("ControlCreature"), e, nil) end
+end)
+
+add("teleportent", "teleportent <entityname>  move a named entity to the player (Debug.TeleportEntityToPlayer)", function(W)
+  if not W[2] then return out("usage: teleportent <entityname>") end
+  try("teleport " .. W[2], dbgf("TeleportEntityToPlayer"), W[2])
+end)
+
+add("damage", "damage <who> <multiplier>  Combat.SetDamageMultiplier(entity, multiplier)", function(W)
   local e, label = need_ent(W[2] or "hero")
   if not (e and tonumber(W[3])) then return out("usage: damage <who> <multiplier>") end
   try_shapes(label .. " damage x" .. W[3], member("Combat", "SetDamageMultiplier"), { pack(e, tonumber(W[3])) })
@@ -1519,7 +1632,7 @@ add("dog", "dog here|pos|bark|growl|whimper|worms on|off|god on|off|inspect  her
     out(x and string.format("dog pos %.3f %.3f %.3f", x, y, z) or "dog has no position")
   elseif s == "bark" or s == "growl" or s == "whimper" then
     local f = ({ bark = "Bark", growl = "Growl", whimper = "Whimper" })[s]
-    try_shapes("dog " .. s, member("Dog", f), { pack(d), pack() })
+    try_shapes("dog " .. s, member("Dog", f), { pack(d, true), pack(d) })
   elseif s == "worms" then
     try_shapes("dog worms", member("Dog", "SetHasWorms"), { pack(d, onoff(W[3], true)) })
   elseif s == "god" then
@@ -1570,38 +1683,93 @@ add("probe", "probe <path> [args]  call a function with (hero, args) then (args)
   try_shapes(W[2], f, { pack(hero, unpack(args, 1, n)), pack(unpack(args, 1, n)) })
 end)
 
+-- name -> { Debug function, parameter list read from the game's script banks }.
+-- Typed arguments are passed through in order; most take none.
 local QUICK = {
-  winter = "DLC_ActivateWinter", summer = "DLC_ActivateSummer",
-  openshops = "DLCToggleOpenAllShops", buyall = "BuyEverythingInLevel",
-  doorsopen = "OpenDoor", doorclose = "CloseTargetDoor", resetopinions = "ResetOpinions",
-  resetambush = "ResetAllAmbushes", villagers = "CreateAdditionalVillagers",
-  crowd = "CreateLotsOfPeople", bandits = "CreateBanditGroupAroundHero",
-  trolls = "CreateTheElevenStagesOfTrolls", hobbes = "CreateHobbes", zombies = "Zombiemageddon",
-  superzombies = "SuperZombiemageddon", wave = "MexicanWave", commotion = "StartCommotion",
-  nocolosseumtimer = "SkipColosseumTimer", lastcreature = "SkipToLastCreature",
-  meetquestreq = "MeetQuestReq", questreward = "GiveQuestReward", title = "GiveTitle",
-  tracktarget = "TrackingHeroTarget", traits = "GetTargetsDescriptiveTraits",
-  personality = "TraceTargetPersonality", trackconvo = "TrackNextConversation",
-  breadcrumbdig = "SetBreadcrumbTrailToNearestDiggingSpot", tobreadcrumb = "TeleportToBreadcrumbTargetPosition",
-  tovillage = "TeleportToVillageMarker", beamup = "BeamHeroUpScotty", family = "CreateInstantFamily",
-  spouse = "CreateSpouse", marryall = "MarryEveryone", gifts = "GiveEveryoneGifts",
-  hateme = "HateMe", flee = "MakeFlee", drunk = "DrunkTarget", growup = "MakeChildGrowUpThroughTime",
-  mimic = "ToggleMimic", garthmorph = "ToggleGarthMorph", pregnancy = "TogglePregnancyCertainty",
-  bigamist = "ToggleCanCatchBigamist", controlcreature = "ControlCreature", telescope = "TurnFirstChestIntoATelescope",
-  unlocktarget = "UnlockTargetQuestAll", discount = "GiveTargetDiscount", buildings = "CountBuildingsOwned",
+  winter = { "DLC_ActivateWinter", "" }, summer = { "DLC_ActivateSummer", "" },
+  openshops = { "DLCToggleOpenAllShops", "open" }, buyall = { "BuyEverythingInLevel", "" },
+  doorsopen = { "OpenDoor", "" }, doorclose = { "CloseTargetDoor", "" },
+  resetopinions = { "ResetOpinions", "" }, resetambush = { "ResetAllAmbushes", "" },
+  villagers = { "CreateAdditionalVillagers", "num" }, crowd = { "CreateLotsOfPeople", "num" },
+  extravillagers = { "AddExtraVillagers", "village_name number" },
+  enemyvillagers = { "CreateEnemyVillagers", "num" },
+  bandits = { "CreateBanditGroupAroundHero", "number" }, trolls = { "CreateTheElevenStagesOfTrolls", "" },
+  troll = { "CreateTroll", "" }, hobbes = { "CreateHobbes", "" }, thug = { "CreateThug", "" },
+  reaver = { "CreateReaver", "" }, reaverenemy = { "CreateReaverEnemy", "" }, garth = { "CreateGarth", "" },
+  garthenemy = { "CreateGarthEnemy", "" }, terror = { "CreateTerror", "" },
+  hugger = { "CreateHuggerBeetles", "number force_variant" }, spitter = { "CreateSpitterBeetles", "number force_variant" },
+  testcombatants = { "CreateTestCombatants", "number creature_type" },
+  humanoids = { "CreateHumanoidCombatants", "" }, rumblepit = { "RumblePit", "add_allies" },
+  daggers = { "HouseOfFlyingDaggers", "num weapon_name" }, gunshots = { "OverrideHeroGunCapacity", "num_shots" },
+  hammertime = { "HammerTime", "" }, landofthedead = { "LandOfTheDead", "" },
+  usualsuspects = { "TheUsualSuspects", "" }, killallthugs = { "KillAll", "" },
+  zombies = { "Zombiemageddon", "entity_type" }, superzombies = { "SuperZombiemageddon", "disable_wisp" },
+  wave = { "MexicanWave", "" }, commotion = { "StartCommotion", "" }, crowdstate = { "SetCrowdState", "num" },
+  nocolosseumtimer = { "SkipColosseumTimer", "" }, lastcreature = { "SkipToLastCreature", "" },
+  meetquestreq = { "MeetQuestReq", "" }, questreward = { "GiveQuestReward", "" }, title = { "GiveTitle", "" },
+  traits = { "GetTargetsDescriptiveTraits", "" }, personality = { "TraceTargetPersonality", "" },
+  trackconvo = { "TrackNextConversation", "" }, cleartracking = { "ClearTracking", "" },
+  breadcrumbdig = { "SetBreadcrumbTrailToNearestDiggingSpot", "" },
+  tobreadcrumb = { "TeleportToBreadcrumbTargetPosition", "" }, tovillage = { "TeleportToVillageMarker", "" },
+  beamup = { "BeamHeroUpScotty", "" }, family = { "CreateInstantFamily", "" }, spouse = { "CreateSpouse", "" },
+  marryall = { "MarryEveryone", "" }, gifts = { "GiveEveryoneGifts", "" }, giftreward = { "GiveTargetGiftReward", "reward_name" },
+  hateme = { "HateMe", "" }, drunk = { "DrunkTarget", "" }, growup = { "MakeChildGrowUpThroughTime", "" },
+  mimic = { "ToggleMimic", "" }, garthmorph = { "ToggleGarthMorph", "create" },
+  pregnancy = { "TogglePregnancyCertainty", "" }, bigamist = { "ToggleCanCatchBigamist", "" },
+  telescope = { "TurnFirstChestIntoATelescope", "" }, chests = { "ChestAbracadabramageddon", "" },
+  unlocktarget = { "UnlockTargetQuestAll", "" }, discount = { "GiveTargetDiscount", "" },
+  buildings = { "CountBuildingsOwned", "" }, buildingsforsale = { "CountBuildingsForSaleInLevel", "" },
+  heromoney = { "ShowHeroMoney", "" }, statue = { "CreateHeroStatue", "" }, sermon = { "PerformTheSermonOnTheMount", "" },
+  wheel = { "SpinSpinSpinTheWheelOfJustice", "" }, stopdayspeed = { "StopDaySpeed", "stop" },
+  henchmanto = { "ChangeHenchmanTo", "recordname" }, follower = { "CreateFollower", "recordname entityname" },
+  miscitems = { "SpawnMiscItems", "num item_name" }, testfx = { "TestFX", "fx_name speed" },
+  moralitynomorph = { "SetHeroMoralityNoMorph", "number" }, scripthelp = { "ScriptDebugHelpOn", "" },
+  scripthelpoff = { "ScriptDebugHelpOff", "" }, playerpage = { "PlayerDebugPage", "" },
+  dogoff = { "DisableDogBehaviours", "" }, trackdog = { "TrackDog", "" },
 }
-add("quick", "quick <name>|list  one-word shortcuts for the game's own debug helpers (quick list)", function(W)
+add("quick", "quick <name> [args] | quick list [filter]  one-word shortcuts for the game's own debug helpers", function(W)
   local q = (W[2] or "list"):lower()
   if q == "list" or not QUICK[q] then
+    local filter = q == "list" and W[3] and W[3]:lower() or nil
     local names = {}
-    for k, v in pairs(QUICK) do names[#names + 1] = k .. "=" .. v end
+    for k, v in pairs(QUICK) do
+      if not filter or (k .. v[1]):lower():find(filter, 1, true) then
+        names[#names + 1] = k .. "=" .. v[1] .. (v[2] ~= "" and ("(" .. v[2] .. ")") or "")
+      end
+    end
     table.sort(names)
     if q ~= "list" then out("unknown quick name: " .. q) end
-    for i = 1, #names, 6 do out(table.concat(names, "  ", i, math.min(i + 5, #names))) end
+    for i = 1, #names, 4 do out(table.concat(names, "  ", i, math.min(i + 3, #names))) end
     return
   end
   local args, n = vals(W, 3)
-  try("Debug." .. QUICK[q], dbgf(QUICK[q]), unpack(args, 1, n))
+  try("Debug." .. QUICK[q][1], dbgf(QUICK[q][1]), unpack(args, 1, n))
+end)
+
+-- Region/start-marker pairs the game's own scripts pass to Debug.LoadLevel("Albion", region, marker).
+local TRAVEL = {
+  bowerstone = { "BWSMarket", "PlayerStart" }, colosseum = { "BWSMarket", "QO890_ColosseumHeroMarker" },
+  slums = { "BWSSlums", "BSStartFromBMkt" }, bloodstone = { "Bloodstone", "BloodstoneStartFromTreasureIsland" },
+  bowerlake = { "BowerLake", "QC060_PStart" }, thagscave = { "Caves\\BowerLake\\ThagsCave", "BLThagCaveStartFromBL_2" },
+  brightwood = { "Brightwood", "Chapter3BigFarm" }, treasureisland = { "Caves\\Bloodstone\\TreasureIsland", "" },
+  ritualcave = { "Caves\\Ravenscar\\RVSRitualCave", "PlayerStart" }, fairfax = { "FairfaxCastleGardens", "FCGStartFromBMkt" },
+  mysteryisland = { "MysteryIsland", "" }, ravenscar = { "Ravenscar", "QC160_StartMarker" },
+  spire = { "TatteredSpire", "QC140_OfficersQuartersMarker" }, temple = { "TempleOfEvil", "TOEStartFromDune" },
+  nightmarehollow = { "Tombs\\BWSMarket\\Nightmare Hollow", "" }, westcliff = { "Westcliff", "WestcliffStartFromCrucible" },
+  wraithmarsh = { "Wraithmarsh", "QC170_TempTeleportMarker" }, rivercave = { "caves\\deepwood\\rivercave", "PlayerStart" },
+}
+add("travel", "travel <place>|list  load a region at a start marker the game's scripts use (Debug.LoadLevel)", function(W)
+  local p = (W[2] or "list"):lower()
+  local t = TRAVEL[p]
+  if not t then
+    local names = {}
+    for k, v in pairs(TRAVEL) do names[#names + 1] = k .. "=" .. v[1] end
+    table.sort(names)
+    if p ~= "list" then out("unknown place: " .. p .. " (or use: warp level <region> [marker])") end
+    for i = 1, #names, 4 do out(table.concat(names, "  ", i, math.min(i + 3, #names))) end
+    return
+  end
+  try("travel " .. p, dbgf("LoadLevel"), "Albion", t[1], t[2])
 end)
 
 -- Places ---------------------------------------------------------------------

@@ -1,6 +1,6 @@
 # Fable 2 Developer Console: Command Reference
 
-Build: **console-v6**. Source: `src/core/fable2_console.h` (host commands) and `src/lua/console_cmds.lua` (Lua commands).
+Build: **console-v7**. Source: `src/core/fable2_console.h` (host commands) and `src/lua/console_cmds.lua` (Lua commands).
 
 ## How the console works
 
@@ -17,7 +17,7 @@ Build: **console-v6**. Source: `src/core/fable2_console.h` (host commands) and `
 - **Name clashes:** a line whose first word is a command runs that command, even if you meant Lua. For example, `level = 3` runs `level`. Write `lua level = 3` instead.
 - `help` lists commands by group; `help <group>` shows the usage of every command in a group; `help <command>` shows one.
 
-**args unconfirmed** marks a command whose engine call's argument shape comes from names and call counts in `FABLE2_LUA_API.md`, not from a confirmed call. Many of these use *shape probing*: the console tries `(entity, args)` first and then `(args)`, and the reply ends in `[shape 1]` or `[shape 2]` to say which one the game accepted. Please send those lines back; they turn guesses into facts.
+**Argument shapes** (console-v7) come from the game's own compiled scripts: `tools/lua_callshapes.py` reads every call in `gamescripts.bnk`/`guiscripts.bnk` and records how many arguments it passes; the result is in [LUA-CALL-SHAPES.md](LUA-CALL-SHAPES.md). A command is only marked **args unconfirmed** when no shipped script calls that function. Many of these use *shape probing*: the console tries `(entity, args)` first and then `(args)`, and the reply ends in `[shape 1]` or `[shape 2]` to say which one the game accepted. Please send those lines back; they turn guesses into facts.
 
 **Who:** commands that take `[who]` accept `hero` (or `me`), `target` (what the hero is targeting), `dog`, `henchman`, or an entity name (looked up with `Debug.GetEntityWithName`).
 
@@ -32,7 +32,7 @@ Build: **console-v6**. Source: `src/core/fable2_console.h` (host commands) and `
 | `level` | `level` | Prints the loaded level name. | Calls the global `GetLevelLoaded`, not a Debug function. |
 | `info` | `info` | Prints hero position, level, time of day, game time and hero target. | Calls `Timing.GetTimeOfDay`, `Debug.GetTime` and `Debug.GetHeroTarget`, all with no arguments. Each part reports on its own. |
 | `target` | `target` | Prints the entity the hero is targeting, and its position. | Calls `Debug.GetHeroTarget` with no arguments. Prints `no target` when there is none. |
-| `ent` | `ent <name>` | Finds an entity by name and prints it and its position. | args unconfirmed (`Debug.GetEntityWithName`). Does not move the hero. |
+| `ent` | `ent <name>` | Finds an entity by name and prints it and its position. | Same shape as the scripts (`Debug.GetEntityWithName`). Does not move the hero. |
 
 ## Warp
 
@@ -42,9 +42,9 @@ Build: **console-v6**. Source: `src/core/fable2_console.h` (host commands) and `
 | `warp` | `warp save <name>` | Saves the hero's current position under `<name>`. | Names are lowercased. Places are held in memory (`__f2_console`) for the session. Nothing in this script writes them to disk. |
 | `warp` | `warp <name>` | Moves the hero to a saved place. | Uses the saved position. |
 | `warp` | `warp list` | Lists saved places, sorted. | Prints `places: (none)` when there are none. |
-| `warp` | `warp level <levelname>` | Loads the named level. | args unconfirmed (`Debug.LoadLevel`). |
+| `warp` | `warp level <region> [marker] [world]` | Loads a region at a start marker: `Debug.LoadLevel(world, region, marker)`. World defaults to `Albion`, marker to `""`. | Same shape as the game's scripts. `travel` has named presets. |
 | `warp` | `warp rel <dx> <dy> <dz>` | Moves the hero by an offset from its current position. | Position-only; not a Debug call. |
-| `gotoent` | `gotoent <name>` | Teleports the hero to a named entity. | args unconfirmed (`Debug.GetEntityWithName`). Prints `entity not found: <name>` on a miss. |
+| `gotoent` | `gotoent <name>` | Teleports the hero to a named entity. | Same shape as the scripts (`Debug.GetEntityWithName`). Prints `entity not found: <name>` on a miss. |
 | `up` | `up [metres]` | Moves the hero straight up. Default 5. | Handy when stuck in geometry. Position-only; not a Debug call. |
 
 ## Hero toggles
@@ -55,39 +55,39 @@ For `[on|off]` toggles, no argument or any value other than `off`/`false`/`no` t
 
 | Command | Usage | What it does | Notes |
 |---|---|---|---|
-| `god` | `god [on\|off]` | Hero god mode. `god on all` (or `god off all`) also sets henchman god mode. | args unconfirmed (`Debug.SetHeroGodMode`, `Debug.SetHenchmanGodMode`). Henchman is set only when the third word is `all`. |
-| `freecam` | `freecam [on\|off]` | Free camera. With no argument, flips the current state. | args unconfirmed (`Debug.SetUseFreeCamera`). Reads state with `Debug.GetUseFreeCamera`, which takes no arguments. |
-| `gui` | `gui [on\|off]` | Draws the HUD. | args unconfirmed (`Debug.SetDrawGUI`). |
-| `names` | `names [on\|off] [filter]` | Draws entity names over entities. Optional filter. | args unconfirmed (`Debug.SetDrawEntityNames`, `Debug.SetDrawEntityNamesFilter`). The filter is passed as typed. |
-| `navgraph` | `navgraph [on\|off]` | Draws the navigation graph. | args unconfirmed (`Debug.SetDrawNavGraph`). |
-| `debugpage` | `debugpage <n>` | Sets the on-screen debug page. | args unconfirmed (`Debug.SetDrawDebugPage`). With no number, sets 0. |
+| `god` | `god [on\|off]` | Hero god mode. `god on all` (or `god off all`) also sets henchman god mode. | Same shape as the scripts (`Debug.SetHeroGodMode`, `Debug.SetHenchmanGodMode`). Henchman is set only when the third word is `all`. |
+| `freecam` | `freecam [on\|off]` | Free camera. With no argument, flips the current state. | Same shape as the scripts (`Debug.SetUseFreeCamera`). Reads state with `Debug.GetUseFreeCamera`, which takes no arguments. |
+| `gui` | `gui [on\|off]` | Draws the HUD. | Same shape as the scripts (`Debug.SetDrawGUI`). |
+| `names` | `names [on\|off] [filter]` | Draws entity names over entities. Optional filter. | Same shape as the scripts (`Debug.SetDrawEntityNames`, `Debug.SetDrawEntityNamesFilter`). The filter is passed as typed. |
+| `navgraph` | `navgraph [on\|off]` | Draws the navigation graph. | Same shape as the scripts (`Debug.SetDrawNavGraph`). |
+| `debugpage` | `debugpage [page]` | Sets the on-screen debug page. | The scripts pass a page name (`"player"`, the default). |
 | `combatdebug` | `combatdebug [on\|off]` | Draws behaviour names and combat group debug. | args unconfirmed (`Debug.SetDrawBehaviourNames`, `Debug.SetDrawCombatMultiplier`). Combat multiplier is set to 1 when on and 0 when off. |
-| `magic` | `magic [on\|off]` | Global magic enabled. | args unconfirmed (`Debug.SetGlobalMagicEnabled`). |
-| `orbs` | `orbs [on\|off]` | Experience orbs. | args unconfirmed (`Debug.SetExperienceOrbsEnabled`). |
-| `tutorials` | `tutorials [on\|off]` | Tutorials on or off. | args unconfirmed (`Debug.SetTutorialsEnabled`). |
-| `lod` | `lod low\|full\|off` | `low` forces low LOD. `full` sets full LOD for all creatures. `off` clears both. | args unconfirmed (`Debug.ForceLowLoDLevel`, `Debug.SetFullLODForAllCreatures`). Any other word prints the usage. |
-| `fast` | `fast [on\|off]` | Calls `Debug.MakeGameGoFast`. | args unconfirmed. The script does not say what the function changes. |
+| `magic` | `magic [on\|off]` | Global magic enabled. | Same shape as the scripts (`Debug.SetGlobalMagicEnabled`). |
+| `orbs` | `orbs [on\|off]` | Experience orbs. | Same shape as the scripts (`Debug.SetExperienceOrbsEnabled`). |
+| `tutorials` | `tutorials [on\|off]` | Tutorials on or off. | Same shape as the scripts (`Debug.SetTutorialsEnabled`). |
+| `lod` | `lod low\|full\|off` | `low` forces low LOD. `full` sets full LOD for all creatures. `off` clears both. | Same shape as the scripts (`Debug.ForceLowLoDLevel`, `Debug.SetFullLODForAllCreatures`). Any other word prints the usage. |
+| `fast` | `fast [on\|off]` | Calls `Debug.MakeGameGoFast`. | Same shape as the scripts. The script does not say what the function changes. |
 
 ## Stats and items
 
 | Command | Usage | What it does | Notes |
 |---|---|---|---|
-| `herolevel` | `herolevel <n>` | Sets hero level. | args unconfirmed (`Debug.SetHeroLevel`). Needs a number; otherwise prints the usage. |
-| `will` | `will <n>` | Sets hero Will. | args unconfirmed (`Debug.SetHeroWill`). |
-| `strength` | `strength <n>` | Sets hero Strength. | args unconfirmed (`Debug.SetHeroStrength`). |
-| `morality` | `morality <n>` | Sets hero morality. | args unconfirmed (`Debug.SetHeroMorality`). Usage text: 1000 good, -1000 evil, 0 neutral. |
-| `purity` | `purity <n>` | Sets hero purity. | args unconfirmed (`Debug.SetHeroPurity`). Usage text: 1000 pure, -1000 corrupt, 0 neutral. |
-| `age` | `age <n>` | Sets hero age. | args unconfirmed (`Debug.SetHeroAge`). |
-| `fat` | `fat <n>` | Sets hero fat. | args unconfirmed (`Debug.SetHeroFat`). |
-| `tan` | `tan <n>` | Sets hero tan. | args unconfirmed (`Debug.SetHeroTan`). |
-| `skill` | `skill <name> <n>` | Calls `Debug.SetHeroSkill(name, n)`. `n` defaults to 1. | args unconfirmed (stated in the script usage). The name goes through the typed-value conversion. |
+| `herolevel` | `herolevel <n>` | Sets hero level. | Same shape as the scripts (`Debug.SetHeroLevel`). Needs a number; otherwise prints the usage. |
+| `will` | `will <0-1>` | Sets hero Will (0 to 1, as the scripts use). | Same shape as the scripts (`Debug.SetHeroWill`). |
+| `strength` | `strength <0-1>` | Sets hero Strength (0 to 1). | Same shape as the scripts (`Debug.SetHeroStrength`). |
+| `morality` | `morality <n>` | Sets hero morality. | Same shape as the scripts (`Debug.SetHeroMorality`). Usage text: 1000 good, -1000 evil, 0 neutral. |
+| `purity` | `purity <n>` | Sets hero purity. | Same shape as the scripts (`Debug.SetHeroPurity`). Usage text: 1000 pure, -1000 corrupt, 0 neutral. |
+| `age` | `age <n>` | Sets hero age. | Same shape as the scripts (`Debug.SetHeroAge`). |
+| `fat` | `fat <0-1>` | Sets hero fat (0 to 1). | Same shape as the scripts (`Debug.SetHeroFat`). |
+| `tan` | `tan <0-1>` | Sets hero tan (0 to 1). | Same shape as the scripts (`Debug.SetHeroTan`). |
+| `skill` | `skill <0-1>` | `Debug.SetHeroSkill(value)`. | The scripts pass 0 to 1 (e.g. 0.3, 0.5). |
 | `gold` | `gold <n>` | Adds gold, or subtracts it if negative. | Uses `Money.Modify` on the hero. Not a Debug or Timing function, so not marked. Needs a hero. |
-| `giveall` | `giveall <category>` | Adds every item of a kind. Categories are listed below. | `giveall list` or `giveall` alone shows the categories. An unknown name prints `unknown category (giveall list)`. Only `wear` passes an argument (`true`); args unconfirmed for that category. |
-| `weapon` | `weapon <name>` | Gives the hero a weapon by name. | args unconfirmed (`Debug.GiveHeroWeapon`). |
+| `giveall` | `giveall <category>` | Adds every item of a kind. Categories are listed below. | `giveall list` shows the categories. `Debug.AddAll*` get the hero (`AddAll*(entity)`), `weapons` is `AddAllWeaponsWithSlots(hero, slots)` (`giveall weapons [slots]`, default 4), `melee`/`ranged` take nothing, `wear` passes `true`. |
+| `weapon` | `weapon <record>` | Gives the hero a weapon, e.g. `weapon ObjectInventory_L_LongSword_Iron`. | `Debug.GiveHeroWeapon(weapon_name, start_sheathed)`; passes `true`. |
 
 ### giveall categories
 
-`giveall list` prints these names in alphabetical order. Each category calls the listed `Debug.*` function. Only `wear` passes an argument (`true`), so args unconfirmed applies to that row alone.
+`giveall list` prints these names in alphabetical order. Each category calls the listed `Debug.*` function. Since console-v7 the `AddAll*` functions get the hero (`AddAll*(entity)`, as the game defines them), `GiveAll*` get nothing and `wear` gets `true`.
 
 | Category | Engine function | Notes |
 |---|---|---|
@@ -101,7 +101,7 @@ For `[on|off]` toggles, no argument or any value other than `off`/`false`/`no` t
 | `firearms` | `Debug.AddAllFirearms` | |
 | `clothing` | `Debug.AddAllClothing` | |
 | `accessories` | `Debug.AddAllClothingAccessories` | |
-| `wear` | `Debug.SetHeroWearingAllClothing` | Called with `true`. args unconfirmed. |
+| `wear` | `Debug.SetHeroWearingAllClothing` | Called with `true`. Same shape as the scripts. |
 | `dyes` | `Debug.AddAllDyes` | |
 | `hairstyles` | `Debug.AddAllHairstyles` | |
 | `makeup` | `Debug.AddAllMakeUp` | |
@@ -127,19 +127,19 @@ For `[on|off]` toggles, no argument or any value other than `off`/`false`/`no` t
 
 | Command | Usage | What it does | Notes |
 |---|---|---|---|
-| `time` | `time [hour]` | With no argument, prints the time of day. With an hour, sets it. | No argument calls `Timing.GetTimeOfDay` with none. Setting calls `Timing.SetTimeOfDay(hour)`, args unconfirmed. The usage text assumes hour 0-24. |
-| `ffwd` | `ffwd <hour>` | Fast-forwards the time of day to an hour. | args unconfirmed (`Timing.FastForwardTimeOfDayTo`). Needs an hour. |
+| `time` | `time [hour]` | With no argument, prints the time of day. With an hour, sets it. | No argument calls `Timing.GetTimeOfDay` with none. Setting calls `Timing.SetTimeOfDay(hour)`, Same shape as the scripts. The usage text assumes hour 0-24. |
+| `ffwd` | `ffwd <hour>` | Fast-forwards the time of day to an hour. | Same shape as the scripts (`Timing.FastForwardTimeOfDayTo`). Needs an hour. |
 
 ## Spawning and cleanup
 
 | Command | Usage | What it does | Notes |
 |---|---|---|---|
-| `spawn` | `spawn <name> [count]` | Creates an entity next to the hero. Repeats `count` times (default 1). | args unconfirmed (`Debug.CreateEntityByHero`). Stops at the first failure. |
-| `spawnat` | `spawnat <name> <x> <y> <z>` | Creates an entity at a position. | args unconfirmed (`Debug.CreateEntityAtPosition`). The position is built as a `CVector3`. |
-| `creatures` | `creatures <family> [count]` | Spawns a creature family. `count` defaults to 1. | args unconfirmed (`Debug.SpawnCreatureFamily`). |
-| `combatants` | `combatants [n]` | Creates `n` combatants around the hero. Default 3. | args unconfirmed (`Debug.CreateCombatantsAroundHero`). |
-| `killall` | `killall` | Destroys all creature entities. | Calls `Debug.DestroyAllCreatureEntities` with no arguments. |
-| `destroytype` | `destroytype <type>` | Destroys all entities of a type. | args unconfirmed (`Debug.DestroyAllEntitiesOfType`). |
+| `spawn` | `spawn <record> [count] [entityname]` | Creates an entity next to the hero, e.g. `spawn CreatureFaunaChicken 3`. Up to 50. | `Debug.CreateEntityByHero(record_name, entity_name)`. Stops at the first failure. |
+| `spawnat` | `spawnat <record> <x> <y> <z> [entityname]` | Creates an entity at a position. | `Debug.CreateEntityAtPosition(record, entity_name, CVector3)`; the name defaults to `f2_<record>`. |
+| `creatures` | `creatures <family>\|list` | Spawns a creature family, e.g. `creatures CreatureFamilyHobbeMedium03a`. | `Debug.SpawnCreatureFamily(recordname)`. `list` shows the families the scripts use. |
+| `combatants` | `combatants [record] [n]` | Creates combatants around the hero (default `CreatureHobbe`, 3). | `Debug.CreateCombatantsAroundHero(type, num, preserve_faction, radius)`. |
+| `killall` | `killall` | Destroys all creature entities. | `Debug.DestroyAllCreatureEntities(false)`, as the scripts call it. |
+| `destroytype` | `destroytype <type>` | Destroys all entities of a type. | Same shape as the scripts (`Debug.DestroyAllEntitiesOfType`). |
 | `resetcreatures` | `resetcreatures` | Resets spawned creatures. | Calls `Debug.ResetSpawnedCreatures` with no arguments. |
 
 ## Reload and session
@@ -290,10 +290,10 @@ Finding an address with `scan`: note your gold, `f2 scan start 1234`; spend or g
 |---|---|---|---|
 | `hp` | `hp [n\|full] [who]` | Prints health as `cur / max`, or sets it. | Sets by calling `Health.Modify(ent, n - cur)`. |
 | `heal` | `heal [who]` | Restores full health. | |
-| `maxhp` | `maxhp <n> [who]` | `Health.SetMax`. | args unconfirmed. |
+| `maxhp` | `maxhp <n> [who]` | `Health.SetMax`. | Same shape as the scripts. |
 | `invuln` | `invuln [on\|off] [who]` | `Health.SetAsInvulnerable(ent, bool)`. | Works on any entity, including the dog. |
 | `cantdie` | `cantdie [on\|off] [who]` | `Health.SetCantDie`: takes damage, never dies. | |
-| `regen` | `regen <rate> [who]` | `Health.SetRegeneration`. | args unconfirmed. |
+| `regen` | `regen <rate> [who] [third]` | `Health.SetRegeneration(entity, rate, 100)`. | The only script call passes 100 last; its meaning is unknown. |
 | `kill` | `kill [who]` | Reduces health below 0 (default: target). | |
 | `deplete` | `deplete` | `Debug.DepleteHealth` (the game's own debug helper). | |
 
@@ -303,16 +303,16 @@ Finding an address with `scan`: note your gold, `f2 scan start 1234`; spend or g
 |---|---|---|---|
 | `mana` | `mana [on\|off]` | Infinite Will energy (`Debug.SetHeroManaInfinite`). | Used by the game's GDC/E3 startup scripts. |
 | `sprint` | `sprint [on\|off]` | `Debug.SetHeroSprintingEnabled`. | Same source. |
-| `speed` | `speed <multiplier>\|off` | Overrides hero movement speed (`Player.SetPlayerMovementSpeedOverridden` + `SetOverriddenMovementSpeedMultiplier`). | args unconfirmed, shape probed. |
+| `speed` | `speed <multiplier>\|off` | Overrides hero movement speed (`Player.SetPlayerMovementSpeedOverridden` + `SetOverriddenMovementSpeedMultiplier`). | `(hero, value)`, as in the scripts. |
 | `footlock` | `footlock [on\|off]` | Foot IK locking (`Debug.SetHeroFootLockingEnabled`). | |
-| `safety` | `safety [on\|off]` | `Player.SetSafetyMode`. | args unconfirmed, shape probed. |
-| `orbpickup` | `orbpickup [on\|off]` | `Player.SetAbleToCollectExperienceOrbs`. | args unconfirmed, shape probed. |
+| `safety` | `safety [on\|off]` | `Player.SetSafetyMode`. | `(hero, value)`, as in the scripts. |
+| `orbpickup` | `orbpickup [on\|off]` | `Player.SetAbleToCollectExperienceOrbs`. | `(hero, value)`, as in the scripts. |
 | `orbspawn` | `orbspawn` | `Debug.SpawnExperienceOrbs`. | |
 | `scar` | `scar [face\|random]` | Adds a scar (`Debug.AddHeroFaceScar` / `AddHeroRandomScar`). | |
 | `outfit` | `outfit <name>\|list` | Debug outfits: barbarian brawler crossdresser goth martialarts pirate pureevil swashbuckler year. | `Debug.SetHeroWearing<Name>Outfit`. |
-| `dye` | `dye <slot> <dye>` | `Debug.SetHeroWornItemDye`. | args unconfirmed. |
+| `dye` | `dye <clothing record> <dye record>` | Dyes a worn item, e.g. `dye ObjectClothingCoatPoshM ObjectInventoryDyeClothingBasicBlue01`. | `Debug.SetHeroWornItemDye(clothing, true, dye)`. |
 | `expressions` | `expressions all\|extend\|succeed [on\|off]` | Unlock all expressions / make all extendable / force extended ones to succeed. | |
-| `entitytype` | `entitytype <type>` | `Debug.ChangePlayerEntityType` (play as another creature). | args unconfirmed. |
+| `entitytype` | `entitytype <record>` | `Debug.ChangePlayerEntityType(record)`. | The scripts only use `CreatureHero` and `CreatureHeroFemale`; other records are untested. |
 
 ### Money and stats
 
@@ -320,11 +320,11 @@ Finding an address with `scan`: note your gold, `f2 scan start 1234`; spend or g
 |---|---|---|---|
 | `money` | `money` / `money set <n>` | Prints gold (`Money.Get(hero)`) or sets it exactly (`Money.Set`). | `gold <n>` still adds. |
 | `stats` | `stats` | Prints morality, purity, renown, strength, will, skill, fat, tan, height, title, chapter, seconds played, metres travelled, combat multiplier, affordable abilities, gold and difficulty. | Each getter is shape probed; `n/a` means neither shape worked. |
-| `renown`, `addmorality`, `addpurity`, `addstrength`, `addwill`, `addfat`, `addtan`, `height` | `<command> <n>` | Adds to the stat (`Stats.Modify*`). | args unconfirmed, shape probed. `morality`/`purity` (set exactly) still exist. |
-| `ability` | `ability <name> <level>` | `Stats.SetHeroAbilityLevel`. | args unconfirmed; ability names unknown until dumped. |
-| `title` | `title` / `title <name>` | Prints the title, or unlocks one (`Stats.AddUnlockedTitle`). | args unconfirmed. |
-| `chapter` | `chapter [n]` | Prints or sets chapter progress. | args unconfirmed. |
-| `trackedstat` | `trackedstat <name> [n]` | Prints or sets a tracked stat. | args unconfirmed. |
+| `renown`, `addmorality`, `addpurity`, `addstrength`, `addwill`, `addskill`, `addfat`, `addtan`, `height` | `<command> <n>` | Adds to the stat. | `Stats.Modify*(hero, n)`. `morality`/`purity` (set exactly) still exist. |
+| `ability` | `ability <name> [level]` / `ability list [filter]` | Prints or sets an ability, e.g. `ability fireball 5`. | `Stats.Get/SetHeroAbilityLevel(hero, EHeroAbilityType.*, level)`. The name is any unique part of an `EHeroAbilityType` key. |
+| `title` | `title` / `title <name>` / `title list` | Prints the title, or unlocks one, e.g. `title ChickenChaser`. | `Stats.AddUnlockedTitle(hero, "ObjectInventoryHeroTitle<Name>")`; `list` shows the 22 titles the scripts use. |
+| `chapter` | `chapter [n]` | Prints or sets chapter progress. | Same shape as the scripts. |
+| `trackedstat` | `trackedstat <name> [n]` / `trackedstat list [filter]` | Prints or sets a tracked stat, e.g. `trackedstat groin_shots`. | `Stats.Get/SetTrackedStat(hero, ETrackedStatType.*[, n])`. |
 
 ### Items
 
@@ -346,22 +346,23 @@ Finding an address with `scan`: note your gold, `f2 scan start 1234`; spend or g
 | `stoptime` | `stoptime [on\|off]` | `Timing.SetTimeAsStopped`. | |
 | `midnight` | `midnight` | Stops time at midnight. | |
 | `day` | `day [n]` | Prints or sets the day count. | |
-| `nextday` | `nextday` | Advances the day count. | |
-| `moon` | `moon <phase>` | `Timing.SetMoonPhase`. | args unconfirmed. |
+| `nextday` | `nextday [n]` | Advances the day count (default 1). | `Timing.AdvanceDayCount(n)`. |
+| `moon` | `moon <phase>` | `Timing.SetMoonPhase(phase)`. | The scripts pass 4. |
 | `clock` | `clock` | World/program frame, tick rate, time step, day, time of day, world seconds per second, real-world time. | |
 | `season` | `season winter\|summer` | `Debug.SwapToWinter` / `SwapToSummer`. | |
-| `ground` | `ground [x y z]` | Landscape height and water depth (default: under the hero). | args unconfirmed, shape probed. |
+| `ground` | `ground [x y z]` | Landscape height and water depth (default: under the hero). | One argument, as in the scripts; the console passes a `CVector3` first, then `(x, y)`. |
 | `snap` | `snap` | Drops the hero onto the landscape surface. | Uses `ground`'s height. |
-| `autosave` | `autosave` | `AutoSaveGame()`. | |
-| `sfx` | `sfx <event>` | `Sound.PlayEvent`. | args unconfirmed, shape probed. |
+| `autosave` | `autosave` | `AutoSaveGame(true, true)`, as every script call does. | |
+| `sfx` | `sfx <event>` | Plays a sound event on the hero, e.g. `sfx SE_GOLD_PAYMENT`. | `Sound.PlayEvent(entity, event, "")`. |
 | `havok` | `havok friction\|restitution\|angulardamping\|maxlinear\|maxangular\|minmass <value>` | Physics tuning. | From the E3 startup script. |
 
 ### Camera
 
 | Command | Usage | What it does | Notes |
 |---|---|---|---|
-| `fov`, `zoom`, `roll`, `blur`, `dof` | `<command> [value]` | Print or set the camera value (`Camera.Get*/Set*`). | args unconfirmed. |
-| `shake` | `shake [amount]` | Camera shake (`Camera.AddCameraShake`, then `Player.AddScreenShake`). | args unconfirmed. |
+| `fov`, `zoom`, `roll`, `blur` | `<command> [value]` | Print or set the camera value. | `Camera.Get*(cam)` / `Camera.Set*(cam, value)` with `cam = CameraManager.GetCurrentCamera().Camera`; `fov <n>` uses the game's `Debug.SetFOV(fov)`. |
+| `dof` | `dof` | Prints depth of field. | Setting it takes 7 values (`Camera.SetDOF`); use `call`. |
+| `shake` | `shake` | Screen shake on the hero. | `Player.AddScreenShake(hero, {})`; the table's fields are unknown, so this may do nothing. |
 | `campos` | `campos` | Camera position, forward vector and angles. | |
 | `camto` | `camto <x> <y> <z>` | Moves the camera (`Debug.MoveCameraToPosition`). | |
 | `camlook` | `camlook <x> <y> <z>` | Points the camera focus (`Debug.MoveCameraFocusToPosition`). | |
@@ -376,14 +377,14 @@ Finding an address with `scan`: note your gold, `f2 scan start 1234`; spend or g
 |---|---|---|
 | `ui hud on\|off` | Draws the whole HUD (`Debug.SetDrawGUI`). | Same as `gui`. |
 | `ui msg <text>` / `msg <text>` | Message box. | |
-| `ui info <text>` | Info box. | args unconfirmed. |
-| `ui close` | Removes the current display box. | |
-| `ui fadeout [s]` / `ui fadein [s]` | Screen fades. | args unconfirmed. |
-| `ui toggle <element> [on\|off]` | `GUI.ToggleElement`. | Element names unknown until dumped. |
+| `ui info <text>` | Info box. | `GUI.DisplayInfoBox(text)`. |
+| `ui close <boxname>` | Removes a named display box. | `GUI.RemoveDisplayBox(name)`; boxes are removed by name. |
+| `ui fadeout [s]` / `ui fadein [s]` | Screen fades (default 1 s). | `GUI.FadeScreenOut/In(seconds)`. |
+| `ui toggle <element> [on\|off]` | `GUI.ToggleElement(name, bool)`. | The scripts only use `DPadUp`, `DPadDown`, `DPadRight`. |
 | `ui icons on\|off` | Player icons and world icons. | |
 | `ui vignette on\|off`, `ui dpad on\|off`, `ui highlight on\|off`, `ui version on\|off`, `ui pausedtext on\|off`, `ui expmeter on\|off` | Individual HUD parts. | |
-| `ui interesting on\|off`, `ui suggestions on\|off` | Object highlighting / automatic HUD suggestions. | args unconfirmed, shape probed. |
-| `ui counter <n>\|off`, `ui timer <s>\|off` | On-screen counter / timer. | args unconfirmed. |
+| `ui interesting on\|off`, `ui suggestions on\|off` | Object highlighting / automatic HUD suggestions. | `(hero, value)`, as in the scripts. |
+| `ui counter <n> [max]\|off`, `ui timer <s>\|off` | On-screen counter / countdown. | `GUI.SetCounter("f2counter", "", n[, max])`, `GUI.SetTimer("f2timer", s)`; `off` removes them by name. |
 | `ui state` | Whether a UI, quick menu, display box or movie is active, and whether the screen is faded. | |
 | `ui credits` | Credits screen. | |
 | `ui consolescale <n>` | Engine debug console scale. | |
@@ -400,7 +401,8 @@ Not adjustable from the Lua API as far as the reference shows: HUD element posit
 | `lightdebug` | `lightdebug off\|nomain\|nolightmaps\|noambient\|nolocal\|missing` | Lighting debug functions from `StartupConsoleScript.lua`. | May only exist when that script ran. |
 | `particles` | `particles [on\|off]` | Particle updates. | |
 | `entdebug` | `entdebug [on\|off]` | Per-entity debug info. | |
-| `facing`, `generators`, `combatdraw`, `memstats` | | Entity facing, creature generators, combat debug drawing, memory stats. | |
+| `facing` | `facing [who]` | Draws an entity's facing direction (default target). | `Debug.DrawEntityFacing(entity)`. |
+| `generators`, `combatdraw`, `memstats` | | Creature generators, combat debug drawing, memory stats. | |
 
 ### Entities
 
@@ -409,10 +411,13 @@ Not adjustable from the Lua API as far as the reference shows: HUD element posit
 | `inspect` | `inspect [who]` | Name, id, position, distance to hero, health, invulnerability, gold, can-fight (default: target). | |
 | `tp` | `tp <who>` | Teleports the hero next to an entity. | |
 | `bring` | `bring <who> [distance]` | Moves an entity next to the hero (default 2 m). | |
-| `near` | `near [radius]` | Lists entities around the hero (`Debug.GetAllEntitiesAroundHero`). | args unconfirmed. |
+| `near` | `near [radius] [type]` | Lists entities around the hero (default 10 m). | `Debug.GetAllEntitiesAroundHero(type, range)`. |
+| `flee` | `flee [who]` | Makes a combatant flee (default target). | `Debug.MakeFlee(combatant)`. |
+| `control` | `control [who]` | Takes control of a creature. | `Debug.ControlCreature(dood, targ)`; experimental. |
+| `teleportent` | `teleportent <entityname>` | Moves a named entity to the player. | `Debug.TeleportEntityToPlayer(entityname)`. |
 | `follow` | `follow` | Makes the target follow the hero. | |
 | `combat` | `combat <who> fight\|flee\|attackable on\|off` | `Combat.SetCanFight` / `SetCanFlee` / `SetCanBeAttacked`. | |
-| `damage` | `damage <who> <multiplier>` | `Combat.SetDamageMultiplier`. | args unconfirmed. |
+| `damage` | `damage <who> <multiplier>` | `Combat.SetDamageMultiplier`. | Same shape as the scripts. |
 | `dog` | `dog here\|pos\|bark\|growl\|whimper\|worms on\|off\|god on\|off\|inspect` | The hero's dog. | |
 
 ### Debug functions
@@ -421,7 +426,8 @@ Not adjustable from the Lua API as far as the reference shows: HUD element posit
 |---|---|---|---|
 | `dbg` | `dbg list [filter]` / `dbg <Name> [args]` | Lists every function in the `Debug` table, or calls one (case-insensitive name). | Covers the ~250 Lua-defined debug helpers the game ships. |
 | `probe` | `probe <path> [args]` | Calls a function with `(hero, args)` then `(args)` and reports which shape worked. | The fastest way to confirm an argument shape. |
-| `quick` | `quick <name>\|list [args]` | One-word shortcuts for the game's own debug helpers (zombies, trolls, bandits, marryall, winter, openshops, beamup, ...). | `quick list` shows each name and the function it calls. Several change the save; use a throwaway save. |
+| `quick` | `quick <name> [args]` / `quick list [filter]` | About 80 one-word shortcuts for the game's own debug helpers (zombies, trolls, bandits, daggers, marryall, winter, openshops, beamup, ...). | `quick list` shows each name, the function and its parameter names read from the scripts, e.g. `daggers=HouseOfFlyingDaggers(num weapon_name)`. Several change the save; use a throwaway save. |
+| `travel` | `travel <place>\|list` | Loads a region at a start marker the game's scripts use: bowerstone, slums, colosseum, bloodstone, bowerlake, brightwood, fairfax, ravenscar, spire, temple, westcliff, wraithmarsh, caves... | `Debug.LoadLevel("Albion", region, marker)`. |
 
 ### Places
 
@@ -430,4 +436,4 @@ Not adjustable from the Lua API as far as the reference shows: HUD element posit
 | `place` | `place set <name> <x> <y> <z>` / `place del <name>` / `place export` | Defines or removes a warp place; `export` prints `place set` lines. | Put exported lines in `console\autoexec.txt` and the places survive restarts. |
 | `near_place` | `near_place` | The saved place closest to the hero. | |
 
-Status: everything in console-v6 was checked in a mock harness (fake engine tables) only. Nothing has run in the game yet.
+Status: console-v6/v7 were checked in a mock harness (fake engine tables) only, and v7's argument shapes were matched against the game's compiled scripts. Nothing has run in the game yet.

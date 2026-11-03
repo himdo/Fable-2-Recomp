@@ -1,4 +1,4 @@
-Fable 2 developer commands - console-v6
+Fable 2 developer commands - console-v7
 =======================================
 
 What it is: one command, "f2", in the ReXGlue SDK's own console. Press ~ in
@@ -14,7 +14,24 @@ autoexec, cvar). Calls whose argument shape is a guess try (entity, args) and
 then (args); the reply ends in [shape 1] or [shape 2], which tells us the real
 shape.
 
-UNTESTED in game. Checked only in a mock harness with fake engine tables.
+Why v7 should help: v5/v6 guessed many argument lists, and several were wrong
+(giveall passed no hero, warp level passed one argument instead of three,
+Camera.* missed the camera object, spawnat/combatants/killall/skill/weapon had
+the wrong arguments). v7 reads the game's own compiled scripts
+(tools/lua_callshapes.py -> docs/console/LUA-CALL-SHAPES.md) and calls each
+function the way the game does. It also adds travel, flee, control,
+teleportent, addskill, ability/title/trackedstat name lists, and ~80 quick
+shortcuts with their real parameters.
+
+UNTESTED in game. Checked in a mock harness with fake engine tables, and the
+argument lists match the game's compiled scripts.
+
+v7 first (these were wrong before):
+     f2 giveall potions | f2 giveall weapons 4 | f2 weapon ObjectInventory_L_LongSword_Iron
+     f2 spawn CreatureFaunaChicken 3 | f2 combatants CreatureHobbe 2 | f2 killall
+     f2 skill 0.5 | f2 ability list | f2 ability fireball 3 | f2 title ChickenChaser
+     f2 fov | f2 fov 90 | f2 zoom | f2 sfx SE_GOLD_PAYMENT | f2 ui counter 3 10 | f2 ui counter off
+     f2 quick list | f2 travel list | f2 travel bowerstone (loads a region; save first)
 
 Steps
 1. Start the game, load a save (use a throwaway save: some commands change it).
