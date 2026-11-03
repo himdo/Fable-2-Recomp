@@ -3,11 +3,11 @@
 // Typed in the SDK's `~` console as   f2 <command>   for example
 //   f2 warp 1 2 3        f2 god on        f2 warp save a; wait 60; warp a
 // (chain commands with ';' inside one f2 line).
-// Nothing runs until the first `f2` command is typed (or console_enabled /
-// FABLE2_CONSOLE=1 turns on the file transport below), so a normal launch is
-// unaffected.
+// Commands only run when one is typed or written to the file transport, so a
+// launch without commands behaves as before.
 //
-// File transport (optional, only when console_enabled or FABLE2_CONSOLE=1):
+// File transport (on by default: console_enabled; FABLE2_CONSOLE=0 or
+// console_enabled = false turns it off):
 //   <game root>\console\in.txt   lines written by an external tool
 //   <game root>\console\out.txt  host command output, appended
 //   <game root>\console\state.txt  status, rewritten about once a second
@@ -21,7 +21,7 @@
 // Host commands: wait, waitfor, exec, echo, peek, poke, expect, find <number>,
 // freeze, unfreeze, trace, status, hosthelp, cvars, dumpmem; v6 adds cvar,
 // history, again, repeat, every, autoexec, peekf, pokef, freezef, peekstr,
-// findstr, findf, fill, scan; v11 adds widescreen (ws). Addresses are Xbox 360 guest
+// findstr, findf, fill, scan; v11 adds widescreen (ws), pause and step. Addresses are Xbox 360 guest
 // virtual addresses (hex, with or without 0x); values are big-endian as in the game.
 
 #pragma once
@@ -41,6 +41,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "fable2_f5_lua.h"
@@ -57,8 +58,9 @@
 
 #define FABLE2_CONSOLE_BUILD "console-v11"
 
-REXCVAR_DEFINE_BOOL(console_enabled, false, "Input",
-                    "Enable the developer command line (f2-console.cmd). Off by default.");
+REXCVAR_DEFINE_BOOL(console_enabled, true, "Input",
+                    "Developer command file transport (console\\in.txt / out.txt / state.txt "
+                    "next to the game data). On by default; false or FABLE2_CONSOLE=0 turns it off.");
 
 namespace fable2::console {
 
@@ -126,6 +128,9 @@ struct State {
   std::atomic<uint64_t> lua_done{0};
   bool lua_wait = false;        // a dispatched line has not reported done yet
   Clock::time_point lua_deadline{};
+  // pause: the game thread waits at the end of the console poll; see hold_paused.
+  bool paused = false;
+  uint64_t step_frames = 0;     // frames to run before pausing again ("step")
 };
 inline State& S() {
   static State s;
@@ -135,11 +140,12 @@ inline State& S() {
 inline void set_root(const fs::path& p) { S().root = p; }
 
 inline bool enabled() {
-  static const bool env = [] {
+  static const int env = [] {
     const char* e = std::getenv("FABLE2_CONSOLE");
-    return e && *e && *e != '0';
+    return e && *e ? (*e != '0' ? 1 : 0) : -1;  // -1 = not set
   }();
-  return env || REXCVAR_GET(console_enabled);
+  if (env >= 0) return env == 1;
+  return REXCVAR_GET(console_enabled);
 }
 
 //--- Output -----------------------------------------------------------------
@@ -560,14 +566,14 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
   }
   if (name == "help") {
     out("help", "host commands: wait waitfor exec echo peek poke expect find <number> freeze unfreeze trace status cvars dumpmem "
-                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen. "
+                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step. "
                 "Chain with ';'. Lua commands follow (their text appears in the log).");
     return false;  // Lua prints its own command list too
   }
   if (name == "hosthelp") {
     out("help",
         "host commands: wait waitfor exec echo peek poke expect find freeze unfreeze trace status cvars dumpmem "
-        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen. "
+        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step. "
         "Everything else (warp, god, gold, giveall, ...) runs in Lua: type help. "
         "Separate commands with ';'. Addresses are hex guest addresses.");
     return true;
@@ -961,6 +967,28 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     e.cmd = cmd;
     s.every.push_back(e);
     out("every", "#" + std::to_string(s.every.size()) + " every " + W[1] + ": " + cmd);
+    return true;
+  }
+  if (name == "pause") {
+    // pause [on|off|toggle]: stop the game thread at the end of the frame. The
+    // window keeps the last frame; only host commands run (hold_paused).
+    const std::string v = W.size() > 1 ? W[1] : "toggle";
+    if (v == "on" || v == "1") s.paused = true;
+    else if (v == "off" || v == "0") s.paused = false;
+    else if (v == "toggle") s.paused = !s.paused;
+    else return out("pause", "usage: pause [on|off|toggle]", true), true;
+    s.step_frames = 0;
+    out("pause", s.paused ? "paused (pause off or step <n> to continue)" : "running");
+    return true;
+  }
+  if (name == "step") {
+    // step [n]: while paused, run n frames (default 1) and pause again.
+    uint64_t n = 1;
+    if (W.size() > 1 && (!parse_u(W[1], n) || n == 0 || n > 100000))
+      return out("step", "usage: step [frames]", true), true;
+    if (!s.paused) return out("step", "not paused (pause on first)", true), true;
+    s.step_frames = n;
+    out("step", "running " + std::to_string(n) + " frame(s)");
     return true;
   }
   if (name == "widescreen" || name == "ws") {
@@ -1362,7 +1390,7 @@ inline void write_state_file() {
     std::ofstream f(tmp, std::ios::trunc);
     f << "build " << FABLE2_CONSOLE_BUILD << "\nframes " << s.frames << "\nqueued " << s.queue.size()
       << "\nbusy " << ((!s.queue.empty() || s.waitfor || s.wait_frames || s.wait_time) ? 1 : 0)
-      << "\nerrors " << s.errors << "\nlast " << s.last << "\n";
+      << "\nerrors " << s.errors << "\npaused " << (s.paused ? 1 : 0) << "\nlast " << s.last << "\n";
   }
   fs::rename(tmp, s.root / "console" / "state.txt", ec);
 }
@@ -1423,6 +1451,59 @@ inline void run_lua_line(const std::string& line, PPCContext& ctx, uint8_t* base
   if (!s.pump_requested) start_pump(ctx, base);
 }
 
+// Host commands that work while the game thread is held: they only read or
+// write memory and console state, and pause/step end the hold.
+inline bool runs_while_paused(const std::string& line) {
+  static const char* kSafe[] = { "pause", "step", "status", "echo", "hosthelp", "peek", "poke", "peekf",
+                                 "pokef", "peekstr", "freeze", "freezef", "unfreeze", "cvar", "cvars",
+                                 "widescreen", "ws", "history", "dumpmem", "find", "findf", "findstr" };
+  std::string head = line.substr(0, line.find_first_of(" \t"));
+  for (auto& c : head) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  for (const char* k : kSafe)
+    if (head == k) return true;
+  return false;
+}
+
+// pause: keeps the game thread here (no guest frames, the window shows the
+// last one) while still reading console\in.txt and the ~ queue. Commands that
+// need the game running (Lua, ui/gui, wait) stay queued until it resumes.
+inline void hold_paused(uint8_t* base, bool file_mode) {
+  State& s = S();
+  if (!s.paused || s.step_frames) return;
+  write_state_file();
+  auto last_state = Clock::now();
+  while (s.paused && !s.step_frames) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    std::error_code ec;
+    const auto in = s.root / "console" / "in.txt";
+    if (file_mode && fs::exists(in, ec)) {
+      std::string text;
+      {
+        std::ifstream f(in, std::ios::binary);
+        std::stringstream ss;
+        ss << f.rdbuf();
+        text = ss.str();
+      }
+      fs::remove(in, ec);
+      enqueue_text(text);
+    }
+    std::string line;
+    {
+      std::lock_guard<std::mutex> lock(s.qmu);
+      if (!s.queue.empty() && runs_while_paused(s.queue.front())) {
+        line = s.queue.front();
+        s.queue.pop_front();
+      }
+    }
+    if (!line.empty()) run_host_command(line, base);
+    for (auto& kv : s.frozen) write_be(base, kv.first, kv.second.size, kv.second.value);
+    if (Clock::now() - last_state > std::chrono::milliseconds(500)) {
+      write_state_file();
+      last_state = Clock::now();
+    }
+  }
+}
+
 // Called every frame from the MainRenderLoop hook, right after the F5 poll.
 inline void poll(PPCContext& ctx, uint8_t* base) {
   State& s = S();
@@ -1430,6 +1511,7 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
   if (!file_mode && !s.active.load(std::memory_order_relaxed)) return;
   if (s.root.empty()) return;
   ++s.frames;
+  if (s.step_frames) --s.step_frames;
   if (s.frames == 1)
     f5lua::logline("[console] %s active, root=%s\n", FABLE2_CONSOLE_BUILD, s.root.string().c_str());
 
@@ -1579,6 +1661,7 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
   }
 
   if ((s.frames % 60) == 0) write_state_file();
+  hold_paused(base, file_mode);
 }
 
 }  // namespace fable2::console

@@ -5,7 +5,7 @@ Build: **console-v9**. Source: `src/core/fable2_console.h` (host commands) and `
 ## How the console works
 
 - Every command is typed in the SDK's `~` console behind the word `f2`, for example `f2 warp 1 2 3` or `f2 god on`. Chain commands with `;` inside one line: `f2 warp save a; wait 60; warp a`.
-- Nothing runs until the first `f2` command is typed, so a normal launch is unchanged. On that first command, `console\autoexec.txt` (if present) runs first.
+- Commands also come from a file: lines written to `<game root>\console\in.txt` are queued, host replies are appended to `console\out.txt`, and `console\state.txt` is rewritten about once a second. This file transport is on by default (`console_enabled = true`); `console_enabled false` or `FABLE2_CONSOLE=0` turns it off. The game root is the folder with the game data, which can be the build folder itself. `console\autoexec.txt` (if present) runs before the first command.
 - The queue runs one command per frame on the game thread (from the `MainRenderLoop` hook). Host commands (memory, files, cvars, timers) are handled in C++; every other line goes to Lua.
 - Host replies go to the `~` console (`REXLOG_INFO`) and to `<game root>\console\out.txt`. Lua replies go through `cprint` as `[console] ...` lines; whether `cprint` reaches the `~` console is unconfirmed, so check `logs\` if they do not show.
 - A leading `!` (for example `f2 !info`) also shows the Lua reply in a message box.
@@ -225,6 +225,17 @@ f2 call Debug.AddAllHairstyles
 ```
 
 `giveall hairstyles` calls the same function. The `find` match count depends on the build.
+
+## Pause (console-v11)
+
+Stops the game itself, not just the game's pause menu: the game thread waits at the end of the frame and the window keeps showing the last frame. Useful for looking at one frame, taking screenshots, or reading memory that changes every frame.
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `pause` | `pause [on\|off\|toggle]` | Holds the game at the end of the current frame. With no argument it toggles. | `console\state.txt` shows `paused 1` while held. |
+| `step` | `step [n]` | While paused, runs n frames (default 1) and pauses again. | Up to 100000 frames. |
+
+While paused, only host commands that read or write memory and console state run: `pause`, `step`, `status`, `echo`, `hosthelp`, `peek`, `poke`, `peekf`, `pokef`, `peekstr`, `freeze`, `freezef`, `unfreeze`, `cvar`, `cvars`, `ws`, `history`, `dumpmem`, `find`, `findf`, `findstr`. Anything that needs the game running (Lua commands, `ui`/`gui`, `wait`) stays queued and runs after `pause off`. `freeze` values are still held. The UI does not redraw while paused, so `ui` edits need `pause off` or `step` to show.
 
 ## Widescreen (console-v11)
 
