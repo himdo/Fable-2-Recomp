@@ -78,7 +78,7 @@ namespace detail {
 // Test builds log the layout whatever fit_window_ui_log says, because L's
 // config file does not reach this cvar. Bump kBuild with each test zip.
 inline constexpr bool kAlwaysLogLayout = true;
-inline constexpr int kBuild = 52;
+inline constexpr int kBuild = 55;
 inline bool LogLayout() {
   return kAlwaysLogLayout || REXCVAR_GET(fit_window_ui_log);
 }
@@ -269,6 +269,7 @@ local function kids(e)
   return {}
 end
 local function child(e, name)
+  if not e then return nil end
   local k = kids(e)
   for i = 1, #k do
     if attr(k[i], "name") == name then return k[i] end
@@ -535,10 +536,10 @@ local function fixMenus()
   cover = dx * tk("cover", 1)
   page = dx * tk("page", 1.2)
   card = dx * tk("card", 1.8)
-  -- Book screens' right cover (ws tune bookcover, 1.4): at 1.2 the pause
-  -- menu's R stick up/down icons on the map page sat under it (2.22:1).
-  bookCover = dx * tk("bookcover", 1.4)
-  paper = dx * tk("paper", 1.4)
+  -- Book screens' right cover (ws tune bookcover, 1.2): moves with the
+  -- pages, so pages meet it as in vanilla (shop front page, Items).
+  bookCover = dx * tk("bookcover", 1.2)
+  paper = dx * tk("paper", 1.5)
   if screen == "title" then
     -- Title: left as authored. Its 16:9 box (White) is on the title's
     -- timeline: scale, position.z and the title camera are put back when it
@@ -579,12 +580,37 @@ local function fixMenus()
         end
       elseif okt and t ~= "behavior" and t ~= "material" and t ~= "texture" then
         -- The paper backing (Page1_Background) moves a little further than
-        -- the page (paper, 1.4 dx; tuned live at 2.22:1 on Items): at 1.3 dx
-        -- its straight left edge showed beside the page's curved frame, from
-        -- 1.5 dx a seam showed inside the page.
+        -- the page (paper, 1.5 dx; tuned live at 2.22:1 on Items and the
+        -- shop): below it a thin line showed left of the page's curved
+        -- frame, from 1.6 dx a seam showed inside the page.
+        -- Only the backing uses `paper`; a page node (the pause menu's
+        -- Pages.Contents: map, renown, R icons) moves with the pages, or it
+        -- ran 0.2 dx ahead of the cover (build 52).
+        local d = n:find("Background") and paper or page
         local path = "Pages/" .. n
-        nudge(pg, path, "position.x", paper)
-        if (applied[path .. ".position.x"] or 0) > 10 then childMove(pg, path, ".", paper, false) end
+        nudge(pg, path, "position.x", d)
+        if (applied[path .. ".position.x"] or 0) > 10 then childMove(pg, path, ".", d, false) end
+      end
+    end
+    -- Shops: the shop's front page (FrontPage) and its paper
+    -- (PageTextureFar/Near) sit beside the Book under Foreground. The front
+    -- page moves with the Book pages, its paper with the paper backing (left
+    -- unmoved, a strip of it showed on its own on Buy Items). The drop shadow
+    -- (FrontPage.Blade.shadow) showed as a grey strip left of the frame on a
+    -- wide window, so it is hidden there.
+    local fg = child(layer, "Foreground")
+    local fp = fg and child(fg, "FrontPage")
+    if fp then
+      childMove(fp, "FrontPage", ".", page, false)
+      childMove(child(fg, "PageTextureFar"), "PageTextureFar", ".", paper, false)
+      childMove(child(fg, "PageTextureNear"), "PageTextureNear", ".", paper, false)
+      local sh = child(child(fp, "Blade"), "shadow")
+      if sh then
+        if first["FrontPage/shadow.opacity"] == nil then
+          first["FrontPage/shadow.opacity"] = attr(sh, "opacity") or 75
+        end
+        local want = dx > 0.5 and 0 or first["FrontPage/shadow.opacity"]
+        if attr(sh, "opacity") ~= want then pcall(setAttribute, sh, "opacity", want) end
       end
     end
     -- On the main menu the character cards wait just off a 16:9 screen, so
