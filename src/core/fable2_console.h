@@ -1518,10 +1518,15 @@ inline void hold_paused(uint8_t* base, bool file_mode) {
     }
     std::string line;
     {
+      // The first command that can run while paused, wherever it is: a queued
+      // ui/Lua command must not block the step or pause off behind it.
       std::lock_guard<std::mutex> lock(s.qmu);
-      if (!s.queue.empty() && runs_while_paused(s.queue.front())) {
-        line = s.queue.front();
-        s.queue.pop_front();
+      for (auto it = s.queue.begin(); it != s.queue.end(); ++it) {
+        if (runs_while_paused(*it)) {
+          line = *it;
+          s.queue.erase(it);
+          break;
+        }
       }
     }
     if (!line.empty()) run_host_command(line, base);
