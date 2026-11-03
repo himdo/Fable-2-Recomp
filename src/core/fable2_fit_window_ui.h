@@ -54,6 +54,12 @@ REXCVAR_DEFINE_BOOL(fit_window_native_16x9, true, "Display",
                     "With fit_game_to_window: keep the game's own 2D screens "
                     "(loading screens, the saving banner) at 16:9 in the "
                     "middle of a wide window instead of stretching them");
+REXCVAR_DEFINE_DOUBLE(fit_window_quad_power, 1.0, "Display",
+                      "With fit_window_native_16x9: the game's own 2D quads are "
+                      "squeezed by ((16/9)/aspect)^this (clip space)");
+REXCVAR_DEFINE_DOUBLE(fit_window_text_power, 1.0, "Display",
+                      "With fit_window_native_16x9: the game's own 2D text x "
+                      "moves toward the centre by ((16/9)/aspect)^this");
 REXCVAR_DEFINE_BOOL(fit_window_ui_log, true, "Display",
                     "Log [ui-layout] lines: the element tree of each menu "
                     "and HUD screen as it loads, plus Gameface script messages");
@@ -70,7 +76,7 @@ namespace detail {
 // Test builds log the layout whatever fit_window_ui_log says, because L's
 // config file does not reach this cvar. Bump kBuild with each test zip.
 inline constexpr bool kAlwaysLogLayout = true;
-inline constexpr int kBuild = 35;
+inline constexpr int kBuild = 37;
 inline bool LogLayout() {
   return kAlwaysLogLayout || REXCVAR_GET(fit_window_ui_log);
 }
@@ -751,11 +757,14 @@ inline void SqueezeQuad(uint8_t* base, uint32_t rect, uint32_t verts,
   for (int i = 0; i < 4; ++i) x[i] = LoadBEFloat(v + i * 64);
   const float lo = std::min(std::min(x[0], x[1]), std::min(x[2], x[3]));
   const float hi = std::max(std::max(x[0], x[1]), std::max(x[2], x[3]));
-  // Build 15 log: the quads come out in clip space, and a full-width one
-  // spans about +-A/(16/9), so 16:9 needs that factor squared.
+  // The quads come out in clip space; ((16/9)/A)^1 keeps the loading
+  // screens and the saving/verifying banner at their 16:9 size with their
+  // text inside (build 36, 32:9 screenshots). Build 15's square made the
+  // banners too small and the text spilled out. fit_window_quad_power
+  // changes the exponent live.
   const bool squeeze = REXCVAR_GET(fit_window_native_16x9) && aspect > kWide + 0.01f;
   if (squeeze) {
-    const float s = (kWide / aspect) * (kWide / aspect);
+    const float s = float(std::pow(double(kWide / aspect), REXCVAR_GET(fit_window_quad_power)));
     for (int i = 0; i < 4; ++i) StoreBEFloat(v + i * 64, x[i] * s);
   }
   if (LogLayout() && g_quad_logs.fetch_add(1) < 200) {
@@ -781,7 +790,8 @@ extern "C" void sub_8235CF68(PPCContext& ctx, uint8_t* base) {
   const float a = fable2::fitwindow::CurrentAspect();
   const float wide = 16.0f / 9.0f;
   if (REXCVAR_GET(fit_window_native_16x9) && a > wide + 0.01f) {
-    ctx.f1.f64 = 640.0 + (ctx.f1.f64 - 640.0) * double(wide / a);
+    ctx.f1.f64 = 640.0 + (ctx.f1.f64 - 640.0) *
+                             std::pow(double(wide / a), REXCVAR_GET(fit_window_text_power));
   }
   __imp__sub_8235CF68(ctx, base);
 }
