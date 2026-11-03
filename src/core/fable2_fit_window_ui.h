@@ -39,6 +39,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdarg>
 #include <cstdint>
@@ -46,6 +47,7 @@
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <vector>
 
 REXCVAR_DEFINE_BOOL(fit_window_hud_to_edges, true, "Display",
                     "With fit_game_to_window: move the HUD's edge elements to "
@@ -76,7 +78,7 @@ namespace detail {
 // Test builds log the layout whatever fit_window_ui_log says, because L's
 // config file does not reach this cvar. Bump kBuild with each test zip.
 inline constexpr bool kAlwaysLogLayout = true;
-inline constexpr int kBuild = 37;
+inline constexpr int kBuild = 39;
 inline bool LogLayout() {
   return kAlwaysLogLayout || REXCVAR_GET(fit_window_ui_log);
 }
@@ -767,9 +769,23 @@ inline void SqueezeQuad(uint8_t* base, uint32_t rect, uint32_t verts,
     const float s = float(std::pow(double(kWide / aspect), REXCVAR_GET(fit_window_quad_power)));
     for (int i = 0; i < 4; ++i) StoreBEFloat(v + i * 64, x[i] * s);
   }
-  if (LogLayout() && g_quad_logs.fetch_add(1) < 200) {
-    float r[4] = {0, 0, 0, 0};
-    if (rect) for (int i = 0; i < 4; ++i) r[i] = LoadBEFloat(base + rect + i * 4);
+  float r[4] = {0, 0, 0, 0};
+  if (rect) for (int i = 0; i < 4; ++i) r[i] = LoadBEFloat(base + rect + i * 4);
+  // Each new caller + rect once (a count limit only ever showed the first
+  // loading screen): tells which builder draws a screen's pieces.
+  bool fresh = false;
+  if (LogLayout()) {
+    static std::mutex mu;
+    static std::vector<uint64_t> seen;
+    const uint64_t key = (uint64_t(caller) << 32) ^ (uint64_t(uint32_t(r[0])) << 20) ^
+                         (uint64_t(uint32_t(r[1])) << 10) ^ uint64_t(uint32_t(r[2]) + uint32_t(r[3]) * 7);
+    std::lock_guard<std::mutex> lock(mu);
+    if (seen.size() < 4096 && std::find(seen.begin(), seen.end(), key) == seen.end()) {
+      seen.push_back(key);
+      fresh = true;
+    }
+  }
+  if (fresh) {
     Log("[native-2d] quad from 0x%08X rect {%.0f, %.0f, %.0f, %.0f}: x %.2f..%.2f%s",
         caller, r[0], r[1], r[2], r[3], lo, hi, squeeze ? " (squeezed)" : "");
   }
@@ -823,4 +839,106 @@ extern "C" void sub_8235B110(PPCContext& ctx, uint8_t* base) {
   const uint32_t caller = fable2::fitwindow::ui::detail::g_quad_caller;
   __imp__sub_8235B110(ctx, base);
   fable2::fitwindow::ui::detail::SqueezeQuad(base, rect, verts, caller);
+}
+
+
+// Videos (Bink, art\videos\*.bik) are drawn full-screen by the game, so with
+// the frame stretched to the window (present_letterbox = false) they came out
+// stretched. While one plays, the presenter goes back to letterboxing, which
+// keeps the game's 16:9 video-mode shape with bars at the sides, and returns
+// to filling the window when it ends. "Playing" = one of the ten Bink entry
+// points the game calls (the BINK section 0x832B3600-0x832C2A3C; call sites
+// in the game's wrapper around 0x82A3B900) ran in the last 300 ms.
+namespace fable2::fitwindow::ui::detail {
+inline constexpr int kBinkEntries = 10;
+inline std::atomic<uint32_t> g_bink_calls[kBinkEntries];
+inline std::atomic<int64_t> g_bink_last_ms{0};
+inline int64_t NowMs() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
+inline void NoteBink(int entry) {
+  g_bink_calls[entry].fetch_add(1, std::memory_order_relaxed);
+  g_bink_last_ms.store(NowMs(), std::memory_order_relaxed);
+}
+}  // namespace fable2::fitwindow::ui::detail
+
+namespace fable2::fitwindow::ui {
+// Call once a frame (the console poll does). Switches letterboxing on while a
+// video plays and back off after, if the fit is on.
+inline void TickVideo() {
+  static bool playing = false;
+  const int64_t last = detail::g_bink_last_ms.load(std::memory_order_relaxed);
+  const bool now_playing = last != 0 && detail::NowMs() - last < 300;
+  if (now_playing == playing) return;
+  playing = now_playing;
+  if (rex::cvar::GetFlagByName("fit_game_to_window") != "true") return;
+  rex::cvar::SetFlagByName("present_letterbox", playing ? "true" : "false");
+  std::string counts;
+  for (int i = 0; i < detail::kBinkEntries; ++i)
+    counts += " " + std::to_string(detail::g_bink_calls[i].load(std::memory_order_relaxed));
+  REXSYS_INFO("[fit-window] video {}: letterbox {} (Bink entry calls:{})",
+              playing ? "started" : "ended", playing ? "on" : "off", counts);
+}
+}  // namespace fable2::fitwindow::ui
+
+DECLARE_REX_FUNC(sub_832B3DE0);
+extern "C" void sub_832B3DE0(PPCContext& ctx, uint8_t* base) {
+  fable2::fitwindow::ui::detail::NoteBink(0);
+  __imp__sub_832B3DE0(ctx, base);
+}
+
+DECLARE_REX_FUNC(sub_832B3EB8);
+extern "C" void sub_832B3EB8(PPCContext& ctx, uint8_t* base) {
+  fable2::fitwindow::ui::detail::NoteBink(1);
+  __imp__sub_832B3EB8(ctx, base);
+}
+
+DECLARE_REX_FUNC(ProcessAndProcessAndProcess1677_832B4F98);
+extern "C" void ProcessAndProcessAndProcess1677_832B4F98(PPCContext& ctx, uint8_t* base) {
+  fable2::fitwindow::ui::detail::NoteBink(2);
+  __imp__ProcessAndProcessAndProcess1677_832B4F98(ctx, base);
+}
+
+DECLARE_REX_FUNC(ProcessAndProcessAndProcess1675_832B5530);
+extern "C" void ProcessAndProcessAndProcess1675_832B5530(PPCContext& ctx, uint8_t* base) {
+  fable2::fitwindow::ui::detail::NoteBink(3);
+  __imp__ProcessAndProcessAndProcess1675_832B5530(ctx, base);
+}
+
+DECLARE_REX_FUNC(sub_832B57E8);
+extern "C" void sub_832B57E8(PPCContext& ctx, uint8_t* base) {
+  fable2::fitwindow::ui::detail::NoteBink(4);
+  __imp__sub_832B57E8(ctx, base);
+}
+
+DECLARE_REX_FUNC(ProcessAndProcessAndProcess1678_832B5A18);
+extern "C" void ProcessAndProcessAndProcess1678_832B5A18(PPCContext& ctx, uint8_t* base) {
+  fable2::fitwindow::ui::detail::NoteBink(5);
+  __imp__ProcessAndProcessAndProcess1678_832B5A18(ctx, base);
+}
+
+DECLARE_REX_FUNC(sub_832B5C18);
+extern "C" void sub_832B5C18(PPCContext& ctx, uint8_t* base) {
+  fable2::fitwindow::ui::detail::NoteBink(6);
+  __imp__sub_832B5C18(ctx, base);
+}
+
+DECLARE_REX_FUNC(sub_832B5E40);
+extern "C" void sub_832B5E40(PPCContext& ctx, uint8_t* base) {
+  fable2::fitwindow::ui::detail::NoteBink(7);
+  __imp__sub_832B5E40(ctx, base);
+}
+
+DECLARE_REX_FUNC(ProcessAndProcessAndProcess499_832B6110);
+extern "C" void ProcessAndProcessAndProcess499_832B6110(PPCContext& ctx, uint8_t* base) {
+  fable2::fitwindow::ui::detail::NoteBink(8);
+  __imp__ProcessAndProcessAndProcess499_832B6110(ctx, base);
+}
+
+DECLARE_REX_FUNC(sub_832B6440);
+extern "C" void sub_832B6440(PPCContext& ctx, uint8_t* base) {
+  fable2::fitwindow::ui::detail::NoteBink(9);
+  __imp__sub_832B6440(ctx, base);
 }
