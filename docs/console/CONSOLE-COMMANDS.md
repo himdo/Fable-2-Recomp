@@ -1,6 +1,6 @@
 # Fable 2 Developer Console: Command Reference
 
-Build: **console-v7**. Source: `src/core/fable2_console.h` (host commands) and `src/lua/console_cmds.lua` (Lua commands).
+Build: **console-v8**. Source: `src/core/fable2_console.h` (host commands) and `src/lua/console_cmds.lua` (Lua commands).
 
 ## How the console works
 
@@ -389,7 +389,26 @@ Finding an address with `scan`: note your gold, `f2 scan start 1234`; spend or g
 | `ui credits` | Credits screen. | |
 | `ui consolescale <n>` | Engine debug console scale. | |
 
-Not adjustable from the Lua API as far as the reference shows: HUD element position and scale. The SDK's own UI scale lives in cvars (`cvars ui`).
+#### Editing HUD elements (console-v8)
+
+The game-side `GUI` table reaches HUD elements **by name**. Names come from `art/gui/gameface/hud.bgf`; `ui elements [filter]` lists them (PlayerHealth, HealthAndMana, Minimap, WorldIcons, Subtitles, DPad*, ShardHealth, ExpressionMeter, ExperienceOrbs, ...). The game's own scripts only pass the names noted below, so other names are untested: a name the engine does not know may do nothing.
+
+| Sub-command | What it does | Engine call |
+|---|---|---|
+| `ui elements [filter]` | Lists HUD element names. | |
+| `ui show <element>` / `ui hide <element>` | Shows or hides an element. | `GUI.ToggleElement(name, bool)`; scripts use DPadUp/DPadDown/DPadRight. |
+| `ui fade <element> in\|out` | Fades an element in or out. | `GUI.FadeElementIn` / `FadeElementOutSlow(name)`; scripts use ShardHealth. |
+| `ui text <element> <TEXT_ID>` | Sets an element's text to a string-table entry (not free text). | `GUI.SetGUIText(name, id)`, e.g. `ui text ShardHealth TEXT_CREATURE_NAME_TROLL`. |
+| `ui meter <element> <percent> [seconds]` | Sets a meter's fill, optionally animated. | `GUI.SetMeterPercentOverTime`; scripts use ShardHealth. |
+| `ui fill low\|med\|high <r> <g> <b>` | Meter fill colours (0-255). | `GUI.Set{Low,Med,High}FillColour`. |
+| `ui fillpct <low%> <med%>` | Where the fill colour changes. | `GUI.SetFillColourPercentages` (scripts: 18 28). |
+| `ui fadecolour <r> <g> <b> [s]` | Fades the screen to a colour; `ui fadein` undoes it. | `GUI.FadeScreenOutToColour`. |
+| `ui dpadcenter on\|off`, `ui abilities on\|off`, `ui gdc on\|off` | D-pad centring, abilities in the experience display, the GDC demo HUD. | `GUI.SetDPadCenter`, `SetExperienceShouldShowAbilities`, `ShowGDCUI`. |
+| `ui suggestmode normal\|expressions` | HUD suggestion mode. | `GUI.SetHUDSuggestionMode(EHUDSuggestionMode.*)`. |
+| `ui icon add\|remove [who] [type]` | Puts a world icon over an entity (default target, type `WI_QUEST_GIVER`). | `GUI.AddWorldIcon(name, entity, "", EWorldIconType.*)`. |
+| `ui timertext <seconds> <TEXT_ID>` | Countdown with a label. | `GUI.SetTimerWithText`. |
+
+**Not reachable yet: position, scale, rotation, opacity, tint, free text.** Those are attributes of the element in the GUI Lua state (the HUD's own scripts do `setAttribute(getElement("Scene.Layer"), "opacity", 0)`, `"position.x"`, `"scale.x"`, `"diffuse.r"`, `"textstring"`...). `f2` runs in the game Lua state, which has no access to them. Reaching them needs a bridge that runs Lua inside the GUI state (finding its `lua_State` and the engine's Lua load/call functions in the recompiled code). The SDK's own UI scale lives in cvars (`cvars ui`).
 
 ### Rendering
 

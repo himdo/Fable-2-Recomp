@@ -1,4 +1,4 @@
-Fable 2 developer commands - console-v7
+Fable 2 developer commands - console-v8
 =======================================
 
 What it is: one command, "f2", in the ReXGlue SDK's own console. Press ~ in
@@ -25,6 +25,13 @@ shortcuts with their real parameters.
 
 UNTESTED in game. Checked in a mock harness with fake engine tables, and the
 argument lists match the game's compiled scripts.
+
+v8 HUD elements (untested names may do nothing; tell me which ones work):
+     f2 ui elements | f2 ui hide Minimap | f2 ui show Minimap
+     f2 ui hide PlayerHealth | f2 ui show PlayerHealth | f2 ui hide DPadUp | f2 ui show DPadUp
+     f2 ui hide Subtitles | f2 ui hide WorldIcons | f2 ui hide ExperienceOrbs (show them again after)
+     f2 ui fill high 0 0 255 | f2 ui fadecolour 255 0 0 1 then f2 ui fadein 1
+     f2 ui icon add dog | f2 ui icon remove dog | f2 ui gdc on | f2 ui gdc off
 
 v7 first (these were wrong before):
      f2 giveall potions | f2 giveall weapons 4 | f2 weapon ObjectInventory_L_LongSword_Iron

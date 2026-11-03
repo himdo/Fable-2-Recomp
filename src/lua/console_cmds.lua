@@ -1,4 +1,4 @@
--- console_cmds.lua (console-v7): interprets one `f2 <command>` line from the ~ console.
+-- console_cmds.lua (console-v8): interprets one `f2 <command>` line from the ~ console.
 -- Called as console_cmds.lua(line) by the generated console_run.lua.
 -- Output: cprint (game log). A line starting with "!" also shows a message box.
 --
@@ -1400,6 +1400,102 @@ UI.consolescale = { "ui consolescale <n>  engine debug console scale (Debug.SetC
 end }
 UI.expmeter = { "ui expmeter on|off  draw the expression meter", function(W)
   try("expression meter", dbgf("SetDrawExpressionMeter"), onoff(W[3], true))
+end }
+
+-- HUD element editing (console-v8). The game-side GUI table reaches HUD elements
+-- by name (names from art/gui/gameface/hud.bgf). Scripts only pass the names in
+-- the comments, so other names are untested. Position/scale/opacity/tint live in
+-- the GUI Lua state (setAttribute) and are not reachable from here yet.
+local HUD_ELEMENTS = {
+  "HUD", "Layer", "UpperElements", "PlayerHealth", "HealthAndMana", "Health", "PlayerHealthMax",
+  "PlayerLowHealthPulser", "CoopHealth", "CoopHealthAndMana", "CoopHealthMax", "CoopLowHealthPulser",
+  "Minimap", "WorldIcons", "Subtitles", "CenterToggle", "DPad", "DPadUp", "DPadDown", "DPadLeft", "DPadRight",
+  "Target", "JobMultiplier", "CrucibleMeter", "GenericMeter", "PriceWidget", "CornerBox", "Counter1", "Counter2",
+  "Counter3", "Counter4", "TargetedQuery", "CutsceneVignette", "CutsceneVignetteBorder", "VignetteBorder",
+  "ShardHealth", "ExpressionMeter", "ExpressionFill", "LeftTopButton", "RightTopButton", "TopTitle",
+  "AButton", "YButton", "SpellAssigning", "SpellCharging", "PlayerSpellCharger", "HenchmanSpellCharger",
+  "ExperianceDisplay", "AbilitiesBox", "ExperienceAmounts", "StrengthExperience", "SkillExperience",
+  "WillExperience", "GeneralExperience", "ExperienceOrbs", "TargetedQueryOpinion", "TargetedGift",
+  "TargetedDivorce", "TargetedMarry", "HighlightNPC", "Screenshot", "Theme",
+}
+UI.elements = { "ui elements [filter]  HUD element names from hud.bgf", function(W)
+  local f = W[3] and W[3]:lower()
+  local names = {}
+  for _, n in ipairs(HUD_ELEMENTS) do
+    if not f or n:lower():find(f, 1, true) then names[#names + 1] = n end
+  end
+  for i = 1, #names, 10 do out(table.concat(names, " ", i, math.min(i + 9, #names))) end
+end }
+UI.show = { "ui show <element>  GUI.ToggleElement(element, true) (scripts use DPadUp/Down/Right; others untested)", function(W)
+  if not W[3] then return out("usage: ui show <element>  (ui elements lists names)") end
+  try("show " .. W[3], gui("ToggleElement"), W[3], true)
+end }
+UI.hide = { "ui hide <element>  GUI.ToggleElement(element, false)", function(W)
+  if not W[3] then return out("usage: ui hide <element>  (ui elements lists names)") end
+  try("hide " .. W[3], gui("ToggleElement"), W[3], false)
+end }
+UI.fade = { "ui fade <element> in|out  GUI.FadeElementIn / FadeElementOutSlow (scripts use ShardHealth)", function(W)
+  local d = (W[4] or ""):lower()
+  if not W[3] or (d ~= "in" and d ~= "out") then return out("usage: ui fade <element> in|out") end
+  if d == "in" then try("fade in " .. W[3], gui("FadeElementIn"), W[3])
+  else try("fade out " .. W[3], gui("FadeElementOutSlow"), W[3]) end
+end }
+UI.text = { "ui text <element> <TEXT_ID>  GUI.SetGUIText(element, text id), e.g. ui text ShardHealth TEXT_CREATURE_NAME_TROLL", function(W)
+  if not (W[3] and W[4]) then return out("usage: ui text <element> <TEXT_ID>  (a string-table id, not free text)") end
+  try("text " .. W[3], gui("SetGUIText"), W[3], W[4])
+end }
+UI.meter = { "ui meter <element> <percent> [seconds]  GUI.SetMeterPercentOverTime (scripts use ShardHealth)", function(W)
+  if not (W[3] and tonumber(W[4])) then return out("usage: ui meter <element> <percent> [seconds]") end
+  try("meter " .. W[3], gui("SetMeterPercentOverTime"), W[3], tonumber(W[4]), tonumber(W[5]) or 0)
+end }
+UI.fill = { "ui fill low|med|high <r> <g> <b>  meter fill colours (0-255)", function(W)
+  local F = { low = "SetLowFillColour", med = "SetMedFillColour", high = "SetHighFillColour" }
+  local k = (W[3] or ""):lower()
+  local r, g, b = tonumber(W[4]), tonumber(W[5]), tonumber(W[6])
+  if not (F[k] and r and g and b) then return out("usage: ui fill low|med|high <r> <g> <b>") end
+  try("fill " .. k, gui(F[k]), r, g, b)
+end }
+UI.fillpct = { "ui fillpct <low%> <med%>  where the meter switches fill colour (scripts use 18 28)", function(W)
+  if not (tonumber(W[3]) and tonumber(W[4])) then return out("usage: ui fillpct <low%> <med%>") end
+  try("fill thresholds", gui("SetFillColourPercentages"), tonumber(W[3]), tonumber(W[4]))
+end }
+UI.fadecolour = { "ui fadecolour <r> <g> <b> [seconds]  fade the screen to a colour (ui fadein to undo)", function(W)
+  local r, g, b = tonumber(W[3]), tonumber(W[4]), tonumber(W[5])
+  if not (r and g and b) then return out("usage: ui fadecolour <r> <g> <b> [seconds]") end
+  try("fade to colour", gui("FadeScreenOutToColour"), r, g, b, tonumber(W[6]) or 1)
+end }
+UI.dpadcenter = { "ui dpadcenter on|off  GUI.SetDPadCenter", function(W)
+  try("dpad center", gui("SetDPadCenter"), onoff(W[3], true))
+end }
+UI.abilities = { "ui abilities on|off  experience display shows abilities", function(W)
+  try("show abilities", gui("SetExperienceShouldShowAbilities"), onoff(W[3], true))
+end }
+UI.gdc = { "ui gdc on|off  the GDC demo HUD (GUI.ShowGDCUI)", function(W)
+  try("gdc ui", gui("ShowGDCUI"), onoff(W[3], true))
+end }
+UI.suggestmode = { "ui suggestmode normal|expressions  GUI.SetHUDSuggestionMode", function(W)
+  local m = (W[3] or ""):lower()
+  local key = m == "normal" and "SUGGESTION_MODE_NORMAL" or m == "expressions" and "SUGGESTION_MODE_EXPRESSION_CHOICES_ONLY"
+  if not key then return out("usage: ui suggestmode normal|expressions") end
+  local e = rawget(_G, "EHUDSuggestionMode")
+  if type(e) ~= "table" then return out("EHUDSuggestionMode not available") end
+  try("suggestion mode " .. m, gui("SetHUDSuggestionMode"), e[key])
+end }
+UI.icon = { "ui icon add|remove [who] [type]  world icon over an entity (GUI.AddWorldIcon(name, entity, text, EWorldIconType.*))", function(W)
+  local a = (W[3] or ""):lower()
+  local e, label = need_ent(W[4] or "target")
+  if not e then return end
+  if a == "remove" then return try("remove icon " .. label, gui("RemoveWorldIcon"), "f2icon_" .. label, e) end
+  if a ~= "add" then return out("usage: ui icon add|remove [who] [type]") end
+  local t = rawget(_G, "EWorldIconType")
+  if type(t) ~= "table" then return out("EWorldIconType not available") end
+  local ty = t[(W[5] or "WI_QUEST_GIVER"):upper()]
+  if ty == nil then return out("unknown EWorldIconType " .. tostring(W[5]) .. " (dump EWorldIconType lists them)") end
+  try("add icon " .. label, gui("AddWorldIcon"), "f2icon_" .. label, e, "", ty)
+end }
+UI.timertext = { "ui timertext <seconds> <TEXT_ID>  countdown with a label (GUI.SetTimerWithText)", function(W)
+  if not (tonumber(W[3]) and W[4]) then return out("usage: ui timertext <seconds> <TEXT_ID>") end
+  try("timer", gui("SetTimerWithText"), "f2timer", tonumber(W[3]), W[4])
 end }
 
 add("ui", "ui <sub>  HUD and screen commands; ui list shows them", function(W)
