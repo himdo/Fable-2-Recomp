@@ -16,6 +16,7 @@ restart. At 16:9 every element is back at its authored place. See
 |---|---|
 | 3D view | Hor+: wider window, wider view. |
 | HUD | Edge elements move to the window edges. |
+| Book screens (pause menu, Items, Weapons, shops) | Covers at the window edges, the menu column and header beside the left cover, the page whole against the right cover. |
 | Main menu | Covers at the window edges (vanilla visible width), paper under the right cover, waiting character cards off-screen; on New Game the cards slide in to their vanilla spots. |
 | Loading screens, saving / verifying banners | The game's own 2D pieces stay 16:9 in the middle with their text inside (`fit_window_native_16x9`). |
 | Videos (Bink) | Letterboxed to 16:9 with bars while they play. |
@@ -28,8 +29,10 @@ Checked with screenshots at 4:3 (1440x1080), 16:9, 21:9 (2560x1080), 2.39:1
 | Setting | Default | Meaning |
 |---|---|---|
 | `f2 ws tune cover <f>` | 1 | Menu covers move by f x the extra width per side. |
-| `f2 ws tune page <f>` | 1.2 | Menu paper, masks and minimap markers move by f x the extra width. |
+| `f2 ws tune page <f>` | 1.2 | Book pages (text, buttons, clip masks, minimap markers) move by f x the extra width. |
 | `f2 ws tune card <f>` | 1.8 | Waiting main menu cards move by f x the extra width. |
+| `f2 ws tune bookcover <f>` | 1.2 | Book screens (pause, shops, Items): the right cover moves by f x the extra width. |
+| `f2 ws tune paper <f>` | 1.4 | Book screens: the page's paper backing moves by f x the extra width. |
 | `fit_window_quad_power` | 1 | The game's 2D quads are squeezed by ((16/9)/aspect)^this. |
 | `fit_window_text_power` | 1 | The game's 2D text x moves to the centre by ((16/9)/aspect)^this. |
 

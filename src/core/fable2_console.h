@@ -1010,7 +1010,7 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
   if (name == "pad") {
     // pad <A|B|X|Y|LB|RB|LT|RT|Up|Down|Left|Right|Start|Back|L3|R3>[+...] [frames]
     // pad stick <lx> <ly> [frames]  (-32768..32767, ly + = forward)  |  pad off
-    // Holds the input for frames (default 6), then releases it. While held
+    // Holds the input for frames (default 12: menus miss 6), then releases it. While held
     // the command queue waits, so "pad A; pad Down; pad A" are separate presses.
     static const std::pair<const char*, uint16_t> kBtn[] = {
         {"up", 0x0001}, {"down", 0x0002}, {"left", 0x0004}, {"right", 0x0008}, {"start", 0x0010},
@@ -1044,7 +1044,7 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
         if (!found) return out("pad", "unknown input '" + b + "'", true), true;
       }
     }
-    uint64_t frames = 6;
+    uint64_t frames = 12;
     if (W.size() > fi && (!parse_u(W[fi], frames) || frames == 0 || frames > 100000))
       return out("pad", "bad frame count", true), true;
     PadStore().Publish(snap);
@@ -1127,7 +1127,7 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
       // Each is a multiple of the extra width per side, so 16:9 stays vanilla.
       double v = 0;
       if (W.size() < 4 || !parse_f(W[3], v))
-        return out("ws", "usage: ws tune <cover|page|card|bookcover> <factor>  (defaults 1, 1.2, 1.8, 1.1)", true), true;
+        return out("ws", "usage: ws tune <cover|page|card|bookcover|paper> <factor>  (defaults 1, 1.2, 1.8, 1.2, 1.4)", true), true;
       std::string key;
       for (char c : W[2])
         if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') key += c;
