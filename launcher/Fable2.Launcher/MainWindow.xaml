@@ -60,6 +60,9 @@
           <TextBlock x:Name="ConfigStateText" Text="Configuration ready" FontSize="12"
                      Foreground="#FFB9D6C7" />
         </Border>
+        <Button x:Name="UpdateButton" Click="UpdateClicked" Visibility="Collapsed"
+                Style="{StaticResource SecondaryButton}" Margin="14,0,0,0"
+                Foreground="{StaticResource AccentHoverBrush}" BorderBrush="{StaticResource AccentBrush}" />
         <Button x:Name="AdvancedOptionsButton" Content="Advanced Options"
                 Click="AdvancedOptionsClicked" Style="{StaticResource SecondaryButton}"
                 Margin="14,0,0,0" />
