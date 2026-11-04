@@ -368,6 +368,49 @@ add("freecam", "freecam [on|off]  free camera", function(W)
   end, W[2])
 end)
 
+-- godmode: god mode alone still lets hits through, so also make the hero
+-- invulnerable (no damage) and unable to die.
+add("godmode", "godmode [on|off]  no damage: god mode + Health.SetAsInvulnerable + Health.SetCantDie on the hero", function(W)
+  local hero = need_hero()
+  if not hero then return end
+  local on = val(W[2]) ~= false
+  try("hero god", dbgf("SetHeroGodMode"), on)
+  try_shapes("hero invulnerable", member("Health", "SetAsInvulnerable"), { pack(hero, on) })
+  try_shapes("hero cant die", member("Health", "SetCantDie"), { pack(hero, on) })
+end)
+
+-- noclip: the engine has no working hero collision switch, so fly the free
+-- camera through walls and drop the hero where it ends up. Only the call shapes
+-- the game's scripts use: the wrong shape of these natives crashes the game.
+local function free_cam_on()
+  local g = dbgf("GetUseFreeCamera")
+  local ok, v = pcall(g or error)
+  return ok and v == true
+end
+add("noclip", "noclip [on|off]  on: fly the free camera through walls; off: put the hero on the ground below the camera", function(W)
+  local want = val(W[2])
+  if type(want) ~= "boolean" then want = not free_cam_on() end
+  if want then
+    try("noclip on (fly with the sticks, then noclip off)", dbgf("SetUseFreeCamera"), true)
+    return
+  end
+  local hero = need_hero()
+  if not hero then return end
+  local ok, p = pcall(function() return CameraManager.CameraPosition end)
+  if free_cam_on() and ok and p then
+    local x, y, z = p:GetX(), p:GetY(), p:GetZ()
+    -- Camera.GetGroundPositionAtPosition(camera, pos), as CameraFunctions calls it.
+    local gok, g = pcall(function()
+      return Camera.GetGroundPositionAtPosition(CameraManager.GetCurrentCamera().Camera, CVector3(x, y, z + 50))
+    end)
+    if gok and type(g) == "userdata" then z = g:GetZ() end
+    try("noclip off", dbgf("SetUseFreeCamera"), false)
+    warp_to(x, y, z)
+  else
+    try("noclip off", dbgf("SetUseFreeCamera"), false)
+  end
+end)
+
 add("gui", "gui [on|off]  draw the HUD", function(W)
   try("gui", dbgf("SetDrawGUI"), val(W[2]) ~= false)
 end)
@@ -1003,7 +1046,8 @@ add("stats", "stats  print every hero stat the Stats table exposes", function()
   end
   local m = get_shapes(member("Money", "Get"), { pack(hero) })
   out("gold: " .. tostring(m))
-  local d = get_shapes(member("Player", "GetDifficultyLevel"), { pack(), pack(hero) })
+  -- Never call it with no arguments: Player.GetDifficultyLevel() crashes the game.
+  local d = get_shapes(member("Player", "GetDifficultyLevel"), { pack(hero) })
   out("difficulty: " .. tostring(d))
 end)
 

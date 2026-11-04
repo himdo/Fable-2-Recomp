@@ -56,7 +56,9 @@ For `[on|off]` toggles, no argument or any value other than `off`/`false`/`no` t
 | Command | Usage | What it does | Notes |
 |---|---|---|---|
 | `god` | `god [on\|off]` | Hero god mode. `god on all` (or `god off all`) also sets henchman god mode. | Same shape as the scripts (`Debug.SetHeroGodMode`, `Debug.SetHenchmanGodMode`). Henchman is set only when the third word is `all`. |
+| `godmode` | `godmode [on\|off]` | No damage: hero god mode plus `Health.SetAsInvulnerable` and `Health.SetCantDie` on the hero. | Tested in game: `god on` alone already blocks a 10-point hit, `godmode on` also blocks a 100000-point hit; `godmode off` restores damage. |
 | `freecam` | `freecam [on\|off]` | Free camera. With no argument, flips the current state. | Same shape as the scripts (`Debug.SetUseFreeCamera`). Reads state with `Debug.GetUseFreeCamera`, which takes no arguments. |
+| `noclip` | `noclip [on\|off]` | `on`: fly the free camera through walls with the sticks. `off`: put the hero on the ground below the camera and return to the normal camera. With no argument, flips. | The engine has no working hero collision switch (`Physics.SetStaticObjectLayerBlockCharacterMovement` did not let the hero through walls), so this uses the free camera. Ground: `Camera.GetGroundPositionAtPosition(camera, pos)` from 50 m above the camera, so the hero can land on a roof. |
 | `gui` | `gui [on\|off]` | Draws the HUD. | Same shape as the scripts (`Debug.SetDrawGUI`). |
 | `names` | `names [on\|off] [filter]` | Draws entity names over entities. Optional filter. | Same shape as the scripts (`Debug.SetDrawEntityNames`, `Debug.SetDrawEntityNamesFilter`). The filter is passed as typed. |
 | `navgraph` | `navgraph [on\|off]` | Draws the navigation graph. | Same shape as the scripts (`Debug.SetDrawNavGraph`). |
@@ -375,7 +377,7 @@ Finding an address with `scan`: note your gold, `f2 scan start 1234`; spend or g
 | Command | Usage | What it does | Notes |
 |---|---|---|---|
 | `money` | `money` / `money set <n>` | Prints gold (`Money.Get(hero)`) or sets it exactly (`Money.Set`). | `gold <n>` still adds. |
-| `stats` | `stats` | Prints morality, purity, renown, strength, will, skill, fat, tan, height, title, chapter, seconds played, metres travelled, combat multiplier, affordable abilities, gold and difficulty. | Each getter is shape probed; `n/a` means neither shape worked. |
+| `stats` | `stats` | Prints morality, purity, renown, strength, will, skill, fat, tan, height, title, chapter, seconds played, metres travelled, combat multiplier, affordable abilities, gold and difficulty. | Each getter is shape probed; `n/a` means neither shape worked. Difficulty is read as `Player.GetDifficultyLevel(hero)` only: called with no arguments it crashes the game. |
 | `renown`, `addmorality`, `addpurity`, `addstrength`, `addwill`, `addskill`, `addfat`, `addtan`, `height` | `<command> <n>` | Adds to the stat. | `Stats.Modify*(hero, n)`. `morality`/`purity` (set exactly) still exist. |
 | `ability` | `ability <name> [level]` / `ability list [filter]` | Prints or sets an ability, e.g. `ability fireball 5`. | `Stats.Get/SetHeroAbilityLevel(hero, EHeroAbilityType.*, level)`. The name is any unique part of an `EHeroAbilityType` key. |
 | `title` | `title` / `title <name>` / `title list` | Prints the title, or unlocks one, e.g. `title ChickenChaser`. | `Stats.AddUnlockedTitle(hero, "ObjectInventoryHeroTitle<Name>")`; `list` shows the 22 titles the scripts use. |
