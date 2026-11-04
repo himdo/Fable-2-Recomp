@@ -43,6 +43,7 @@ Checks that the generated files in `constants/` match
 | `tools/test_manifest_collisions.py` | The check for manifest names that clash with DLL exports reports clashes and bad input, and the real manifest avoids the kernel wait names that once broke audio |
 | `tools/test_package_release.py` | The release zip holds only the listed files, symbols stay separate, checksums match, and a missing file stops packaging |
 | `tools/test_runtime_staging.py` | Debug and Release builds stage the patched SDK files, and staging fails before copying if an input is missing |
+| `tools/repro/test_normalize_pe.py` | The stable-hash step pins timestamps and the PDB GUID, so two builds come out identical. Three known bugs are marked as expected failures |
 
 To run one file:
 
