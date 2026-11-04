@@ -37,15 +37,14 @@ if(FABLE2_CODEGEN_TOOL)
     if(NOT EXISTS "${FABLE2_CODEGEN_TOOL}")
         message(FATAL_ERROR "FABLE2_CODEGEN_TOOL does not exist")
     endif()
-    # The official tool must keep its own runtime. Host headers, integration
-    # sources and libraries come from the matched source-built SDK instead.
+    # The tool only ships in the Release SDK, so a Debug host points at it here.
     set_target_properties(rex::rexglue PROPERTIES
         IMPORTED_LOCATION "${FABLE2_CODEGEN_TOOL}"
         IMPORTED_LOCATION_DEBUG "${FABLE2_CODEGEN_TOOL}"
         IMPORTED_LOCATION_RELWITHDEBINFO "${FABLE2_CODEGEN_TOOL}"
         IMPORTED_LOCATION_RELEASE "${FABLE2_CODEGEN_TOOL}")
-    # A staged package still contains the official SDK's other configurations.
-    # Reject selecting those by accident via an old/manual CMake cache.
+    # Reject selecting the other configuration's SDK by accident via an
+    # old/manual CMake cache.
     get_filename_component(FABLE2_PACKAGE_ROOT "${rexglue_DIR}/../../.." ABSOLUTE)
     set(FABLE2_SDK_PROVENANCE "${FABLE2_PACKAGE_ROOT}/renderer-sdk-provenance.json")
     if(WIN32 AND EXISTS "${FABLE2_SDK_PROVENANCE}")
@@ -354,10 +353,9 @@ add_custom_command(TARGET fable_2 POST_BUILD
 # the source plugin hasn't been built yet.
 # SDK locations, resolved relative to this repo (no hardcoded paths).
 # Override on the command line with:
-#   -DREXGLUE_SDK_ROOT=<prebuilt SDK root>    (win-amd64 layout: bin/, include/, lib/)
+#   -DREXGLUE_SDK_ROOT=<staged SDK root>      (win-amd64 layout: bin/, include/, lib/)
 #   -DREXGLUE_SDK_SOURCE=<SDK source tree>    (optional; Vulkan plugin only)
-# The defaults are created by tools/setup_sdk.cmd (prebuilt, auto-run by
-# build.cmd) and tools/setup_sdk_src.cmd (source, only for the Vulkan path).
+# build.cmd sets both, staging the SDK with tools/build_runtime_sdk.cmd.
 if(NOT DEFINED REXGLUE_SDK_ROOT)
     set(REXGLUE_SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/rexglue-sdk/win-amd64")
 endif()

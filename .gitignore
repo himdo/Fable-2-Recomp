@@ -45,7 +45,7 @@ rebuild.log
 rebuild2.log
 __pycache__/
 
-# --- Fetched/external toolchain deps (created by tools/setup_sdk*.cmd). -------
+# --- Fetched/external toolchain deps (created by tools/setup_sdk_src.cmd). -------
 # The tracked files in thirdparty/ (rexglue-sdk-local.patch,
 # rexglue-sdk-submodule-pins.txt, vulkan/, vk_video/) stay in the repo.
 thirdparty/rexglue-sdk-src/

@@ -28,35 +28,30 @@ tests\run_native_tests.cmd
 dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release
 ```
 
-Both Debug and Release builds prepare the pinned SDK, apply the patch, build D3D12 runtime
-and GPU targets, and stage matched headers, integration sources, import
-libraries and DLLs. The host is rebuilt against that staged SDK. The official
-0.10.0 codegen executable remains in a separate directory with its original
-runtime; mixing newer native DLLs into its directory is not supported.
+Both Debug and Release builds prepare the pinned SDK, apply the patch, build the
+whole SDK with the D3D12 backend, and install matched headers, integration sources,
+import libraries and DLLs. The host is rebuilt against that staged SDK. The `rexglue`
+codegen tool is built from the same source and links the same runtime.
 Patch conflicts and unexpected SDK revisions fail rather than overwrite edits.
 `build.cmd fable_2` builds the Debug host and a patched Debug SDK;
 `build.cmd -release fable_2` builds the Release pair. Debug SDK build/staging directories
 are `out/build/runtime-sdk-debug` and `out/tooling/runtime-sdk-debug/win-amd64`;
 Release keeps `out/build/runtime-sdk` and `out/tooling/runtime-sdk/win-amd64`.
-Debug stages `rexruntimed.dll` and `rexgpu-xenosd.dll`, never substitutes the
-official unpatched Debug pair, and still uses the separate official codegen tool.
+Debug stages `rexruntimed.dll` and `rexgpu-xenosd.dll`, and uses the codegen tool from
+the Release SDK, so a first Debug build builds both SDK configurations.
 After updating an existing checkout, rerun `build.cmd` rather than only building
 an old CMake cache. Keep the EXE and DLLs together in the resulting build folder.
 The startup log records `[native-build] configuration=... linked_sdk=...`.
 This identifies the host's configured SDK, not DLLs manually replaced afterward.
-CMake rejects a new staged SDK whose configuration does not match the host,
-instead of silently selecting the official package's unpatched other configuration.
+CMake rejects a new staged SDK whose configuration does not match the host.
 The unavailable upstream libmspack pin is replaced by its earlier public
 `305907723a4e7ab2018e58040059ffb5e77db837` revision. The Windows helper only
 materializes that revision's symlink blobs after validating their targets.
 
-`thirdparty/rexglue-sdk` remains the pinned source SDK and is still built for
-the runtime/renderer fixes. `out/tooling/rexglue-sdk-0.10.0` is only the official
-prebuilt codegen package, not a replacement source checkout. Keeping it outside
-the submodule avoids overwriting source/local edits: the previous download
-script could recursively delete that same directory before extraction. The
-staged native SDK also lives under `out/tooling`, keeping matched native
-headers/libraries separate from the codegen tool's own runtime dependencies.
+`thirdparty/rexglue-sdk` is the pinned source SDK and the only SDK the build uses.
+The staged SDK lives under `out/tooling`, so nothing is written over the submodule's
+source. The tool's symbols are listed in `src/system/rexruntime.def` in the fork, so a
+fork change that makes the tool import something new needs a line there as well.
 Put the published launcher beside the Release game EXE, `fable2_build.json`,
 `app-icon.png` and its matched DLLs. The previous experimental Vulkan build
 path is not the default for these fixes; do not replace this pair with DLLs
