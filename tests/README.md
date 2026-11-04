@@ -40,6 +40,7 @@ Checks that the generated files in `constants/` match
 |---|---|
 | `config/test_config_template.py` | The template in `src/core/fable2_config.cpp` and the launcher's default settings both match `config/fable2_config.toml` |
 | `tools/test_game_versions.py` | Generated version files match the catalogue, and invalid or duplicate entries are rejected |
+| `tools/test_manifest_collisions.py` | The check for manifest names that clash with DLL exports reports clashes and bad input, and the real manifest avoids the kernel wait names that once broke audio |
 | `tools/test_package_release.py` | The release zip holds only the listed files, symbols stay separate, checksums match, and a missing file stops packaging |
 | `tools/test_runtime_staging.py` | Debug and Release builds stage the patched SDK files, and staging fails before copying if an input is missing |
 
