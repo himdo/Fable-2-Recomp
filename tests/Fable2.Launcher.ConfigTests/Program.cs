@@ -295,6 +295,29 @@ try
         GameCompatibilityInspector.Classify(malformedProbe.Hash, p => HasFile(malformedProbe, p), p => HasDirectory(malformedProbe, p))), "malformed descriptor accepted");
     Console.WriteLine("Catalogue-driven allow/deny, marker, extra-locale and native-profile tests passed.");
 
+    // UpdateChecker: only a newer release from this repo counts as an update.
+    static string ReleaseJson(string tag, string page = "https://github.com/himdo/Fable-2-Recomp/releases/tag/x") =>
+        System.Text.Json.JsonSerializer.Serialize(new { tag_name = tag, html_url = page });
+    Require(UpdateChecker.FindUpdate("1.5.0", ReleaseJson("1.6.0"))?.Version == "1.6.0", "newer release was missed");
+    Require(UpdateChecker.FindUpdate("1.5.0", ReleaseJson("v1.10.0")) is not null, "versions were compared as text");
+    Require(UpdateChecker.FindUpdate("1.5.0", ReleaseJson("1.5.0")) is null, "same release counted as an update");
+    Require(UpdateChecker.FindUpdate("1.5", ReleaseJson("1.5.0")) is null, "1.5 and 1.5.0 were treated as different");
+    Require(UpdateChecker.FindUpdate("1.6.0", ReleaseJson("1.5.0")) is null, "older release counted as an update");
+    Require(UpdateChecker.FindUpdate("1.5.0-16-g55e38c4", ReleaseJson("1.5.0")) is null, "git describe version was misread");
+    Require(UpdateChecker.FindUpdate("1.5.0-16-g55e38c4", ReleaseJson("1.5.1")) is not null, "git describe version missed an update");
+    Require(UpdateChecker.FindUpdate("unknown", ReleaseJson("1.6.0")) is null, "unreadable version counted as outdated");
+    Require(UpdateChecker.FindUpdate("1.5.0", ReleaseJson("1.6.0", "https://example.com/releases/")) is null, "link outside the repo was accepted");
+    string versionFolder = Path.Combine(testDirectory, "version");
+    Directory.CreateDirectory(versionFolder);
+    Require(UpdateChecker.ReadInstalledVersion(versionFolder) is null, "missing build file gave a version");
+    File.WriteAllText(Path.Combine(versionFolder, "fable2_build.json"), "{\"profiles\":[]}");
+    Require(UpdateChecker.ReadInstalledVersion(versionFolder) is null, "local build gave a version");
+    File.WriteAllText(Path.Combine(versionFolder, "fable2_build.json"), "{\"version\":\"1.5.0\"}");
+    Require(UpdateChecker.ReadInstalledVersion(versionFolder) == "1.5.0", "packaged version was not read");
+    File.WriteAllText(Path.Combine(versionFolder, "fable2_build.json"), "{bad");
+    Require(UpdateChecker.ReadInstalledVersion(versionFolder) is null, "malformed build file gave a version");
+    Console.WriteLine("Update check tests passed.");
+
     // Fable2ConfigFile (the Advanced Options page config, fable2_config.toml).
     string advPath = Path.Combine(testDirectory, "fable2_config.toml");
     var advanced = new Fable2ConfigValues
