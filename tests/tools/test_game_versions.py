@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("generator", ROOT / "tools/generate_game_versions.py")
 generator = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(generator)

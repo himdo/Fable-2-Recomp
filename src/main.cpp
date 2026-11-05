@@ -5,6 +5,7 @@
 // F5 -> run external Lua file. Must be included before fable_2_app.h (which
 // pulls in keyboard_gamepad.h, which calls fable2::f5lua::poll_f5() per frame).
 #include "fable2_f5_lua.h"
+#include "fable2_console.h"  // opt-in developer command line
 
 #include "fable_2_app.h"
 #include "fps_meter.h"
