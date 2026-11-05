@@ -38,6 +38,7 @@
 //     Z_FINISH, becomes Z_BUF_ERROR.
 #include "fable_2_pch.h"
 
+#include <atomic>
 #include <cstring>
 #include <mutex>
 #include <unordered_map>
@@ -146,11 +147,25 @@ struct HostStream {
 
 std::mutex g_map_mutex;
 std::unordered_map<uint32_t, HostStream*> g_streams;
+// Bumped on every map change; invalidates each thread's cached lookup.
+// Scaleform inflates one byte per call, so the cache skips the lock there.
+std::atomic<uint64_t> g_streams_gen{0};
+
+struct CachedFind {
+  uint32_t strm = 0;
+  HostStream* s = nullptr;
+  uint64_t gen = ~uint64_t(0);
+};
+thread_local CachedFind t_last;
 
 HostStream* Find(uint32_t strm) {
+  const uint64_t gen = g_streams_gen.load(std::memory_order_acquire);
+  if (t_last.strm == strm && t_last.gen == gen) return t_last.s;
   std::lock_guard lock(g_map_mutex);
   auto it = g_streams.find(strm);
-  return it == g_streams.end() ? nullptr : it->second;
+  HostStream* s = it == g_streams.end() ? nullptr : it->second;
+  t_last = {strm, s, g_streams_gen.load(std::memory_order_relaxed)};
+  return s;
 }
 void Drop(uint32_t strm) {
   HostStream* s = nullptr;
@@ -160,6 +175,7 @@ void Drop(uint32_t strm) {
     if (it != g_streams.end()) {
       s = it->second;
       g_streams.erase(it);
+      g_streams_gen.fetch_add(1, std::memory_order_release);
     }
   }
   delete s;
@@ -299,6 +315,7 @@ void Init2(const Zlib& z, PPCContext& ctx, uint8_t* base) {
   {
     std::lock_guard lock(g_map_mutex);
     g_streams[strm] = s;
+    g_streams_gen.fetch_add(1, std::memory_order_release);
   }
 }
 
