@@ -38,6 +38,7 @@
 // Re-enable to re-measure the frame pacing:
 // #include "fps_probe.h"
 #include "keyboard_gamepad.h"
+#include "menu_items.h"
 // The console pad (f2 pad) uses the remote-pad driver in every build.
 #include "remote_gamepad_driver.h"
 #ifdef FABLE2_REMOTE_CONTROL
@@ -146,6 +147,11 @@ class Fable2App : public rex::ReXApp {
 
   void OnPostSetup() override {
     fable2::branding::Apply(window());
+    fable2::menu::SetQuitHandler([this] {
+      app_context().CallInUIThread([this] {
+        if (window()) window()->RequestClose();
+      });
+    });
     // Render at the window's aspect ratio (src/core/fable2_fit_window.h).
     fable2::fitwindow::Install(runtime()->memory(), window());
     // Hero/dog black-texture fix (see plans/hero-dog-texture-readback.md).
