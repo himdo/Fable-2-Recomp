@@ -1,20 +1,83 @@
-# Source-only tests
+# Tests
 
-From the repository root:
+These tests check the launcher, the build tools and some runtime code. None of
+them need game files, a GPU or an audio device.
 
-```cmd
+## Quick start
+
+From the repository root, with Python 3.11 or later and nothing else to install:
+
+```sh
 python tools/generate_game_versions.py --check
-python -m unittest discover -s tests -p test_*.py
-dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release
-tests\run_native_tests.cmd
+python -m unittest discover -s tests -p "test_*.py"
 ```
 
-Python tests also cover Debug/Release SDK staging with synthetic
-files, including failure when Debug DLLs or import libraries are missing.
-The native runner needs a VS x64 developer shell with Clang and the patched
-SDK source. An optional first argument selects that source tree. It checks
-audio pacing, host FPS limiting (including 144), FPS metering and the version
-catalogue/content guards in compatible and both single-edition configurations.
-Test executables go under `out/tests`; no game files or audio/GPU device are
-needed. Original XEX paths can optionally be passed to the native verifier,
-and a dump path to the launcher tests, for local checks. Never commit these inputs.
+If `python` isn't found, use `python3`. Keep the quotes around `"test_*.py"`,
+because zsh rejects the pattern without them.
+
+## The test suites
+
+| Suite | Command | Needs | In CI? |
+|---|---|---|---|
+| Version check | `python tools/generate_game_versions.py --check` | Python | Yes |
+| Python tests | `python -m unittest discover -s tests -p "test_*.py"` | Python 3.11+ | Yes |
+| Launcher tests | `dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release` | .NET 8 SDK | Yes |
+| Native tests | `tests\run_native_tests.cmd` | Windows, a VS x64 developer shell, Clang and the patched SDK source | No |
+
+CI runs on Windows.
+
+## What each suite checks
+
+### Version check
+
+Checks that the generated files in `constants/` match
+`constants/game_versions.json`. If it reports stale constants, run it without
+`--check` to regenerate them, then commit the result.
+
+### Python tests
+
+| File | What it checks |
+|---|---|
+| `config/test_config_template.py` | The template in `src/core/fable2_config.cpp` and the launcher's default settings both match `config/fable2_config.toml` |
+| `tools/test_game_versions.py` | Generated version files match the catalogue, and invalid or duplicate entries are rejected |
+| `tools/test_package_release.py` | The release zip holds only the listed files, symbols stay separate, checksums match, and a missing file stops packaging |
+| `tools/test_runtime_staging.py` | Debug and Release builds stage the patched SDK files, and staging fails before copying if an input is missing |
+
+To run one file:
+
+```sh
+python -m unittest discover -s tests -p "test_config_template.py"
+```
+
+These tests use fake files in temporary folders, and their folders mirror the
+code they cover. A new `test_*.py` file is picked up automatically, but a new
+subfolder needs an empty `__init__.py`, or its tests are silently skipped.
+
+### Launcher tests
+
+`Fable2.Launcher.ConfigTests/Program.cs` covers the launcher's settings files,
+graphics and FPS options, dropdown styling, game version checks and ISO
+extraction from a synthetic disc image. It prints a line for each group that
+passes. The project targets plain .NET 8, but CI only runs it on Windows.
+
+### Native tests
+
+`native/` holds C++ tests for audio pacing, FPS limiting, FPS metering,
+keyboard and mouse map parsing, and the version catalogue in each build profile.
+Test executables go under `out/tests`.
+
+The runner uses `thirdparty/rexglue-sdk` by default, and an optional first
+argument selects a different SDK source folder. If that folder is empty, run
+`git submodule update --init thirdparty/rexglue-sdk` first.
+
+## Optional: checking your own game files
+
+You can point these tests at your own files for local checks. Never commit
+these files.
+
+```cmd
+dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release -- <game folder>
+out\tests\runtime-unit-tests\xex-goty-compatible.exe <path to default.xex>
+```
+
+Run `tests\run_native_tests.cmd` first to build the second one.
