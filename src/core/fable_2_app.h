@@ -339,10 +339,12 @@ class Fable2App : public rex::ReXApp {
     };
     const fable2::config::Values& cfg = fable2::config::Get();
     // XLanguage profile default; config, environment and CLI still win.
-    std::string profile_hash;
-    if (fable2::xexverify::Sha256File(game_data_root() / "default.xex", profile_hash) &&
-        fable2::xexverify::IsAcceptedHash(profile_hash)) {
-      const auto* version = fable2::versions::Find(profile_hash);
+    // Check() shares the verified-hash marker with OnLoadXexImage, so the
+    // 21 MB hash pass runs at most once per changed default.xex.
+    const auto profile =
+        fable2::xexverify::Check(game_data_root() / "default.xex", XexHashMarker());
+    if (fable2::xexverify::IsAcceptedHash(profile.actual_hash)) {
+      const auto* version = fable2::versions::Find(profile.actual_hash);
       seed_cvar("user_language", std::to_string(version->language));
       REXSYS_INFO("[build-profile] detected {}", version->name);
     }
@@ -433,9 +435,7 @@ class Fable2App : public rex::ReXApp {
     std::string host_tail{tail};
     std::replace(host_tail.begin(), host_tail.end(), '\\', '/');
     const std::filesystem::path xex = game_data_root() / host_tail;
-    std::filesystem::path cache = cache_root();
-    if (cache.empty()) cache = game_data_root() / "cache";
-    const std::filesystem::path marker = cache / "default.xex.sha256";
+    const std::filesystem::path marker = XexHashMarker();
 
     // --skipHash (cvar, see main.cpp): compute and log the default.xex hash,
     // but do not let a mismatch (or an unreadable file) block the launch.
@@ -580,6 +580,12 @@ class Fable2App : public rex::ReXApp {
       }
     }
   }
+  std::filesystem::path XexHashMarker() {
+    std::filesystem::path cache = cache_root();
+    if (cache.empty()) cache = game_data_root() / "cache";
+    return cache / "default.xex.sha256";
+  }
+
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     // fable2::deadbeef_overlay::register_overlay(drawer);
   }
