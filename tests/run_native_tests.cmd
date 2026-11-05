@@ -16,7 +16,7 @@ clang++ -std=c++23 -I"%SDK%\include" "%~dp0native\test_guest_frame_meter.cpp" -o
 rem Keyboard/mouse -> gamepad map parsing (links the SDK's real keybinds.cpp;
 rem the extra -I dirs are the SDK's own thirdparty headers pulled in by its cvar
 rem and ppc/context includes).
-clang++ -std=c++23 -I"%SDK%\include" -I"%SDK%\thirdparty\fmt\include" -I"%SDK%\thirdparty\simde" -I"%SDK%\thirdparty\spdlog\include" -I"%ROOT%" "%~dp0native\test_keyboard_gamepad_map.cpp" "%SDK%\src\ui\keybinds.cpp" -o "%OUT%\map.exe" || exit /b 1
+clang++ -std=c++23 -I"%SDK%\include" -I"%SDK%\thirdparty\fmt\include" -I"%SDK%\thirdparty\simde" -I"%SDK%\thirdparty\spdlog\include" -I"%ROOT%" -I"%ROOT%\src\core" -I"%ROOT%\src\input" "%~dp0native\test_keyboard_gamepad_map.cpp" "%SDK%\src\ui\keybinds.cpp" -o "%OUT%\map.exe" || exit /b 1
 "%OUT%\map.exe" || exit /b 1
 for %%P in (goty-compatible goty-us-eu goty-german) do (
   clang++ -std=c++23 -DFABLE2_BUILD_PROFILE=\"%%P\" "%~dp0native\test_xex_verify.cpp" -o "%OUT%\xex-%%P.exe" || exit /b 1
