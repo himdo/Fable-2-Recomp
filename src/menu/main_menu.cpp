@@ -1,9 +1,8 @@
 // Adds the recomp's items to the front-end main menu.
 //
-// sub_826CA6E0 builds the main menu: one ProcessAndProcessAndProcess2440_826CB808
-// call per item, which fires the ExpandableMenu Lua SpawnButton event. When an
-// item is chosen, ProcessAndProcessAndProcess2446_826C81A0 receives an event
-// whose first word points at the item's name string.
+// FrontMenu_Populate builds the main menu with one ExpandableMenu_SpawnButton
+// call per item. When an item is chosen, FrontMenu_HandleEvent receives an
+// event whose first word points at the item's name string.
 
 #include "fable_2_pch.h"
 
@@ -16,7 +15,7 @@
 
 extern "C" void ConstructRefCounted_8222CF18(PPCContext& ctx, uint8_t* base);
 extern "C" void DestructRefCounted_82214F08(PPCContext& ctx, uint8_t* base);
-extern "C" void ProcessAndProcessAndProcess2440_826CB808(PPCContext& ctx, uint8_t* base);
+extern "C" void ExpandableMenu_SpawnButton(PPCContext& ctx, uint8_t* base);
 
 namespace fable2::menu {
 namespace {
@@ -71,8 +70,8 @@ void DestructString(PPCContext& ctx, uint8_t* base, uint32_t slot) {
   DestructRefCounted_82214F08(ctx, base);
 }
 
-// Mirrors one add-item call in sub_826CA6E0. The label is handed over as the
-// already-localized wide string the game would get from its string table.
+// Mirrors one add-item call in FrontMenu_Populate. The label is handed over as
+// the already-localized wide string the game would get from its string table.
 void AddItem(PPCContext& ctx, uint8_t* base, uint32_t menu, const MenuItem& item) {
   const uint32_t caller_sp = ctx.r1.u32;
   const uint32_t sp = caller_sp - kFrameSize;
@@ -98,7 +97,7 @@ void AddItem(PPCContext& ctx, uint8_t* base, uint32_t menu, const MenuItem& item
   ctx.r8.u64 = 0;
   ctx.r9.u64 = kMenuButtonEventType;
   ctx.r10.u64 = REX_LOAD_U32(menu + 20);
-  ProcessAndProcessAndProcess2440_826CB808(ctx, base);
+  ExpandableMenu_SpawnButton(ctx, base);
 
   DestructString(ctx, base, sp + kParentSlot);
   DestructString(ctx, base, sp + kIconSlot);
@@ -140,10 +139,10 @@ void QuitGame() {
 
 }  // namespace fable2::menu
 
-extern "C" void __imp__sub_826CA6E0(PPCContext& ctx, uint8_t* base);
-extern "C" void sub_826CA6E0(PPCContext& ctx, uint8_t* base) {
+extern "C" void __imp__FrontMenu_Populate(PPCContext& ctx, uint8_t* base);
+extern "C" void FrontMenu_Populate(PPCContext& ctx, uint8_t* base) {
   const uint32_t menu = ctx.r3.u32;
-  __imp__sub_826CA6E0(ctx, base);
+  __imp__FrontMenu_Populate(ctx, base);
   const uint64_t result = ctx.r3.u64;
   for (const auto& item : fable2::menu::kMainMenuItems) {
     fable2::menu::AddItem(ctx, base, menu, item);
@@ -151,11 +150,11 @@ extern "C" void sub_826CA6E0(PPCContext& ctx, uint8_t* base) {
   ctx.r3.u64 = result;
 }
 
-extern "C" void __imp__ProcessAndProcessAndProcess2446_826C81A0(PPCContext& ctx, uint8_t* base);
-extern "C" void ProcessAndProcessAndProcess2446_826C81A0(PPCContext& ctx, uint8_t* base) {
+extern "C" void __imp__FrontMenu_HandleEvent(PPCContext& ctx, uint8_t* base);
+extern "C" void FrontMenu_HandleEvent(PPCContext& ctx, uint8_t* base) {
   if (const auto* item = fable2::menu::FindChosenItem(base, ctx.r4.u32)) {
     item->activate();
     return;
   }
-  __imp__ProcessAndProcessAndProcess2446_826C81A0(ctx, base);
+  __imp__FrontMenu_HandleEvent(ctx, base);
 }
