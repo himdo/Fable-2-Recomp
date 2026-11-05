@@ -16,6 +16,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, string> _values = new(StringComparer.OrdinalIgnoreCase);
     private string? _gameDirectory;
     private string? _executableDirectory;
+    private string? _updatePage;
     private bool _loading = true;
 
     // Advanced Options page state.
@@ -50,6 +51,25 @@ public partial class MainWindow : Window
         DetectGameDirectory();
         _loading = false;
         RefreshSummary();
+        Loaded += async (_, _) => await ShowAvailableUpdateAsync();
+    }
+
+    private async Task ShowAvailableUpdateAsync()
+    {
+        string? installed = UpdateChecker.ReadInstalledVersion(AppContext.BaseDirectory);
+        if (installed is null) return;
+        AvailableUpdate? update = await UpdateChecker.CheckAsync(installed);
+        if (update is null) return;
+        _updatePage = update.PageUrl;
+        UpdateButton.Content = $"Update available: {update.Version}";
+        UpdateButton.ToolTip = "Open the release page";
+        UpdateButton.Visibility = Visibility.Visible;
+    }
+
+    private void UpdateClicked(object sender, RoutedEventArgs e)
+    {
+        if (_updatePage is not null)
+            Process.Start(new ProcessStartInfo(_updatePage) { UseShellExecute = true });
     }
 
     private void SetDefaults()
