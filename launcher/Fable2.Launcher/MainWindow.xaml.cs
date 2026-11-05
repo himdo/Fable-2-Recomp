@@ -83,6 +83,10 @@ public partial class MainWindow : Window
             foreach (var option in Constants.GraphicsOptions.FrameLimits)
                 FrameLimitCombo.Items.Add(new ComboBoxItem { Tag = option.Value, Content = option.Label });
         SelectByTag(FrameLimitCombo, "0");
+        if (HostFrameLimitCombo.Items.Count == 0)
+            foreach (var option in Constants.GraphicsOptions.HostFrameLimits)
+                HostFrameLimitCombo.Items.Add(new ComboBoxItem { Tag = option.Value, Content = option.Label });
+        SelectByTag(HostFrameLimitCombo, "0");
         VsyncCheck.IsChecked = true;
     }
 
@@ -152,6 +156,7 @@ public partial class MainWindow : Window
             SelectByTag(AnisotropicCombo, GetValue("anisotropic_override", "5"));
             SelectByTag(AntiAliasingCombo, Unquote(GetValue("swap_post_effect", "none")));
             SelectByTag(FrameLimitCombo, GetValue("frame_limit", "0"));
+            SelectByTag(HostFrameLimitCombo, GetValue("host_frame_limit", "0"));
 
             bool fullscreen = ParseBool(GetValue("fullscreen", "true"), true);
             bool exclusive = ParseBool(GetValue("fullscreen_exclusive", "false"), false);
@@ -195,7 +200,8 @@ public partial class MainWindow : Window
         return GraphicsSettings.Create(SelectedTag(ResolutionCombo) ?? "1080p",
             SelectedTag(RenderScaleCombo) ?? "2", SelectedTag(AnisotropicCombo) ?? "5",
             SelectedTag(AntiAliasingCombo) ?? "none", SelectedTag(DisplayModeCombo) ?? "borderless",
-            VsyncCheck.IsChecked == true, SelectedTag(FrameLimitCombo) ?? "0");
+            VsyncCheck.IsChecked == true, SelectedTag(FrameLimitCombo) ?? "0",
+            SelectedTag(HostFrameLimitCombo) ?? "0");
     }
 
     private bool SaveConfiguration()

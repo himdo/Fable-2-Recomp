@@ -70,6 +70,17 @@ try
         RequireThrows(() => GraphicsSettings.Create("1080p", "2", "4", "none", "windowed", true, invalid), "unsupported FPS preset accepted");
     Require(GraphicsOptions.FrameLimits.Any(option => option.Value == "144"), "144 FPS preset missing");
     Console.WriteLine("30/60/120/144/165/240/unlimited mapping, validation and persistence passed.");
+    Require(GraphicsSettings.Create("1080p", "2", "4", "none", "windowed", true)["host_frame_limit"] == "0", "host FPS limit is not off by default");
+    foreach (string cap in GraphicsOptions.HostFrameLimits.Select(option => option.Value))
+    {
+        var hostCapped = GraphicsSettings.Create("1080p", "2", "4", "none", "windowed", true, "60", cap);
+        Require(hostCapped["host_frame_limit"] == cap && hostCapped["frame_limit"] == "60", "host FPS limit mapping failed");
+        LauncherConfigFile.WriteValues(configPath, hostCapped, GraphicsSettings.ManagedKeys);
+        Require(LauncherConfigFile.ReadValues(configPath)["host_frame_limit"] == cap, "host FPS limit roundtrip failed");
+    }
+    foreach (string invalid in new[] { "-1", "241", "61", "unknown" })
+        RequireThrows(() => GraphicsSettings.Create("1080p", "2", "4", "none", "windowed", true, "0", invalid), "unsupported host FPS preset accepted");
+    Console.WriteLine("Host FPS limit mapping, validation and persistence passed.");
 
     var preferred = GraphicsSettings.Create("4k", "3", "4", "fxaa", "windowed", false, "60");
     string preferencesPath = Path.Combine(testDirectory, "launcher-settings.toml");

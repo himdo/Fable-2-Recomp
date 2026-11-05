@@ -78,6 +78,11 @@ the old 60-Hz guest pacing therefore held it at 30 even with a 60-FPS limit.
 disables it for 60/unlimited independently of presentation VSync. The limiter
 uses a private high-resolution waitable timer on Windows, with a standard wait
 fallback, and does not change the guest clock or advertised video mode.
+`host_frame_limit` caps presents to the display (0 disables it, SDK range
+0–1000; the launcher offers the same presets). It skips presents rather than
+waiting, so the guest keeps its own rate, and counts every present, including
+UI repaints between guest frames. This is the rate external overlays such as
+NVIDIA's report.
 F3 counts guest swaps in Release, averaged over a short window and including
 stalls; it does not count monitor refreshes or establish unique rendered frames.
 

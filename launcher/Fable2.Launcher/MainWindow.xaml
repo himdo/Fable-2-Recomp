@@ -151,9 +151,16 @@
               </StackPanel>
 
               <StackPanel Margin="0,18,0,0">
-                <TextBlock Text="FPS LIMIT" Style="{StaticResource FieldLabel}" />
+                <TextBlock Text="GUEST FPS LIMIT" Style="{StaticResource FieldLabel}" />
                 <ComboBox x:Name="FrameLimitCombo" SelectionChanged="SettingChanged" />
                 <TextBlock Text="Requires the matching runtime. VSync may impose a lower limit; gameplay timing above 60 FPS is not fully verified."
+                           FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,0" TextWrapping="Wrap" />
+              </StackPanel>
+
+              <StackPanel Margin="0,18,0,0">
+                <TextBlock Text="HOST FPS LIMIT" Style="{StaticResource FieldLabel}" />
+                <ComboBox x:Name="HostFrameLimitCombo" SelectionChanged="SettingChanged" />
+                <TextBlock Text="Caps how often frames reach your display, without slowing the game. Requires the matching runtime."
                            FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,0" TextWrapping="Wrap" />
               </StackPanel>
 
