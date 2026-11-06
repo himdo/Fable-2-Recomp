@@ -60,7 +60,7 @@ class Fable2ControlTests(unittest.TestCase):
     @unittest.expectedFailure
     def test_rt_in_buttons_build_state(self):
         # Known issue: the game accepts RT as a button name, doesn't pull the trigger and still replies ok.
-        # Found by reading the game code, not on a running game. A game-side fix would replace this test.
+        # Confirmed on a running Debug build. A game-side fix would replace this test.
         args = make_args(buttons="A,RT")
         expected = {**BASE_STATE, "buttons": ["A"], "triggers": {"RT": 255}}
         response = control.build_state(args)
