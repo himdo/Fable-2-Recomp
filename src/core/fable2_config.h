@@ -200,6 +200,12 @@ struct Values {
   // at random, which shows as flickering patches on the dog. Seeds the SDK
   // cvars depth_bias_shader(_units) in Fable2App. false = no bias.
   bool dog_fur_depth_bias = true;
+  // [patches] terrain_tess_cpu: Terrain tessellation on the CPU (SDK cvar terrain_tess_cpu).
+  bool terrain_tess_cpu = true;
+  // [patches] skinning_cpu: Memexport skinning on the CPU (SDK cvar skinning_cpu).
+  bool skinning_cpu = true;
+  // [patches] faster_render_targets: Narrower EDRAM transfers (SDK cvars execute_unclipped_draw_vs_on_cpu, skip_depth_clear_transfers).
+  bool faster_render_targets = true;
   // [perf] - hot-function override tuning.
   // hotfunc_yield_every: NtYieldExecution batching factor for the hotfunc
   // overrides (see src/core/hotfunc/hotfunc_yield.h). Every Nth call does
@@ -207,6 +213,9 @@ struct Values {
   // original (yield every call), 0 = never yield. Larger = fewer context
   // switches, less frequent CPU rotation to other guest threads.
   int32_t hotfunc_yield_every = 1;
+  // [perf] refresh_gpu_memory_each_frame: false seeds the SDK cvar
+  // clear_memory_page_state off (see the config file).
+  bool refresh_gpu_memory_each_frame = false;
 };
 
 // Load the config from `path`.

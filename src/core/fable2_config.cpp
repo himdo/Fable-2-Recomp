@@ -239,6 +239,29 @@ hero_dog_texture_readback = false
 # Default: true
 dog_fur_depth_bias = true
 
+# Terrain Tessellation on CPU (SDK cvar terrain_tess_cpu): compute the terrain's
+# tessellation factors on the CPU so the game does not wait every frame for the
+# GPU to read them back. The draw still runs on the GPU. D3D12 only.
+# false = wait for the GPU, as original.
+# Default: true
+terrain_tess_cpu = true
+
+# Skinning on CPU (SDK cvar skinning_cpu): compute the vertices the game skins
+# with memexport shader F6C546D6C2645541 on the CPU, which removes another wait
+# for the GPU every frame. The draw still runs on the GPU. D3D12 only.
+# false = wait for the GPU, as original.
+# Default: true
+skinning_cpu = true
+
+# Faster Render Targets (SDK cvars execute_unclipped_draw_vs_on_cpu and
+# skip_depth_clear_transfers): works out how far full-screen draws really reach
+# and skips copying depth that a clear is about to overwrite. Most of the gain is
+# at higher internal resolutions: 33 to about 57 FPS at 2x in a busy town. Also
+# removes the purple bar at the bottom of the screen. D3D12 only.
+# false = as the SDK defaults.
+# Default: true
+faster_render_targets = true
+
 [perf]
 # NtYieldExecution batching for the hot-function overrides (see
 # src/core/hotfunc/hotfunc_yield.h): every Nth guest yield does the real
@@ -248,6 +271,14 @@ dog_fur_depth_bias = true
 # every call); 0 = never yield; larger = fewer context switches.
 # Default: 1
 hotfunc_yield_every = 1
+
+# Refresh GPU Memory Each Frame (SDK cvar clear_memory_page_state): at the end of
+# every frame the SDK forgets which guest memory it has already copied to the
+# GPU, so everything the next frame uses is copied again. It is a safety net for
+# CPU writes the page protection cannot see. With it off, 2x went from 34 to 38
+# FPS indoors with nothing missing on screen in testing.
+# false = trust the write tracking. Default: false
+refresh_gpu_memory_each_frame = false
 )TOML_EOF";
 
 std::string_view TypeName(toml::node_type t) {
@@ -426,6 +457,15 @@ bool Load(const std::filesystem::path& path) {
     values.dog_fur_depth_bias =
         Read<bool>(patches_table, "patches", "dog_fur_depth_bias", "boolean",
                    values.dog_fur_depth_bias);
+    values.terrain_tess_cpu =
+        Read<bool>(patches_table, "patches", "terrain_tess_cpu", "boolean",
+                   values.terrain_tess_cpu);
+    values.skinning_cpu =
+        Read<bool>(patches_table, "patches", "skinning_cpu", "boolean",
+                   values.skinning_cpu);
+    values.faster_render_targets =
+        Read<bool>(patches_table, "patches", "faster_render_targets", "boolean",
+                   values.faster_render_targets);
   }
   const toml::path perf_path{"perf"};
   const auto perf = root[perf_path];
@@ -434,6 +474,9 @@ bool Load(const std::filesystem::path& path) {
     values.hotfunc_yield_every = static_cast<int32_t>(Read<int64_t>(
         perf_table, "perf", "hotfunc_yield_every", "integer",
         values.hotfunc_yield_every));
+    values.refresh_gpu_memory_each_frame = Read<bool>(
+        perf_table, "perf", "refresh_gpu_memory_each_frame", "boolean",
+        values.refresh_gpu_memory_each_frame);
   }
 
   g_values = values;
