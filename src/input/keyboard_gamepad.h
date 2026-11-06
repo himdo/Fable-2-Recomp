@@ -284,7 +284,8 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
       unlock_down_prev_ = unlock_down;
     }
 
-    if (focused) {
+    // While the debug menu is open, clicks and typing belong to the menu.
+    if (focused && !console_open_) {
       for (const auto& m : bindings_) {
         if (has_unlock_key && m.vk == unlock_vk) continue;  // not gamepad input
         if ((GetAsyncKeyState(m.vk) & 0x8000) == 0) continue;  // not held
