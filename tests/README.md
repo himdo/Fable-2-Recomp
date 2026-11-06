@@ -43,6 +43,7 @@ Checks that the generated files in `constants/` match
 | `tools/test_game_versions.py` | Generated version files match the catalogue, and invalid or duplicate entries are rejected |
 | `tools/test_package_release.py` | The release zip holds only the listed files, its build info is stamped with the version, symbols stay separate, checksums match, and a missing file stops packaging |
 | `tools/test_runtime_staging.py` | Debug and Release builds stage the patched SDK files, and staging fails before copying if an input is missing |
+| `tools/test_make_hotfunc_overrides.py` | The override generator extracts and transforms functions correctly and never overwrites a hand-tuned file. Four known issues are marked as expected failures |
 
 To run one file:
 
