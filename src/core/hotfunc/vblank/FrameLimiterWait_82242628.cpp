@@ -27,9 +27,9 @@
 //
 // Deliberate deviation from the guest: the guest loop back-edges to
 // GpuProgressCheck with no delay between iterations. This version interposes
-// a short host (Windows) sleep when still not ready, so the emulated loop
-// does not hammer the counter as aggressively. The sleep touches no guest
-// state, so the register-state invariants above still hold.
+// a short CPU pause when still not ready, so the emulated loop does not
+// hammer the counter as aggressively. The pause touches no guest state, so
+// the register-state invariants above still hold.
 // Guest structure (addresses are the guest instructions):
 //   0x82242628  prologue: save r29/lr, 144-byte frame, r31=limit (r3),
 //               r30=now (r4), r29=flag (r5).
@@ -80,9 +80,9 @@ constexpr uint32_t kArgProgress = 92;
 constexpr uint32_t kArgProgressCopy = 96;
 constexpr uint32_t kArgTimebase = 100;
 
-// Host pause between not-ready iterations of the wait loop, in nanoseconds.
+// PAUSE instructions between not-ready iterations of the wait loop.
 // (The guest loop has no delay; on hardware this is a tight spin.)
-constexpr uint32_t kPauseNs = 500;
+constexpr int kPauseSpins = 32;
 
 // Guest return addresses (the instruction after each bl).
 constexpr uint32_t kRetSaveGpr = 0x82242630;
@@ -160,16 +160,10 @@ void BuildArgBlock(PPCContext& ctx, uint8_t* base) {
   ctx.cr6.compare<uint32_t>(ctx.r11.u32, ctx.r10.u32, ctx.xer);
 }
 
-// Host pause of a couple of hundred nanoseconds to a microsecond. Uses
-// WaitForSingleObjectEx with a NULL handle rather than Sleep / std::
-// this_thread::sleep_for because those round to scheduler ticks (~15 ms
-// without timeBeginPeriod) and would overshoot the frame deadline; the
-// waitable-timer path is sub-millisecond accurate. Touches no guest state.
+// Sleep and waits round to scheduler ticks and would overshoot the frame
+// deadline, so spin with PAUSE instead. Touches no guest state.
 void SpinPause() {
-  // WaitForSingleObjectEx expects 100-ns units; 0 means "no timeout", so
-  // bump anything below that to one 100-ns quantum.
-  const uint32_t hundredNs = kPauseNs / 100;
-  WaitForSingleObjectEx(nullptr, hundredNs > 0 ? hundredNs : 1, TRUE);
+  for (int i = 0; i < kPauseSpins; ++i) YieldProcessor();
 }
 
 // addi r1,r1,144; b __restgprlr_29 (0x82242714).

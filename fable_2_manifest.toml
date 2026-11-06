@@ -47049,9 +47049,13 @@ name = "ProcessAndProcessAndProcess2438_82CA7568"
 [entrypoint.functions."0x82407A98"]
 name = "ProcessAndProcessAndProcess2439_82407A98"
 
-# Process a value by checking its state and driving many sub-operations (two thousand four hundred and forty-first form). It takes a value (a), a value (b), a value (c), a value (d), a value (e), a value (f), a value (g), and a value (h); it checks the value's state, and drives many sub-operations (ConstructRefCounted, DestructRefCounted, Free_SizeBucketed_Thunk, ProcessAndVcallAndProcess16, and more) based on the result. This is the "process this data" routine (two thousand four hundred and forty-first form), part of the 0x826CB process cluster. 361 lines. 7 callees. 2 callers (sub_826CA6E0 and sub_826CA0B0).
+# Adds one item to an ExpandableMenu: sets the String1-4 (name, localized
+# text, icon, parent) and Float1-4 (IDs, event type) attributes on the menu
+# element and fires the Lua g_Menu:SpawnButton() event. r3 = menu, r4 = name,
+# r5 = localized text, r6 = icon, r7 = parent ("Root" for top level),
+# r8 = IDLow | IDHigh << 16, r9 = event type.
 [entrypoint.functions."0x826CB808"]
-name = "ProcessAndProcessAndProcess2440_826CB808"
+name = "ExpandableMenu_SpawnButton"
 
 # Process a value by checking its state and driving sub-operations (two thousand four hundred and forty-second form). It takes a value (a) and a value (b); it checks the value's state, and drives sub-operations (GetGlobalPointer, ProcessAndDispatchException, and more) based on the result. This is the "process this data" routine (two thousand four hundred and forty-second form), part of the 0x82238 process cluster. 43 lines. 2 callees. 1 caller (ProcessAndProcessAndProcess1829).
 [entrypoint.functions."0x82238740"]
@@ -47073,9 +47077,11 @@ name = "ProcessAndProcessAndProcess2444_8259D510"
 [entrypoint.functions."0x8259D7C0"]
 name = "ProcessAndProcessAndProcess2445_8259D7C0"
 
-# Process a structure by checking its state and driving many sub-operations (two thousand four hundred and forty-seventh form). It takes a value (a) and a structure (b: fields at b->4 and b->8); it checks the structure's state, and drives many sub-operations (ConstructRefCounted, DestructRefCounted, CopyAssign_RefCounted, ProcessAndComputeFloat, ProcessAndReplaceRefCounted, ProcessAndVcallAndClear3, ReleaseGlobalRef, StrCmp_Signed, and many others) based on the result. This is the "process this data" routine (two thousand four hundred and forty-seventh form), part of the 0x826C8 process cluster. 2077 lines. 34 callees. 0 callers.
+# Event handler of the front-end (main) menu. For a chosen item, the event's
+# first word points at the item's name string, which it compares against
+# "New Game", "Load Game" and the other item names to pick the action.
 [entrypoint.functions."0x826C81A0"]
-name = "ProcessAndProcessAndProcess2446_826C81A0"
+name = "FrontMenu_HandleEvent"
 
 # Process a structure by checking its state and driving many sub-operations (two thousand four hundred and forty-eighth form). It takes a structure (a: fields at a->108, a->180, and a->80); it checks the structure's state, and drives many sub-operations (ReleaseGlobalRef, ProcessAndDecrementRefCount, ProcessAndDecrementDispose, ProcessAndIncrementAndProcess, ProcessAndIncrementCounter, ProcessAndReplaceValue, ProcessAndResolveHandler, ProcessAndProcessAndProcess2256, and more) based on the result. This is the "process this data" routine (two thousand four hundred and forty-eighth form), part of the 0x82818 process cluster. 371 lines. 10 callees. 1 caller (ProcessAndProcessAndProcess814).
 [entrypoint.functions."0x82818728"]
@@ -47540,6 +47546,11 @@ name = "ProcessAndProcessAndProcess2560_8322BB68"
 # ~twice per physical press (once per menu input element).
 [entrypoint.functions."0x82188F20"]
 name = "FrontMenu_PressBitDispatch"
+
+# Adds the front-end (main) menu's items (New Game, Load Game, Downloadable
+# Content, Language, Subtitles) with ExpandableMenu_SpawnButton.
+[entrypoint.functions."0x826CA6E0"]
+name = "FrontMenu_Populate"
 
 # Process a structure by checking its state (two thousand four hundred and one hundred and thirteenth form). It takes a structure (a: field at a->12) and a flag (b); it checks the structure's state, and sets or clears a bit in the structure based on the flag. This is the "process this data" routine (two thousand four hundred and one hundred and thirteenth form), part of the 0x82C5C process cluster. 15 lines. 0 callees. 3 callers (sub_82C5A780, sub_82C5CC60, and sub_82C5A950).
 [entrypoint.functions."0x82C5C748"]
