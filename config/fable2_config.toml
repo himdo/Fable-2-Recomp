@@ -207,6 +207,15 @@ hero_dog_texture_readback = false
 # Default: true
 dog_fur_depth_bias = true
 
+# Faster Render Targets (SDK cvars execute_unclipped_draw_vs_on_cpu and
+# skip_depth_clear_transfers): works out how far full-screen draws really reach
+# and skips copying depth that a clear is about to overwrite. Most of the gain is
+# at higher internal resolutions: 33 to about 57 FPS at 2x in a busy town. Also
+# removes the purple bar at the bottom of the screen. D3D12 only.
+# false = as the SDK defaults.
+# Default: true
+faster_render_targets = true
+
 [perf]
 # NtYieldExecution batching for the hot-function overrides (see
 # src/core/hotfunc/hotfunc_yield.h): every Nth guest yield does the real
