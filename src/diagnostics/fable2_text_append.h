@@ -649,19 +649,7 @@ inline void append_segment(PPCContext& ctx, uint8_t* base, uint32_t seg, uint32_
 
 namespace fable2::textappend {
 
-// Font object captured from UIFont_LookupGlyph (r3 = font; glyph table at +84).
-// Also the last emitted glyph x (from UIFont_EmitGlyphQuad r4) used as the
-// anchor for the appended draw.
-inline uint32_t& cap_font() { static uint32_t v = 0; return v; }
-inline uint32_t& cap_last_x() { static uint32_t v = 0; return v; }
-
 extern "C" void UIFont_LookupGlyph(PPCContext& __restrict ctx, uint8_t* base) {
-  // Capture the font object (r3) for the appended draw.
-  {
-    uint32_t font = (uint32_t)ctx.r3.u64;
-    if (font >= 0x3F000000u && font < 0x84000000u && wr2(base, (uint32_t)(font + 84), 4))
-      cap_font() = font;
-  }
   if (fable2::textappend::probe_on()) {
     static std::atomic<int> n{0};
     if (n.fetch_add(1) < 300) {
@@ -740,11 +728,6 @@ extern "C" void UIFont_EmitGlyphQuad(PPCContext& __restrict ctx, uint8_t* base) 
       if (r6 >= 0x3F000000u && r6 < 0x84000000u)
         fable2::textappend::dump_words("qdst", base, r6, 32);
     }
-  }
-  // Capture the last emitted glyph x (r4) as the anchor for the appended draw.
-  {
-    const uint32_t r4 = (uint32_t)ctx.r4.u64;
-    if (r4 < 0x40000000u) cap_last_x() = r4;
   }
   if (fable2::uir::hook("UIFont_EmitGlyphQuad", ctx, base)) return;
   __imp__UIFont_EmitGlyphQuad(ctx, base);

@@ -78,6 +78,7 @@ set(FABLE2_SOURCES
     src/core/fable2_patches.cpp
     src/core/fable2_hooks.cpp
     src/core/fable2_address_scan.cpp
+    src/menu/main_menu.cpp
     ${HOTFUNC_SOURCES}
 )
 
@@ -87,13 +88,14 @@ else()
     add_executable(fable_2 ${FABLE2_SOURCES})
 endif()
 
-# The app's headers live in subfolders (src/core, src/diagnostics, src/input)
-# and are included by bare filename ("fable2_config.h"), so the subfolders
-# must be on the include path of both the app and the recompiled code.
+# The app's headers live in subfolders (src/core, src/diagnostics, src/input,
+# src/menu) and are included by bare filename ("fable2_config.h"), so the
+# subfolders must be on the include path of both the app and the recompiled code.
 set(FABLE2_HEADER_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core
     ${CMAKE_CURRENT_SOURCE_DIR}/src/diagnostics
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/input)
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/input
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/menu)
 target_include_directories(fable_2 PRIVATE ${FABLE2_HEADER_DIRS})
 if(TARGET fable_2_recomp)
     target_include_directories(fable_2_recomp PRIVATE ${FABLE2_HEADER_DIRS})
