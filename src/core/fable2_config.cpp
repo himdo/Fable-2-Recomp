@@ -239,6 +239,20 @@ hero_dog_texture_readback = false
 # Default: true
 dog_fur_depth_bias = true
 
+# Terrain Tessellation on CPU (SDK cvar terrain_tess_cpu): compute the terrain's
+# tessellation factors on the CPU so the game does not wait every frame for the
+# GPU to read them back. The draw still runs on the GPU. D3D12 only.
+# false = wait for the GPU, as original.
+# Default: true
+terrain_tess_cpu = true
+
+# Skinning on CPU (SDK cvar skinning_cpu): compute the vertices the game skins
+# with memexport shader F6C546D6C2645541 on the CPU, which removes another wait
+# for the GPU every frame. The draw still runs on the GPU. D3D12 only.
+# false = wait for the GPU, as original.
+# Default: true
+skinning_cpu = true
+
 # Faster Render Targets (SDK cvars execute_unclipped_draw_vs_on_cpu and
 # skip_depth_clear_transfers): works out how far full-screen draws really reach
 # and skips copying depth that a clear is about to overwrite. Most of the gain is
@@ -435,6 +449,12 @@ bool Load(const std::filesystem::path& path) {
     values.dog_fur_depth_bias =
         Read<bool>(patches_table, "patches", "dog_fur_depth_bias", "boolean",
                    values.dog_fur_depth_bias);
+    values.terrain_tess_cpu =
+        Read<bool>(patches_table, "patches", "terrain_tess_cpu", "boolean",
+                   values.terrain_tess_cpu);
+    values.skinning_cpu =
+        Read<bool>(patches_table, "patches", "skinning_cpu", "boolean",
+                   values.skinning_cpu);
     values.faster_render_targets =
         Read<bool>(patches_table, "patches", "faster_render_targets", "boolean",
                    values.faster_render_targets);
