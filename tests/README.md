@@ -42,8 +42,10 @@ Checks that the generated files in `constants/` match
 | `tools/test_apply_recomp_patches.py` | The patch step applies each patch once, fails on a missing anchor and honors its on/off switch. One known issue is marked as an expected failure |
 | `tools/test_fable2_control.py` | The `state` command turns its options into the right request, keeps values of 0, and rejects non-integer values. Two known issues are marked as expected failures |
 | `tools/test_game_versions.py` | Generated version files match the catalogue, and invalid or duplicate entries are rejected |
+| `tools/test_manifest_collisions.py` | The check for manifest names that clash with DLL exports reports clashes and bad input, and the real manifest avoids the kernel wait names that once broke audio |
 | `tools/test_package_release.py` | The release zip holds only the listed files, its build info is stamped with the version, symbols stay separate, checksums match, and a missing file stops packaging |
 | `tools/test_runtime_staging.py` | Debug and Release builds stage the patched SDK files, and staging fails before copying if an input is missing |
+| `tools/repro/test_normalize_pe.py` | The stable-hash step pins timestamps and the PDB GUID, so two builds come out identical. Three known bugs are marked as expected failures |
 | `tools/test_make_hotfunc_overrides.py` | The override generator extracts and transforms functions correctly and never overwrites a hand-tuned file. Four known issues are marked as expected failures |
 
 To run one file:
