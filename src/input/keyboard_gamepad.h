@@ -269,7 +269,7 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     // the actual run happens on the guest main thread via the RunScript binding
     // probe, so this just latches a flag. Runs even while the console (F4) is
     // open (F5 is a host-level developer command, not gamepad input).
-    fable2::f5lua::poll_f5();
+    fable2::f5lua::poll_f5(focused);
 
     // Debug-console toggle key (default F4). Pressing it opens/closes the menu;
     // while the menu is open we release the mouse lock (free cursor for the
@@ -284,7 +284,8 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
       unlock_down_prev_ = unlock_down;
     }
 
-    if (focused) {
+    // While the debug menu is open, clicks and typing belong to the menu.
+    if (focused && !console_open_) {
       for (const auto& m : bindings_) {
         if (has_unlock_key && m.vk == unlock_vk) continue;  // not gamepad input
         if ((GetAsyncKeyState(m.vk) & 0x8000) == 0) continue;  // not held

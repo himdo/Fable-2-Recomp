@@ -30,6 +30,7 @@
 #include "dir_manifest_heal.h"
 #include "fable2_address_scan.h"
 #include "fable2_config.h"
+#include "fable2_fit_window.h"
 #include "fable2_patches.h"
 // #include "fable2_deadbeef_overlay.h"
 // 30fps-cap instrumentation (writes fps_probe.log next to the exe). Disabled
@@ -37,9 +38,11 @@
 // Re-enable to re-measure the frame pacing:
 // #include "fps_probe.h"
 #include "keyboard_gamepad.h"
+#include "menu_items.h"
+// The console pad (f2 pad) uses the remote-pad driver in every build.
+#include "remote_gamepad_driver.h"
 #ifdef FABLE2_REMOTE_CONTROL
 #include "remote_control_server.h"
-#include "remote_gamepad_driver.h"
 // 1-second game-state classifier (src/diagnostics/fable2_state_probe.h, single-TU inline).
 // Forward-declared here; the inline definitions live in the state probe header
 // (included once, in main.cpp), so the app can start/stop it alongside the
@@ -126,6 +129,11 @@ class Fable2App : public rex::ReXApp {
       auto system = rex::input::CreateDefaultInputSystem(tool_mode);
       system->AddDriver(
           std::make_unique<fable2::KeyboardGamepadDriver>(system->window(), 0));
+      // Console pad (`f2 pad`, src/core/fable2_console.h): the remote-pad
+      // driver fed from the console's own store. Always on; idle = no input.
+      system->AddDriver(std::make_unique<fable2::remote::GamepadDriver>(
+          system->window(), 0, &fable2::console::PadStore(),
+          &fable2::console::PadEnabled()));
 #ifdef FABLE2_REMOTE_CONTROL
       // Remote (AI) pad: driven over localhost TCP by an external harness
       // (src/input/remote_control_server.h). OR-merges with the pads above; not
@@ -139,6 +147,13 @@ class Fable2App : public rex::ReXApp {
 
   void OnPostSetup() override {
     fable2::branding::Apply(window());
+    fable2::menu::SetQuitHandler([this] {
+      app_context().CallInUIThread([this] {
+        if (window()) window()->RequestClose();
+      });
+    });
+    // Render at the window's aspect ratio (src/core/fable2_fit_window.h).
+    fable2::fitwindow::Install(runtime()->memory(), window());
     // Hero/dog black-texture fix (see plans/hero-dog-texture-readback.md).
     // Approach + guest base 0x12704000 credit just-harry's Unofficial Xenia
     // femtofork for Fable II. readback_resolve_force_addresses is defined in the
@@ -330,10 +345,12 @@ class Fable2App : public rex::ReXApp {
     };
     const fable2::config::Values& cfg = fable2::config::Get();
     // XLanguage profile default; config, environment and CLI still win.
-    std::string profile_hash;
-    if (fable2::xexverify::Sha256File(game_data_root() / "default.xex", profile_hash) &&
-        fable2::xexverify::IsAcceptedHash(profile_hash)) {
-      const auto* version = fable2::versions::Find(profile_hash);
+    // Check() shares the verified-hash marker with OnLoadXexImage, so the
+    // 21 MB hash pass runs at most once per changed default.xex.
+    const auto profile =
+        fable2::xexverify::Check(game_data_root() / "default.xex", XexHashMarker());
+    if (fable2::xexverify::IsAcceptedHash(profile.actual_hash)) {
+      const auto* version = fable2::versions::Find(profile.actual_hash);
       seed_cvar("user_language", std::to_string(version->language));
       REXSYS_INFO("[build-profile] detected {}", version->name);
     }
@@ -410,6 +427,7 @@ class Fable2App : public rex::ReXApp {
     // mtime-respecting copy can leave a stale/truncated manifest in place;
     // this appends any file that is on disk but unlisted. Idempotent.
     fable2::manifestheal::EnsureComplete(game_data_root());
+    fable2::console::set_root(game_data_root());
 
     // Resolve the host path the same way the SDK does (game:\ / d:\ ->
     // game_data_root). The SDK's path may use either slash direction
@@ -423,9 +441,7 @@ class Fable2App : public rex::ReXApp {
     std::string host_tail{tail};
     std::replace(host_tail.begin(), host_tail.end(), '\\', '/');
     const std::filesystem::path xex = game_data_root() / host_tail;
-    std::filesystem::path cache = cache_root();
-    if (cache.empty()) cache = game_data_root() / "cache";
-    const std::filesystem::path marker = cache / "default.xex.sha256";
+    const std::filesystem::path marker = XexHashMarker();
 
     // --skipHash (cvar, see main.cpp): compute and log the default.xex hash,
     // but do not let a mismatch (or an unreadable file) block the launch.
@@ -570,6 +586,12 @@ class Fable2App : public rex::ReXApp {
       }
     }
   }
+  std::filesystem::path XexHashMarker() {
+    std::filesystem::path cache = cache_root();
+    if (cache.empty()) cache = game_data_root() / "cache";
+    return cache / "default.xex.sha256";
+  }
+
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     // fable2::deadbeef_overlay::register_overlay(drawer);
   }

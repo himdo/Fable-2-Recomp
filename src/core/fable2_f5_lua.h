@@ -131,9 +131,9 @@ inline void logline(const char* fmt, ...) {
 }
 
 // Per-frame F5 edge detector. Call from the host input poll (per frame).
-inline void poll_f5() {
+inline void poll_f5(bool focused) {
 #ifdef _WIN32
-  const bool down = (GetAsyncKeyState(FABLE2_F5_VK) & 0x8000) != 0;
+  const bool down = focused && (GetAsyncKeyState(FABLE2_F5_VK) & 0x8000) != 0;
   const bool edge = down && !g_f5_down_prev;
   g_f5_down_prev = down;
   if (edge) g_f5_pending.store(true);
@@ -142,14 +142,14 @@ inline void poll_f5() {
 
 // Run the external Lua file via the captured CScriptManager::RunScript.
 // Returns true if invoked. Must be called from the guest main thread.
-inline bool run_external(PPCContext& ctx, uint8_t* base) {
+inline bool run_external(PPCContext& ctx, uint8_t* base, const std::string* path_override = nullptr) {
   const uint32_t this_ptr = g_this.load();
   const uint32_t method = g_method.load();
   if (this_ptr == 0 || method == 0) {
     logline("[f5] requested but RunScript callable not captured yet\n");
     return false;
   }
-  const std::string path = REXCVAR_GET(f5_lua_path);
+  const std::string path = path_override ? *path_override : REXCVAR_GET(f5_lua_path);
   if (path.empty()) return false;
 
   // Safety: the captured method must resolve to a real recompiled guest
