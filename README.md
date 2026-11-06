@@ -1,7 +1,7 @@
 # Fable 2 — ReXGlue Recompiled Project
 First and for most this project was made to test the capabilities of local and open source AI. This project was made using Qwen3.8 27b. After about an hour it got the game running. Then after a large amount of human trial and error I was able to get enough of the functions mapped to be able to complete the game. I currently do not consider this to be fully complete as I have yet to 100% the game. The sha256 of the iso that started this project is: "685a0d3bea9718812f17bcd155907a5359a548b6d3d8342dd2a6c944f45e35ff" and its the Fable 2 GOTY for USA and Europe.
 
-Recompilation of Fable 2 (Xbox 360, title ID 4D5307F1) using the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk) v0.10.0, with the runtime built from [the project's fork](https://github.com/himdo/rexglue-sdk). Guest PPC code is statically recompiled to C++ at build time by `rexglue codegen`, driven by `fable_2_manifest.toml`.
+Recompilation of Fable 2 (Xbox 360, title ID 4D5307F1) using the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk) v0.10.0, with the SDK built from [the project's fork](https://github.com/himdo/rexglue-sdk). Guest PPC code is statically recompiled to C++ at build time by `rexglue codegen`, driven by `fable_2_manifest.toml`.
 
 # Important Note:
 **This project does not condone Piracy, any mentions or links will result in removal and an instant ban from this repo!**
@@ -475,11 +475,9 @@ hardcoded paths**. Prerequisites (all standard tools):
 - **CMake** ≥ 3.25 (on PATH)
 - **LLVM** (clang/clang++/lld) — on PATH or the default `C:\Program Files\LLVM` install
 - **Ninja** (on PATH, `%USERPROFILE%\bin`, or the WinGet package dir)
-- **Internet** on first build — `build.cmd` auto-downloads the prebuilt
-  ReXGlue SDK v0.10.0 (~100 MB) from the
-  [official release](https://github.com/rexglue/rexglue-sdk/releases/tag/v0.10.0)
-  into `out\tooling\rexglue-sdk-0.10.0\`. A compatible official SDK on PATH
-  is used instead if present. Downloads never replace the source submodule.
+- **Internet** on first build — `build.cmd` fetches the
+  [SDK fork](https://github.com/himdo/rexglue-sdk) and its submodules, then builds the
+  SDK, including the `rexglue` codegen tool, under `out\`. Later builds don't rebuild it.
 - **Python and Git** for code generation and source-SDK preparation, plus the
   `pefile` package (`pip install pefile`) for the post-build PE cleaning; **Visual
   Studio Build Tools / Windows SDK** (x64 developer shell) for the native build.
@@ -491,15 +489,14 @@ build.cmd <target>      # any other CMake target
 build.cmd -release [t]  # build as Release (-O3) instead of Debug (-r is short form)
 ```
 
-The first `build.cmd` run fetches the official SDK if needed under `out/tooling`.
-Both Debug and Release build the pinned, patched SDK from source; see
+Both Debug and Release build the pinned, patched SDK from source, and a first Debug
+build also builds the Release SDK because only that one ships the codegen tool; see
 [runtime build requirements](docs/RUNTIME_FIXES.md). Game content is required
 for code generation but is never published with this repository.
 
 Manual/advanced setup (normally not needed):
 
 ```
-tools\setup_sdk.cmd      # fetch the prebuilt SDK only (what build.cmd auto-runs)
 tools\setup_sdk_src.cmd  # fetch the SDK SOURCE for the Vulkan plugin: clones
                          # rexglue/rexglue-sdk at the pinned commit
                          # (f5337cdc), pins its submodules to the SHAs in
@@ -510,8 +507,8 @@ git                     # only needed for setup_sdk_src.cmd
 ```
 
 The build also accepts explicit overrides if you keep the SDK elsewhere:
-`cmake -DREXGLUE_SDK_ROOT=<prebuilt SDK root> -DREXGLUE_SDK_SOURCE=<SDK source>`
-(`build.cmd` sets `REXGLUE_SDK_ROOT`/`REXGLUE_SDK_SOURCE` from its own search).
+`cmake -DREXGLUE_SDK_ROOT=<staged SDK root> -DREXGLUE_SDK_SOURCE=<SDK source>`
+(`build.cmd` sets `REXGLUE_SDK_ROOT`/`REXGLUE_SDK_SOURCE` itself).
 
 - Toolchain: the `win-amd64-debug` preset (Ninja + clang) by default. The SDK's public headers use clang builtins (`__builtin_bswap32`, `__VA_OPT__`), so plain MSVC `cl` cannot compile the generated code — a `win-msvc-debug` preset exists but only works for targets that don't compile `generated/`.
 - **Release builds:** `build.cmd` defaults to the `win-amd64-debug` preset (`-O0`, `out\build\win-amd64-debug`). Pass the `-release` flag (short form: `-r`) to select the `win-amd64-release` preset (`-O3`, `out\build\win-amd64-release`):
