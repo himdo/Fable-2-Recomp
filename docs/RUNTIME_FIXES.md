@@ -1,18 +1,13 @@
 # Windows runtime fixes
 
-The tested source baseline is `himdo/rexglue-sdk` commit
-`1338ec1011739c7f00f8df9b9473e34d3dd9f2df` (upstream's dog rendering fix).
-`thirdparty/rexglue-sdk-runtime-fixes.patch` carries the additional audio,
-frame-pacing, Release FPS-counter and Windows export changes as source.
-`thirdparty/rexglue-sdk-debug-exports.patch` adds the performance-counter and cvar
-exports needed by Debug's GPU plugin, shutdown path and debug control server.
-It applies separately so an SDK checkout already carrying the original patch
-can upgrade without resetting it.
-It also removes the hardcoded `LIBRARY rexruntime` name from the export table:
+The source SDK is `himdo/rexglue-sdk`, pinned through the `thirdparty/rexglue-sdk`
+submodule. The audio, frame-pacing, Release FPS-counter and Windows export
+changes are part of that fork, as are the performance-counter and cvar exports
+needed by Debug's GPU plugin, shutdown path and debug control server.
+The fork also removes the hardcoded `LIBRARY rexruntime` name from the export table:
 the linker must use its actual output name, so Debug imports `rexruntimed.dll`
 rather than accidentally loading a leftover Release `rexruntime.dll`.
-The SDK source comes from that fork, through the `thirdparty/rexglue-sdk`
-submodule. No binary download of a patched runtime, game files or saves are
+No binary download of a patched runtime, game files or saves are
 required from this contribution. Original GOTY game files are still required
 to generate and run the game.
 
@@ -28,12 +23,11 @@ tests\run_native_tests.cmd
 dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release
 ```
 
-Both Debug and Release builds prepare the pinned SDK, apply the patch, build the
-whole SDK with the D3D12 backend, and install matched headers, integration sources,
-import libraries and DLLs. The host is rebuilt against that staged SDK. The `rexglue`
-codegen tool is built from the same source and links the same runtime.
-Patch conflicts and unexpected SDK revisions fail rather than overwrite edits.
-`build.cmd fable_2` builds the Debug host and a patched Debug SDK;
+Both Debug and Release builds prepare the pinned SDK, build the whole SDK with the
+D3D12 backend, and install matched headers, integration sources, import libraries
+and DLLs. The host is rebuilt against that staged SDK. The `rexglue` codegen tool is
+built from the same source and links the same runtime.
+`build.cmd fable_2` builds the Debug host and a Debug SDK;
 `build.cmd -release fable_2` builds the Release pair. Debug SDK build/staging directories
 are `out/build/runtime-sdk-debug` and `out/tooling/runtime-sdk-debug/win-amd64`;
 Release keeps `out/build/runtime-sdk` and `out/tooling/runtime-sdk/win-amd64`.
