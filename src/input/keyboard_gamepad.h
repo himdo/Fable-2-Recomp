@@ -269,7 +269,7 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     // the actual run happens on the guest main thread via the RunScript binding
     // probe, so this just latches a flag. Runs even while the console (F4) is
     // open (F5 is a host-level developer command, not gamepad input).
-    fable2::f5lua::poll_f5();
+    fable2::f5lua::poll_f5(focused);
 
     // Debug-console toggle key (default F4). Pressing it opens/closes the menu;
     // while the menu is open we release the mouse lock (free cursor for the
