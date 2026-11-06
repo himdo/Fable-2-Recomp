@@ -192,6 +192,16 @@ class Fable2App : public rex::ReXApp {
                     "(SDK without depth_bias_shader?)");
       }
     }
+    // [patches] faster_render_targets sets GPU-plugin cvars, so here.
+    {
+      const char* value = fable2::config::Get().faster_render_targets ? "true" : "false";
+      for (const char* cvar : {"execute_unclipped_draw_vs_on_cpu", "skip_depth_clear_transfers"}) {
+        if (rex::cvar::GetFlagSource(cvar) == rex::cvar::Source::kDefault &&
+            !rex::cvar::SetFlagByName(cvar, value)) {
+          REXSYS_WARN("[fable2-config] {} cvar missing (SDK without it?)", cvar);
+        }
+      }
+    }
 
     // Feed the F3 debug overlay with guest FPS (below). The GPU plugin
     // records per-guest-swap frame timing into the shared perf registry
