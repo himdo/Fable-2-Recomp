@@ -39,7 +39,7 @@ Checks that the generated files in `constants/` match
 | File | What it checks |
 |---|---|
 | `config/test_config_template.py` | The template in `src/core/fable2_config.cpp` and the launcher's default settings both match `config/fable2_config.toml` |
-| `tools/test_fable2_control.py` | The `state` command turns its options into the right request, keeps values of 0, and rejects non-integer values. Two known issues are marked as expected failures |
+| `tools/test_fable2_control.py` | The `state` command turns its options into the right request, strips spaces from button names, keeps values of 0, and rejects non-integer values |
 | `tools/test_game_versions.py` | Generated version files match the catalogue, and invalid or duplicate entries are rejected |
 | `tools/test_package_release.py` | The release zip holds only the listed files, its build info is stamped with the version, symbols stay separate, checksums match, and a missing file stops packaging |
 | `tools/test_runtime_staging.py` | Debug and Release builds stage the patched SDK files, and staging fails before copying if an input is missing |

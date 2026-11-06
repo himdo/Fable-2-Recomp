@@ -972,6 +972,11 @@ class ControlServer {
         SlotRef ref;
         if (!SlotFromName(item.str, ref))
           return Err(std::format("unknown button name: {}", item.str));
+        if (IsStickSlot(ref.slot))
+          return Err(std::format("{} is a stick; set it with 'stk'", item.str));
+        // A trigger name pulls it fully, like press. 'triggers' below can override it.
+        if (ref.slot == Slot::kTrigL) baseline.left_trigger = static_cast<uint8_t>(ref.default_value);
+        else if (ref.slot == Slot::kTrigR) baseline.right_trigger = static_cast<uint8_t>(ref.default_value);
         baseline.buttons =
             static_cast<uint16_t>(baseline.buttons | SlotButtonMask(ref.slot));
       }
