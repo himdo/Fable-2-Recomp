@@ -248,6 +248,14 @@ dog_fur_depth_bias = true
 # every call); 0 = never yield; larger = fewer context switches.
 # Default: 1
 hotfunc_yield_every = 1
+
+# Refresh GPU Memory Each Frame (SDK cvar clear_memory_page_state): at the end of
+# every frame the SDK forgets which guest memory it has already copied to the
+# GPU, so everything the next frame uses is copied again. It is a safety net for
+# CPU writes the page protection cannot see. With it off, 2x went from 34 to 38
+# FPS indoors with nothing missing on screen in testing.
+# false = trust the write tracking. Default: false
+refresh_gpu_memory_each_frame = false
 )TOML_EOF";
 
 std::string_view TypeName(toml::node_type t) {
@@ -434,6 +442,9 @@ bool Load(const std::filesystem::path& path) {
     values.hotfunc_yield_every = static_cast<int32_t>(Read<int64_t>(
         perf_table, "perf", "hotfunc_yield_every", "integer",
         values.hotfunc_yield_every));
+    values.refresh_gpu_memory_each_frame = Read<bool>(
+        perf_table, "perf", "refresh_gpu_memory_each_frame", "boolean",
+        values.refresh_gpu_memory_each_frame);
   }
 
   g_values = values;

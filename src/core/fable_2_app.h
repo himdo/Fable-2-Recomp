@@ -192,6 +192,11 @@ class Fable2App : public rex::ReXApp {
                     "(SDK without depth_bias_shader?)");
       }
     }
+    if (!fable2::config::Get().refresh_gpu_memory_each_frame &&
+        rex::cvar::GetFlagSource("clear_memory_page_state") == rex::cvar::Source::kDefault &&
+        !rex::cvar::SetFlagByName("clear_memory_page_state", "false")) {
+      REXSYS_WARN("[fable2-config] clear_memory_page_state cvar missing");
+    }
 
     // Feed the F3 debug overlay with guest FPS (below). The GPU plugin
     // records per-guest-swap frame timing into the shared perf registry

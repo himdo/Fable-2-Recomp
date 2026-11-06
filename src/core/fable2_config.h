@@ -207,6 +207,9 @@ struct Values {
   // original (yield every call), 0 = never yield. Larger = fewer context
   // switches, less frequent CPU rotation to other guest threads.
   int32_t hotfunc_yield_every = 1;
+  // [perf] refresh_gpu_memory_each_frame: false seeds the SDK cvar
+  // clear_memory_page_state off (see the config file).
+  bool refresh_gpu_memory_each_frame = false;
 };
 
 // Load the config from `path`.
