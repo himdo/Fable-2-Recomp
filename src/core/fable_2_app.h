@@ -205,6 +205,16 @@ class Fable2App : public rex::ReXApp {
         }
       }
     }
+    // [patches] faster_render_targets sets GPU-plugin cvars, so here.
+    {
+      const char* value = fable2::config::Get().faster_render_targets ? "true" : "false";
+      for (const char* cvar : {"execute_unclipped_draw_vs_on_cpu", "skip_depth_clear_transfers"}) {
+        if (rex::cvar::GetFlagSource(cvar) == rex::cvar::Source::kDefault &&
+            !rex::cvar::SetFlagByName(cvar, value)) {
+          REXSYS_WARN("[fable2-config] {} cvar missing (SDK without it?)", cvar);
+        }
+      }
+    }
     // The fast memexport readback hands the guest the previous draw's output, so
     // moving geometry uses stale data and flickers. With both shaders on the CPU
     // nothing is left to read back in testing, so the exact path costs nothing.

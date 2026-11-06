@@ -253,6 +253,15 @@ terrain_tess_cpu = true
 # Default: true
 skinning_cpu = true
 
+# Faster Render Targets (SDK cvars execute_unclipped_draw_vs_on_cpu and
+# skip_depth_clear_transfers): works out how far full-screen draws really reach
+# and skips copying depth that a clear is about to overwrite. Most of the gain is
+# at higher internal resolutions: 33 to about 57 FPS at 2x in a busy town. Also
+# removes the purple bar at the bottom of the screen. D3D12 only.
+# false = as the SDK defaults.
+# Default: true
+faster_render_targets = true
+
 [perf]
 # NtYieldExecution batching for the hot-function overrides (see
 # src/core/hotfunc/hotfunc_yield.h): every Nth guest yield does the real
@@ -446,6 +455,9 @@ bool Load(const std::filesystem::path& path) {
     values.skinning_cpu =
         Read<bool>(patches_table, "patches", "skinning_cpu", "boolean",
                    values.skinning_cpu);
+    values.faster_render_targets =
+        Read<bool>(patches_table, "patches", "faster_render_targets", "boolean",
+                   values.faster_render_targets);
   }
   const toml::path perf_path{"perf"};
   const auto perf = root[perf_path];

@@ -204,6 +204,8 @@ struct Values {
   bool terrain_tess_cpu = true;
   // [patches] skinning_cpu: Memexport skinning on the CPU (SDK cvar skinning_cpu).
   bool skinning_cpu = true;
+  // [patches] faster_render_targets: Narrower EDRAM transfers (SDK cvars execute_unclipped_draw_vs_on_cpu, skip_depth_clear_transfers).
+  bool faster_render_targets = true;
   // [perf] - hot-function override tuning.
   // hotfunc_yield_every: NtYieldExecution batching factor for the hotfunc
   // overrides (see src/core/hotfunc/hotfunc_yield.h). Every Nth call does
