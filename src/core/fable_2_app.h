@@ -20,6 +20,7 @@
 #include <fstream>
 #include <sstream>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #ifdef _WIN32
@@ -196,6 +197,36 @@ class Fable2App : public rex::ReXApp {
         rex::cvar::GetFlagSource("clear_memory_page_state") == rex::cvar::Source::kDefault &&
         !rex::cvar::SetFlagByName("clear_memory_page_state", "false")) {
       REXSYS_WARN("[fable2-config] clear_memory_page_state cvar missing");
+    }
+    // [patches] terrain_tess_cpu and skinning_cpu set GPU-plugin cvars, so here.
+    {
+      const auto& cfg = fable2::config::Get();
+      const std::pair<const char*, bool> cpu_memexport[] = {
+          {"terrain_tess_cpu", cfg.terrain_tess_cpu}, {"skinning_cpu", cfg.skinning_cpu}};
+      for (const auto& [cvar, on] : cpu_memexport) {
+        if (rex::cvar::GetFlagSource(cvar) == rex::cvar::Source::kDefault &&
+            !rex::cvar::SetFlagByName(cvar, on ? "true" : "false")) {
+          REXSYS_WARN("[fable2-config] {} cvar missing (SDK without it?)", cvar);
+        }
+      }
+    }
+    // [patches] faster_render_targets sets GPU-plugin cvars, so here.
+    {
+      const char* value = fable2::config::Get().faster_render_targets ? "true" : "false";
+      for (const char* cvar : {"execute_unclipped_draw_vs_on_cpu", "skip_depth_clear_transfers"}) {
+        if (rex::cvar::GetFlagSource(cvar) == rex::cvar::Source::kDefault &&
+            !rex::cvar::SetFlagByName(cvar, value)) {
+          REXSYS_WARN("[fable2-config] {} cvar missing (SDK without it?)", cvar);
+        }
+      }
+    }
+    // The fast memexport readback hands the guest the previous draw's output, so
+    // moving geometry uses stale data and flickers. With both shaders on the CPU
+    // nothing is left to read back in testing, so the exact path costs nothing.
+    if (fable2::config::Get().terrain_tess_cpu && fable2::config::Get().skinning_cpu &&
+        rex::cvar::GetFlagSource("readback_memexport_fast") == rex::cvar::Source::kDefault &&
+        !rex::cvar::SetFlagByName("readback_memexport_fast", "false")) {
+      REXSYS_WARN("[fable2-config] readback_memexport_fast cvar missing");
     }
 
     // Feed the F3 debug overlay with guest FPS (below). The GPU plugin
