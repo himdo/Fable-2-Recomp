@@ -20,6 +20,7 @@
 #include <fstream>
 #include <sstream>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #ifdef _WIN32
@@ -133,7 +134,7 @@ class Fable2App : public rex::ReXApp {
       // driver fed from the console's own store. Always on; idle = no input.
       system->AddDriver(std::make_unique<fable2::remote::GamepadDriver>(
           system->window(), 0, &fable2::console::PadStore(),
-          &fable2::console::PadEnabled()));
+          &fable2::console::PadEnabled(), rex::input::DeviceId{1ull << 62}));
 #ifdef FABLE2_REMOTE_CONTROL
       // Remote (AI) pad: driven over localhost TCP by an external harness
       // (src/input/remote_control_server.h). OR-merges with the pads above; not
@@ -192,6 +193,41 @@ class Fable2App : public rex::ReXApp {
                     "(SDK without depth_bias_shader?)");
       }
     }
+    if (!fable2::config::Get().refresh_gpu_memory_each_frame &&
+        rex::cvar::GetFlagSource("clear_memory_page_state") == rex::cvar::Source::kDefault &&
+        !rex::cvar::SetFlagByName("clear_memory_page_state", "false")) {
+      REXSYS_WARN("[fable2-config] clear_memory_page_state cvar missing");
+    }
+    // [patches] terrain_tess_cpu and skinning_cpu set GPU-plugin cvars, so here.
+    {
+      const auto& cfg = fable2::config::Get();
+      const std::pair<const char*, bool> cpu_memexport[] = {
+          {"terrain_tess_cpu", cfg.terrain_tess_cpu}, {"skinning_cpu", cfg.skinning_cpu}};
+      for (const auto& [cvar, on] : cpu_memexport) {
+        if (rex::cvar::GetFlagSource(cvar) == rex::cvar::Source::kDefault &&
+            !rex::cvar::SetFlagByName(cvar, on ? "true" : "false")) {
+          REXSYS_WARN("[fable2-config] {} cvar missing (SDK without it?)", cvar);
+        }
+      }
+    }
+    // [patches] faster_render_targets sets GPU-plugin cvars, so here.
+    {
+      const char* value = fable2::config::Get().faster_render_targets ? "true" : "false";
+      for (const char* cvar : {"execute_unclipped_draw_vs_on_cpu", "skip_depth_clear_transfers"}) {
+        if (rex::cvar::GetFlagSource(cvar) == rex::cvar::Source::kDefault &&
+            !rex::cvar::SetFlagByName(cvar, value)) {
+          REXSYS_WARN("[fable2-config] {} cvar missing (SDK without it?)", cvar);
+        }
+      }
+    }
+    // The fast memexport readback hands the guest the previous draw's output, so
+    // moving geometry uses stale data and flickers. With both shaders on the CPU
+    // nothing is left to read back in testing, so the exact path costs nothing.
+    if (fable2::config::Get().terrain_tess_cpu && fable2::config::Get().skinning_cpu &&
+        rex::cvar::GetFlagSource("readback_memexport_fast") == rex::cvar::Source::kDefault &&
+        !rex::cvar::SetFlagByName("readback_memexport_fast", "false")) {
+      REXSYS_WARN("[fable2-config] readback_memexport_fast cvar missing");
+    }
 
     // Feed the F3 debug overlay with guest FPS (below). The GPU plugin
     // records per-guest-swap frame timing into the shared perf registry
@@ -206,7 +242,7 @@ class Fable2App : public rex::ReXApp {
     // and distinguishes:
     //   (A) table valid then zeroed  -> "HEAD WENT NULL" after "FIRST VALID"
     //   (B) never valid (consumer first) -> only "null" ever, no "FIRST VALID"
-    std::thread([]() {
+    if (fable2::allocwatch::Enabled()) std::thread([]() {
       using namespace fable2::allocwatch;
       const uintptr_t base = kGuestBase;  // 0x100000000, stable
       auto t0 = std::chrono::steady_clock::now();

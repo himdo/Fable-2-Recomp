@@ -9,12 +9,12 @@ public static class GraphicsSettings
     [
         "resolution", "window_width", "window_height", "resolution_scale",
         "anisotropic_override", "swap_post_effect", "vsync", "fullscreen", "fullscreen_exclusive",
-        "frame_limit", "guest_vblank_pacing"
+        "frame_limit", "guest_vblank_pacing", "host_frame_limit"
     ];
 
     public static Dictionary<string, string> Create(string resolution, string scale,
         string anisotropic, string antiAliasing, string displayMode, bool vsync,
-        string frameLimit = "0")
+        string frameLimit = "0", string hostFrameLimit = "0")
     {
         (int width, int height) = resolution switch
         {
@@ -26,7 +26,8 @@ public static class GraphicsSettings
             !new[] { "-1", "1", "2", "3", "4", "5" }.Contains(anisotropic) ||
             !new[] { "none", "fxaa", "fxaa_extreme" }.Contains(antiAliasing) ||
             !new[] { "windowed", "borderless", "exclusive" }.Contains(displayMode) ||
-            !GraphicsOptions.FrameLimits.Any(option => option.Value == frameLimit))
+            !GraphicsOptions.FrameLimits.Any(option => option.Value == frameLimit) ||
+            !GraphicsOptions.HostFrameLimits.Any(option => option.Value == hostFrameLimit))
             throw new ArgumentException("Unsupported graphics setting");
 
         return new(StringComparer.OrdinalIgnoreCase)
@@ -44,6 +45,7 @@ public static class GraphicsSettings
             // guest pacing therefore caps it at 30 even with a 60-FPS limiter.
             // This does not disable the user's host presentation VSync.
             ["guest_vblank_pacing"] = (frameLimit == "30").ToString().ToLowerInvariant(),
+            ["host_frame_limit"] = hostFrameLimit,
             ["fullscreen"] = (displayMode != "windowed").ToString().ToLowerInvariant(),
             ["fullscreen_exclusive"] = (displayMode == "exclusive").ToString().ToLowerInvariant()
         };

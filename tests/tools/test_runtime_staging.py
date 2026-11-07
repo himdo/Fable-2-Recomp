@@ -16,61 +16,80 @@ class RuntimeStagingTests(unittest.TestCase):
     def stage(self, configuration, missing=None):
         with tempfile.TemporaryDirectory(prefix="fable2-sdk-test-") as directory:
             base = Path(directory)
-            official, source, build, output = [base / name for name in
-                                               ("official", "source", "build", "output")]
+            source, output = base / "source", base / "output"
+            suffix = "d" if configuration == "Debug" else ""
+            names = [f"{stem}{suffix}.{extension}" for stem in ("rexruntime", "rexgpu-xenos")
+                     for extension in ("dll", "lib", "pdb")]
+            if configuration == "Release":
+                names.append("rexglue.exe")
             files = {
-                official / "bin/rexglue.exe": "official-codegen",
-                official / "share/rexglue/rex_app.cpp": "old-app",
-                source / "include/rex/test.h": "matched-header",
-                source / "thirdparty/sdl3/include/SDL3/test.h": "matched-sdl",
-                build / "include/rex/version.h": "matched-version",
-                source / "src/ui/rex_app.cpp": "matched-app",
-                source / "src/ui/windowed_app_main_sdl.cpp": "matched-entry",
+                output / "include/rex/version.h": "version",
+                output / "lib/cmake/rexglue/rexglueConfig.cmake": "config",
             }
-            for suffix in ("", "d"):
-                for stem in ("rexruntime", "rexgpu-xenos"):
-                    for extension, folder in (("dll", "bin"), ("lib", "lib")):
-                        name = f"{stem}{suffix}.{extension}"
-                        files[official / folder / name] = "old-" + name
-                        if name != missing:
-                            files[source / "out/win-amd64" / name] = "patched-" + name
+            for name in names:
+                if name == missing:
+                    continue
+                if name.endswith(".pdb"):
+                    files[source / "out/win-amd64" / name] = "symbols-" + name
+                else:
+                    folder = "lib" if name.endswith(".lib") else "bin"
+                    files[output / folder / name] = "built-" + name
             for path, value in files.items():
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(value)
-            args = ["stage_renderer_sdk.py", *map(str, (official, source, build, output)),
-                    "--configuration", configuration]
+            args = ["stage_renderer_sdk.py", str(source), str(output), "--configuration", configuration]
             with patch("sys.argv", args), patch.object(staging.subprocess, "check_output",
                                                        return_value="synthetic-revision\n"):
                 if missing:
                     with self.assertRaisesRegex(SystemExit, "Missing build input"):
                         staging.main()
-                    self.assertFalse(output.exists())
+                    self.assertFalse((output / "renderer-sdk-provenance.json").exists())
                     return
                 staging.main()
-            suffix = "d" if configuration == "Debug" else ""
             for stem in ("rexruntime", "rexgpu-xenos"):
-                name = f"{stem}{suffix}.dll"
-                self.assertEqual((output / "bin" / name).read_text(), "patched-" + name)
-                name = f"{stem}{suffix}.lib"
-                self.assertEqual((output / "lib" / name).read_text(), "patched-" + name)
-            self.assertEqual((output / "bin/rexglue.exe").read_text(), "official-codegen")
-            self.assertEqual((official / "bin" / f"rexruntime{suffix}.dll").read_text(),
-                             f"old-rexruntime{suffix}.dll")
-            self.assertEqual((output / "include/rex/version.h").read_text(), "matched-version")
+                name = f"{stem}{suffix}.pdb"
+                self.assertEqual((output / "bin" / name).read_text(), "symbols-" + name)
             provenance = json.loads((output / "renderer-sdk-provenance.json").read_text())
             self.assertEqual(provenance["configuration"], configuration)
             self.assertEqual(provenance["sdk_commit"], "synthetic-revision")
 
-    def test_debug_uses_patched_debug_pair(self):
+    def test_new_tool_clears_codegen_stamp(self):
+        with tempfile.TemporaryDirectory(prefix="fable2-sdk-test-") as directory:
+            base = Path(directory)
+            source, output, stamp = base / "source", base / "output", base / "codegen.stamp"
+            files = ["include/rex/version.h", "lib/cmake/rexglue/rexglueConfig.cmake", "bin/rexglue.exe",
+                     "bin/rexruntime.dll", "bin/rexgpu-xenos.dll", "lib/rexruntime.lib", "lib/rexgpu-xenos.lib"]
+            for name in files:
+                (output / name).parent.mkdir(parents=True, exist_ok=True)
+                (output / name).write_text("built")
+            args = ["stage_renderer_sdk.py", str(source), str(output), "--codegen-stamp", str(stamp)]
+
+            def run():
+                with patch("sys.argv", args), patch.object(staging.subprocess, "check_output",
+                                                           return_value="synthetic-revision\n"):
+                    staging.main()
+
+            run()
+            stamp.write_text("fingerprint")
+            run()
+            self.assertTrue(stamp.exists())
+            (output / "bin/rexglue.exe").write_text("rebuilt")
+            run()
+            self.assertFalse(stamp.exists())
+
+    def test_debug_uses_debug_pair_without_tool(self):
         self.stage("Debug")
 
-    def test_release_uses_patched_release_pair(self):
+    def test_release_uses_release_pair(self):
         self.stage("Release")
 
-    def test_missing_debug_runtime_does_not_fall_back_to_official(self):
+    def test_missing_release_tool_fails(self):
+        self.stage("Release", missing="rexglue.exe")
+
+    def test_missing_debug_runtime_fails(self):
         self.stage("Debug", missing="rexruntimed.dll")
 
-    def test_missing_debug_plugin_library_fails_before_copying(self):
+    def test_missing_debug_plugin_library_fails(self):
         self.stage("Debug", missing="rexgpu-xenosd.lib")
 
 

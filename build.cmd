@@ -62,26 +62,6 @@ if errorlevel 1 (
     if defined NINJADIR set "PATH=%NINJADIR%;%PATH%"
 )
 
-rem Official codegen SDK: prefer rexglue.exe on PATH, then the downloaded
-rem package under out/tooling. Never download over the source submodule.
-set "REXSDK="
-for /f "delims=" %%f in ('where rexglue.exe 2^>nul') do (
-    if not defined REXSDK for %%d in ("%%~dpf..") do set "REXSDK=%%~fdd"
-)
-if not defined REXSDK set "REXSDK=%~dp0out\tooling\rexglue-sdk-0.10.0\win-amd64"
-if not exist "%REXSDK%\lib\cmake\rexglue\rexglueConfig.cmake" (
-    set "REXSDK=%~dp0..\rexglue-sdk-0.10.0.9-dev.g923c1a5-win-amd64\win-amd64"
-)
-if not exist "%REXSDK%\lib\cmake\rexglue\rexglueConfig.cmake" (
-    echo ReXGlue SDK not found; downloading via tools\setup_sdk.cmd ...
-    call "%~dp0tools\setup_sdk.cmd" || exit /b 1
-    set "REXSDK=%~dp0out\tooling\rexglue-sdk-0.10.0\win-amd64"
-)
-if not exist "%REXSDK%\lib\cmake\rexglue\rexglueConfig.cmake" (
-    echo Error: ReXGlue SDK not found under %REXSDK% 1>&2
-    exit /b 1
-)
-
 rem Argument parsing: -release / -r select the Release preset, -clean / -c
 rem wipes the build dir instead of building, the first non-flag argument is
 rem the CMake target (default: fable_2_codegen).
@@ -137,13 +117,7 @@ if "%CLEAN%"=="1" (
     exit /b 0
 )
 
-rem Bootstrap CMake integration from the existing manifest on a fresh clone.
-rem Do not run rexglue init: that would replace the project's authored files.
-if not exist "generated\rexglue.cmake" (
-    "%REXSDK%\bin\rexglue.exe" codegen fable_2_manifest.toml || exit /b 1
-)
-
-rem Pinned source submodule, needed by every matched native runtime build.
+rem Pinned source submodule, needed by every build.
 set "SDKSRC=%~dp0thirdparty\rexglue-sdk"
 if not exist "%SDKSRC%\CMakeLists.txt" (
     git submodule update --init thirdparty/rexglue-sdk || exit /b 1
@@ -156,13 +130,20 @@ if /i "%CONFIG%"=="win-amd64-debug" (
     set "RUNTIMECONFIG=Debug"
     set "RUNTIMEDIR=runtime-sdk-debug"
 )
-call "%~dp0tools\build_runtime_sdk.cmd" "%REXSDK%" "%RUNTIMECONFIG%" || exit /b 1
-set "CODEGENSDK=%REXSDK%"
+call "%~dp0tools\build_runtime_sdk.cmd" "%RUNTIMECONFIG%" || exit /b 1
 set "REXSDK=%~dp0out\tooling\%RUNTIMEDIR%\win-amd64"
+rem The codegen tool only ships in the Release SDK, whichever config is built.
+set "CODEGENTOOL=%~dp0out\tooling\runtime-sdk\win-amd64\bin\rexglue.exe"
+
+rem Bootstrap CMake integration from the existing manifest on a fresh clone.
+rem Do not run rexglue init: that would replace the project's authored files.
+if not exist "generated\rexglue.cmake" (
+    "%CODEGENTOOL%" codegen fable_2_manifest.toml || exit /b 1
+)
 
 rem (inline -D with quotes at the call site: cmd cannot carry a quoted value
 rem in a variable for paths with spaces)
-cmake --preset %CONFIG% -DCMAKE_PREFIX_PATH="%REXSDK%" -Drexglue_DIR="%REXSDK%\lib\cmake\rexglue" -DREXGLUE_SDK_ROOT="%REXSDK%" -DREXGLUE_SDK_SOURCE="%SDKSRC%" -DFABLE2_CODEGEN_TOOL="%CODEGENSDK%\bin\rexglue.exe" || exit /b 1
+cmake --preset %CONFIG% -DCMAKE_PREFIX_PATH="%REXSDK%" -Drexglue_DIR="%REXSDK%\lib\cmake\rexglue" -DREXGLUE_SDK_ROOT="%REXSDK%" -DREXGLUE_SDK_SOURCE="%SDKSRC%" -DFABLE2_CODEGEN_TOOL="%CODEGENTOOL%" || exit /b 1
 rem CMake can only list the generated sources once codegen has written them.
 if not exist "generated\default\sources.cmake" (
     cmake --build out\build\%CONFIG% --target fable_2_codegen || exit /b 1
