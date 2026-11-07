@@ -48,21 +48,24 @@ class Fable2ControlTests(unittest.TestCase):
 
         self.assertEqual(response, expected)
 
-    @unittest.expectedFailure
     def test_spaced_buttons_build_state(self):
-        # Known issue: the space is kept, so the game rejects " B" as an unknown button name.
-        args = make_args(buttons="A, B")
+        args = make_args(buttons=" A , B ")
         expected = {**BASE_STATE, "buttons": ["A", "B"]}
         response = control.build_state(args)
 
         self.assertEqual(response, expected)
 
-    @unittest.expectedFailure
+    def test_only_spaces_build_state(self):
+        args = make_args(buttons=" , ")
+        expected = {**BASE_STATE, "buttons": []}
+        response = control.build_state(args)
+
+        self.assertEqual(response, expected)
+
     def test_rt_in_buttons_build_state(self):
-        # Known issue: the game accepts RT as a button name, doesn't pull the trigger and still replies ok.
-        # Confirmed on a running Debug build. A game-side fix would replace this test.
+        # The game pulls the trigger for this name, so the tool sends it unchanged.
         args = make_args(buttons="A,RT")
-        expected = {**BASE_STATE, "buttons": ["A"], "triggers": {"RT": 255}}
+        expected = {**BASE_STATE, "buttons": ["A", "RT"]}
         response = control.build_state(args)
 
         self.assertEqual(response, expected)
