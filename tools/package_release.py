@@ -27,6 +27,7 @@ def release_files(root, build, launcher):
     files = {name: require(build / name) for name in BUILD_FILES}
     files["Fable2Launcher.exe"] = require(launcher)
     files["README.md"] = require(root / "README.md")
+    files["KEYCAP-NOTICES.txt"] = require(root / "launcher" / "KEYCAP-NOTICES.txt")
     # From the repo: the build folder's copy may hold a developer's own settings.
     files["fable2_config.toml"] = require(root / "config/fable2_config.toml")
     # dir.manifest stays out: the real one comes from the disc, and the game lists these scripts itself.

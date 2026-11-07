@@ -21,6 +21,7 @@ class PackageReleaseTests(unittest.TestCase):
         self.launcher = self.base / "launcher/Fable2Launcher.exe"
         for path, text in {
             self.root / "README.md": "readme",
+            self.root / "launcher/KEYCAP-NOTICES.txt": "keycap notices",
             self.root / "config/fable2_config.toml": "repo config",
             self.launcher: "launcher",
             self.build / "fable_2.exe": "game",
@@ -53,7 +54,7 @@ class PackageReleaseTests(unittest.TestCase):
             build_info = json.loads(archive.read("Fable 2 1.6.0/fable2_build.json"))
         self.assertEqual(names, {f"Fable 2 1.6.0/{name}" for name in (
             "fable_2.exe", "rexruntime.dll", "rexgpu-xenos.dll", "fable2_build.json", "Fable2Launcher.exe",
-            "README.md", "fable2_config.toml", "data/scripts/recomp/F5.lua")})
+            "README.md", "KEYCAP-NOTICES.txt", "fable2_config.toml", "data/scripts/recomp/F5.lua")})
         self.assertEqual(config, "repo config")
         self.assertEqual(build_info, {"profiles": ["goty"], "version": "1.6.0"})
 

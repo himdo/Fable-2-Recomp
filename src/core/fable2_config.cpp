@@ -76,6 +76,10 @@ keyboard_gamepad_map = "LMB:X,RMB:Y,MMB:B,Shift:A,E:A,Q:LT,Tab:RB,R:RT,Z:LB,B:B,
 # Default: true
 mouse_look = true
 
+# Launcher-only option: generate keyboard/mouse prompt images from the
+# startup bindings. Launch through Fable2Launcher.exe to use this option.
+keyboard_prompt_images = false
+
 # Mouse-look sensitivity slider (1..4096; 256 = 1x). Shared by BOTH look modes:
 # for the legacy right-stick mapping it sets the stick units per pixel; for
 # direct mouse look it multiplies mouse_look_yaw_sens / mouse_look_pitch_sens.

@@ -100,6 +100,26 @@ F3 in the game shows the guest-swap FPS counter in Release.
 silent fallback without disabling any Windows device. Exit existing game and
 launcher processes before running that test.
 
+### Keyboard and mouse prompt images
+
+Open **Advanced Options**, check **Show keyboard and mouse prompt images**,
+save, and launch the game from the launcher. Shared controller prompts use
+keycap images generated from the keyboard and mouse bindings effective at
+startup. If an action has several bindings, the prompt prefers a regular key
+over an alternate mouse button or modifier. Unbound controls retain their
+original artwork.
+
+The game loads these textures at startup. Relaunch after changing bindings.
+To use the original controller prompts, clear the checkbox and launch again.
+Controller input remains available in both modes.
+
+The option requires a writable extracted game folder on NTFS. It creates a
+read-only game-data view with two generated GUI banks and hard links to the
+other files. Your disc image and extracted banks are preserved. The launcher
+can reuse the view under `cache/keyboard-prompts` in the game-data folder.
+This cache can be removed while the game and launcher are closed. Saves
+continue to use the existing save folder beside the executable.
+
 
 Launcher overview supplied by the tester (before the high-refresh presets were added):
 
