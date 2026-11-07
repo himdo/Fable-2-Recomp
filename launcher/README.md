@@ -55,9 +55,8 @@ and section untouched, and makes a one-time `.launcher-backup` before the first
 write. Keybind and patch changes take effect the next time the game launches.
 
 Dropdowns use dark text on a light background, including the selected item.
-There are no texture/font replacements, remaster switches or save editors.
-The launcher and game use an original project-owned book/tree icon, not
-extracted game art; see [asset provenance](../assets/README.md).
+The launcher and game use a project-owned book/tree icon documented in
+[asset provenance](../assets/README.md).
 
 Build from the repository root:
 
@@ -107,7 +106,8 @@ save, and launch the game from the launcher. Shared controller prompts use
 keycap images generated from the keyboard and mouse bindings effective at
 startup. If an action has several bindings, the prompt prefers a regular key
 over an alternate mouse button or modifier. Unbound controls retain their
-original artwork.
+original artwork. The main-menu selection badge uses separate artwork and
+still shows the controller's A button.
 
 The game loads these textures at startup. Relaunch after changing bindings.
 To use the original controller prompts, clear the checkbox and launch again.
