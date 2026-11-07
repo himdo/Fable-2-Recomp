@@ -242,7 +242,7 @@ class Fable2App : public rex::ReXApp {
     // and distinguishes:
     //   (A) table valid then zeroed  -> "HEAD WENT NULL" after "FIRST VALID"
     //   (B) never valid (consumer first) -> only "null" ever, no "FIRST VALID"
-    std::thread([]() {
+    if (fable2::allocwatch::Enabled()) std::thread([]() {
       using namespace fable2::allocwatch;
       const uintptr_t base = kGuestBase;  // 0x100000000, stable
       auto t0 = std::chrono::steady_clock::now();
