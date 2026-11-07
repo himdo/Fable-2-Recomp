@@ -11,6 +11,8 @@ clang++ -std=c++23 -I"%SDK%\include" "%~dp0native\test_clocked_audio_sink.cpp" -
 "%OUT%\audio.exe" || exit /b 1
 clang++ -std=c++23 -I"%SDK%\include" "%~dp0native\test_frame_limiter.cpp" "%SDK%\src\graphics\frame_limiter.cpp" -o "%OUT%\limiter.exe" || exit /b 1
 "%OUT%\limiter.exe" || exit /b 1
+clang++ -std=c++23 -I"%SDK%\include" "%~dp0native\test_present_rate_limiter.cpp" -o "%OUT%\present-limiter.exe" || exit /b 1
+"%OUT%\present-limiter.exe" || exit /b 1
 clang++ -std=c++23 -I"%SDK%\include" "%~dp0native\test_guest_frame_meter.cpp" -o "%OUT%\meter.exe" || exit /b 1
 "%OUT%\meter.exe" || exit /b 1
 rem Keyboard/mouse -> gamepad map parsing (links the SDK's real keybinds.cpp;

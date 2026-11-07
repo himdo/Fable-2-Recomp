@@ -56,7 +56,8 @@ Original GOTY USA/Europe and German GOTY dumps are supported by the default
 
 The optional WPF launcher detects the original game edition and configures
 output resolution, internal render scale, anisotropic filtering, FXAA, VSync,
-window/fullscreen mode and a 30/60/120/144/165/240/unlimited FPS limit. It keeps its preferences
+window/fullscreen mode, and separate 30/60/120/144/165/240/unlimited FPS limits for the game
+and for presenting to the display. It keeps its preferences
 in `launcher-settings.toml` and writes `fable_2.toml`, preserving other settings
 and a one-time backup. Preferences survive the runtime rewriting its config.
 It can also extract the game straight from a disc image: the **Extract from
