@@ -233,6 +233,15 @@ realtime_texture_morphing = true
 # Default: false
 hero_dog_texture_readback = false
 
+# Vulkan Texture Morph Fallback: on the Vulkan renderer (always on Linux, and
+# on Windows with --gpu_plugin=xenos-vulkan) realtime_texture_morphing still
+# renders the hero and the dog black, so while Vulkan is in use this switches
+# to the original baked mode with hero_dog_texture_readback instead (only that
+# one texture is read back, at load and when the hero's looks change). Has no
+# effect on D3D12. false = use the two settings above as written.
+# Default: true
+vulkan_texture_morph_fallback = true
+
 # Dog Fur Depth Bias: the dog's fur is drawn as 15 thin layers over its body
 # that rely on exact depth ties in the Xbox 360's 24-bit depth buffer. The PC's
 # 32-bit depth breaks those ties at random, which shows as flickering, blocky
@@ -283,6 +292,16 @@ hotfunc_yield_every = 1
 # FPS indoors with nothing missing on screen in testing.
 # false = trust the write tracking. Default: false
 refresh_gpu_memory_each_frame = false
+
+# Idle yield sleep, in microseconds. Some guest threads wait for each other
+# by calling NtYieldExecution in a tight loop, which pins a CPU core at 100%
+# even when the game is idle (menus, loading, videos). When a thread yields
+# back to back with no work in between, it sleeps this long per yield
+# instead. The game's frame limiter, which busy-waits for the rest of every
+# frame, sleeps the same amount between polls. 0 = never sleep (original
+# behaviour). Leave commented out to use the platform default.
+# Default: 0 on Windows, 100 elsewhere
+# idle_yield_sleep_us = 100
 )TOML_EOF";
 
 std::string_view TypeName(toml::node_type t) {
@@ -458,6 +477,9 @@ bool Load(const std::filesystem::path& path) {
     values.hero_dog_texture_readback =
         Read<bool>(patches_table, "patches", "hero_dog_texture_readback", "boolean",
                    values.hero_dog_texture_readback);
+    values.vulkan_texture_morph_fallback =
+        Read<bool>(patches_table, "patches", "vulkan_texture_morph_fallback", "boolean",
+                   values.vulkan_texture_morph_fallback);
     values.dog_fur_depth_bias =
         Read<bool>(patches_table, "patches", "dog_fur_depth_bias", "boolean",
                    values.dog_fur_depth_bias);
@@ -481,6 +503,9 @@ bool Load(const std::filesystem::path& path) {
     values.refresh_gpu_memory_each_frame = Read<bool>(
         perf_table, "perf", "refresh_gpu_memory_each_frame", "boolean",
         values.refresh_gpu_memory_each_frame);
+    values.idle_yield_sleep_us = static_cast<int32_t>(Read<int64_t>(
+        perf_table, "perf", "idle_yield_sleep_us", "integer",
+        values.idle_yield_sleep_us));
   }
 
   g_values = values;
@@ -490,6 +515,18 @@ bool Load(const std::filesystem::path& path) {
 }
 
 const Values& Get() { return g_values; }
+
+void ApplyVulkanRendererOverrides() {
+  if (!g_values.vulkan_texture_morph_fallback || !g_values.realtime_texture_morphing) {
+    return;
+  }
+  g_values.realtime_texture_morphing = false;
+  g_values.hero_dog_texture_readback = true;
+  REXSYS_INFO(
+      "[fable2-config] Vulkan renderer: realtime_texture_morphing renders the hero/dog "
+      "black there, using hero_dog_texture_readback instead "
+      "(vulkan_texture_morph_fallback=false to keep it)");
+}
 
 const char* DefaultTemplate() { return kTemplate; }
 

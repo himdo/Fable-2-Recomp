@@ -44,9 +44,16 @@
 //   0x822426E0  wait loop: GpuProgressCheck_82B9BF90 (0 = ready -> leave),
 //               else re-run the readiness test and spin while not ready.
 //   0x8224270C  call sub_82B9BEC8(r1+80), then the epilogue at 0x82242714.
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 #include "fable_2_pch.h"
+
+#include <chrono>
+#include <thread>
+
+#include "fable2_config.h"
 
 extern "C" void FastHelper_821E8D20(PPCContext& ctx, uint8_t* base);
 extern "C" void GpuProgressCheck_82B9BF90(PPCContext& ctx, uint8_t* base);
@@ -163,7 +170,15 @@ void BuildArgBlock(PPCContext& ctx, uint8_t* base) {
 // Sleep and waits round to scheduler ticks and would overshoot the frame
 // deadline, so spin with PAUSE instead. Touches no guest state.
 void SpinPause() {
-  for (int i = 0; i < kPauseSpins; ++i) YieldProcessor();
+  for (int i = 0; i < kPauseSpins; ++i) {
+#if defined(_WIN32)
+    YieldProcessor();
+#elif defined(__x86_64__) || defined(__i386__)
+    __builtin_ia32_pause();
+#elif defined(__aarch64__)
+    __asm__ __volatile__("yield");
+#endif
+  }
 }
 
 // addi r1,r1,144; b __restgprlr_29 (0x82242714).
@@ -214,8 +229,18 @@ extern "C" void FrameLimiterWait_82242628(PPCContext& __restrict ctx, uint8_t* b
       break;
     }
     ReadinessR9R11(ctx, base);
+    // Host-side politeness, not guest behaviour: the guest spins here for
+    // the rest of every frame (up to ~33 ms) polling a counter the GPU thread
+    // writes, which pins a host core at 100%. Sleeping between polls leaves
+    // the guest state untouched and delays the wake-up by at most one sleep.
+    // [perf] idle_yield_sleep_us; 0 keeps the original spin.
     if (ctx.cr6.lt != 0) {
-      SpinPause();
+      const int32_t sleep_us = fable2::config::Get().idle_yield_sleep_us;
+      if (sleep_us > 0) {
+        std::this_thread::sleep_for(std::chrono::microseconds(sleep_us));
+      } else {
+        SpinPause();
+      }
     }
   }
 

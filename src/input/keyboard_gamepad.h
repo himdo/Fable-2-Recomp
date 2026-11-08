@@ -49,6 +49,7 @@
 
 #include "fable2_config.h"  // direct_mouse_look toggle
 #include "mouse_look.h"     // fable2::mouselook (accumulates the mouse delta)
+#include "host_input.h"     // fable2::hostinput (non-Windows key/mouse state)
 
 #ifdef _WIN32
 #include <windows.h>
@@ -364,6 +365,62 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
       }
     } else {
       mouse_centered_ = false;  // re-prime on (re)focus to avoid a jump
+    }
+#else
+    // Same behaviour as the Windows path above, from the SDK window's own
+    // input events (src/input/host_input.h) instead of global key polling and
+    // cursor recentering: the pointer is locked with relative mouse mode while
+    // looking, and the motion since the last poll drives the right stick.
+    rex::ui::Window* win = GameWindow();
+    fable2::hostinput::Tracker& host = fable2::hostinput::T();
+    host.EnsureAttached(win);
+    const bool focused = win != nullptr && host.HasFocus();
+
+    fable2::f5lua::poll_f5(focused);
+
+    uint16_t unlock_vk = static_cast<uint16_t>(
+        rex::ui::ParseVirtualKey(REXCVAR_GET(mouse_unlock_key)));
+    bool has_unlock_key = unlock_vk != 0;
+    if (focused) {
+      bool unlock_down = has_unlock_key && host.IsKeyDown(unlock_vk);
+      if (unlock_down && !unlock_down_prev_) console_open_ = !console_open_;
+      unlock_down_prev_ = unlock_down;
+    }
+
+    if (focused && !console_open_) {
+      for (const auto& m : bindings_) {
+        if (has_unlock_key && m.vk == unlock_vk) continue;  // not gamepad input
+        if (!host.IsKeyDown(m.vk)) continue;                 // not held
+        if (m.button != 0) {
+          buttons |= m.button;
+        } else if (m.trigger == 'L') {
+          left_trigger = 0xFF;
+        } else if (m.trigger == 'R') {
+          right_trigger = 0xFF;
+        } else if (m.axis == 1) {
+          lx += m.axis_sign * input_detail::kStickMax;
+        } else if (m.axis == 2) {
+          ly += m.axis_sign * input_detail::kStickMax;
+        }
+      }
+    }
+    lx = input_detail::ClampStick(lx);
+    ly = input_detail::ClampStick(ly);
+
+    const bool looking = focused && REXCVAR_GET(mouse_look) && !console_open_;
+    host.SetMouseLook(looking);  // pointer lock + hidden cursor, on the UI thread
+    int32_t dx = 0, dy = 0;
+    host.TakeMouseDelta(dx, dy);  // always drained, so nothing piles up
+    if (looking) {
+      if (mouse_centered_) {
+        // Fable 2 inverts Y, so mouse-up (dy<0) maps to +ry (look up).
+        const int32_t scale = REXCVAR_GET(mouse_look_scale);
+        rx = input_detail::ClampStick(dx * scale);
+        ry = input_detail::ClampStick(-dy * scale);
+      }
+      mouse_centered_ = true;  // skip the first poll's motion (lock settling)
+    } else {
+      mouse_centered_ = false;
     }
 #endif
 

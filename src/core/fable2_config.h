@@ -193,6 +193,10 @@ struct Values {
   // Fable2App; readback then happens only for that resolve, not every frame.
   // Superseded by realtime_texture_morphing (only takes effect with that off).
   bool hero_dog_texture_readback = false;
+  // [patches] vulkan_texture_morph_fallback: while the Vulkan renderer is in
+  // use, ApplyVulkanRendererOverrides() swaps realtime_texture_morphing (black
+  // hero/dog on Vulkan) for hero_dog_texture_readback.
+  bool vulkan_texture_morph_fallback = true;
   // Give the dog's shell-fur layers (pixel shader 014F8A02DB7B19CA) a small
   // extra depth bias so they don't Z-fight with the body and with each other.
   // The fur relies on exact depth ties in the Xbox 360's 24-bit float depth
@@ -216,6 +220,16 @@ struct Values {
   // [perf] refresh_gpu_memory_each_frame: false seeds the SDK cvar
   // clear_memory_page_state off (see the config file).
   bool refresh_gpu_memory_each_frame = false;
+  // idle_yield_sleep_us: when a guest thread calls NtYieldExecution back to
+  // back with no work in between (it is polling for another thread), sleep
+  // this many microseconds per yield instead of spinning a core at 100%
+  // (see src/core/hotfunc/hotfunc_yield.h). 0 = never sleep (original).
+  // Off by default on Windows, where a sub-millisecond sleep is not available.
+#ifdef _WIN32
+  int32_t idle_yield_sleep_us = 0;
+#else
+  int32_t idle_yield_sleep_us = 100;
+#endif
 };
 
 // Load the config from `path`.
@@ -229,6 +243,10 @@ bool Load(const std::filesystem::path& path);
 
 // Parsed values (in-memory defaults until Load() succeeds).
 const Values& Get();
+
+// Called once the GPU backend is known to be Vulkan, before the GPU plugin's
+// cvars are seeded: applies vulkan_texture_morph_fallback.
+void ApplyVulkanRendererOverrides();
 
 // The default template written when the file is missing. Must match
 // config/fable2_config.toml in the repo (staged next to the exe by the build).

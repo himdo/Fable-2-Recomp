@@ -1547,20 +1547,24 @@ inline void run_lua_line(const std::string& line, PPCContext& ctx, uint8_t* base
 // F9 (game window focused) toggles pause, so the moment to stop can be picked
 // by hand. Edge-detected; checked every frame and while paused.
 inline void poll_pause_key() {
-#ifdef _WIN32
   static bool prev = false;
-  const bool down = (GetAsyncKeyState(0x78 /* VK_F9 */) & 0x8000) != 0;
+  const bool down = fable2::hostinput::IsKeyDown(0x78 /* VK_F9 */);
   const bool edge = down && !prev;
   prev = down;
   if (!edge) return;
+#ifdef _WIN32
   DWORD pid = 0;
   GetWindowThreadProcessId(GetForegroundWindow(), &pid);
   if (pid != GetCurrentProcessId()) return;
+#else
+  // Key state only comes from the game window's own events, so a held key
+  // already means it is focused.
+  if (!fable2::hostinput::T().HasFocus()) return;
+#endif
   State& s = S();
   s.paused = !s.paused;
   s.step_frames = 0;
   out("pause", s.paused ? "paused (F9)" : "running (F9)");
-#endif
 }
 
 // Host commands that work while the game thread is held: they only read or

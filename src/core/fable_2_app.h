@@ -118,7 +118,16 @@ class Fable2App : public rex::ReXApp {
       config.graphics = rex::system::LoadGpuPlugin("xenos-vulkan", "vulkan");
     }
     // Otherwise leave config.graphics null so ReXApp loads
-    // LoadGpuPlugin("xenos") -> the prebuilt D3D12 plugin.
+    // LoadGpuPlugin("xenos") -> the prebuilt D3D12 plugin on Windows. Off
+    // Windows the SDK is built without D3D12, so "xenos" is Vulkan too.
+#ifdef _WIN32
+    const bool vulkan_renderer = plugin == "xenos-vulkan";
+#else
+    const bool vulkan_renderer = true;
+#endif
+    if (vulkan_renderer) {
+      fable2::config::ApplyVulkanRendererOverrides();
+    }
 
     // Build on top of the default input system (SDL gamepad + NOP) and add a
     // synthetic "keyboard gamepad" driver so host keys/mouse buttons can drive
