@@ -52,7 +52,11 @@ Fable II Game of the Year Edition disc image in the repository root:
 - `default.xex`
 - `data/` (about 6.5 GB)
 
-Both are git-ignored. The supported versions and their SHA-256 hashes are in
+Both are git-ignored, and both must be real files, not symlinks: the code
+generator refuses a `default.xex` that resolves outside the project, and the
+game's file system does not follow a `data` symlink. To keep the content
+elsewhere, pass `--game_data_root=<dir>` to the game instead (`./run.sh`
+passes the repository root). The supported versions and their SHA-256 hashes are in
 `constants/game_versions.json`; check yours with `sha256sum default.xex`.
 
 To extract them, use the repository's own extractor (`tools/x360extract`,
@@ -185,8 +189,10 @@ vulkan_allow_present_mode_fifo_relaxed = false
 
 ## Known limitations
 
-- **Only lightly tested.** These Linux changes were written without a Linux
-  machine to compile on. Report build errors with the full compiler output.
+- **Only lightly tested.** The build (`--cpu deck`, clang 20) has been
+  compiled on Ubuntu 24.04 under WSL2 and boots through the intro to the
+  title screen there, on Mesa's CPU renderer (llvmpipe), so neither GPU
+  behaviour nor performance has been checked on a real Linux GPU driver yet.
 - **Higher internal resolution** (`resolution_scale`) does not sharpen the
   presented image yet, on Vulkan or D3D12.
 - **Some developer diagnostics are Windows-only:** the crash logger, the
