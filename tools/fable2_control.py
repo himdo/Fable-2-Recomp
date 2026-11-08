@@ -76,7 +76,8 @@ def run(host: str, port: int, token: str, request: dict) -> int:
 def build_state(args) -> dict:
     req = {"cmd": "state"}
     if args.buttons:
-        req["buttons"] = [b for b in args.buttons.split(",") if b]
+        names = (b.strip() for b in args.buttons.split(","))
+        req["buttons"] = [b for b in names if b]
     if args.lt is not None or args.rt is not None:
         req["triggers"] = {}
         if args.lt is not None:
