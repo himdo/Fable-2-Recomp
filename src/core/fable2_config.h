@@ -239,6 +239,9 @@ struct Values {
 #else
   int32_t fps_limit = 60;
 #endif
+  // [perf] native_lua_gc: native Lua GC routines
+  // (src/core/hotfunc/luagc/NativeLuaGC.cpp); false = recompiled originals.
+  bool native_lua_gc = true;
 };
 
 // Load the config from `path`.

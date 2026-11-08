@@ -312,6 +312,12 @@ refresh_gpu_memory_each_frame = false
 # to use the platform default (on Windows the launcher manages this instead).
 # Default: 30 on Windows, 60 elsewhere
 # fps_limit = 60
+
+# Native Lua GC: run the game's Lua garbage collector (mark and sweep) as
+# native code instead of recompiled PowerPC code. It was about half of the main
+# game thread's time in busy areas. Same algorithm and results, only faster.
+# false = the original recompiled code. Default: true
+native_lua_gc = true
 )TOML_EOF";
 
 std::string_view TypeName(toml::node_type t) {
@@ -518,6 +524,8 @@ bool Load(const std::filesystem::path& path) {
         values.idle_yield_sleep_us));
     values.fps_limit = static_cast<int32_t>(Read<int64_t>(
         perf_table, "perf", "fps_limit", "integer", values.fps_limit));
+    values.native_lua_gc = Read<bool>(perf_table, "perf", "native_lua_gc", "boolean",
+                                      values.native_lua_gc);
   }
 
   g_values = values;
