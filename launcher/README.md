@@ -55,9 +55,8 @@ and section untouched, and makes a one-time `.launcher-backup` before the first
 write. Keybind and patch changes take effect the next time the game launches.
 
 Dropdowns use dark text on a light background, including the selected item.
-There are no texture/font replacements, remaster switches or save editors.
-The launcher and game use an original project-owned book/tree icon, not
-extracted game art; see [asset provenance](../assets/README.md).
+The launcher and game use a project-owned book/tree icon documented in
+[asset provenance](../assets/README.md).
 
 Build from the repository root:
 
@@ -99,6 +98,27 @@ F3 in the game shows the guest-swap FPS counter in Release.
 `StartWithoutAudio.cmd`, staged with the native EXE, exercises the clocked
 silent fallback without disabling any Windows device. Exit existing game and
 launcher processes before running that test.
+
+### Keyboard and mouse prompt images
+
+Open **Advanced Options**, check **Show keyboard and mouse prompt images**,
+save, and launch the game from the launcher. Shared controller prompts use
+keycap images generated from the keyboard and mouse bindings effective at
+startup. If an action has several bindings, the prompt prefers a regular key
+over an alternate mouse button or modifier. Unbound controls retain their
+original artwork. The main-menu selection badge uses separate artwork and
+still shows the controller's A button.
+
+The game loads these textures at startup. Relaunch after changing bindings.
+To use the original controller prompts, clear the checkbox and launch again.
+Controller input remains available in both modes.
+
+The option requires a writable extracted game folder on NTFS. It creates a
+read-only game-data view with two generated GUI banks and hard links to the
+other files. Your disc image and extracted banks are preserved. The launcher
+can reuse the view under `cache/keyboard-prompts` in the game-data folder.
+This cache can be removed while the game and launcher are closed. Saves
+continue to use the existing save folder beside the executable.
 
 
 Launcher overview supplied by the tester (before the high-refresh presets were added):
