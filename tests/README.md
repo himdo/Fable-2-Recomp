@@ -46,7 +46,8 @@ Checks that the generated files in `constants/` match
 | `tools/test_make_hotfunc_overrides.py` | The override generator extracts and transforms functions correctly and never overwrites a hand-tuned file. Four known issues are marked as expected failures |
 | `tools/test_manifest_collisions.py` | The check for manifest names that clash with DLL exports reports clashes and bad input, and the real manifest avoids the kernel wait names that once broke audio |
 | `tools/test_package_release.py` | The release zip holds only the listed files, its build info is stamped with the version, symbols stay separate, checksums match, and a missing file stops packaging |
-| `tools/test_runtime_staging.py` | Debug and Release builds stage the patched SDK files, and staging fails before copying if an input is missing |
+| `tools/test_prepare_runtime_sdk.py` | The SDK prepare step rejects a missing or non-git folder and a checkout without libmspack, skips setup with `--skip-dependencies`, and marks libmspack stored as plain files as set up. Uses small throwaway git repos. Two known issues are marked as expected failures |
+| `tools/test_runtime_staging.py` | Debug and Release builds stage the SDK files, and staging fails before copying if an input is missing |
 
 To run one file:
 
