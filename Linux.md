@@ -195,6 +195,18 @@ Suggested settings on the Deck:
   moment instead of skipping draws, and the pipeline cache next to the
   executable makes later visits smooth.
 
+## Measuring performance
+
+- The game presents exactly one host frame per game frame, so the Steam
+  Deck's performance overlay (or MangoHud) shows the game's real frame rate
+  and frame times. The F3 debug overlay also shows it, but while any ImGui
+  overlay is open the window is repainted at the display refresh rate, so
+  external FPS counters then read the refresh rate instead.
+- Every 5 seconds the log (`logs/` next to the executable) gets a line like
+  `[guest-fps] 47.9 fps over 5.0 s, slowest frame 61.2 ms, 3 of 240 frames
+  over 33 ms; host presented 47.9/s`. The "over 33 ms" count is the number of
+  visible stutters. `log_guest_fps = false` in `fable_2.toml` turns it off.
+
 ## Display and performance settings
 
 `fable_2.toml` next to the executable holds SDK settings, one `name = value`
