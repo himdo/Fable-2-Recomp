@@ -15,6 +15,9 @@
 #   -clean, -c       wipe the build dir for the selected config and stop
 #   --sdk <path>     build the SDK from this source tree instead of the
 #                    submodule (also: REXSDK_SOURCE=<path>)
+#   --trace          keep the guest function-entry trace hook
+#                    (FABLE2_FUNC_TRACE, see README); off by default here
+#                    because it costs a check on every guest call
 #   --cpu <level>    code generation target (also: FABLE2_CPU=<level>):
 #                      generic  x86-64-v2, runs on any CPU from ~2009 on (default)
 #                      deck     Steam Deck (Zen 2: AVX2, FMA)
@@ -34,6 +37,7 @@ TARGET=fable_2
 CLEAN=0
 SDKSRC="${REXSDK_SOURCE:-}"
 CPU="${FABLE2_CPU:-generic}"
+FUNC_TRACE=OFF
 while [ $# -gt 0 ]; do
     case "$1" in
         -debug|-d) CONFIG=Debug ;;
@@ -43,7 +47,8 @@ while [ $# -gt 0 ]; do
         --sdk=*) SDKSRC="${1#--sdk=}" ;;
         --cpu) shift; CPU="${1:?--cpu needs a level}" ;;
         --cpu=*) CPU="${1#--cpu=}" ;;
-        -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
+        --trace) FUNC_TRACE=ON ;;
+        -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
         -*) echo "Error: unknown option $1 (see ./build.sh --help)" >&2; exit 1 ;;
         *) TARGET="$1" ;;
     esac
@@ -125,6 +130,7 @@ configure() {
         -DREXSDK_DIR="$SDKSRC" \
         -DREXGLUE_USE_VULKAN=ON \
         -DREXGLUE_ENABLE_TRACY=OFF -DREXGLUE_BUILD_TESTS=OFF \
+        -DFABLE2_FUNC_TRACE="$FUNC_TRACE" \
         "${SDL_ARGS[@]}"
 }
 

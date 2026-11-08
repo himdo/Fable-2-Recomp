@@ -188,7 +188,10 @@ endif()
 # bottom of fable2_func_trace.h (which redefines REX_FUNC_PROLOGUE) runs with
 # the generated pch already loaded, and the patched macro is baked into the
 # PCH used by every recompiled TU.
-if(TARGET fable_2_recomp)
+# FABLE2_FUNC_TRACE=OFF leaves the hook out: even when tracing is off, it costs
+# a flag load and branch at every guest function entry (millions per second).
+option(FABLE2_FUNC_TRACE "Hook every guest function entry for fable2_func_trace.log" ON)
+if(TARGET fable_2_recomp AND FABLE2_FUNC_TRACE)
     target_precompile_headers(fable_2_recomp PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core/fable2_func_trace.h)
 endif()
