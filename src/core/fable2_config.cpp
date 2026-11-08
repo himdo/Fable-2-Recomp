@@ -302,6 +302,16 @@ refresh_gpu_memory_each_frame = false
 # behaviour). Leave commented out to use the platform default.
 # Default: 0 on Windows, 100 elsewhere
 # idle_yield_sleep_us = 100
+
+# Frame rate cap. The game normally locks itself to 30 fps by waiting for two
+# emulated 60 Hz vblanks per frame. Any other value lifts that lock and caps
+# the game at this many fps instead (SDK cvars frame_limit and
+# guest_vblank_pacing, the same as the Windows launcher's frame limit), while
+# presentation still follows vsync. 30 = the original lock, 0 = unlimited.
+# fable_2.toml and the command line still take priority. Leave commented out
+# to use the platform default (on Windows the launcher manages this instead).
+# Default: 30 on Windows, 60 elsewhere
+# fps_limit = 60
 )TOML_EOF";
 
 std::string_view TypeName(toml::node_type t) {
@@ -506,6 +516,8 @@ bool Load(const std::filesystem::path& path) {
     values.idle_yield_sleep_us = static_cast<int32_t>(Read<int64_t>(
         perf_table, "perf", "idle_yield_sleep_us", "integer",
         values.idle_yield_sleep_us));
+    values.fps_limit = static_cast<int32_t>(Read<int64_t>(
+        perf_table, "perf", "fps_limit", "integer", values.fps_limit));
   }
 
   g_values = values;

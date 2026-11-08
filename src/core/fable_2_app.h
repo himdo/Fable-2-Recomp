@@ -229,6 +229,25 @@ class Fable2App : public rex::ReXApp {
         }
       }
     }
+    // [perf] fps_limit: lift the game's 30 fps vblank lock and cap at the
+    // configured rate instead, exactly like the launcher's frame limit (both are
+    // GPU-plugin cvars, so seeded here). Skipped when either cvar was set by a
+    // higher-priority source (fable_2.toml, REX_* env, command line).
+    {
+      const int32_t fps = fable2::config::Get().fps_limit;
+      if (fps != 30 &&
+          rex::cvar::GetFlagSource("frame_limit") == rex::cvar::Source::kDefault &&
+          rex::cvar::GetFlagSource("guest_vblank_pacing") == rex::cvar::Source::kDefault) {
+        const std::string limit = std::to_string(std::clamp(fps, 0, 240));
+        if (rex::cvar::SetFlagByName("frame_limit", limit) &&
+            rex::cvar::SetFlagByName("guest_vblank_pacing", "false")) {
+          REXSYS_INFO("[fable2-config] frame rate cap {} fps (fps_limit; 30 = original lock)",
+                      limit);
+        } else {
+          REXSYS_WARN("[fable2-config] frame_limit / guest_vblank_pacing cvars missing");
+        }
+      }
+    }
     // The fast memexport readback hands the guest the previous draw's output, so
     // moving geometry uses stale data and flickers. With both shaders on the CPU
     // nothing is left to read back in testing, so the exact path costs nothing.

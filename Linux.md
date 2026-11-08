@@ -112,7 +112,36 @@ Saves, the shader cache, logs and `fable2_config.toml` are written next to the
 executable, in `out/build/linux-amd64-release/`. Back up `saves/` there. If
 something goes wrong, the newest log is in `logs/`.
 
+## Portable package (build once, copy anywhere)
+
+```bash
+./build.sh --cpu deck package
+```
+
+builds the Release game and writes `out/dist/Fable2-Linux-<cpu>/` plus a
+`.tar.gz` of it (about 40 MB). The package holds no game content: extract it
+on the target machine, copy `default.xex` and `data/` next to `Fable2.sh`, and
+run `Fable2.sh`. Saves, settings, logs and the shader cache are kept in that
+folder. The binaries need glibc 2.38 or newer (Ubuntu 24.04, SteamOS 3.6 and
+later); `Fable2.sh` checks and says so if the system is too old.
+
 ## Steam Deck
+
+### With a package built on another PC (recommended)
+
+1. On the PC, build the package (`./build.sh --cpu deck package`, for example
+   in WSL2 on Windows) and copy `Fable2-Linux-deck.tar.gz`, `default.xex` and
+   the `data` folder to a USB drive or SD card.
+2. On the Deck, in Desktop Mode, copy the archive to `~/Games/` and extract it
+   there (right-click → Extract → Extract archive here). Extracting on the Deck
+   keeps the executable flags, which a copy from a FAT32/exFAT drive would lose.
+3. Copy `default.xex` and the whole `data` folder into
+   `~/Games/Fable2-Linux-deck/`, next to `Fable2.sh`.
+4. Double-click `Fable2.sh` (choose *Execute*), or run it from Konsole, to
+   test it in Desktop Mode.
+5. For Gaming Mode, add `Fable2.sh` to Steam as described in step 5 below.
+
+### Building on the Deck itself
 
 SteamOS's root filesystem is read-only, so build inside a
 [Distrobox](https://distrobox.it/) container (preinstalled on SteamOS 3.5 and
@@ -158,8 +187,10 @@ Suggested settings on the Deck:
 - In `out/build/linux-amd64-release/fable2_config.toml`, turn on
   `high_tick_rate` and `higher_hf_tick_rate` (together). The game's own logic
   otherwise ticks at 15 Hz, which feels choppy even at a high frame rate.
-- Cap the frame rate with the Deck's Quick Access Menu (Performance tab:
-  40 Hz refresh + 40 FPS, or 60/60) rather than the game's `frame_limit`.
+- The game is capped at 60 fps by default on Linux (`[perf] fps_limit` in
+  `fable2_config.toml`; 30 = the original lock, 0 = unlimited). For a steadier
+  40 fps, set the Quick Access Menu's Performance tab to a 40 Hz refresh rate
+  and 40 FPS limit as well.
 - The first time each area loads, new shaders are compiled. That stalls for a
   moment instead of skipping draws, and the pipeline cache next to the
   executable makes later visits smooth.
@@ -170,13 +201,12 @@ Suggested settings on the Deck:
 per line. The same names work on the command line as `--name=value`, which
 takes priority.
 
-```toml
-# The game locks itself to 30 fps by waiting two emulated 60 Hz vblanks per
-# frame. vsync = false removes that lock; frame_limit caps the result
-# (0 = unlimited). vsync = true restores the original locked 30 fps.
-vsync = false
-frame_limit = 60
+The frame rate cap is `[perf] fps_limit` in `fable2_config.toml` (default 60
+on Linux). It sets the SDK cvars `frame_limit` and `guest_vblank_pacing`, the
+same ones the Windows launcher uses, so setting either of those here
+overrides it.
 
+```toml
 # Present with strict vsync (no tearing, no busy main thread).
 vulkan_allow_present_mode_immediate = false
 vulkan_allow_present_mode_mailbox = false

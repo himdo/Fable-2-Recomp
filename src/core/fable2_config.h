@@ -230,6 +230,15 @@ struct Values {
 #else
   int32_t idle_yield_sleep_us = 100;
 #endif
+  // [perf] fps_limit: 30 keeps the game's own 30 fps vblank lock; anything
+  // else seeds frame_limit (0 = unlimited) and turns guest_vblank_pacing off,
+  // like the Windows launcher's frame limit. Windows keeps the original lock
+  // by default because the launcher manages it there.
+#ifdef _WIN32
+  int32_t fps_limit = 30;
+#else
+  int32_t fps_limit = 60;
+#endif
 };
 
 // Load the config from `path`.

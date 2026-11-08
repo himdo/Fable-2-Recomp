@@ -19,7 +19,10 @@
 #                      generic  x86-64-v2, runs on any CPU from ~2009 on (default)
 #                      deck     Steam Deck (Zen 2: AVX2, FMA)
 #                      native   the CPU this is being built on
-#   target           any CMake target (default: fable_2)
+#   target           any CMake target (default: fable_2), or "package":
+#                    build fable_2 (Release) and write a portable, ready to
+#                    run folder + .tar.gz to out/dist/Fable2-Linux-<cpu>
+#                    (tools/package_linux.sh), to copy to another machine
 #
 # Needs default.xex in the project root (see Linux.md, "Add the game content").
 set -euo pipefail
@@ -140,6 +143,12 @@ echo "$ARCH_FLAGS" > "$STAMP"
 if [ ! -f "$ROOT/generated/default/sources.cmake" ]; then
     cmake --build "$BUILD" --target fable_2_codegen
     configure
+fi
+if [ "$TARGET" = package ]; then
+    [ "$CONFIG" = Release ] || { echo "Error: package needs a Release build" >&2; exit 1; }
+    cmake --build "$BUILD" --target fable_2
+    "$ROOT/tools/package_linux.sh" "$BUILD" "$CPU"
+    exit 0
 fi
 cmake --build "$BUILD" --target "$TARGET"
 echo "Built $TARGET in $BUILD. Run it with ./run.sh"
