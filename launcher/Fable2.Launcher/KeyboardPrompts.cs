@@ -239,7 +239,7 @@ internal static class KeyboardPrompts
         for (int x = 0; x < size; x++)
         {
             int source = (y * size + x) * 4;
-            int target = 4 + TiledOffset(x, y, size);
+            int target = 4 + XenosTiling.TiledOffset(x, y, size);
             int alpha = pixels[source + 3];
             if (alpha == 0) continue;
             result[target] = (byte)alpha;
@@ -247,18 +247,6 @@ internal static class KeyboardPrompts
                 result[target + channel] = (byte)((pixels[source + 3 - channel] * 255 + alpha / 2) / alpha);
         }
         return result;
-    }
-
-    // Xenos 2D tiled byte address for a four-byte pixel. Adapted from
-    // ReXGlue's texture_util::GetTiledOffset2D. See KEYCAP-NOTICES.txt.
-    internal static int TiledOffset(int x, int y, int pitch)
-    {
-        int macro = ((x >> 5) + (y >> 5) * (pitch >> 5)) << 9;
-        int micro = ((x & 7) + ((y & 14) << 2)) << 2;
-        int offset = macro + ((micro & ~15) << 1) + (micro & 15) + ((y & 1) << 4);
-        int bank = (((y & 8) >> 2) + (x >> 3)) & 3;
-        return ((offset & ~511) << 3) + ((y & 16) << 7) + ((offset & 448) << 2) +
-            (bank << 6) + (offset & 63);
     }
 
     [DllImport("kernel32.dll", EntryPoint = "CreateHardLinkW", CharSet = CharSet.Unicode, SetLastError = true)]
