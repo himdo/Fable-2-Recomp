@@ -23,6 +23,7 @@
 #                    files while the game runs)
 #   --pgo-use <file> optimize the runtime libraries with a profile merged
 #                    from those files (llvm-profdata merge -o <file> ...)
+#   --lto            ThinLTO for the GPU plugin library (needs lld)
 #   --cpu <level>    code generation target (also: FABLE2_CPU=<level>):
 #                      generic  x86-64-v2, runs on any CPU from ~2009 on (default)
 #                      deck     Steam Deck (Zen 2: AVX2, FMA)
@@ -44,6 +45,7 @@ SDKSRC="${REXSDK_SOURCE:-}"
 CPU="${FABLE2_CPU:-generic}"
 FUNC_TRACE=OFF
 PGO=OFF
+LTO=OFF
 PGO_PROFILE=
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -56,9 +58,10 @@ while [ $# -gt 0 ]; do
         --cpu=*) CPU="${1#--cpu=}" ;;
         --trace) FUNC_TRACE=ON ;;
         --pgo-generate) PGO=GENERATE ;;
+        --lto) LTO=ON ;;
         --pgo-use) shift; PGO=USE; PGO_PROFILE="$(readlink -f "${1:?--pgo-use needs a .profdata file}")" ;;
         --pgo-use=*) PGO=USE; PGO_PROFILE="$(readlink -f "${1#--pgo-use=}")" ;;
-        -h|--help) sed -n '2,35p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,36p' "$0"; exit 0 ;;
         -*) echo "Error: unknown option $1 (see ./build.sh --help)" >&2; exit 1 ;;
         *) TARGET="$1" ;;
     esac
@@ -142,6 +145,7 @@ configure() {
         -DREXGLUE_ENABLE_TRACY=OFF -DREXGLUE_BUILD_TESTS=OFF \
         -DFABLE2_FUNC_TRACE="$FUNC_TRACE" \
         -DREXGLUE_PGO="$PGO" -DREXGLUE_PGO_PROFILE="$PGO_PROFILE" \
+        -DREXGLUE_LTO="$LTO" \
         "${SDL_ARGS[@]}"
 }
 
