@@ -135,6 +135,15 @@ internal static class KeyboardPrompts
                 GuiTextureBank.ReadInt(headerBank.Payload(reference), 12) != 0xA2)
                 throw new InvalidDataException("This disc does not use the expected controller texture format.");
             byte[] rawHeader = headerBank.Payload(reference).ToArray();
+
+            // Collect the keyboard-variant payload for each affected controller
+            // icon. The recomp swaps these in at runtime (see
+            // src/core/fable2_keycap_swap.h), so the bank files on disk stay
+            // untouched (hard links to the originals) and only this sidecar
+            // carries the keycap pixels. The bank stays a normal read; the
+            // game's own dir.manifest is still copied so its startup self-heal
+            // cannot write through a hard link.
+            var sidecar = new List<(string BankPath, long Offset, int Size, byte[] Payload)>();
             var rendered = new Dictionary<(string Label, int Size), byte[]>();
             foreach ((string name, GuiTextureBank.Entry entry) in textureBank.Entries)
             {
@@ -148,21 +157,17 @@ internal static class KeyboardPrompts
                     GuiTextureBank.ReadInt(metadata, 4) != entry.Length) continue;
                 if (!rendered.TryGetValue((label, size), out byte[]? image))
                     rendered[(label, size)] = image = RenderKeycap(label, size);
-                textureBank.Replace(entry, image);
-                byte[] replacementHeader = (byte[])rawHeader.Clone();
-                GuiTextureBank.WriteInt(replacementHeader, 4, image.Length);
-                GuiTextureBank.WriteInt(replacementHeader, 16, size);
-                GuiTextureBank.WriteInt(replacementHeader, 20, size);
-                headerBank.Replace(header, replacementHeader);
+                // Same dimensions as the original icon, so the header (width /
+                // height / payload length) is unchanged; only the pixels differ.
+                if (image.Length != entry.Length) continue;
+                sidecar.Add((Textures, entry.Offset, entry.Length, image));
             }
-            if (rendered.Count == 0) return gameRoot;
+            if (sidecar.Count == 0) return gameRoot;
 
             foreach (FileInfo file in files)
             {
                 string relative = Path.GetRelativePath(gameRoot, file.FullName);
                 string portable = relative.Replace('\\', '/');
-                if (portable.Equals(Textures, StringComparison.OrdinalIgnoreCase) ||
-                    portable.Equals(Headers, StringComparison.OrdinalIgnoreCase)) continue;
                 string output = Path.Combine(staging, relative);
                 Directory.CreateDirectory(Path.GetDirectoryName(output)!);
                 // The recomp may heal the manifest on startup. Give it a copy
@@ -173,9 +178,9 @@ internal static class KeyboardPrompts
                     throw new IOException("Keyboard prompts need a writable game folder on an NTFS volume. " +
                         "Turn off keyboard prompts to launch from the original folder.");
             }
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(staging, Textures))!);
-            textureBank.Write(Path.Combine(staging, Textures));
-            headerBank.Write(Path.Combine(staging, Headers));
+            // The controller icon banks are hard links to the originals; the
+            // keycap pixels travel in the sidecar and are applied at runtime.
+            WriteSidecar(Path.Combine(staging, "keyboard_prompts.bin"), sidecar);
 
             try { Directory.Move(staging, target); }
             catch (IOException) when (Directory.Exists(target)) { } // another launcher published it
@@ -247,6 +252,28 @@ internal static class KeyboardPrompts
                 result[target + channel] = (byte)((pixels[source + 3 - channel] * 255 + alpha / 2) / alpha);
         }
         return result;
+    }
+
+    // Writes the keyboard-prompt sidecar the recomp reads at startup (see
+    // src/core/fable2_keycap_swap.h). Little-endian:
+    //   magic "KBPM" (u32), version (u32 = 1), entry_count (u32), then per entry:
+    //   bank_path_len (u32), bank_path (utf8), abs_offset (u64), size (u32), payload (size).
+    private static void WriteSidecar(string path, List<(string BankPath, long Offset, int Size, byte[] Payload)> entries)
+    {
+        using var file = File.Create(path);
+        using var writer = new BinaryWriter(file, new UTF8Encoding(false));
+        writer.Write(0x4D50424B); // "KBPM"
+        writer.Write(1u);         // version
+        writer.Write((uint)entries.Count);
+        foreach ((string BankPath, long Offset, int Size, byte[] Payload) in entries)
+        {
+            byte[] name = Encoding.UTF8.GetBytes(BankPath);
+            writer.Write((uint)name.Length);
+            writer.Write(name);
+            writer.Write(Offset);    // u64
+            writer.Write((uint)Size);
+            writer.Write(Payload);
+        }
     }
 
     [DllImport("kernel32.dll", EntryPoint = "CreateHardLinkW", CharSet = CharSet.Unicode, SetLastError = true)]

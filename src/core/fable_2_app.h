@@ -32,6 +32,7 @@
 #include "fable2_address_scan.h"
 #include "fable2_config.h"
 #include "fable2_fit_window.h"
+#include "fable2_keycap_swap.h"
 #include "fable2_patches.h"
 // #include "fable2_deadbeef_overlay.h"
 // 30fps-cap instrumentation (writes fps_probe.log next to the exe). Disabled
@@ -449,6 +450,11 @@ class Fable2App : public rex::ReXApp {
     // Lets the direct-mouse-look hook (src/core/fable2_hooks.cpp) translate the
     // camera object's guest address to a host pointer.
     fable2::mouselook::set_memory(runtime()->memory());
+    // Real-time keycap prompt swap (src/core/fable2_keycap_swap.h). No-op unless
+    // the launcher wrote a keyboard-prompt sidecar; the prompt variant then
+    // follows the active input device (keyboard/mouse -> keycaps, pad ->
+    // controller icons).
+    fable2::keycap::Instance().Init(runtime()->memory(), game_data_root());
   }
 
   // Startup integrity check: this build was recompiled against a specific

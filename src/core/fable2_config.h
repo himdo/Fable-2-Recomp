@@ -37,6 +37,12 @@ struct Values {
   int32_t config_version = 1;
   // [input]
   std::string keyboard_gamepad_map{std::string{kDefaultKeyboardGamepadMap}};
+  // Keycap prompt toggle (see src/core/fable2_keycap_swap.h). When the
+  // launcher has written a keyboard-prompt sidecar (keyboard_prompt_images),
+  // pressing this host key at runtime swaps the controller prompt icons
+  // between the original Xbox 360 images and the keyboard/mouse keycaps in
+  // real time (no relaunch). Default "L".
+  std::string keyboard_prompt_toggle_key{"L"};
   // Keep in sync with the cvar defaults in main.cpp (mouse_look,
   // mouse_look_scale); the cvar keeps its compiled default as a fallback so
   // an empty/missing config can never wedge input.

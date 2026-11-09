@@ -80,6 +80,12 @@ mouse_look = true
 # startup bindings. Launch through Fable2Launcher.exe to use this option.
 keyboard_prompt_images = false
 
+# When keyboard_prompt_images is on, pressing this host key at runtime swaps
+# the controller prompt icons between the original Xbox 360 images and the
+# keyboard/mouse keycaps in real time (no relaunch). Any key name understood
+# by the keyboard gamepad map (e.g. "L", "K", "F8"). Default: "L"
+keyboard_prompt_toggle_key = "L"
+
 # Mouse-look sensitivity slider (1..4096; 256 = 1x). Shared by BOTH look modes:
 # for the legacy right-stick mapping it sets the stick units per pixel; for
 # direct mouse look it multiplies mouse_look_yaw_sens / mouse_look_pitch_sens.
@@ -369,6 +375,9 @@ bool Load(const std::filesystem::path& path) {
     values.keyboard_gamepad_map = Read<std::string>(
         input_table, "input", "keyboard_gamepad_map", "string",
         std::string{kDefaultKeyboardGamepadMap});
+    values.keyboard_prompt_toggle_key = Read<std::string>(
+        input_table, "input", "keyboard_prompt_toggle_key", "string",
+        values.keyboard_prompt_toggle_key);
     // Defaults come from Values itself (single source of truth).
     values.mouse_look =
         Read<bool>(input_table, "input", "mouse_look", "boolean",
