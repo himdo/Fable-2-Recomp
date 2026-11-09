@@ -18,6 +18,11 @@
 #   --trace          keep the guest function-entry trace hook
 #                    (FABLE2_FUNC_TRACE, see README); off by default here
 #                    because it costs a check on every guest call
+#   --pgo-generate   build the runtime libraries instrumented for profile-
+#                    guided optimization (they write fable2-pgo-*.profraw
+#                    files while the game runs)
+#   --pgo-use <file> optimize the runtime libraries with a profile merged
+#                    from those files (llvm-profdata merge -o <file> ...)
 #   --cpu <level>    code generation target (also: FABLE2_CPU=<level>):
 #                      generic  x86-64-v2, runs on any CPU from ~2009 on (default)
 #                      deck     Steam Deck (Zen 2: AVX2, FMA)
@@ -38,6 +43,8 @@ CLEAN=0
 SDKSRC="${REXSDK_SOURCE:-}"
 CPU="${FABLE2_CPU:-generic}"
 FUNC_TRACE=OFF
+PGO=OFF
+PGO_PROFILE=
 while [ $# -gt 0 ]; do
     case "$1" in
         -debug|-d) CONFIG=Debug ;;
@@ -48,7 +55,10 @@ while [ $# -gt 0 ]; do
         --cpu) shift; CPU="${1:?--cpu needs a level}" ;;
         --cpu=*) CPU="${1#--cpu=}" ;;
         --trace) FUNC_TRACE=ON ;;
-        -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
+        --pgo-generate) PGO=GENERATE ;;
+        --pgo-use) shift; PGO=USE; PGO_PROFILE="$(readlink -f "${1:?--pgo-use needs a .profdata file}")" ;;
+        --pgo-use=*) PGO=USE; PGO_PROFILE="$(readlink -f "${1#--pgo-use=}")" ;;
+        -h|--help) sed -n '2,35p' "$0"; exit 0 ;;
         -*) echo "Error: unknown option $1 (see ./build.sh --help)" >&2; exit 1 ;;
         *) TARGET="$1" ;;
     esac
@@ -131,6 +141,7 @@ configure() {
         -DREXGLUE_USE_VULKAN=ON \
         -DREXGLUE_ENABLE_TRACY=OFF -DREXGLUE_BUILD_TESTS=OFF \
         -DFABLE2_FUNC_TRACE="$FUNC_TRACE" \
+        -DREXGLUE_PGO="$PGO" -DREXGLUE_PGO_PROFILE="$PGO_PROFILE" \
         "${SDL_ARGS[@]}"
 }
 
