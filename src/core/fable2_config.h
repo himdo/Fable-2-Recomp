@@ -206,6 +206,8 @@ struct Values {
   bool skinning_cpu = true;
   // [patches] faster_render_targets: Narrower EDRAM transfers (SDK cvars execute_unclipped_draw_vs_on_cpu, skip_depth_clear_transfers).
   bool faster_render_targets = true;
+  // [patches] gpu_frame_sync: Keep the GPU at most one frame behind (SDK cvar gpu_sync_at_frame_start).
+  bool gpu_frame_sync = true;
   // [perf] - hot-function override tuning.
   // hotfunc_yield_every: NtYieldExecution batching factor for the hotfunc
   // overrides (see src/core/hotfunc/hotfunc_yield.h). Every Nth call does
