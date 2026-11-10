@@ -85,11 +85,12 @@ struct Settings {
   float vignette_b = 0.0f;  // camera "screen darkening" parameter 2 (cam+204)
   float blur = 0.0f;        // full-screen blur (cam+212)
 
-  // Colour and light: multipliers on the game's own live values (1 = as is).
+  // Colour: applied by the GPU colour grade over the finished frame (1 = as is).
   float exposure = 1.0f;
   float contrast = 1.0f;
   float saturation = 1.0f;
   float brightness = 1.0f;
+  // Light: multipliers on the game's own live values (1 = as is).
   float bloom = 1.0f;
   float bloom_threshold = 1.0f;
   float sun_beams = 1.0f;
@@ -102,7 +103,10 @@ struct Settings {
   float stars = 1.0f;
   float moon_glare = 1.0f;
   float sun_disc = 1.0f;
-  int filter = 0;  // index into kFilterPresets (the panel's Filter list)
+  int filter = 0;  // index into kFilterPresets (the menu's Filter list)
+  float filter_strength = 1.0f;  // 0..1, blends the filter in
+  float warmth = 0.0f;           // -1 cool .. +1 warm (on top of the filter)
+  float tint = 0.0f;             // -1 green .. +1 magenta
   // Composition aids (drawn on screen only; never in a screenshot).
   int guides = 0;      // 0 none, 1 rule of thirds, 2 centre grid, 3 both
   int letterbox = 0;   // 0 none, 1 1.85:1, 2 2.35:1, 3 2.39:1 (cinema bars)
@@ -112,56 +116,52 @@ struct Settings {
   float time_hours = 12.0f;
 };
 
-// Camera filters: each sets the colour, light and lens sliders to a named look.
-// Values are the same controls the panel shows (colour ones multiply the game's
-// own grading), so a filter is a starting point you can keep tweaking.
-struct FilterPreset {
+// Camera filters: colour grades run on the GPU over the finished frame (see
+// rex_set_swap_color_grade / color_grade_cs.hlsl), so they work on any scene
+// and are in the screenshots. "Filter Strength" blends each one in; the
+// Exposure / Contrast / Saturation / Brightness / Warmth / Tint sliders apply
+// on top.
+struct ColorFilter {
   const char* name;
-  float exposure, contrast, saturation, brightness, bloom, sun_beams, overlay, fog;
-  float vignette_a, vignette_b, blur;
+  float saturation;       // 1 = as is, 0 = black and white
+  float warmth, tint;     // white balance: + warmer / + magenta
+  float contrast, gamma;  // contrast around mid grey; gamma > 1 darkens
+  float tone[3];          // monochrome toning colour (sepia, cyanotype)
+  float tone_amount;      // 0..1
+  float shadows[3];       // colour pushed into the shadows
+  float highlights[3];    // colour pushed into the highlights
+  float fade[3];          // faded / lifted blacks colour
+  float fade_amount;
 };
 
-inline constexpr FilterPreset kFilterPresets[] = {
-    // name            exp   con   sat   bri   bloom sun   ovl   fog   vig_a vig_b blur
-    {"Original",       1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
-    {"Black and White",1.00f, 1.20f, 0.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
-    {"Noir",           0.90f, 1.60f, 0.00f, 0.85f, 1.00f, 0.80f, 1.20f, 1.10f, 0.45f, 0.30f, 0.00f},
-    {"High Contrast Mono", 1.05f, 1.80f, 0.00f, 1.00f, 0.80f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
-    {"Sepia",          1.05f, 0.90f, 0.35f, 1.05f, 1.00f, 1.00f, 1.40f, 1.00f, 0.15f, 0.10f, 0.00f},
-    {"Vintage",        1.00f, 0.85f, 0.70f, 1.10f, 0.90f, 1.00f, 1.60f, 1.20f, 0.30f, 0.20f, 0.00f},
-    {"Faded Film",     1.10f, 0.75f, 0.65f, 1.15f, 0.90f, 1.00f, 1.50f, 1.00f, 0.00f, 0.00f, 0.00f},
-    {"Teal and Orange",1.00f, 1.25f, 1.20f, 1.00f, 1.10f, 1.20f, 1.00f, 1.00f, 0.10f, 0.05f, 0.00f},
-    {"Golden Hour",    1.10f, 1.05f, 1.15f, 1.10f, 1.25f, 1.80f, 1.00f, 0.90f, 0.10f, 0.05f, 0.00f},
-    {"Cool Night",     0.85f, 1.10f, 0.85f, 0.90f, 1.20f, 0.60f, 1.00f, 1.30f, 0.25f, 0.15f, 0.00f},
-    {"Dusk",           0.80f, 1.05f, 0.90f, 0.85f, 1.00f, 0.70f, 1.00f, 1.20f, 0.35f, 0.20f, 0.00f},
-    {"Pastel",         1.15f, 0.70f, 0.75f, 1.25f, 1.10f, 1.00f, 1.00f, 1.10f, 0.00f, 0.00f, 0.00f},
-    {"Dreamy Glow",    1.05f, 0.90f, 1.00f, 1.05f, 2.20f, 1.30f, 1.00f, 1.60f, 0.00f, 0.00f, 0.15f},
-    {"Soft Focus",     1.05f, 0.90f, 1.00f, 1.05f, 1.80f, 1.10f, 1.00f, 1.20f, 0.00f, 0.00f, 0.25f},
-    {"Polaroid",       1.10f, 0.85f, 0.95f, 1.15f, 1.00f, 1.00f, 1.30f, 1.00f, 0.10f, 0.05f, 0.00f},
-    {"Kodachrome",     1.00f, 1.15f, 1.40f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
-    {"Cross-process",  1.05f, 1.35f, 1.25f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 0.10f, 0.05f, 0.00f},
-    {"Matte",          1.05f, 0.80f, 0.80f, 1.20f, 0.90f, 1.00f, 1.30f, 1.00f, 0.00f, 0.00f, 0.00f},
-    {"Bleach Bypass",  1.00f, 1.50f, 0.30f, 1.00f, 1.00f, 1.00f, 1.20f, 1.00f, 0.15f, 0.10f, 0.00f},
-    {"High Key",       1.35f, 0.70f, 0.95f, 1.35f, 1.30f, 1.00f, 1.00f, 0.80f, 0.00f, 0.00f, 0.00f},
-    {"Low Key",        0.70f, 1.45f, 0.95f, 0.70f, 0.90f, 0.70f, 1.00f, 1.30f, 0.45f, 0.30f, 0.00f},
-    {"Vivid",          1.00f, 1.30f, 1.60f, 1.00f, 1.10f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
+inline constexpr ColorFilter kFilterPresets[] = {
+    // name               sat   warm   tint   con   gamma  tone                tone  shadows                highlights             fade                 fade
+    {"Original",          1.00f, 0.00f, 0.00f, 1.00f, 1.00f, {1, 1, 1},          0.0f, {0, 0, 0},             {0, 0, 0},             {0, 0, 0},             0.00f},
+    {"Black and White",   0.00f, 0.00f, 0.00f, 1.12f, 1.00f, {1, 1, 1},          0.0f, {0, 0, 0},             {0, 0, 0},             {0, 0, 0},             0.00f},
+    {"Noir",              0.00f, 0.00f, 0.00f, 1.45f, 0.95f, {1, 1, 1},          0.0f, {0, 0, 0},             {0, 0, 0},             {0, 0, 0},             0.00f},
+    {"Sepia",             1.00f, 0.00f, 0.00f, 1.05f, 0.95f, {1.10f, 0.86f, 0.62f}, 1.0f, {0, 0, 0},          {0, 0, 0},             {0.25f, 0.18f, 0.10f}, 0.06f},
+    {"Cyanotype",         1.00f, 0.00f, 0.00f, 1.10f, 1.00f, {0.62f, 0.86f, 1.18f}, 1.0f, {0, 0, 0.02f},      {0, 0, 0},             {0.05f, 0.10f, 0.20f}, 0.06f},
+    {"Vintage",           0.70f, 0.35f, 0.00f, 0.90f, 1.00f, {1, 1, 1},          0.0f, {0.03f, 0.01f, -0.02f}, {0.04f, 0.02f, -0.03f}, {0.22f, 0.18f, 0.12f}, 0.12f},
+    {"Faded Film",        0.72f, 0.05f, 0.00f, 0.82f, 0.95f, {1, 1, 1},          0.0f, {0.00f, 0.02f, 0.04f},  {0.02f, 0.01f, 0.00f},  {0.20f, 0.20f, 0.22f}, 0.16f},
+    {"Teal and Orange",   1.15f, 0.00f, 0.00f, 1.12f, 1.00f, {1, 1, 1},          0.0f, {-0.07f, 0.03f, 0.09f}, {0.10f, 0.03f, -0.07f}, {0, 0, 0},             0.00f},
+    {"Golden Hour",       1.12f, 0.55f, 0.05f, 1.05f, 0.95f, {1, 1, 1},          0.0f, {0.02f, 0.00f, -0.02f}, {0.08f, 0.04f, -0.05f}, {0, 0, 0},             0.00f},
+    {"Cool Night",        0.70f, -0.60f, 0.05f, 1.08f, 1.12f, {1, 1, 1},         0.0f, {-0.02f, 0.00f, 0.06f}, {0.00f, 0.02f, 0.05f},  {0.02f, 0.03f, 0.08f}, 0.05f},
+    {"Dusk",              0.95f, 0.20f, 0.25f, 1.05f, 1.08f, {1, 1, 1},          0.0f, {0.00f, -0.02f, 0.06f}, {0.08f, 0.02f, -0.02f}, {0, 0, 0},             0.00f},
+    {"Pastel",            0.60f, 0.05f, 0.05f, 0.80f, 0.85f, {1, 1, 1},          0.0f, {0.02f, 0.00f, 0.04f},  {0, 0, 0},             {0.95f, 0.92f, 0.95f}, 0.12f},
+    {"Dreamy",            0.90f, 0.10f, 0.15f, 0.85f, 0.85f, {1, 1, 1},          0.0f, {0.02f, 0.00f, 0.04f},  {0.04f, 0.02f, 0.03f},  {1.00f, 0.93f, 0.95f}, 0.10f},
+    {"Polaroid",          0.85f, 0.15f, 0.00f, 0.90f, 0.95f, {1, 1, 1},          0.0f, {0.00f, 0.03f, 0.05f},  {0.05f, 0.03f, -0.03f}, {0.95f, 0.92f, 0.84f}, 0.08f},
+    {"Kodachrome",        1.35f, 0.12f, 0.00f, 1.15f, 1.00f, {1, 1, 1},          0.0f, {0.00f, 0.00f, 0.02f},  {0.03f, 0.01f, -0.03f}, {0, 0, 0},             0.00f},
+    {"Cross-Process",     1.20f, 0.00f, -0.15f, 1.25f, 1.00f, {1, 1, 1},         0.0f, {0.00f, 0.04f, 0.10f},  {0.08f, 0.08f, -0.10f}, {0, 0, 0},             0.00f},
+    {"Matte",             0.85f, 0.00f, 0.00f, 0.85f, 1.00f, {1, 1, 1},          0.0f, {0, 0, 0},             {0, 0, 0},             {0.12f, 0.12f, 0.12f}, 0.14f},
+    {"Bleach Bypass",     0.35f, 0.00f, 0.00f, 1.35f, 0.92f, {1, 1, 1},          0.0f, {0, 0, 0},             {0, 0, 0},             {0, 0, 0},             0.00f},
+    {"High Key",          0.90f, 0.00f, 0.00f, 0.85f, 0.72f, {1, 1, 1},          0.0f, {0, 0, 0},             {0, 0, 0},             {1, 1, 1},             0.06f},
+    {"Low Key",           0.90f, 0.00f, 0.00f, 1.30f, 1.12f, {1, 1, 1},          0.0f, {0, 0, 0},             {0, 0, 0},             {0, 0, 0},             0.00f},
+    {"Vivid",             1.50f, 0.00f, 0.00f, 1.12f, 1.00f, {1, 1, 1},          0.0f, {0, 0, 0},             {0, 0, 0},             {0, 0, 0},             0.00f},
 };
 inline constexpr int kFilterPresetCount = static_cast<int>(sizeof(kFilterPresets) / sizeof(kFilterPresets[0]));
 
-// Copies a filter's colour and lens values into s; leaves the camera settings alone.
-inline void apply_filter(Settings& s, const FilterPreset& f) {
-  s.exposure = f.exposure;
-  s.contrast = f.contrast;
-  s.saturation = f.saturation;
-  s.brightness = f.brightness;
-  s.bloom = f.bloom;
-  s.sun_beams = f.sun_beams;
-  s.overlay = f.overlay;
-  s.fog = f.fog;
-  s.vignette_a = f.vignette_a;
-  s.vignette_b = f.vignette_b;
-  s.blur = f.blur;
-}
+// Picking a filter starts it at full strength; the other sliders are kept.
+inline void apply_filter(Settings& s, const ColorFilter&) { s.filter_strength = 1.0f; }
 
 inline std::mutex& settings_mutex() {
   static std::mutex m;

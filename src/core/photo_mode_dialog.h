@@ -217,32 +217,57 @@ inline std::vector<Page> BuildPages() {
     std::vector<std::string> names;
     for (int i = 0; i < kFilterPresetCount; ++i) names.emplace_back(kFilterPresets[i].name);
     p.items.push_back(Option(
-        "Filter", "A ready-made look. Fine-tune it with the settings below.", names,
+        "Filter", "A colour look for the whole picture. Fine-tune it with the settings below.", names,
         [](const Settings& s) { return float(s.filter); },
         [](Settings& s, float v) {
           s.filter = std::clamp(int(std::lround(v)), 0, kFilterPresetCount - 1);
           apply_filter(s, kFilterPresets[s.filter]);
         }));
-    const char* mult = "1.00x is how the game looks.";
-    p.items.push_back(Multiplier("Exposure", mult, &Settings::exposure, 4.0f));
-    p.items.push_back(Multiplier("Contrast", mult, &Settings::contrast, 3.0f));
-    p.items.push_back(Multiplier("Saturation", mult, &Settings::saturation, 3.0f));
-    p.items.push_back(Multiplier("Brightness", mult, &Settings::brightness, 3.0f));
+    Item strength = Slider("Filter Strength", "How strongly the filter is applied.", &Settings::filter_strength,
+                           0.0f, 1.0f, 0.05f, "");
+    strength.fmt = [](float v) { return Fmt("%.0f%%", v * 100.0f); };
+    strength.visible = [](const Settings& s) { return s.filter != 0; };
+    p.items.push_back(strength);
+    p.items.push_back(Slider("Exposure", "Brighten or darken the whole picture.", &Settings::exposure, 0.25f, 3.0f,
+                             0.05f, "%.2fx"));
+    p.items.push_back(Slider("Contrast", "The difference between light and dark.", &Settings::contrast, 0.4f, 2.5f,
+                             0.05f, "%.2fx"));
+    p.items.push_back(Slider("Saturation", "How strong the colours are. 0 is black and white.",
+                             &Settings::saturation, 0.0f, 2.5f, 0.05f, "%.2fx"));
+    p.items.push_back(Slider("Brightness", "Lift or lower the mid tones, keeping black and white.",
+                             &Settings::brightness, 0.4f, 2.5f, 0.05f, "%.2fx"));
+    Item warm = Slider("Warmth", "Cooler blue or warmer orange light.", &Settings::warmth, -1.0f, 1.0f, 0.05f, "");
+    warm.fmt = [](float v) { return std::fabs(v) < 0.005f ? std::string("Neutral") : Fmt("%+.2f", v); };
+    p.items.push_back(warm);
+    Item tint = Slider("Tint", "Shift towards green or magenta.", &Settings::tint, -1.0f, 1.0f, 0.05f, "");
+    tint.fmt = [](float v) { return std::fabs(v) < 0.005f ? std::string("Neutral") : Fmt("%+.2f", v); };
+    p.items.push_back(tint);
+    p.items.push_back(Action("Reset Colour", "No filter, and every colour setting back to the game's own.",
+                             [](Settings& s) {
+                               s.filter = 0;
+                               s.filter_strength = 1.0f;
+                               s.exposure = s.contrast = s.saturation = s.brightness = 1.0f;
+                               s.warmth = s.tint = 0.0f;
+                             }));
+    Item undo = Action("Undo Last Change", "Put back the setting you changed last.", [](Settings&) {});
+    undo.special = 1;
+    p.items.push_back(undo);
+    pages.push_back(std::move(p));
+  }
+
+  // Light: the game's own lighting effects ------------------------------------------------
+  {
+    Page p{"Light"};
     p.items.push_back(Multiplier("Bloom", "The glow around bright light.", &Settings::bloom, 5.0f));
     p.items.push_back(Multiplier("Bloom Threshold", "How bright something must be to glow.",
                                  &Settings::bloom_threshold, 3.0f));
     p.items.push_back(Multiplier("Sun Beams", "Shafts of light from the sun.", &Settings::sun_beams, 5.0f));
-    p.items.push_back(Multiplier("Film Tint", "The game's colour overlay.", &Settings::overlay, 4.0f));
+    p.items.push_back(Multiplier("Film Texture", "The game's own film overlay.", &Settings::overlay, 4.0f));
     p.items.push_back(Multiplier("Fog", "Haze in the distance.", &Settings::fog, 4.0f));
     p.items.push_back(Multiplier("Ground Mist", "Mist lying low on the ground.", &Settings::ground_mist, 4.0f));
-    p.items.push_back(Action("Reset Colour", "Back to the game's own colours.", [](Settings& s) {
-      s.filter = 0;
-      apply_filter(s, kFilterPresets[0]);
-      s.bloom_threshold = s.ground_mist = 1.0f;
+    p.items.push_back(Action("Reset Light", "Back to the game's own lighting.", [](Settings& s) {
+      s.bloom = s.bloom_threshold = s.sun_beams = s.overlay = s.fog = s.ground_mist = 1.0f;
     }));
-    Item undo = Action("Undo Last Change", "Put back the setting you changed last.", [](Settings&) {});
-    undo.special = 1;
-    p.items.push_back(undo);
     pages.push_back(std::move(p));
   }
 
@@ -945,6 +970,9 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     FABLE2_PM_MERGE(guides)
     FABLE2_PM_MERGE(letterbox)
     FABLE2_PM_MERGE(filter)
+    FABLE2_PM_MERGE(filter_strength)
+    FABLE2_PM_MERGE(warmth)
+    FABLE2_PM_MERGE(tint)
     FABLE2_PM_MERGE(override_time)
     FABLE2_PM_MERGE(time_hours)
 #undef FABLE2_PM_MERGE

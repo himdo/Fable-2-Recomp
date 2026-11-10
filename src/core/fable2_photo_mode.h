@@ -51,6 +51,7 @@
 #include <thread>
 
 #include <rex/logging/macros.h>
+#include <rex/ui/color_grade.h>
 #include <rex/ui/presenter.h>
 
 #include "fable2_config.h"
@@ -144,11 +145,10 @@ struct State {
   float saved_tod = 0.5f;
   float applied_tod = -1.0f;
 
-  ThemeSlotState theme[18] = {
-      {kExposure, &Settings::exposure},
-      {kContrast, &Settings::contrast},
-      {kSaturation, &Settings::saturation},
-      {kBrightness, &Settings::brightness},
+  // Exposure / contrast / saturation / brightness are not here: they go
+  // through the GPU colour grade (build_grade), which always works on the
+  // finished frame, instead of the game's tone-mapping inputs.
+  ThemeSlotState theme[14] = {
       {kBloomStrength, &Settings::bloom},
       {kBloomThreshold, &Settings::bloom_threshold},
       {kSunBeams, &Settings::sun_beams},
@@ -417,6 +417,48 @@ inline void restore_theme(uint8_t* base) {
   g.theme_out = 0;
 }
 
+// --- Colour grade (photo mode filters) ----------------------------------------------
+// Same maths as the prototype the presets were tuned with: saturation and
+// toning as a colour matrix, white balance, exposure; then contrast around a
+// 0.4 pivot, gamma, split toning and faded blacks in the shader.
+inline rex::ui::SwapColorGrade build_grade(const Settings& s) {
+  const ColorFilter& f = kFilterPresets[std::clamp(s.filter, 0, kFilterPresetCount - 1)];
+  const float k = std::clamp(s.filter_strength, 0.0f, 1.0f);
+  auto mix = [k](float a, float b) { return a + (b - a) * k; };
+  const float sat = std::max(0.0f, mix(1.0f, f.saturation) * s.saturation);
+  const float warm = mix(0.0f, f.warmth) + s.warmth;
+  const float tint = mix(0.0f, f.tint) + s.tint;
+  const float tone = f.tone_amount * k;
+  constexpr float L[3] = {0.2126f, 0.7152f, 0.0722f};
+  const float wb[3] = {1.0f + 0.10f * warm + 0.03f * tint, 1.0f - 0.06f * tint,
+                       1.0f - 0.10f * warm + 0.03f * tint};
+  rex::ui::SwapColorGrade g;
+  float* rows[3] = {g.row_r, g.row_g, g.row_b};
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      const float satm = (1.0f - sat) * L[j] + (i == j ? sat : 0.0f);
+      const float tonem = f.tone[i] * L[j];
+      rows[i][j] = s.exposure * wb[i] * ((1.0f - tone) * satm + tone * tonem);
+    }
+    rows[i][3] = 0.0f;
+  }
+  g.contrast = std::max(0.05f, mix(1.0f, f.contrast) * s.contrast);
+  g.gamma = std::clamp(mix(1.0f, f.gamma) / std::max(0.05f, s.brightness), 0.2f, 5.0f);
+  for (int i = 0; i < 3; ++i) {
+    g.shadows[i] = f.shadows[i] * k;
+    g.highlights[i] = f.highlights[i] * k;
+    g.fade[i] = f.fade[i];
+  }
+  g.shadows[3] = 0.4f;  // contrast pivot
+  g.fade[3] = f.fade_amount * k;
+  // Nothing to do at all: leave the pass off.
+  const bool identity = s.filter == 0 && s.exposure == 1.0f && s.contrast == 1.0f &&
+                        s.saturation == 1.0f && s.brightness == 1.0f && s.warmth == 0.0f &&
+                        s.tint == 0.0f;
+  g.enabled = identity ? 0u : 1u;
+  return g;
+}
+
 // --- Screenshots ------------------------------------------------------------------------
 inline std::filesystem::path exe_dir() {
 #ifdef _WIN32
@@ -621,6 +663,8 @@ inline void enter(PPCContext& ctx, uint8_t* base) {
     s.rain = s.snow = s.stars = s.moon_glare = s.sun_disc = 1.0f;
     s.override_time = false;
     s.filter = 0;
+    s.filter_strength = 1.0f;
+    s.warmth = s.tint = 0.0f;
     if (s.move_speed <= 0.0f) s.move_speed = config::Get().photo_mode_move_speed;
   }
 
@@ -670,6 +714,7 @@ inline void leave(PPCContext& ctx, uint8_t* base) {
   for (auto& t : g.theme) t.valid = false;
   for (int i = 0; i < g.cam_count; ++i) g.cams[i].restore_pending = true;
   g.restore_updates_left = 30;
+  rex_set_swap_color_grade(nullptr);  // filters off
   g.phase = Phase::kOff;
   g.suppress_pad = true;  // Esc / B may still be held: keep it from the game
   active_flag().store(false, std::memory_order_release);
@@ -894,20 +939,25 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
     __imp__sub_821D43D8(ctx, base);
   }
   apply_theme(base);
+  {
+    const rex::ui::SwapColorGrade grade = build_grade(g.s);
+    rex_set_swap_color_grade(&grade);
+  }
 
   if (now_ms() - g.diag_last_ms >= 1000) {
     g.diag_last_ms = now_ms();
     const Pad p = merged_pad();
-    char buf[320];
+    char buf[420];
     std::snprintf(buf, sizeof(buf),
                   "tick phase=%d top=%d world=%u frozen=%u cam_calls=%u cam_writes=%u "
                   "pad_reads=%u pad=%04X lx=%d ly=%d rx=%d ry=%d lt=%u rt=%u focus=%d ui_kb=%d "
-                  "pos=(%.2f, %.2f, %.2f) yaw=%.1f pitch=%.1f",
+                  "pos=(%.2f, %.2f, %.2f) yaw=%.1f pitch=%.1f filter=%s/%.0f%% grade=%d",
                   int(g.phase), top ? 1 : 0, g.diag_world, g.diag_frozen, g.diag_cam_calls,
                   g.diag_cam_writes, diag_pad_reads().exchange(0), p.buttons, p.lx, p.ly, p.rx,
                   p.ry, p.lt, p.rt, window_focused().load() ? 1 : 0,
                   ui_wants_keyboard().load() ? 1 : 0, g.pos.x, g.pos.y, g.pos.z, g.yaw / kDeg,
-                  g.pitch / kDeg);
+                  g.pitch / kDeg, kFilterPresets[std::clamp(g.s.filter, 0, kFilterPresetCount - 1)].name,
+                  g.s.filter_strength * 100.0f, rex_get_swap_color_grade(nullptr) ? 1 : 0);
     log_line(buf);
     g.diag_world = g.diag_frozen = g.diag_cam_calls = g.diag_cam_writes = 0;
   }
