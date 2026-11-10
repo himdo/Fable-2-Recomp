@@ -409,14 +409,20 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
   int64_t toast_ms_ = 0;
 
   // Layout, in 720p units.
+  // Text sizes are the game's own three menu fonts at their native line
+  // heights on its 720p canvas (gui_large / gui_normal / gui_small), scaled
+  // with the window height exactly like the game's text.
+  static constexpr float kLarge = 32.0f;
+  static constexpr float kNormal = 27.0f;
+  static constexpr float kSmall = 24.0f;
   static constexpr float kLeft = 64.0f;     // text column
-  static constexpr float kRight = 470.0f;   // value column right edge
-  static constexpr float kTitleY = 52.0f;
-  static constexpr float kTabsY = 112.0f;
-  static constexpr float kListY = 162.0f;
-  static constexpr float kRow = 31.0f;
-  static constexpr float kText = 23.0f;     // item text height
-  static constexpr float kBar = 104.0f;     // slider bar width
+  static constexpr float kRight = 500.0f;   // value column right edge
+  static constexpr float kTitleY = 40.0f;
+  static constexpr float kTabsY = 94.0f;
+  static constexpr float kListY = 140.0f;
+  static constexpr float kRow = 34.0f;
+  static constexpr float kText = kNormal;   // menu lines
+  static constexpr float kBar = 110.0f;     // slider bar width
 
   float X(float v) const { return v * k_; }
 
@@ -429,18 +435,21 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
   }
 
   // --- Text ------------------------------------------------------------------------
-  float TextW(const char* t, float size) const {
-    if (gamefont::Ready()) return gamefont::Measure(t, X(size));
+  // `size` is one of kLarge / kNormal / kSmall; `scale` shrinks or grows it
+  // for the few places that need it (button letters, the countdown).
+  float TextW(const char* t, float size, float scale = 1.0f) const {
+    if (gamefont::AnyReady()) return gamefont::Measure(t, X(size) * scale, size);
     return float(std::strlen(t)) * 7.0f;  // default ImGui font fallback
   }
-  void Text(ImVec2 p, float size, ImU32 col, const char* t, bool shadow = true) {
-    if (gamefont::Ready()) {
-      const float sz = X(size);
+  void Text(ImVec2 p, float size, ImU32 col, const char* t, bool shadow = true, float scale = 1.0f) {
+    if (gamefont::AnyReady()) {
+      const float sz = X(size) * scale;
       if (shadow) {
         const float o = std::max(1.0f, sz * 0.06f);
-        gamefont::Draw(dl_, ImVec2(p.x + o, p.y + o), sz, menu::with_alpha(menu::kShadow, ((col >> 24) & 0xFF) / 255.0f), t);
+        gamefont::Draw(dl_, ImVec2(p.x + o, p.y + o), sz, size,
+                       menu::with_alpha(menu::kShadow, ((col >> 24) & 0xFF) / 255.0f), t);
       }
-      gamefont::Draw(dl_, p, sz, col, t);
+      gamefont::Draw(dl_, p, sz, size, col, t);
     } else {
       if (shadow) dl_->AddText(ImVec2(p.x + 1, p.y + 1), menu::kShadow, t, nullptr);
       dl_->AddText(p, col, t, nullptr);
@@ -501,9 +510,9 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
   // Xbox 360-style face button / bumper / key cap, followed by its label.
   // Returns the width used.
   float Prompt(float x, float y, const char* button, const char* label, bool measure_only = false) {
-    const float size = 21.0f;
+    const float size = kSmall;
     float w = 0.0f;
-    const float h = X(26.0f);
+    const float h = X(30.0f);
     const float cy = y + h * 0.5f;
     struct Face { const char* name; ImU32 col; };
     static const Face kFaces[] = {{"A", IM_COL32(92, 168, 58, 255)},
@@ -518,26 +527,26 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
       if (!measure_only) {
         dl_->AddCircleFilled(ImVec2(x + r, cy), r, IM_COL32(20, 20, 20, 230), 24);
         dl_->AddCircleFilled(ImVec2(x + r, cy), r * 0.84f, face->col, 24);
-        const float tw = TextW(button, size * 0.82f);
-        Text(ImVec2(x + r - tw * 0.5f, cy - X(size * 0.82f) * 0.55f), size * 0.82f, IM_COL32(255, 255, 255, 255),
-             button, false);
+        const float tw = TextW(button, size, 0.82f);
+        Text(ImVec2(x + r - tw * 0.5f, cy - X(size) * 0.82f * 0.52f), size, IM_COL32(255, 255, 255, 255), button,
+             false, 0.82f);
       }
       w = h;
     } else {
       // Bumpers and keys: a rounded cap with the name inside.
-      const float tw = TextW(button, size * 0.78f);
+      const float tw = TextW(button, size, 0.78f);
       const float cw = std::max(h, tw + X(14.0f));
       if (!measure_only) {
         dl_->AddRectFilled(ImVec2(x, y), ImVec2(x + cw, y + h), IM_COL32(18, 16, 12, 220), X(6.0f), 0);
         dl_->AddRect(ImVec2(x, y), ImVec2(x + cw, y + h), menu::with_alpha(menu::kCreamDim, 0.8f), X(6.0f), 0,
                      std::max(1.0f, X(1.2f)));
-        Text(ImVec2(x + (cw - tw) * 0.5f, cy - X(size * 0.78f) * 0.55f), size * 0.78f, menu::kCream, button, false);
+        Text(ImVec2(x + (cw - tw) * 0.5f, cy - X(size) * 0.78f * 0.52f), size, menu::kCream, button, false, 0.78f);
       }
       w = cw;
     }
     if (label && *label) {
       w += X(8.0f);
-      if (!measure_only) Text(ImVec2(x + w, cy - X(size) * 0.55f), size, menu::kCream, label);
+      if (!measure_only) Text(ImVec2(x + w, cy - X(size) * 0.52f), size, menu::kCream, label);
       w += TextW(label, size);
     }
     return w;
@@ -635,13 +644,13 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     if (io.MouseClicked[0]) {
       float x = X(kLeft);
       for (int p = 0; p < int(pages_.size()); ++p) {
-        const float w = TextW(pages_[p].name, 21.0f);
-        if (m.x >= x - X(6) && m.x < x + w + X(6) && m.y >= X(kTabsY - 4) && m.y < X(kTabsY + 28)) {
+        const float w = TextW(pages_[p].name, kSmall);
+        if (m.x >= x - X(6) && m.x < x + w + X(6) && m.y >= X(kTabsY - 4) && m.y < X(kTabsY + 30)) {
           SetPage(p);
           vis = Visible(s);
           return;
         }
-        x += w + X(22.0f);
+        x += w + X(20.0f);
       }
     }
     if (!io.MouseDown[0]) drag_row_ = -1;
@@ -700,8 +709,8 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
                                  dark);
 
     // Title and rule.
-    Text(ImVec2(X(kLeft), X(kTitleY)), 38.0f, menu::with_alpha(menu::kCream, fade), "Photo Mode");
-    Rule(X(kLeft - 14.0f), X(kRight + 10.0f), X(kTitleY + 46.0f), fade);
+    Text(ImVec2(X(kLeft), X(kTitleY)), kLarge, menu::with_alpha(menu::kCream, fade), "Photo Mode");
+    Rule(X(kLeft - 14.0f), X(kRight + 10.0f), X(kTitleY + 40.0f), fade);
 
     // Pages: LB  Camera  Lens  Colour  World  Capture  RB
     const bool pad = prompts_pad().load(std::memory_order_relaxed);
@@ -713,14 +722,14 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     }
     for (int p = 0; p < int(pages_.size()); ++p) {
       const bool cur = p == page_;
-      const float w = TextW(pages_[p].name, 21.0f);
-      Text(ImVec2(x, ty), 21.0f, menu::with_alpha(cur ? menu::kGold : menu::kFaint, fade), pages_[p].name);
+      const float w = TextW(pages_[p].name, kSmall);
+      Text(ImVec2(x, ty), kSmall, menu::with_alpha(cur ? menu::kGold : menu::kFaint, fade), pages_[p].name);
       if (cur) {
-        const float uy = ty + X(27.0f);
+        const float uy = ty + X(28.0f);
         dl_->AddRectFilled(ImVec2(x, uy), ImVec2(x + w, uy + std::max(1.0f, X(1.5f))),
                            menu::with_alpha(menu::kGold, fade), 0.0f, 0);
       }
-      x += w + X(22.0f);
+      x += w + X(20.0f);
     }
     if (pad) Prompt(x - X(10.0f), ty - X(1.0f), "RB", nullptr);
 
@@ -789,7 +798,7 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     if (!vis.empty()) {
       const float y = X(kListY + kRow * vis.size() + 14.0f);
       Rule(X(kLeft - 14.0f), X(kRight + 10.0f), y, 0.5f * fade);
-      TextWrapped(ImVec2(X(kLeft), y + X(12.0f)), 19.0f, X(kRight - kLeft), menu::with_alpha(menu::kFaint, fade),
+      TextWrapped(ImVec2(X(kLeft), y + X(12.0f)), kSmall, X(kRight - kLeft), menu::with_alpha(menu::kFaint, fade),
                   items[vis[sel_]].desc);
     }
   }
@@ -811,8 +820,11 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
       if (pad) {
         list = {{"A", a}, {"X", "Reset Camera"}, {"Y", "Hide Menu"}, {"B", "Exit"}};
       } else {
-        list = {{"Enter", a}, {config::Get().photo_mode_screenshot_key, "Take Photo"},
-                {"H", "Hide Menu"}, {"Esc", "Exit"}};
+        list.clear();
+        if (std::strcmp(a, "Take Photo") != 0) list.push_back({"Enter", a});
+        list.push_back({config::Get().photo_mode_screenshot_key, "Take Photo"});
+        list.push_back({"H", "Hide Menu"});
+        list.push_back({"Esc", "Exit"});
       }
       // A thin dark band behind the prompts.
       dl_->AddRectFilledMultiColor(ImVec2(0, H - X(90.0f)), ImVec2(W, H), IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0),
@@ -829,9 +841,10 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     const float y = H - X(56.0f);
     for (const P& p : list) x += Prompt(x, y, p.button.c_str(), p.label.c_str()) + gap;
     if (shown && !pad) {
-      // Camera keys, small, on the left.
-      Text(ImVec2(X(kLeft), y + X(3.0f)), 18.0f, menu::kFaint,
-           "WASD Move    E / Q Up and Down    Right Mouse Look    Wheel Zoom");
+      // Camera keys on the left, when there is room beside the prompts.
+      const char* keys = "WASD Move    Q / E Down, Up    Right Mouse Look";
+      if (X(kLeft) + TextW(keys, kSmall) + X(40.0f) < W - X(48.0f) - (total - gap))
+        Text(ImVec2(X(kLeft), y + X(30.0f) * 0.5f - X(kSmall) * 0.52f), kSmall, menu::kFaint, keys);
     }
   }
 
@@ -849,8 +862,8 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
       if (left > 300) {
         char b[8];
         std::snprintf(b, sizeof(b), "%d", int((left + 999) / 1000));
-        const float w = TextW(b, 64.0f);
-        Text(ImVec2(W * 0.5f - w * 0.5f, X(40.0f)), 64.0f, menu::kCream, b);
+        const float w = TextW(b, kLarge, 2.0f);
+        Text(ImVec2(W * 0.5f - w * 0.5f, X(40.0f)), kLarge, menu::kCream, b, true, 2.0f);
       }
     }
     if (toast_.empty()) return;
@@ -860,10 +873,10 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     // "Saved Fable2_....png (2560x1440)" -> "Photo saved".
     const bool saved = toast_.rfind("Saved", 0) == 0;
     const char* t = saved ? "Photo Saved" : toast_.c_str();
-    const float w = TextW(t, 24.0f);
+    const float w = TextW(t, kNormal);
     const float x = W - X(48.0f) - w;
-    Rule(x - X(20.0f), W - X(28.0f), X(84.0f), a);
-    Text(ImVec2(x, X(50.0f)), 24.0f, menu::with_alpha(menu::kCream, a), t);
+    Rule(x - X(20.0f), W - X(28.0f), X(80.0f), a);
+    Text(ImVec2(x, X(46.0f)), kNormal, menu::with_alpha(menu::kCream, a), t);
   }
 
   // Thirds, centre grid and cinema bars, drawn over the game (never in photos).

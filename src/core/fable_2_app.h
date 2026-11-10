@@ -595,26 +595,32 @@ class Fable2App : public rex::ReXApp {
       }
     }
   }
-  // The game's own menu typeface for the photo mode menu, read from the
-  // user's game data (data/language/<lang>/fonts/gui_large.bft).
+  // The game's own menu typeface (large / normal / small) for the photo mode
+  // menu, read from the user's game data (data/language/<lang>/fonts/*.bft).
   void OnConfigureFonts(ImFontAtlas* atlas) override {
+    namespace gf = fable2::gamefont;
     std::vector<std::filesystem::path> roots;
     if (!game_data_root().empty()) roots.push_back(game_data_root());
     roots.push_back(fable2::photomode::menu::PhotosFolder().parent_path());
-    std::string why = "game data not found";
-    for (const auto& root : roots) {
-      for (const char* lang : {"en-uk", "en-us", "en"}) {
-        const auto path = root / "data" / "language" / lang / "fonts" / "gui_large.bft";
-        if (!std::filesystem::exists(path)) continue;
-        if (fable2::gamefont::Load(path) && fable2::gamefont::AddToAtlas(atlas)) {
-          REXSYS_INFO("[photo-mode] menu font: {} ({} glyphs)", path.string(),
-                      fable2::gamefont::font().glyphs.size());
-          return;
+    for (int i = 0; i < gf::kSizeCount; ++i) {
+      bool ok = false;
+      for (const auto& root : roots) {
+        for (const char* lang : {"en-uk", "en-us", "en"}) {
+          const auto path = root / "data" / "language" / lang / "fonts" / gf::kSizeFile[i];
+          if (std::filesystem::exists(path) && gf::Load(path, i)) {
+            ok = true;
+            break;
+          }
         }
-        why = fable2::gamefont::font().error;
+        if (ok) break;
       }
+      if (!ok) REXSYS_WARN("[photo-mode] menu font {} not loaded ({})", gf::kSizeFile[i],
+                           gf::font(i).error.empty() ? "not found" : gf::font(i).error);
     }
-    REXSYS_WARN("[photo-mode] menu font not loaded ({}); using the default font", why);
+    const int added = gf::AddAllToAtlas(atlas);
+    REXSYS_INFO("[photo-mode] menu fonts: {} of {} loaded (large {} / normal {} / small {} glyphs)", added,
+                int(gf::kSizeCount), gf::font(gf::kLarge).glyphs.size(), gf::font(gf::kNormal).glyphs.size(),
+                gf::font(gf::kSmall).glyphs.size());
   }
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     // fable2::deadbeef_overlay::register_overlay(drawer);
