@@ -42,7 +42,7 @@ Checks that the generated files in `constants/` match
 | `tools/repro/test_normalize_pe.py` | The stable-hash step pins timestamps and the PDB GUID, so two builds come out identical. Three known bugs are marked as expected failures |
 | `tools/test_apply_recomp_patches.py` | The patch step applies each patch once, fails on a missing anchor and honors its on/off switch. One known issue is marked as an expected failure |
 | `tools/test_fable2_control.py` | Each command sends the request the server expects, `state` strips spaces from button names and keeps values of 0, a token login goes first and stops on a bad token, and connection errors are reported as JSON |
-| `tools/test_game_versions.py` | Generated version files match the catalogue, and invalid or duplicate entries are rejected |
+| `tools/test_game_versions.py` | Generated version files match the catalogue, invalid or duplicate entries are rejected, the default profile must be compatible and in the validated code group, only those versions get a CMake profile, and `--check` reports stale files. One known issue is marked as an expected failure |
 | `tools/test_make_hotfunc_overrides.py` | The override generator extracts and transforms functions correctly and never overwrites a hand-tuned file. Four known issues are marked as expected failures |
 | `tools/test_manifest_collisions.py` | The check for manifest names that clash with DLL exports reports clashes and bad input, and the real manifest avoids the kernel wait names that once broke audio |
 | `tools/test_package_release.py` | The release zip holds only the listed files, its build info is stamped with the version, symbols stay separate, checksums match, and a missing file stops packaging |
