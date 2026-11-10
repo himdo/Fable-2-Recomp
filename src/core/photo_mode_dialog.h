@@ -93,6 +93,12 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     FABLE2_PM_MERGE(overlay)
     FABLE2_PM_MERGE(fog)
     FABLE2_PM_MERGE(ground_mist)
+    FABLE2_PM_MERGE(rain)
+    FABLE2_PM_MERGE(snow)
+    FABLE2_PM_MERGE(stars)
+    FABLE2_PM_MERGE(moon_glare)
+    FABLE2_PM_MERGE(sun_disc)
+    FABLE2_PM_MERGE(filter)
     FABLE2_PM_MERGE(override_time)
     FABLE2_PM_MERGE(time_hours)
 #undef FABLE2_PM_MERGE
@@ -130,7 +136,22 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
       ImGui::Separator();
     }
 
-    if (ImGui::Button("Take screenshot", ImVec2(0.0f, 0.0f))) screenshot_request().store(true);
+    if (ImGui::Button("Take screenshot", ImVec2(0.0f, 0.0f))) {
+      {
+        std::lock_guard<std::mutex> lock(shot_plan_mutex());
+        ShotPlan& p = shot_plan_unlocked();
+        p.shots = std::clamp(p.shots, 1, 10);
+      }
+      screenshot_request().store(true);
+    }
+    if (ImGui::CollapsingHeader("Screenshot", 0)) {
+      std::lock_guard<std::mutex> lock(shot_plan_mutex());
+      ShotPlan& p = shot_plan_unlocked();
+      ImGui::SliderInt("Burst count", &p.shots, 1, 10);
+      ImGui::SliderInt("Self-timer", &p.delay_s, 0, 30, "%d s");
+      ImGui::SliderInt("Burst spacing", &p.spacing_ms, 100, 2000, "%d ms");
+      ImGui::TextDisabled("Burst and timer apply to the next Take screenshot or F12.");
+    }
     ImGui::SameLine(0.0f, -1.0f);
     if (ImGui::Button("Hide panel", ImVec2(0.0f, 0.0f))) panel_visible().store(false);
     ImGui::SameLine(0.0f, -1.0f);
@@ -185,6 +206,14 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     }
 
     if (ImGui::CollapsingHeader("Colour and light", ImGuiTreeNodeFlags_DefaultOpen)) {
+      std::string names;
+      for (int i = 0; i < kFilterPresetCount; ++i) {
+        names += kFilterPresets[i].name;
+        names += '\0';
+      }
+      if (ImGui::Combo("Filter", &s.filter, names.c_str(), -1)) {
+        apply_filter(s, kFilterPresets[s.filter]);
+      }
       ImGui::TextDisabled("1.00x = the game's own value");
       ImGui::SliderFloat("Exposure", &s.exposure, 0.0f, 4.0f, "%.2fx", 0);
       ImGui::SliderFloat("Contrast", &s.contrast, 0.0f, 3.0f, "%.2fx", 0);
@@ -196,13 +225,20 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
       ImGui::SliderFloat("Film overlay", &s.overlay, 0.0f, 4.0f, "%.2fx", 0);
       ImGui::SliderFloat("Fog", &s.fog, 0.0f, 4.0f, "%.2fx", 0);
       ImGui::SliderFloat("Ground mist", &s.ground_mist, 0.0f, 4.0f, "%.2fx", 0);
-      if (ImGui::Button("Black and white", ImVec2(0.0f, 0.0f))) s.saturation = 0.0f;
-      ImGui::SameLine(0.0f, -1.0f);
       if (ImGui::Button("Reset colour", ImVec2(0.0f, 0.0f))) {
-        s.exposure = s.contrast = s.saturation = s.brightness = 1.0f;
-        s.bloom = s.bloom_threshold = s.sun_beams = s.overlay = 1.0f;
-        s.fog = s.ground_mist = 1.0f;
+        s.filter = 0;
+        apply_filter(s, kFilterPresets[0]);
+        s.bloom_threshold = s.ground_mist = 1.0f;
       }
+    }
+
+    if (ImGui::CollapsingHeader("Weather and sky", 0)) {
+      ImGui::TextDisabled("Weather and sky effects, 1.00x = the game's own value");
+      ImGui::SliderFloat("Rain", &s.rain, 0.0f, 3.0f, "%.2fx", 0);
+      ImGui::SliderFloat("Snow", &s.snow, 0.0f, 3.0f, "%.2fx", 0);
+      ImGui::SliderFloat("Stars", &s.stars, 0.0f, 3.0f, "%.2fx", 0);
+      ImGui::SliderFloat("Moon glare", &s.moon_glare, 0.0f, 3.0f, "%.2fx", 0);
+      ImGui::SliderFloat("Sun disc", &s.sun_disc, 0.0f, 3.0f, "%.2fx", 0);
     }
 
     if (ImGui::CollapsingHeader("Time of day", ImGuiTreeNodeFlags_DefaultOpen)) {

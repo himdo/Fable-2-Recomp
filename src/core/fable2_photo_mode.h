@@ -143,7 +143,7 @@ struct State {
   float saved_tod = 0.5f;
   float applied_tod = -1.0f;
 
-  ThemeSlotState theme[11] = {
+  ThemeSlotState theme[18] = {
       {kExposure, &Settings::exposure},
       {kContrast, &Settings::contrast},
       {kSaturation, &Settings::saturation},
@@ -155,6 +155,13 @@ struct State {
       {kFogNearDensity, &Settings::fog},
       {kFogFarDensity, &Settings::fog},
       {kGroundMist, &Settings::ground_mist},
+      {kRainDensity, &Settings::rain},
+      {kRainSize, &Settings::rain},
+      {kSnowSize, &Settings::snow},
+      {kSnowFallSpeed, &Settings::snow},
+      {kStarBrightness, &Settings::stars},
+      {kMoonGlare, &Settings::moon_glare},
+      {kSunDiscIntensity, &Settings::sun_disc},
   };
   uint32_t theme_out = 0;
 
@@ -592,7 +599,9 @@ inline void enter(PPCContext& ctx, uint8_t* base) {
     s.exposure = s.contrast = s.saturation = s.brightness = 1.0f;
     s.bloom = s.bloom_threshold = s.sun_beams = s.overlay = 1.0f;
     s.fog = s.ground_mist = 1.0f;
+    s.rain = s.snow = s.stars = s.moon_glare = s.sun_disc = 1.0f;
     s.override_time = false;
+    s.filter = 0;
     if (s.move_speed <= 0.0f) s.move_speed = config::Get().photo_mode_move_speed;
   }
 
@@ -863,7 +872,30 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
   }
   apply_theme(base);
 
-  if (screenshot_request().exchange(false)) take_screenshot();
+  if (screenshot_request().exchange(false)) {
+    // A plain shot goes through the same schedule as timed and burst shots.
+    ShotPlan p;
+    {
+      std::lock_guard<std::mutex> lock(shot_plan_mutex());
+      p = shot_plan_unlocked();
+    }
+    shots_left().store(p.shots);
+    shot_next_ms().store(now_ms() + 1000LL * p.delay_s);
+  }
+  const int64_t due = shot_next_ms().load();
+  if (due != 0 && now_ms() >= due && shots_left().load() > 0) {
+    take_screenshot();
+    if (shots_left().fetch_sub(1) > 1) {
+      ShotPlan p;
+      {
+        std::lock_guard<std::mutex> lock(shot_plan_mutex());
+        p = shot_plan_unlocked();
+      }
+      shot_next_ms().store(now_ms() + p.spacing_ms);
+    } else {
+      shot_next_ms().store(0);
+    }
+  }
 }
 
 // --- Pad read (guest thread): r3 = user, r4 = X_INPUT_STATE, returns r3 = 0 ok. ---------

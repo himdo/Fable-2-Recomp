@@ -44,6 +44,13 @@ enum ThemeSlot : int {
   kBrightness = 46,
   kSunBeams = 48,  // RadialBlurFactor (the "SunBeams" group)
   kGroundMist = 189,
+  kRainDensity = 74,
+  kRainSize = 73,
+  kSnowSize = 71,
+  kSnowFallSpeed = 72,
+  kStarBrightness = 70,
+  kMoonGlare = 67,
+  kSunDiscIntensity = 94,
 };
 
 // What the depth-of-field section does.
@@ -89,11 +96,69 @@ struct Settings {
   float overlay = 1.0f;
   float fog = 1.0f;
   float ground_mist = 1.0f;
+  // Weather and sky (multipliers on the game's own values).
+  float rain = 1.0f;
+  float snow = 1.0f;
+  float stars = 1.0f;
+  float moon_glare = 1.0f;
+  float sun_disc = 1.0f;
+  int filter = 0;  // index into kFilterPresets (the panel's Filter list)
 
   // Time of day (0..24 h). Only applied while override_time is on.
   bool override_time = false;
   float time_hours = 12.0f;
 };
+
+// Camera filters: each sets the colour, light and lens sliders to a named look.
+// Values are the same controls the panel shows (colour ones multiply the game's
+// own grading), so a filter is a starting point you can keep tweaking.
+struct FilterPreset {
+  const char* name;
+  float exposure, contrast, saturation, brightness, bloom, sun_beams, overlay, fog;
+  float vignette_a, vignette_b, blur;
+};
+
+inline constexpr FilterPreset kFilterPresets[] = {
+    // name            exp   con   sat   bri   bloom sun   ovl   fog   vig_a vig_b blur
+    {"Original",       1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
+    {"Black and white",1.00f, 1.20f, 0.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
+    {"Noir",           0.90f, 1.60f, 0.00f, 0.85f, 1.00f, 0.80f, 1.20f, 1.10f, 0.45f, 0.30f, 0.00f},
+    {"High contrast mono", 1.05f, 1.80f, 0.00f, 1.00f, 0.80f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
+    {"Sepia",          1.05f, 0.90f, 0.35f, 1.05f, 1.00f, 1.00f, 1.40f, 1.00f, 0.15f, 0.10f, 0.00f},
+    {"Vintage",        1.00f, 0.85f, 0.70f, 1.10f, 0.90f, 1.00f, 1.60f, 1.20f, 0.30f, 0.20f, 0.00f},
+    {"Faded film",     1.10f, 0.75f, 0.65f, 1.15f, 0.90f, 1.00f, 1.50f, 1.00f, 0.00f, 0.00f, 0.00f},
+    {"Teal and orange",1.00f, 1.25f, 1.20f, 1.00f, 1.10f, 1.20f, 1.00f, 1.00f, 0.10f, 0.05f, 0.00f},
+    {"Golden hour",    1.10f, 1.05f, 1.15f, 1.10f, 1.25f, 1.80f, 1.00f, 0.90f, 0.10f, 0.05f, 0.00f},
+    {"Cool night",     0.85f, 1.10f, 0.85f, 0.90f, 1.20f, 0.60f, 1.00f, 1.30f, 0.25f, 0.15f, 0.00f},
+    {"Dusk",           0.80f, 1.05f, 0.90f, 0.85f, 1.00f, 0.70f, 1.00f, 1.20f, 0.35f, 0.20f, 0.00f},
+    {"Pastel",         1.15f, 0.70f, 0.75f, 1.25f, 1.10f, 1.00f, 1.00f, 1.10f, 0.00f, 0.00f, 0.00f},
+    {"Dreamy glow",    1.05f, 0.90f, 1.00f, 1.05f, 2.20f, 1.30f, 1.00f, 1.60f, 0.00f, 0.00f, 0.15f},
+    {"Soft focus",     1.05f, 0.90f, 1.00f, 1.05f, 1.80f, 1.10f, 1.00f, 1.20f, 0.00f, 0.00f, 0.25f},
+    {"Polaroid",       1.10f, 0.85f, 0.95f, 1.15f, 1.00f, 1.00f, 1.30f, 1.00f, 0.10f, 0.05f, 0.00f},
+    {"Kodachrome",     1.00f, 1.15f, 1.40f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
+    {"Cross-process",  1.05f, 1.35f, 1.25f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 0.10f, 0.05f, 0.00f},
+    {"Matte",          1.05f, 0.80f, 0.80f, 1.20f, 0.90f, 1.00f, 1.30f, 1.00f, 0.00f, 0.00f, 0.00f},
+    {"Bleach bypass",  1.00f, 1.50f, 0.30f, 1.00f, 1.00f, 1.00f, 1.20f, 1.00f, 0.15f, 0.10f, 0.00f},
+    {"High key",       1.35f, 0.70f, 0.95f, 1.35f, 1.30f, 1.00f, 1.00f, 0.80f, 0.00f, 0.00f, 0.00f},
+    {"Low key",        0.70f, 1.45f, 0.95f, 0.70f, 0.90f, 0.70f, 1.00f, 1.30f, 0.45f, 0.30f, 0.00f},
+    {"Vivid",          1.00f, 1.30f, 1.60f, 1.00f, 1.10f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
+};
+inline constexpr int kFilterPresetCount = static_cast<int>(sizeof(kFilterPresets) / sizeof(kFilterPresets[0]));
+
+// Copies a filter's colour and lens values into s; leaves the camera settings alone.
+inline void apply_filter(Settings& s, const FilterPreset& f) {
+  s.exposure = f.exposure;
+  s.contrast = f.contrast;
+  s.saturation = f.saturation;
+  s.brightness = f.brightness;
+  s.bloom = f.bloom;
+  s.sun_beams = f.sun_beams;
+  s.overlay = f.overlay;
+  s.fog = f.fog;
+  s.vignette_a = f.vignette_a;
+  s.vignette_b = f.vignette_b;
+  s.blur = f.blur;
+}
 
 inline std::mutex& settings_mutex() {
   static std::mutex m;
@@ -142,6 +207,29 @@ inline void request_exit() { want_active().store(false); }
 // --- One-shot requests from the input poll / panel ---------------------------
 inline std::atomic<bool>& screenshot_request() {
   static std::atomic<bool> v{false};
+  return v;
+}
+// Timed and burst screenshots: the panel sets the count, delay and spacing;
+// the guest thread takes the shots when their time comes.
+struct ShotPlan {
+  int shots = 1;           // frames to capture (burst)
+  int delay_s = 0;         // wait before the first shot (self-timer)
+  int spacing_ms = 400;    // gap between burst shots
+};
+inline std::mutex& shot_plan_mutex() {
+  static std::mutex m;
+  return m;
+}
+inline ShotPlan& shot_plan_unlocked() {
+  static ShotPlan p;
+  return p;
+}
+inline std::atomic<int64_t>& shot_next_ms() {  // 0 = nothing scheduled
+  static std::atomic<int64_t> v{0};
+  return v;
+}
+inline std::atomic<int>& shots_left() {
+  static std::atomic<int> v{0};
   return v;
 }
 inline std::atomic<bool>& reset_camera_request() {
