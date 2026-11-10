@@ -122,6 +122,7 @@ struct State {
   Pad pad[4]{};
   Pad pad_prev_frame{};  // merged pad at the previous world update
   uint16_t toggle_prev[4] = {0, 0, 0, 0};
+  Repeater rep_up, rep_down, rep_left, rep_right;  // D-pad menu navigation
   std::atomic<bool> suppress_pad{false};  // keep blanking until all released
 
   // Cameras touched this session. After leaving, each is restored on its next
@@ -166,7 +167,21 @@ struct State {
   uint32_t theme_out = 0;
 
   Settings s;  // this frame's copy of the panel settings
+
+  // Diagnostics (logged once a second while photo mode is on).
+  int64_t diag_last_ms = 0;
+  uint32_t diag_world = 0, diag_cam_calls = 0, diag_cam_writes = 0, diag_frozen = 0;
 };
+
+// Pad reads per user (any thread) and the last buttons seen, for the log.
+inline std::atomic<uint32_t>& diag_pad_reads() {
+  static std::atomic<uint32_t> v{0};
+  return v;
+}
+inline std::atomic<uint32_t>& diag_pad_buttons() {
+  static std::atomic<uint32_t> v{0};
+  return v;
+}
 
 inline State& st() {
   static State s;
@@ -492,11 +507,23 @@ inline void integrate(float dt) {
   g.pad_prev_frame = pad;
   auto pressed = [&](uint16_t mask) { return (pad.buttons & mask) && !(prev.buttons & mask); };
 
-  // Pad one-shots: A screenshot, B exit, X reset camera, Y panel.
-  if (pressed(0x1000)) screenshot_request().store(true);
-  if (pressed(0x2000)) request_exit();
+  // Pad: A select / take photo (the menu decides), B or Start exit, X reset
+  // camera, Y or Back show / hide the menu, R3 level the horizon. The D-pad
+  // moves through the menu and LB / RB change page; the sticks and triggers
+  // fly the camera.
+  if (pressed(0x1000)) nav_activate().fetch_add(1);
+  if (pressed(0x2000) || pressed(0x0010)) request_exit();
   if (pressed(0x4000)) reset_camera_request().store(true);
-  if (pressed(0x8000)) panel_visible().store(!panel_visible().load());
+  if (pressed(0x8000) || pressed(0x0020)) panel_visible().store(!panel_visible().load());
+  if (pressed(0x0100)) nav_tab().fetch_sub(1);
+  if (pressed(0x0200)) nav_tab().fetch_add(1);
+  const bool level = pressed(0x0080) && !(pad.buttons & 0x0040);
+  const int64_t now = now_ms();
+  nav_y().fetch_add(g.rep_down.Fire(pad.buttons & 0x0002, now) - g.rep_up.Fire(pad.buttons & 0x0001, now));
+  nav_x().fetch_add(g.rep_right.Fire(pad.buttons & 0x0008, now) - g.rep_left.Fire(pad.buttons & 0x0004, now));
+  if (pad.buttons != 0 || pad.lt > 30 || pad.rt > 30 || stick(pad.lx) != 0.0f || stick(pad.ly) != 0.0f ||
+      stick(pad.rx) != 0.0f || stick(pad.ry) != 0.0f)
+    prompts_pad().store(true, std::memory_order_relaxed);
 
   float speed = g.s.move_speed;
   if (keys && key_down(0x10)) speed *= 4.0f;   // Shift
@@ -511,10 +538,6 @@ inline void integrate(float dt) {
     side -= key_down('A') ? 1.0f : 0.0f;
     up += key_down('E') ? 1.0f : 0.0f;
     up -= key_down('Q') ? 1.0f : 0.0f;
-    yaw_rate += key_down(0x25) ? 1.0f : 0.0f;    // Left
-    yaw_rate -= key_down(0x27) ? 1.0f : 0.0f;    // Right
-    pitch_rate += key_down(0x26) ? 1.0f : 0.0f;  // Up
-    pitch_rate -= key_down(0x28) ? 1.0f : 0.0f;  // Down
     roll_rate -= key_down('Z') ? 1.0f : 0.0f;
     roll_rate += key_down('C') ? 1.0f : 0.0f;
     zoom -= key_down(0x21) ? 1.0f : 0.0f;  // PageUp: narrower FOV
@@ -525,10 +548,6 @@ inline void integrate(float dt) {
   up += (pad.rt - pad.lt) / 255.0f;
   yaw_rate -= stick(pad.rx);
   pitch_rate += stick(pad.ry);
-  if (pad.buttons & 0x0100) roll_rate -= 1.0f;  // LB
-  if (pad.buttons & 0x0200) roll_rate += 1.0f;  // RB
-  if (pad.buttons & 0x0001) zoom -= 1.0f;       // D-pad up
-  if (pad.buttons & 0x0002) zoom += 1.0f;       // D-pad down
 
   const float look = g.s.look_speed;
   const int32_t mdx = look_dx().exchange(0, std::memory_order_relaxed);
@@ -545,7 +564,7 @@ inline void integrate(float dt) {
   const float wheel = wheel_acc().exchange(0.0f, std::memory_order_relaxed);
   float fov = g.s.fov_deg - wheel * 3.0f + zoom * 30.0f * dt;
   fov = std::clamp(fov, 5.0f, 120.0f);
-  float roll = g.s.roll_deg + roll_rate * 45.0f * dt;
+  float roll = level ? 0.0f : g.s.roll_deg + roll_rate * 45.0f * dt;
   if (roll > 180.0f) roll -= 360.0f;
   if (roll < -180.0f) roll += 360.0f;
   if (fov != g.s.fov_deg || roll != g.s.roll_deg) {
@@ -679,6 +698,7 @@ inline void on_camera_update(PPCContext& ctx, uint8_t* base) {
     return;
   }
 
+  ++g.diag_cam_calls;
   const mouselook::Vec3 eye{ldf(base, cam + 144), ldf(base, cam + 148), ldf(base, cam + 152)};
   const bool has_eye = eye.x != 0.0f || eye.y != 0.0f || eye.z != 0.0f;
 
@@ -723,6 +743,7 @@ inline void on_camera_update(PPCContext& ctx, uint8_t* base) {
   if (!has_eye) return;  // not a live view camera
   if (!take_snapshot(base, cam)) return;
 
+  ++g.diag_cam_writes;
   const Settings& s = g.s;
   const mouselook::Quat q = orientation(g.yaw, g.pitch, s.roll_deg * kDeg);
   stf(base, cam + 144, g.pos.x);
@@ -862,7 +883,9 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
     }
   }
 
+  ++g.diag_world;
   if (g.s.freeze_world && top) {
+    ++g.diag_frozen;
     update_cameras(ctx, base);
     if (tod_changed) rebuild_theme(ctx, base);
     ctx = saved;
@@ -871,6 +894,23 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
     __imp__sub_821D43D8(ctx, base);
   }
   apply_theme(base);
+
+  if (now_ms() - g.diag_last_ms >= 1000) {
+    g.diag_last_ms = now_ms();
+    const Pad p = merged_pad();
+    char buf[320];
+    std::snprintf(buf, sizeof(buf),
+                  "tick phase=%d top=%d world=%u frozen=%u cam_calls=%u cam_writes=%u "
+                  "pad_reads=%u pad=%04X lx=%d ly=%d rx=%d ry=%d lt=%u rt=%u focus=%d ui_kb=%d "
+                  "pos=(%.2f, %.2f, %.2f) yaw=%.1f pitch=%.1f",
+                  int(g.phase), top ? 1 : 0, g.diag_world, g.diag_frozen, g.diag_cam_calls,
+                  g.diag_cam_writes, diag_pad_reads().exchange(0), p.buttons, p.lx, p.ly, p.rx,
+                  p.ry, p.lt, p.rt, window_focused().load() ? 1 : 0,
+                  ui_wants_keyboard().load() ? 1 : 0, g.pos.x, g.pos.y, g.pos.z, g.yaw / kDeg,
+                  g.pitch / kDeg);
+    log_line(buf);
+    g.diag_world = g.diag_frozen = g.diag_cam_calls = g.diag_cam_writes = 0;
+  }
 
   if (screenshot_request().exchange(false)) {
     // A plain shot goes through the same schedule as timed and burst shots.
@@ -902,6 +942,7 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
 inline void on_pad_read(uint8_t* base, uint32_t user, uint32_t state_ptr, uint32_t result) {
   using namespace detail;
   State& g = st();
+  diag_pad_reads().fetch_add(1, std::memory_order_relaxed);
   if (result != 0 || !ptr_ok(state_ptr)) {
     std::lock_guard<std::mutex> lock(g.pad_mutex);
     g.pad[user & 3] = Pad{};  // disconnected: no stale stick drift
@@ -923,6 +964,18 @@ inline void on_pad_read(uint8_t* base, uint32_t user, uint32_t state_ptr, uint32
 
   const auto& cfg = config::Get();
   const uint16_t both = 0x0040 | 0x0080;  // L3 + R3
+  if (p.buttons != (diag_pad_buttons().load() & 0xFFFF) && !active()) {
+    // Button changes outside photo mode, rate-limited: shows whether the pad
+    // reaches this hook at all and what L3 / R3 look like.
+    static int64_t last = 0;
+    if ((p.buttons & both) || now_ms() - last > 2000) {
+      last = now_ms();
+      char buf[96];
+      std::snprintf(buf, sizeof(buf), "pad user %u buttons %04X", u, p.buttons);
+      log_line(buf);
+    }
+  }
+  diag_pad_buttons().store(p.buttons);
   if (cfg.photo_mode_enabled && cfg.photo_mode_gamepad_toggle) {
     const bool now = (p.buttons & both) == both;
     const bool before = (g.toggle_prev[u] & both) == both;

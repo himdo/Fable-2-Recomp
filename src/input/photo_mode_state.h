@@ -124,26 +124,26 @@ struct FilterPreset {
 inline constexpr FilterPreset kFilterPresets[] = {
     // name            exp   con   sat   bri   bloom sun   ovl   fog   vig_a vig_b blur
     {"Original",       1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
-    {"Black and white",1.00f, 1.20f, 0.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
+    {"Black and White",1.00f, 1.20f, 0.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
     {"Noir",           0.90f, 1.60f, 0.00f, 0.85f, 1.00f, 0.80f, 1.20f, 1.10f, 0.45f, 0.30f, 0.00f},
-    {"High contrast mono", 1.05f, 1.80f, 0.00f, 1.00f, 0.80f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
+    {"High Contrast Mono", 1.05f, 1.80f, 0.00f, 1.00f, 0.80f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
     {"Sepia",          1.05f, 0.90f, 0.35f, 1.05f, 1.00f, 1.00f, 1.40f, 1.00f, 0.15f, 0.10f, 0.00f},
     {"Vintage",        1.00f, 0.85f, 0.70f, 1.10f, 0.90f, 1.00f, 1.60f, 1.20f, 0.30f, 0.20f, 0.00f},
-    {"Faded film",     1.10f, 0.75f, 0.65f, 1.15f, 0.90f, 1.00f, 1.50f, 1.00f, 0.00f, 0.00f, 0.00f},
-    {"Teal and orange",1.00f, 1.25f, 1.20f, 1.00f, 1.10f, 1.20f, 1.00f, 1.00f, 0.10f, 0.05f, 0.00f},
-    {"Golden hour",    1.10f, 1.05f, 1.15f, 1.10f, 1.25f, 1.80f, 1.00f, 0.90f, 0.10f, 0.05f, 0.00f},
-    {"Cool night",     0.85f, 1.10f, 0.85f, 0.90f, 1.20f, 0.60f, 1.00f, 1.30f, 0.25f, 0.15f, 0.00f},
+    {"Faded Film",     1.10f, 0.75f, 0.65f, 1.15f, 0.90f, 1.00f, 1.50f, 1.00f, 0.00f, 0.00f, 0.00f},
+    {"Teal and Orange",1.00f, 1.25f, 1.20f, 1.00f, 1.10f, 1.20f, 1.00f, 1.00f, 0.10f, 0.05f, 0.00f},
+    {"Golden Hour",    1.10f, 1.05f, 1.15f, 1.10f, 1.25f, 1.80f, 1.00f, 0.90f, 0.10f, 0.05f, 0.00f},
+    {"Cool Night",     0.85f, 1.10f, 0.85f, 0.90f, 1.20f, 0.60f, 1.00f, 1.30f, 0.25f, 0.15f, 0.00f},
     {"Dusk",           0.80f, 1.05f, 0.90f, 0.85f, 1.00f, 0.70f, 1.00f, 1.20f, 0.35f, 0.20f, 0.00f},
     {"Pastel",         1.15f, 0.70f, 0.75f, 1.25f, 1.10f, 1.00f, 1.00f, 1.10f, 0.00f, 0.00f, 0.00f},
-    {"Dreamy glow",    1.05f, 0.90f, 1.00f, 1.05f, 2.20f, 1.30f, 1.00f, 1.60f, 0.00f, 0.00f, 0.15f},
-    {"Soft focus",     1.05f, 0.90f, 1.00f, 1.05f, 1.80f, 1.10f, 1.00f, 1.20f, 0.00f, 0.00f, 0.25f},
+    {"Dreamy Glow",    1.05f, 0.90f, 1.00f, 1.05f, 2.20f, 1.30f, 1.00f, 1.60f, 0.00f, 0.00f, 0.15f},
+    {"Soft Focus",     1.05f, 0.90f, 1.00f, 1.05f, 1.80f, 1.10f, 1.00f, 1.20f, 0.00f, 0.00f, 0.25f},
     {"Polaroid",       1.10f, 0.85f, 0.95f, 1.15f, 1.00f, 1.00f, 1.30f, 1.00f, 0.10f, 0.05f, 0.00f},
     {"Kodachrome",     1.00f, 1.15f, 1.40f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
     {"Cross-process",  1.05f, 1.35f, 1.25f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 0.10f, 0.05f, 0.00f},
     {"Matte",          1.05f, 0.80f, 0.80f, 1.20f, 0.90f, 1.00f, 1.30f, 1.00f, 0.00f, 0.00f, 0.00f},
-    {"Bleach bypass",  1.00f, 1.50f, 0.30f, 1.00f, 1.00f, 1.00f, 1.20f, 1.00f, 0.15f, 0.10f, 0.00f},
-    {"High key",       1.35f, 0.70f, 0.95f, 1.35f, 1.30f, 1.00f, 1.00f, 0.80f, 0.00f, 0.00f, 0.00f},
-    {"Low key",        0.70f, 1.45f, 0.95f, 0.70f, 0.90f, 0.70f, 1.00f, 1.30f, 0.45f, 0.30f, 0.00f},
+    {"Bleach Bypass",  1.00f, 1.50f, 0.30f, 1.00f, 1.00f, 1.00f, 1.20f, 1.00f, 0.15f, 0.10f, 0.00f},
+    {"High Key",       1.35f, 0.70f, 0.95f, 1.35f, 1.30f, 1.00f, 1.00f, 0.80f, 0.00f, 0.00f, 0.00f},
+    {"Low Key",        0.70f, 1.45f, 0.95f, 0.70f, 0.90f, 0.70f, 1.00f, 1.30f, 0.45f, 0.30f, 0.00f},
     {"Vivid",          1.00f, 1.30f, 1.60f, 1.00f, 1.10f, 1.00f, 1.00f, 1.00f, 0.00f, 0.00f, 0.00f},
 };
 inline constexpr int kFilterPresetCount = static_cast<int>(sizeof(kFilterPresets) / sizeof(kFilterPresets[0]));
@@ -244,6 +244,57 @@ inline std::atomic<bool>& panel_visible() {
   static std::atomic<bool> v{true};
   return v;
 }
+
+// --- Menu navigation (pad on the guest thread, keys on the input poll -> the
+// menu on the UI thread). Counters: the menu drains them each frame. ----------
+inline std::atomic<int>& nav_y() {  // +1 = down
+  static std::atomic<int> v{0};
+  return v;
+}
+inline std::atomic<int>& nav_x() {  // +1 = right (increase)
+  static std::atomic<int> v{0};
+  return v;
+}
+inline std::atomic<int>& nav_tab() {  // +1 = next tab
+  static std::atomic<int> v{0};
+  return v;
+}
+inline std::atomic<int>& nav_tab_direct() {  // 1..N = jump to tab, 0 = none
+  static std::atomic<int> v{0};
+  return v;
+}
+inline std::atomic<int>& nav_activate() {  // A / Enter
+  static std::atomic<int> v{0};
+  return v;
+}
+// Which prompts to show: true after pad input, false after keys / mouse.
+inline std::atomic<bool>& prompts_pad() {
+  static std::atomic<bool> v{false};
+  return v;
+}
+
+// Key / button auto-repeat: fires on press, then repeats after a pause, faster
+// the longer it is held.
+struct Repeater {
+  bool held = false;
+  int64_t start = 0, next = 0;
+  int Fire(bool down, int64_t now) {
+    if (!down) {
+      held = false;
+      return 0;
+    }
+    if (!held) {
+      held = true;
+      start = next = now;
+      next = now + 380;
+      return 1;
+    }
+    if (now < next) return 0;
+    const int64_t h = now - start;
+    next = now + (h > 1600 ? 35 : h > 900 ? 60 : 100);
+    return 1;
+  }
+};
 
 // --- Host input -> guest -----------------------------------------------------
 // RMB-drag look: the input poll adds cursor pixels, the guest drains them.

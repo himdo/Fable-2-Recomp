@@ -455,17 +455,35 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     const bool h = edge('H');
     const bool r = edge('R');
     const bool x = edge('X');
+    const bool tab = edge(VK_TAB);
+    const bool enter = edge(VK_RETURN);
+    int digit = 0;
+    for (int d = 1; d <= 9; ++d)
+      if (edge(static_cast<uint16_t>('0' + d))) digit = d;
+    // Arrow keys move through the menu (with auto-repeat).
+    const int64_t now = pm::now_ms();
+    auto held = [&](int vk) { return focused && (GetAsyncKeyState(vk) & 0x8000) != 0; };
+    const int dy = photo_rep_[1].Fire(held(VK_DOWN), now) - photo_rep_[0].Fire(held(VK_UP), now);
+    const int dx = photo_rep_[3].Fire(held(VK_RIGHT), now) - photo_rep_[2].Fire(held(VK_LEFT), now);
     if (!on || console_open_) return;
     if (esc) pm::request_exit();
     if (shot) pm::screenshot_request().store(true);
     if (typing) return;
+    const bool any = h || r || x || tab || enter || digit || dx || dy;
+    if (any) pm::prompts_pad().store(false, std::memory_order_relaxed);
     if (h) pm::panel_visible().store(!pm::panel_visible().load());
     if (r) pm::reset_camera_request().store(true);
     if (x) {
       std::lock_guard<std::mutex> lock(pm::settings_mutex());
       pm::settings_unlocked().roll_deg = 0.0f;
     }
+    if (tab) pm::nav_tab().fetch_add((GetAsyncKeyState(VK_SHIFT) & 0x8000) ? -1 : 1);
+    if (digit) pm::nav_tab_direct().store(digit);
+    if (enter) pm::nav_activate().fetch_add(1);
+    if (dy) pm::nav_y().fetch_add(dy);
+    if (dx) pm::nav_x().fetch_add(dx);
   }
+  fable2::photomode::Repeater photo_rep_[4];  // up, down, left, right
   std::string photo_toggle_name_;
   std::string photo_shot_name_;
   uint16_t photo_toggle_vk_ = 0;

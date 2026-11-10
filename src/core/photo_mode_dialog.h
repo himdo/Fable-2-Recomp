@@ -1,80 +1,897 @@
-// fable_2 - Photo mode settings panel (ImGui, drawn on the UI thread).
+// fable_2 - Photo mode menu (drawn on the UI thread over the game).
 //
-// Registered once in Fable2App::OnCreateDialogs and drawn every frame by the
-// SDK's ImGuiDrawer; it draws nothing while photo mode is off. It only edits
-// fable2::photomode::Settings (under its mutex) and raises one-shot requests;
-// the guest thread (src/core/fable2_photo_mode.h) applies them to the game.
-// The screenshot reads the game's own frame, so the panel never shows in it.
+// Drawn like one of the game's own menus rather than as a desktop window: the
+// game's GUI typeface (src/core/photo_mode_font.h), cream text over a soft
+// dark fade on the left, gold highlight on the selected line, pages switched
+// with LB / RB, values changed with left / right, and button prompts along the
+// bottom. Everything is drawn straight into ImGui's foreground draw list, so
+// there are no ImGui windows or widgets.
 //
-// Needs rexruntime.dll to export ImGuiDialog's constructor/destructor and the
-// ImGui functions used here (see the SDK's src/system/rexruntime.def).
+// Input: the D-pad / arrow keys arrive as counters from the guest thread and
+// the input poll (photo_mode_state.h nav_*); the mouse is read from ImGuiIO
+// (hover selects, click changes, drag on a bar sets it, wheel adjusts).
+// The menu only edits fable2::photomode::Settings (under its mutex) and raises
+// one-shot requests; the guest thread applies them to the game. The screenshot
+// reads the game's own frame, so nothing drawn here is ever in a photo.
 #pragma once
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <functional>
 #include <string>
+#include <vector>
 
 #include <imgui.h>
 #include <rex/ui/imgui_dialog.h>
 #include <rex/ui/imgui_drawer.h>
 
 #include "fable2_config.h"
+#include "photo_mode_font.h"
 #include "photo_mode_state.h"
+
+#ifdef _WIN32
+#include <shellapi.h>
+#include <windows.h>
+#endif
 
 namespace fable2::photomode {
 
+namespace menu {
+
+// Colours (straight alpha).
+constexpr ImU32 kCream = IM_COL32(240, 230, 204, 255);
+constexpr ImU32 kCreamDim = IM_COL32(196, 184, 156, 255);
+constexpr ImU32 kFaint = IM_COL32(160, 150, 128, 200);
+constexpr ImU32 kGold = IM_COL32(218, 182, 98, 255);
+constexpr ImU32 kShadow = IM_COL32(0, 0, 0, 200);
+
+inline ImU32 with_alpha(ImU32 c, float a) {
+  const int base = int((c >> IM_COL32_A_SHIFT) & 0xFF);
+  const int na = std::clamp(int(base * a), 0, 255);
+  return (c & ~IM_COL32_A_MASK) | (ImU32(na) << IM_COL32_A_SHIFT);
+}
+
+enum class Kind { kToggle, kSlider, kOption, kAction };
+
+struct Box {
+  ImVec2 Min, Max;
+  bool Contains(ImVec2 p) const { return p.x >= Min.x && p.y >= Min.y && p.x < Max.x && p.y < Max.y; }
+  float GetHeight() const { return Max.y - Min.y; }
+};
+
+struct Item {
+  const char* label;
+  const char* desc;
+  Kind kind;
+  // Slider / toggle / option value (toggle: 0 or 1; option: index).
+  std::function<float(const Settings&)> get;
+  std::function<void(Settings&, float)> set;
+  float lo = 0, hi = 1, step = 0.05f;
+  bool log = false;  // step multiplies (1 + step) instead of adding
+  std::function<std::string(float)> fmt;
+  std::vector<std::string> options;
+  std::function<void(Settings&)> action;
+  std::function<bool(const Settings&)> visible;
+  int special = 0;  // 1 = undo (handled by the menu)
+};
+
+struct Page {
+  const char* name;
+  std::vector<Item> items;
+};
+
+inline std::string Fmt(const char* f, float v) {
+  char b[48];
+  std::snprintf(b, sizeof(b), f, v);
+  return b;
+}
+
+// --- Item builders -----------------------------------------------------------------
+inline Item Toggle(const char* label, const char* desc, bool Settings::*m) {
+  Item it{label, desc, Kind::kToggle};
+  it.get = [m](const Settings& s) { return (s.*m) ? 1.0f : 0.0f; };
+  it.set = [m](Settings& s, float v) { s.*m = v > 0.5f; };
+  it.lo = 0;
+  it.hi = 1;
+  return it;
+}
+inline Item Slider(const char* label, const char* desc, float Settings::*m, float lo, float hi,
+                   float step, const char* fmt, bool log = false) {
+  Item it{label, desc, Kind::kSlider};
+  it.get = [m](const Settings& s) { return s.*m; };
+  it.set = [m](Settings& s, float v) { s.*m = v; };
+  it.lo = lo;
+  it.hi = hi;
+  it.step = step;
+  it.log = log;
+  std::string f = fmt;
+  it.fmt = [f](float v) { return Fmt(f.c_str(), v); };
+  return it;
+}
+inline Item Multiplier(const char* label, const char* desc, float Settings::*m, float hi) {
+  return Slider(label, desc, m, 0.0f, hi, 0.05f, "%.2fx");
+}
+inline Item Option(const char* label, const char* desc, std::vector<std::string> names,
+                   std::function<float(const Settings&)> get,
+                   std::function<void(Settings&, float)> set) {
+  Item it{label, desc, Kind::kOption};
+  it.options = std::move(names);
+  it.get = std::move(get);
+  it.set = std::move(set);
+  it.lo = 0;
+  it.hi = float(it.options.size() - 1);
+  return it;
+}
+inline Item Action(const char* label, const char* desc, std::function<void(Settings&)> fn) {
+  Item it{label, desc, Kind::kAction};
+  it.action = std::move(fn);
+  return it;
+}
+
+inline std::filesystem::path PhotosFolder() {
+  std::filesystem::path dir = config::Get().photo_mode_screenshot_folder;
+  if (dir.empty()) dir = "screenshots";
+  if (dir.is_relative()) {
+#ifdef _WIN32
+    wchar_t buf[MAX_PATH];
+    const DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
+    if (n > 0 && n < MAX_PATH) return std::filesystem::path(buf).parent_path() / dir;
+#endif
+  }
+  return dir;
+}
+
+// Values kept outside Settings (the shot plan) go through these.
+inline float ShotGet(int ShotPlan::*m) {
+  std::lock_guard<std::mutex> lock(shot_plan_mutex());
+  return float(shot_plan_unlocked().*m);
+}
+inline void ShotSet(int ShotPlan::*m, float v) {
+  std::lock_guard<std::mutex> lock(shot_plan_mutex());
+  shot_plan_unlocked().*m = int(std::lround(v));
+}
+
+inline std::vector<Page> BuildPages() {
+  std::vector<Page> pages;
+
+  // Camera ---------------------------------------------------------------------------
+  {
+    Page p{"Camera"};
+    p.items.push_back(Toggle("Pause the World", "Freeze people, creatures, water and time while you frame the shot.",
+                             &Settings::freeze_world));
+    p.items.push_back(Toggle("Hide the HUD", "Hide the health bar, minimap and other on-screen information.",
+                             &Settings::hide_hud));
+    p.items.push_back(Toggle("Hide World Markers", "Hide the glowing quest and interaction markers in the world.",
+                             &Settings::hide_world_icons));
+    p.items.push_back(Slider("Field of View", "Zoom the lens. Lower values bring distant things closer.",
+                             &Settings::fov_deg, 5.0f, 120.0f, 1.0f, "%.0f\xC2\xB0"));
+    p.items.push_back(Slider("Roll", "Tilt the camera to one side.", &Settings::roll_deg, -180.0f, 180.0f,
+                             1.0f, "%.0f\xC2\xB0"));
+    p.items.push_back(Slider("Camera Speed", "How fast the camera flies. Hold the left stick in (or Shift) to go faster.",
+                             &Settings::move_speed, 0.25f, 40.0f, 0.1f, "%.1f m/s", true));
+    p.items.push_back(Slider("Look Speed", "How fast the camera turns.", &Settings::look_speed, 0.2f, 3.0f, 0.1f,
+                             "%.1fx"));
+    p.items.push_back(Action("Reset Camera", "Put the camera back where photo mode started.",
+                             [](Settings&) { reset_camera_request().store(true); }));
+    p.items.push_back(Action("Level the Horizon", "Remove any roll.", [](Settings& s) { s.roll_deg = 0.0f; }));
+    pages.push_back(std::move(p));
+  }
+
+  // Lens -----------------------------------------------------------------------------
+  {
+    Page p{"Lens"};
+    auto focus = [](const Settings& s) { return s.dof_mode == DofMode::kFocus; };
+    p.items.push_back(Option(
+        "Depth of Field", "Blur what is nearer or further than the point you focus on.",
+        {"As in the Game", "Off", "Focus"}, [](const Settings& s) { return float(int(s.dof_mode)); },
+        [](Settings& s, float v) { s.dof_mode = static_cast<DofMode>(int(std::lround(v))); }));
+    Item it = Slider("Focus Distance", "How far from the camera things are sharpest.", &Settings::dof_focus,
+                     0.2f, 200.0f, 0.08f, "%.1f m", true);
+    it.visible = focus;
+    p.items.push_back(it);
+    it = Slider("Sharp Depth", "How deep the sharp zone around the focus point is.", &Settings::dof_range, 0.05f,
+                50.0f, 0.1f, "%.2f m", true);
+    it.visible = focus;
+    p.items.push_back(it);
+    it = Slider("Blur Falloff", "How gradually things blur outside the sharp zone.", &Settings::dof_falloff, 0.1f,
+                100.0f, 0.1f, "%.1f m", true);
+    it.visible = focus;
+    p.items.push_back(it);
+    it = Slider("Blur Strength", "How strong the blur is.", &Settings::dof_strength, 0.0f, 1.0f, 0.05f, "%.2f");
+    it.visible = focus;
+    p.items.push_back(it);
+    p.items.push_back(Slider("Vignette", "Darken the corners of the picture.", &Settings::vignette_a, 0.0f, 1.0f,
+                             0.05f, "%.2f"));
+    p.items.push_back(Slider("Edge Shadow", "A second, softer darkening around the edges.", &Settings::vignette_b,
+                             0.0f, 1.0f, 0.05f, "%.2f"));
+    p.items.push_back(Slider("Soft Lens", "Blur the whole picture.", &Settings::blur, 0.0f, 1.0f, 0.05f, "%.2f"));
+    pages.push_back(std::move(p));
+  }
+
+  // Colour ---------------------------------------------------------------------------
+  {
+    Page p{"Colour"};
+    std::vector<std::string> names;
+    for (int i = 0; i < kFilterPresetCount; ++i) names.emplace_back(kFilterPresets[i].name);
+    p.items.push_back(Option(
+        "Filter", "A ready-made look. Fine-tune it with the settings below.", names,
+        [](const Settings& s) { return float(s.filter); },
+        [](Settings& s, float v) {
+          s.filter = std::clamp(int(std::lround(v)), 0, kFilterPresetCount - 1);
+          apply_filter(s, kFilterPresets[s.filter]);
+        }));
+    const char* mult = "1.00x is how the game looks.";
+    p.items.push_back(Multiplier("Exposure", mult, &Settings::exposure, 4.0f));
+    p.items.push_back(Multiplier("Contrast", mult, &Settings::contrast, 3.0f));
+    p.items.push_back(Multiplier("Saturation", mult, &Settings::saturation, 3.0f));
+    p.items.push_back(Multiplier("Brightness", mult, &Settings::brightness, 3.0f));
+    p.items.push_back(Multiplier("Bloom", "The glow around bright light.", &Settings::bloom, 5.0f));
+    p.items.push_back(Multiplier("Bloom Threshold", "How bright something must be to glow.",
+                                 &Settings::bloom_threshold, 3.0f));
+    p.items.push_back(Multiplier("Sun Beams", "Shafts of light from the sun.", &Settings::sun_beams, 5.0f));
+    p.items.push_back(Multiplier("Film Tint", "The game's colour overlay.", &Settings::overlay, 4.0f));
+    p.items.push_back(Multiplier("Fog", "Haze in the distance.", &Settings::fog, 4.0f));
+    p.items.push_back(Multiplier("Ground Mist", "Mist lying low on the ground.", &Settings::ground_mist, 4.0f));
+    p.items.push_back(Action("Reset Colour", "Back to the game's own colours.", [](Settings& s) {
+      s.filter = 0;
+      apply_filter(s, kFilterPresets[0]);
+      s.bloom_threshold = s.ground_mist = 1.0f;
+    }));
+    Item undo = Action("Undo Last Change", "Put back the setting you changed last.", [](Settings&) {});
+    undo.special = 1;
+    p.items.push_back(undo);
+    pages.push_back(std::move(p));
+  }
+
+  // World ----------------------------------------------------------------------------
+  {
+    Page p{"World"};
+    p.items.push_back(Toggle("Set the Time of Day", "Choose the hour yourself instead of the game's clock.",
+                             &Settings::override_time));
+    Item t = Slider("Time of Day", "Dawn, midday, dusk or the middle of the night.", &Settings::time_hours, 0.0f,
+                    23.75f, 0.25f, "");
+    t.fmt = [](float v) {
+      const int mins = int(std::lround(v * 60.0f)) % (24 * 60);
+      char b[16];
+      std::snprintf(b, sizeof(b), "%02d:%02d", mins / 60, mins % 60);
+      return std::string(b);
+    };
+    t.visible = [](const Settings& s) { return s.override_time; };
+    p.items.push_back(t);
+    const char* mult = "1.00x is how the game has it.";
+    p.items.push_back(Multiplier("Rain", mult, &Settings::rain, 3.0f));
+    p.items.push_back(Multiplier("Snow", mult, &Settings::snow, 3.0f));
+    p.items.push_back(Multiplier("Stars", "How bright the stars are at night.", &Settings::stars, 3.0f));
+    p.items.push_back(Multiplier("Moon Glow", "The glow around the moon.", &Settings::moon_glare, 3.0f));
+    p.items.push_back(Multiplier("Sun", "How bright the sun's disc is.", &Settings::sun_disc, 3.0f));
+    pages.push_back(std::move(p));
+  }
+
+  // Capture --------------------------------------------------------------------------
+  {
+    Page p{"Capture"};
+    p.items.push_back(Option(
+        "Framing Guide", "Lines to help you compose. Never in the photo.",
+        {"None", "Rule of Thirds", "Centre", "Thirds and Centre"},
+        [](const Settings& s) { return float(s.guides); },
+        [](Settings& s, float v) { s.guides = int(std::lround(v)); }));
+    p.items.push_back(Option(
+        "Cinema Bars", "Widescreen bars to frame the shot. Never in the photo.",
+        {"None", "1.85 : 1", "2.35 : 1", "2.39 : 1"}, [](const Settings& s) { return float(s.letterbox); },
+        [](Settings& s, float v) { s.letterbox = int(std::lround(v)); }));
+    Item timer{"Self-Timer", "Wait before taking the photo.", Kind::kSlider};
+    timer.get = [](const Settings&) { return ShotGet(&ShotPlan::delay_s); };
+    timer.set = [](Settings&, float v) { ShotSet(&ShotPlan::delay_s, v); };
+    timer.lo = 0;
+    timer.hi = 30;
+    timer.step = 1;
+    timer.fmt = [](float v) { return v < 0.5f ? std::string("Off") : Fmt("%.0f s", v); };
+    p.items.push_back(timer);
+    Item burst{"Burst", "How many photos to take in a row.", Kind::kSlider};
+    burst.get = [](const Settings&) { return ShotGet(&ShotPlan::shots); };
+    burst.set = [](Settings&, float v) { ShotSet(&ShotPlan::shots, v); };
+    burst.lo = 1;
+    burst.hi = 10;
+    burst.step = 1;
+    burst.fmt = [](float v) { return v < 1.5f ? std::string("Single") : Fmt("%.0f photos", v); };
+    p.items.push_back(burst);
+    Item gap{"Burst Interval", "The time between photos in a burst.", Kind::kSlider};
+    gap.get = [](const Settings&) { return ShotGet(&ShotPlan::spacing_ms); };
+    gap.set = [](Settings&, float v) { ShotSet(&ShotPlan::spacing_ms, v); };
+    gap.lo = 100;
+    gap.hi = 2000;
+    gap.step = 50;
+    gap.fmt = [](float v) { return Fmt("%.2f s", v / 1000.0f); };
+    p.items.push_back(gap);
+    p.items.push_back(Action("Take Photo", "Saved as a PNG in the screenshots folder next to the game.",
+                             [](Settings&) { screenshot_request().store(true); }));
+    p.items.push_back(Action("Open Photo Folder", "Show your photos in Explorer.", [](Settings&) {
+#ifdef _WIN32
+      const std::filesystem::path dir = PhotosFolder();
+      std::error_code ec;
+      std::filesystem::create_directories(dir, ec);
+      ShellExecuteW(nullptr, L"open", dir.wstring().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+#endif
+    }));
+    pages.push_back(std::move(p));
+  }
+  return pages;
+}
+
+}  // namespace menu
+
 class PhotoModeDialog final : public rex::ui::ImGuiDialog {
  public:
-  explicit PhotoModeDialog(rex::ui::ImGuiDrawer* drawer) : rex::ui::ImGuiDialog(drawer) {}
+  explicit PhotoModeDialog(rex::ui::ImGuiDrawer* drawer)
+      : rex::ui::ImGuiDialog(drawer), pages_(menu::BuildPages()) {}
 
  protected:
   void OnDraw(ImGuiIO& io) override {
-    if (!active()) {
+    const bool on = active();
+    if (on && !was_on_) {
+      // Fresh each time: first page, first line, nothing queued.
+      page_ = 0;
+      sel_ = 0;
+      nav_y().store(0);
+      nav_x().store(0);
+      nav_tab().store(0);
+      nav_tab_direct().store(0);
+      nav_activate().store(0);
+      opened_ms_ = now_ms();
+    }
+    was_on_ = on;
+    if (!on) {
       ui_wants_mouse().store(false, std::memory_order_relaxed);
       ui_wants_keyboard().store(false, std::memory_order_relaxed);
       return;
     }
-    // Mouse wheel over the game (not over the panel) zooms.
-    if (!io.WantCaptureMouse && io.MouseWheel != 0.0f) {
+    k_ = std::max(0.5f, io.DisplaySize.y / 720.0f);
+    dl_ = ImGui::GetForegroundDrawList();
+    const bool shown = panel_visible().load(std::memory_order_relaxed);
+
+    Settings s = settings_copy();
+    const Settings before = s;
+
+    DrawGuides(io, s);
+    if (shown) {
+      HandleInput(io, s);
+      DrawMenu(io, s);
+    } else {
+      // Menu hidden: A / Enter still takes the photo.
+      if (nav_activate().exchange(0) > 0) screenshot_request().store(true);
+      nav_y().store(0);
+      nav_x().store(0);
+      nav_tab().store(0);
+      nav_tab_direct().store(0);
+      mouse_in_panel_ = false;
+    }
+    DrawPrompts(io, shown);
+    DrawStatus(io);
+
+    {
+      std::lock_guard<std::mutex> lock(settings_mutex());
+      // Only copy what the menu changed, so a value the guest moved in the
+      // meantime (roll / FOV keys) is not overwritten with a stale copy.
+      MergeChanged(before, s, settings_unlocked());
+    }
+    ui_wants_mouse().store(shown && mouse_in_panel_, std::memory_order_relaxed);
+    ui_wants_keyboard().store(false, std::memory_order_relaxed);
+
+    // Mouse wheel over the game (not over the menu) zooms.
+    if (!(shown && mouse_in_panel_) && io.MouseWheel != 0.0f) {
       float w = wheel_acc().load(std::memory_order_relaxed);
       while (!wheel_acc().compare_exchange_weak(w, w + io.MouseWheel)) {
       }
     }
-    if (!panel_visible().load(std::memory_order_relaxed)) {
-      ui_wants_mouse().store(false, std::memory_order_relaxed);
-      ui_wants_keyboard().store(false, std::memory_order_relaxed);
-      DrawHint(io);
-      return;
-    }
-
-    Settings s = settings_copy();
-    const Settings before = s;
-    DrawGuides(io, s);
-    DrawPanel(io, s);
-    {
-      std::lock_guard<std::mutex> lock(settings_mutex());
-      // Only copy what the panel changed, so a value the guest moved in the
-      // meantime (roll / FOV keys) is not overwritten with a stale copy.
-      MergeChanged(before, s, settings_unlocked());
-    }
-    // Undo keeps the settings from before the last run of changes: a drag
-    // is one run, so it undoes as one step.
-    const bool changed = std::memcmp(&before, &s, sizeof(Settings)) != 0;
-    if (changed && !changing_) {
-      undo_ = before;
-      has_undo_ = true;
-    }
-    changing_ = changed;
-    ui_wants_mouse().store(io.WantCaptureMouse, std::memory_order_relaxed);
-    ui_wants_keyboard().store(io.WantCaptureKeyboard, std::memory_order_relaxed);
   }
 
  private:
+  std::vector<menu::Page> pages_;
+  int page_ = 0;
+  int sel_ = 0;  // index into the page's visible items
+  bool was_on_ = false;
+  int64_t opened_ms_ = 0;
+  float k_ = 1.0f;  // pixels per 720p unit
+  ImDrawList* dl_ = nullptr;
+  bool mouse_in_panel_ = false;
+  ImVec2 last_mouse_{-1e9f, -1e9f};
+  int drag_row_ = -1;  // slider being dragged with the mouse
+  // Undo: settings before the current run of changes to one line.
   Settings undo_{};
   bool has_undo_ = false;
-  bool changing_ = false;
+  int last_changed_ = -1;
+  int last_changed_page_ = -1;
+  // Status toast.
+  std::string toast_;
+  int64_t toast_ms_ = 0;
+
+  // Layout, in 720p units.
+  static constexpr float kLeft = 64.0f;     // text column
+  static constexpr float kRight = 470.0f;   // value column right edge
+  static constexpr float kTitleY = 52.0f;
+  static constexpr float kTabsY = 112.0f;
+  static constexpr float kListY = 162.0f;
+  static constexpr float kRow = 31.0f;
+  static constexpr float kText = 23.0f;     // item text height
+  static constexpr float kBar = 104.0f;     // slider bar width
+
+  float X(float v) const { return v * k_; }
+
+  std::vector<int> Visible(const Settings& s) const {
+    std::vector<int> v;
+    const auto& items = pages_[page_].items;
+    for (int i = 0; i < int(items.size()); ++i)
+      if (!items[i].visible || items[i].visible(s)) v.push_back(i);
+    return v;
+  }
+
+  // --- Text ------------------------------------------------------------------------
+  float TextW(const char* t, float size) const {
+    if (gamefont::Ready()) return gamefont::Measure(t, X(size));
+    return float(std::strlen(t)) * 7.0f;  // default ImGui font fallback
+  }
+  void Text(ImVec2 p, float size, ImU32 col, const char* t, bool shadow = true) {
+    if (gamefont::Ready()) {
+      const float sz = X(size);
+      if (shadow) {
+        const float o = std::max(1.0f, sz * 0.06f);
+        gamefont::Draw(dl_, ImVec2(p.x + o, p.y + o), sz, menu::with_alpha(menu::kShadow, ((col >> 24) & 0xFF) / 255.0f), t);
+      }
+      gamefont::Draw(dl_, p, sz, col, t);
+    } else {
+      if (shadow) dl_->AddText(ImVec2(p.x + 1, p.y + 1), menu::kShadow, t, nullptr);
+      dl_->AddText(p, col, t, nullptr);
+    }
+  }
+  void TextRight(float right_x, float y, float size, ImU32 col, const char* t) {
+    Text(ImVec2(right_x - TextW(t, size), y), size, col, t);
+  }
+  // Word-wrapped text; returns the height used.
+  float TextWrapped(ImVec2 p, float size, float width, ImU32 col, const char* t) {
+    std::string line, word;
+    float y = p.y;
+    auto flush = [&]() {
+      if (!line.empty()) Text(ImVec2(p.x, y), size, col, line.c_str());
+      y += X(size) * 1.05f;
+      line.clear();
+    };
+    const std::string all = t;
+    size_t i = 0;
+    while (i <= all.size()) {
+      const size_t j = all.find(' ', i);
+      word = all.substr(i, j == std::string::npos ? std::string::npos : j - i);
+      const std::string trial = line.empty() ? word : line + " " + word;
+      if (!line.empty() && TextW(trial.c_str(), size) > width) {
+        flush();
+        line = word;
+      } else {
+        line = trial;
+      }
+      if (j == std::string::npos) break;
+      i = j + 1;
+    }
+    flush();
+    return y - p.y;
+  }
+
+  // --- Ornaments ---------------------------------------------------------------------
+  void Diamond(ImVec2 c, float r, ImU32 col) {
+    dl_->AddQuadFilled(ImVec2(c.x, c.y - r), ImVec2(c.x + r, c.y), ImVec2(c.x, c.y + r), ImVec2(c.x - r, c.y),
+                       col);
+  }
+  // A thin gold rule that fades out at both ends, with a diamond in the middle.
+  void Rule(float x0, float x1, float y, float alpha = 1.0f) {
+    const float mid = (x0 + x1) * 0.5f;
+    const float h = std::max(1.0f, X(1.2f));
+    const ImU32 g = menu::with_alpha(menu::kGold, 0.85f * alpha);
+    const ImU32 z = menu::with_alpha(menu::kGold, 0.0f);
+    dl_->AddRectFilledMultiColor(ImVec2(x0, y), ImVec2(mid, y + h), z, g, g, z);
+    dl_->AddRectFilledMultiColor(ImVec2(mid, y), ImVec2(x1, y + h), g, z, z, g);
+    Diamond(ImVec2(mid, y + h * 0.5f), X(3.5f), g);
+  }
+  void Chevron(ImVec2 c, float r, bool right, ImU32 col) {
+    const float d = right ? 1.0f : -1.0f;
+    dl_->AddTriangleFilled(ImVec2(c.x + d * r, c.y), ImVec2(c.x - d * r * 0.6f, c.y - r),
+                           ImVec2(c.x - d * r * 0.6f, c.y + r), col);
+  }
+
+  // Xbox 360-style face button / bumper / key cap, followed by its label.
+  // Returns the width used.
+  float Prompt(float x, float y, const char* button, const char* label, bool measure_only = false) {
+    const float size = 21.0f;
+    float w = 0.0f;
+    const float h = X(26.0f);
+    const float cy = y + h * 0.5f;
+    struct Face { const char* name; ImU32 col; };
+    static const Face kFaces[] = {{"A", IM_COL32(92, 168, 58, 255)},
+                                  {"B", IM_COL32(204, 56, 44, 255)},
+                                  {"X", IM_COL32(48, 108, 206, 255)},
+                                  {"Y", IM_COL32(226, 178, 34, 255)}};
+    const Face* face = nullptr;
+    for (const Face& f : kFaces)
+      if (std::strcmp(f.name, button) == 0) face = &f;
+    if (face) {
+      const float r = h * 0.5f;
+      if (!measure_only) {
+        dl_->AddCircleFilled(ImVec2(x + r, cy), r, IM_COL32(20, 20, 20, 230), 24);
+        dl_->AddCircleFilled(ImVec2(x + r, cy), r * 0.84f, face->col, 24);
+        const float tw = TextW(button, size * 0.82f);
+        Text(ImVec2(x + r - tw * 0.5f, cy - X(size * 0.82f) * 0.55f), size * 0.82f, IM_COL32(255, 255, 255, 255),
+             button, false);
+      }
+      w = h;
+    } else {
+      // Bumpers and keys: a rounded cap with the name inside.
+      const float tw = TextW(button, size * 0.78f);
+      const float cw = std::max(h, tw + X(14.0f));
+      if (!measure_only) {
+        dl_->AddRectFilled(ImVec2(x, y), ImVec2(x + cw, y + h), IM_COL32(18, 16, 12, 220), X(6.0f), 0);
+        dl_->AddRect(ImVec2(x, y), ImVec2(x + cw, y + h), menu::with_alpha(menu::kCreamDim, 0.8f), X(6.0f), 0,
+                     std::max(1.0f, X(1.2f)));
+        Text(ImVec2(x + (cw - tw) * 0.5f, cy - X(size * 0.78f) * 0.55f), size * 0.78f, menu::kCream, button, false);
+      }
+      w = cw;
+    }
+    if (label && *label) {
+      w += X(8.0f);
+      if (!measure_only) Text(ImVec2(x + w, cy - X(size) * 0.55f), size, menu::kCream, label);
+      w += TextW(label, size);
+    }
+    return w;
+  }
+
+  // --- Input -------------------------------------------------------------------------------
+  void Adjust(const menu::Item& it, Settings& s, int dir) {
+    if (dir == 0) return;
+    const float v = it.get(s);
+    float nv = v;
+    switch (it.kind) {
+      case menu::Kind::kToggle:
+        nv = v > 0.5f ? 0.0f : 1.0f;
+        break;
+      case menu::Kind::kOption: {
+        const int n = int(it.options.size());
+        nv = float(((int(std::lround(v)) + dir) % n + n) % n);
+        break;
+      }
+      case menu::Kind::kSlider:
+        if (it.log)
+          nv = v * std::pow(1.0f + it.step, float(dir));
+        else
+          nv = std::round((v + it.step * dir) / it.step) * it.step;
+        nv = std::clamp(nv, it.lo, it.hi);
+        break;
+      case menu::Kind::kAction:
+        return;
+    }
+    if (nv != v) it.set(s, nv);
+  }
+
+  void Activate(const menu::Item& it, Settings& s) {
+    if (it.special == 1) {
+      if (has_undo_) {
+        s = undo_;
+        has_undo_ = false;
+        last_changed_ = -1;
+      }
+    } else if (it.kind == menu::Kind::kAction) {
+      it.action(s);
+    } else if (it.kind == menu::Kind::kToggle || it.kind == menu::Kind::kOption) {
+      Adjust(it, s, 1);
+    } else {
+      screenshot_request().store(true);
+    }
+  }
+
+  void SetPage(int p) {
+    const int n = int(pages_.size());
+    page_ = ((p % n) + n) % n;
+    sel_ = 0;
+    drag_row_ = -1;
+  }
+
+  // Row rectangle for visible line i (screen pixels).
+  menu::Box RowRect(int i) const {
+    const float y = X(kListY + kRow * i);
+    return menu::Box{ImVec2(X(kLeft - 26.0f), y), ImVec2(X(kRight + 18.0f), y + X(kRow))};
+  }
+  float BarX0() const { return X(kRight - kBar); }
+  float BarX1() const { return X(kRight); }
+
+  void HandleInput(ImGuiIO& io, Settings& s) {
+    const Settings start = s;
+    if (const int d = nav_tab_direct().exchange(0); d > 0 && d <= int(pages_.size())) SetPage(d - 1);
+    if (const int t = nav_tab().exchange(0); t != 0) SetPage(page_ + t);
+
+    std::vector<int> vis = Visible(s);
+    if (vis.empty()) return;
+    sel_ = std::clamp(sel_, 0, int(vis.size()) - 1);
+
+    if (const int dy = nav_y().exchange(0); dy != 0) {
+      const int n = int(vis.size());
+      sel_ = ((sel_ + dy) % n + n) % n;
+    }
+    const auto& items = pages_[page_].items;
+    if (const int dx = nav_x().exchange(0); dx != 0) {
+      const auto& it = items[vis[sel_]];
+      if (it.kind == menu::Kind::kToggle || it.kind == menu::Kind::kOption)
+        Adjust(it, s, dx > 0 ? 1 : -1);
+      else
+        for (int i = 0; i < std::abs(dx); ++i) Adjust(it, s, dx > 0 ? 1 : -1);
+    }
+    for (int a = nav_activate().exchange(0); a > 0; --a) Activate(items[vis[sel_]], s);
+
+    // Mouse.
+    const ImVec2 m = io.MousePos;
+    const bool moved = std::fabs(m.x - last_mouse_.x) + std::fabs(m.y - last_mouse_.y) > 0.5f;
+    last_mouse_ = m;
+    mouse_in_panel_ = m.x >= 0 && m.x < X(kRight + 60.0f) && m.y >= 0 && m.y < io.DisplaySize.y;
+    if (moved && mouse_in_panel_) prompts_pad().store(false, std::memory_order_relaxed);
+
+    // Page names.
+    if (io.MouseClicked[0]) {
+      float x = X(kLeft);
+      for (int p = 0; p < int(pages_.size()); ++p) {
+        const float w = TextW(pages_[p].name, 21.0f);
+        if (m.x >= x - X(6) && m.x < x + w + X(6) && m.y >= X(kTabsY - 4) && m.y < X(kTabsY + 28)) {
+          SetPage(p);
+          vis = Visible(s);
+          return;
+        }
+        x += w + X(22.0f);
+      }
+    }
+    if (!io.MouseDown[0]) drag_row_ = -1;
+    for (int i = 0; i < int(vis.size()); ++i) {
+      const menu::Box r = RowRect(i);
+      if (!r.Contains(m)) continue;
+      if (moved && drag_row_ < 0) sel_ = i;
+      const auto& it = items[vis[i]];
+      if (io.MouseClicked[0]) {
+        sel_ = i;
+        if (it.kind == menu::Kind::kSlider && m.x >= BarX0() - X(8)) {
+          drag_row_ = i;
+        } else if (it.kind == menu::Kind::kOption && m.x < BarX0() + X(kBar * 0.5f) && m.x > BarX0() - X(60)) {
+          Adjust(it, s, -1);
+        } else {
+          Activate(it, s);
+        }
+      }
+      if (io.MouseWheel != 0.0f && it.kind != menu::Kind::kAction) {
+        sel_ = i;
+        Adjust(it, s, io.MouseWheel > 0 ? 1 : -1);
+      }
+      break;
+    }
+    if (drag_row_ >= 0 && drag_row_ < int(vis.size())) {
+      const auto& it = items[vis[drag_row_]];
+      float t = std::clamp((m.x - BarX0()) / (BarX1() - BarX0()), 0.0f, 1.0f);
+      float v = it.log ? it.lo * std::pow(it.hi / it.lo, t) : it.lo + (it.hi - it.lo) * t;
+      if (!it.log && it.step > 0) v = std::round(v / it.step) * it.step;
+      it.set(s, std::clamp(v, it.lo, it.hi));
+    }
+
+    // Undo keeps the settings from before a run of changes to one line.
+    if (std::memcmp(&start, &s, sizeof(Settings)) != 0) {
+      const int line = vis.empty() ? -1 : vis[std::min(sel_, int(vis.size()) - 1)];
+      if (line != last_changed_ || page_ != last_changed_page_) {
+        undo_ = start;
+        has_undo_ = true;
+      }
+      last_changed_ = line;
+      last_changed_page_ = page_;
+    }
+  }
+
+  // --- Drawing -------------------------------------------------------------------------------
+  void DrawMenu(ImGuiIO& io, Settings& s) {
+    const float H = io.DisplaySize.y;
+    // Fade in over the first 150 ms.
+    const float fade = std::clamp(float(now_ms() - opened_ms_) / 150.0f, 0.0f, 1.0f);
+
+    // Background: dark on the left, fading into the picture.
+    const ImU32 dark = IM_COL32(6, 5, 3, int(205 * fade));
+    const ImU32 clear = IM_COL32(6, 5, 3, 0);
+    dl_->AddRectFilled(ImVec2(0, 0), ImVec2(X(kRight + 30.0f), H), dark, 0.0f, 0);
+    dl_->AddRectFilledMultiColor(ImVec2(X(kRight + 30.0f), 0), ImVec2(X(kRight + 260.0f), H), dark, clear, clear,
+                                 dark);
+
+    // Title and rule.
+    Text(ImVec2(X(kLeft), X(kTitleY)), 38.0f, menu::with_alpha(menu::kCream, fade), "Photo Mode");
+    Rule(X(kLeft - 14.0f), X(kRight + 10.0f), X(kTitleY + 46.0f), fade);
+
+    // Pages: LB  Camera  Lens  Colour  World  Capture  RB
+    const bool pad = prompts_pad().load(std::memory_order_relaxed);
+    float x = X(kLeft);
+    const float ty = X(kTabsY);
+    if (pad) {
+      const float w = Prompt(0, 0, "LB", nullptr, true);
+      Prompt(X(kLeft - 12.0f) - w, ty - X(1.0f), "LB", nullptr);
+    }
+    for (int p = 0; p < int(pages_.size()); ++p) {
+      const bool cur = p == page_;
+      const float w = TextW(pages_[p].name, 21.0f);
+      Text(ImVec2(x, ty), 21.0f, menu::with_alpha(cur ? menu::kGold : menu::kFaint, fade), pages_[p].name);
+      if (cur) {
+        const float uy = ty + X(27.0f);
+        dl_->AddRectFilled(ImVec2(x, uy), ImVec2(x + w, uy + std::max(1.0f, X(1.5f))),
+                           menu::with_alpha(menu::kGold, fade), 0.0f, 0);
+      }
+      x += w + X(22.0f);
+    }
+    if (pad) Prompt(x - X(10.0f), ty - X(1.0f), "RB", nullptr);
+
+    // Lines.
+    const auto vis = Visible(s);
+    sel_ = std::clamp(sel_, 0, std::max(0, int(vis.size()) - 1));
+    const auto& items = pages_[page_].items;
+    for (int i = 0; i < int(vis.size()); ++i) {
+      const auto& it = items[vis[i]];
+      const menu::Box r = RowRect(i);
+      const bool cur = i == sel_;
+      const float ty2 = r.Min.y + (r.GetHeight() - X(kText)) * 0.5f;
+      if (cur) {
+        const ImU32 a = IM_COL32(218, 182, 98, int(70 * fade));
+        const ImU32 z = IM_COL32(218, 182, 98, 0);
+        dl_->AddRectFilledMultiColor(r.Min, ImVec2(r.Max.x, r.Max.y), a, z, z, a);
+        dl_->AddRectFilled(ImVec2(r.Min.x, r.Min.y), ImVec2(r.Min.x + std::max(1.0f, X(2.0f)), r.Max.y),
+                           menu::with_alpha(menu::kGold, fade), 0.0f, 0);
+        Diamond(ImVec2(X(kLeft - 12.0f), (r.Min.y + r.Max.y) * 0.5f), X(3.5f), menu::with_alpha(menu::kGold, fade));
+      }
+      const ImU32 label_col = menu::with_alpha(cur ? menu::kCream : menu::kCreamDim, fade);
+      Text(ImVec2(X(kLeft), ty2), kText, label_col, it.label);
+
+      const float cy = (r.Min.y + r.Max.y) * 0.5f;
+      switch (it.kind) {
+        case menu::Kind::kToggle: {
+          const bool v = it.get(s) > 0.5f;
+          TextRight(BarX1(), ty2, kText, menu::with_alpha(v ? menu::kGold : menu::kCreamDim, fade), v ? "On" : "Off");
+          break;
+        }
+        case menu::Kind::kOption: {
+          const int idx = std::clamp(int(std::lround(it.get(s))), 0, int(it.options.size()) - 1);
+          const char* name = it.options[idx].c_str();
+          const float right = cur ? BarX1() - X(14.0f) : BarX1();
+          TextRight(right, ty2, kText, label_col, name);
+          if (cur) {
+            const float w = TextW(name, kText);
+            Chevron(ImVec2(right - w - X(12.0f), cy), X(5.0f), false, menu::with_alpha(menu::kGold, fade));
+            Chevron(ImVec2(BarX1() - X(4.0f), cy), X(5.0f), true, menu::with_alpha(menu::kGold, fade));
+          }
+          break;
+        }
+        case menu::Kind::kSlider: {
+          const float v = it.get(s);
+          float t = it.log ? std::log(v / it.lo) / std::log(it.hi / it.lo) : (v - it.lo) / (it.hi - it.lo);
+          t = std::clamp(t, 0.0f, 1.0f);
+          const float bh = std::max(2.0f, X(3.0f));
+          const float x0 = BarX0(), x1 = BarX1();
+          dl_->AddRectFilled(ImVec2(x0, cy - bh * 0.5f), ImVec2(x1, cy + bh * 0.5f), IM_COL32(255, 255, 255, int(40 * fade)),
+                             bh * 0.5f, 0);
+          dl_->AddRectFilled(ImVec2(x0, cy - bh * 0.5f), ImVec2(x0 + (x1 - x0) * t, cy + bh * 0.5f),
+                             menu::with_alpha(cur ? menu::kGold : menu::kCreamDim, fade * (cur ? 1.0f : 0.7f)), bh * 0.5f, 0);
+          Diamond(ImVec2(x0 + (x1 - x0) * t, cy), X(cur ? 6.0f : 4.5f),
+                  menu::with_alpha(cur ? menu::kGold : menu::kCreamDim, fade));
+          const std::string val = it.fmt ? it.fmt(v) : menu::Fmt("%.2f", v);
+          TextRight(x0 - X(14.0f), ty2, kText, label_col, val.c_str());
+          break;
+        }
+        case menu::Kind::kAction:
+          if (cur) Chevron(ImVec2(BarX1() - X(4.0f), cy), X(5.0f), true, menu::with_alpha(menu::kGold, fade));
+          break;
+      }
+    }
+
+    // Description of the selected line.
+    if (!vis.empty()) {
+      const float y = X(kListY + kRow * vis.size() + 14.0f);
+      Rule(X(kLeft - 14.0f), X(kRight + 10.0f), y, 0.5f * fade);
+      TextWrapped(ImVec2(X(kLeft), y + X(12.0f)), 19.0f, X(kRight - kLeft), menu::with_alpha(menu::kFaint, fade),
+                  items[vis[sel_]].desc);
+    }
+  }
+
+  void DrawPrompts(ImGuiIO& io, bool shown) {
+    const float W = io.DisplaySize.x, H = io.DisplaySize.y;
+    const bool pad = prompts_pad().load(std::memory_order_relaxed);
+    struct P { std::string button, label; };
+    std::vector<P> list;
+    if (shown) {
+      const Settings s = settings_copy();
+      const auto vis = Visible(s);
+      const char* a = "Take Photo";
+      if (!vis.empty()) {
+        const auto& it = pages_[page_].items[vis[std::min(sel_, int(vis.size()) - 1)]];
+        if (it.kind == menu::Kind::kAction) a = it.label;
+        else if (it.kind != menu::Kind::kSlider) a = "Change";
+      }
+      if (pad) {
+        list = {{"A", a}, {"X", "Reset Camera"}, {"Y", "Hide Menu"}, {"B", "Exit"}};
+      } else {
+        list = {{"Enter", a}, {config::Get().photo_mode_screenshot_key, "Take Photo"},
+                {"H", "Hide Menu"}, {"Esc", "Exit"}};
+      }
+      // A thin dark band behind the prompts.
+      dl_->AddRectFilledMultiColor(ImVec2(0, H - X(90.0f)), ImVec2(W, H), IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0),
+                                   IM_COL32(0, 0, 0, 150), IM_COL32(0, 0, 0, 150));
+    } else {
+      list = pad ? std::vector<P>{{"A", "Take Photo"}, {"Y", "Show Menu"}}
+                 : std::vector<P>{{config::Get().photo_mode_screenshot_key, "Take Photo"}, {"H", "Show Menu"}};
+    }
+    // Right-aligned row along the bottom.
+    float total = 0.0f;
+    const float gap = X(30.0f);
+    for (const P& p : list) total += Prompt(0, 0, p.button.c_str(), p.label.c_str(), true) + gap;
+    float x = W - X(48.0f) - (total - gap);
+    const float y = H - X(56.0f);
+    for (const P& p : list) x += Prompt(x, y, p.button.c_str(), p.label.c_str()) + gap;
+    if (shown && !pad) {
+      // Camera keys, small, on the left.
+      Text(ImVec2(X(kLeft), y + X(3.0f)), 18.0f, menu::kFaint,
+           "WASD Move    E / Q Up and Down    Right Mouse Look    Wheel Zoom");
+    }
+  }
+
+  void DrawStatus(ImGuiIO& io) {
+    const float W = io.DisplaySize.x;
+    const std::string st = status();
+    if (st != toast_) {
+      toast_ = st;
+      toast_ms_ = now_ms();
+    }
+    // Self-timer countdown in the middle of the top edge.
+    const int64_t due = shot_next_ms().load();
+    if (due != 0 && shots_left().load() > 0) {
+      const int64_t left = due - now_ms();
+      if (left > 300) {
+        char b[8];
+        std::snprintf(b, sizeof(b), "%d", int((left + 999) / 1000));
+        const float w = TextW(b, 64.0f);
+        Text(ImVec2(W * 0.5f - w * 0.5f, X(40.0f)), 64.0f, menu::kCream, b);
+      }
+    }
+    if (toast_.empty()) return;
+    const float age = float(now_ms() - toast_ms_) / 1000.0f;
+    if (age > 3.5f) return;
+    const float a = age < 3.0f ? 1.0f : 1.0f - (age - 3.0f) / 0.5f;
+    // "Saved Fable2_....png (2560x1440)" -> "Photo saved".
+    const bool saved = toast_.rfind("Saved", 0) == 0;
+    const char* t = saved ? "Photo Saved" : toast_.c_str();
+    const float w = TextW(t, 24.0f);
+    const float x = W - X(48.0f) - w;
+    Rule(x - X(20.0f), W - X(28.0f), X(84.0f), a);
+    Text(ImVec2(x, X(50.0f)), 24.0f, menu::with_alpha(menu::kCream, a), t);
+  }
+
+  // Thirds, centre grid and cinema bars, drawn over the game (never in photos).
+  void DrawGuides(ImGuiIO& io, const Settings& s) {
+    const float w = io.DisplaySize.x;
+    const float h = io.DisplaySize.y;
+    if (s.letterbox != 0) {
+      static const float kRatios[] = {0.0f, 1.85f, 2.35f, 2.39f};
+      const float bar = std::max(0.0f, (h - w / kRatios[std::clamp(s.letterbox, 0, 3)]) * 0.5f);
+      if (bar > 0.5f) {
+        dl_->AddRectFilled(ImVec2(0, 0), ImVec2(w, bar), IM_COL32(0, 0, 0, 255), 0.0f, 0);
+        dl_->AddRectFilled(ImVec2(0, h - bar), ImVec2(w, h), IM_COL32(0, 0, 0, 255), 0.0f, 0);
+      }
+    }
+    if (s.guides == 0) return;
+    const ImU32 line = IM_COL32(255, 255, 255, 90);
+    if (s.guides == 1 || s.guides == 3) {
+      for (int i = 1; i <= 2; ++i) {
+        dl_->AddLine(ImVec2(w * i / 3.0f, 0.0f), ImVec2(w * i / 3.0f, h), line, 1.0f);
+        dl_->AddLine(ImVec2(0.0f, h * i / 3.0f), ImVec2(w, h * i / 3.0f), line, 1.0f);
+      }
+    }
+    if (s.guides == 2 || s.guides == 3) {
+      const float c = X(10.0f);
+      dl_->AddLine(ImVec2(w * 0.5f - c, h * 0.5f), ImVec2(w * 0.5f + c, h * 0.5f), line, 1.0f);
+      dl_->AddLine(ImVec2(w * 0.5f, h * 0.5f - c), ImVec2(w * 0.5f, h * 0.5f + c), line, 1.0f);
+    }
+  }
 
   static void MergeChanged(const Settings& before, const Settings& after, Settings& live) {
 #define FABLE2_PM_MERGE(f) \
@@ -118,277 +935,6 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     FABLE2_PM_MERGE(override_time)
     FABLE2_PM_MERGE(time_hours)
 #undef FABLE2_PM_MERGE
-  }
-
-  // Thirds, centre grid and cinema bars, drawn over the game (the screenshot
-  // reads the game's own frame, so these never end up in it).
-  void DrawGuides(ImGuiIO& io, const Settings& s) {
-    if (s.letterbox != 0) {
-      static const float kRatios[] = {0.0f, 1.85f, 2.35f, 2.39f};
-      const float target = kRatios[s.letterbox];
-      const float w = io.DisplaySize.x;
-      const float h = io.DisplaySize.y;
-      const float bar = std::max(0.0f, (h - w / target) * 0.5f);
-      if (bar > 0.5f) {
-        const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
-                                       ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
-                                       ImGuiWindowFlags_NoNav;
-        ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(w, bar), ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(1.0f);
-        ImGui::Begin("##bar_top", nullptr, flags);
-        ImGui::End();
-        ImGui::SetNextWindowPos(ImVec2(0.0f, h - bar), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(w, bar), ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(1.0f);
-        ImGui::Begin("##bar_bottom", nullptr, flags);
-        ImGui::End();
-      }
-    }
-    if (s.guides == 0) return;
-    ImDrawList* dl = ImGui::GetForegroundDrawList();
-    const float w = io.DisplaySize.x;
-    const float h = io.DisplaySize.y;
-    const ImU32 line = IM_COL32(255, 255, 255, 110);
-    if (s.guides == 1 || s.guides == 3) {
-      for (int i = 1; i <= 2; ++i) {
-        dl->AddLine(ImVec2(w * i / 3.0f, 0.0f), ImVec2(w * i / 3.0f, h), line, 1.0f);
-        dl->AddLine(ImVec2(0.0f, h * i / 3.0f), ImVec2(w, h * i / 3.0f), line, 1.0f);
-      }
-    }
-    if (s.guides == 2 || s.guides == 3) {
-      dl->AddLine(ImVec2(w * 0.5f, 0.0f), ImVec2(w * 0.5f, h), line, 1.0f);
-      dl->AddLine(ImVec2(0.0f, h * 0.5f), ImVec2(w, h * 0.5f), line, 1.0f);
-      dl->AddRect(ImVec2(w * 0.5f - 12.0f, h * 0.5f - 12.0f), ImVec2(w * 0.5f + 12.0f, h * 0.5f + 12.0f),
-                  line, 0.0f, 0, 1.0f);
-    }
-  }
-
-  void DrawHint(ImGuiIO& io) {
-    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y - 16.0f),
-                            ImGuiCond_Always, ImVec2(0.5f, 1.0f));
-    ImGui::SetNextWindowBgAlpha(0.35f);
-    if (ImGui::Begin("##photo_hint", nullptr,
-                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
-                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
-                         ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs)) {
-      ImGui::TextDisabled("Photo mode  -  H / pad Y: panel   %s / pad A: screenshot   Esc / pad B: exit",
-                          config::Get().photo_mode_screenshot_key.c_str());
-    }
-    ImGui::End();
-  }
-
-  // Parchment, brown and gold, to match the game's menus. Only the panel
-  // sets these; the game's own UI is unaffected.
-  static void PushParchment(int& pushed_colours, int& pushed_vars) {
-    struct C { ImGuiCol idx; ImVec4 col; };
-    static const C kColours[] = {
-        {ImGuiCol_WindowBg, ImVec4(0.93f, 0.87f, 0.73f, 0.95f)},
-        {ImGuiCol_PopupBg, ImVec4(0.93f, 0.87f, 0.73f, 0.98f)},
-        {ImGuiCol_Text, ImVec4(0.25f, 0.16f, 0.08f, 1.00f)},
-        {ImGuiCol_TextDisabled, ImVec4(0.48f, 0.36f, 0.20f, 1.00f)},
-        {ImGuiCol_TitleBg, ImVec4(0.36f, 0.23f, 0.11f, 1.00f)},
-        {ImGuiCol_TitleBgActive, ImVec4(0.42f, 0.27f, 0.12f, 1.00f)},
-        {ImGuiCol_Border, ImVec4(0.72f, 0.56f, 0.22f, 1.00f)},
-        {ImGuiCol_Separator, ImVec4(0.72f, 0.56f, 0.22f, 0.70f)},
-        {ImGuiCol_FrameBg, ImVec4(0.85f, 0.78f, 0.60f, 1.00f)},
-        {ImGuiCol_FrameBgHovered, ImVec4(0.90f, 0.84f, 0.66f, 1.00f)},
-        {ImGuiCol_SliderGrab, ImVec4(0.70f, 0.52f, 0.18f, 1.00f)},
-        {ImGuiCol_SliderGrabActive, ImVec4(0.85f, 0.66f, 0.25f, 1.00f)},
-        {ImGuiCol_CheckMark, ImVec4(0.55f, 0.38f, 0.12f, 1.00f)},
-        {ImGuiCol_Button, ImVec4(0.62f, 0.45f, 0.20f, 1.00f)},
-        {ImGuiCol_ButtonHovered, ImVec4(0.72f, 0.54f, 0.26f, 1.00f)},
-        {ImGuiCol_ButtonActive, ImVec4(0.50f, 0.35f, 0.14f, 1.00f)},
-        {ImGuiCol_Header, ImVec4(0.80f, 0.70f, 0.48f, 0.60f)},
-        {ImGuiCol_HeaderHovered, ImVec4(0.85f, 0.75f, 0.52f, 0.80f)},
-        {ImGuiCol_HeaderActive, ImVec4(0.80f, 0.68f, 0.42f, 1.00f)},
-    };
-    for (const C& c : kColours) {
-      ImGui::PushStyleColor(c.idx, c.col);
-      ++pushed_colours;
-    }
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 3.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
-    pushed_vars += 4;
-  }
-
-  void DrawPanel(ImGuiIO& io, Settings& s) {
-    const float width = 360.0f;
-    ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_FirstUseEver, ImVec2(0.0f, 0.0f));
-    ImGui::SetNextWindowSize(ImVec2(width, io.DisplaySize.y > 200.0f ? io.DisplaySize.y - 32.0f : 600.0f),
-                             ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowBgAlpha(0.95f);
-    int pushed_colours = 0;
-    int pushed_vars = 0;
-    PushParchment(pushed_colours, pushed_vars);
-    if (!ImGui::Begin("Photo Mode", nullptr, ImGuiWindowFlags_NoSavedSettings)) {
-      ImGui::End();
-      ImGui::PopStyleVar(pushed_vars);
-      ImGui::PopStyleColor(pushed_colours);
-      return;
-    }
-    ImGui::PushItemWidth(-130.0f);
-
-    const std::string st = status();
-    if (!st.empty()) {
-      ImGui::TextWrapped("%s", st.c_str());
-      ImGui::Separator();
-    }
-
-    if (ImGui::Button("Take screenshot", ImVec2(0.0f, 0.0f))) {
-      {
-        std::lock_guard<std::mutex> lock(shot_plan_mutex());
-        ShotPlan& p = shot_plan_unlocked();
-        p.shots = std::clamp(p.shots, 1, 10);
-      }
-      screenshot_request().store(true);
-    }
-    if (ImGui::CollapsingHeader("Screenshot", 0)) {
-      std::lock_guard<std::mutex> lock(shot_plan_mutex());
-      ShotPlan& p = shot_plan_unlocked();
-      // SliderInt is not exported by the SDK, so edit through floats.
-      float count = static_cast<float>(p.shots);
-      float delay = static_cast<float>(p.delay_s);
-      float spacing = static_cast<float>(p.spacing_ms);
-      if (ImGui::SliderFloat("Burst count", &count, 1.0f, 10.0f, "%.0f", 0)) p.shots = static_cast<int>(count + 0.5f);
-      if (ImGui::SliderFloat("Self-timer", &delay, 0.0f, 30.0f, "%.0f s", 0)) p.delay_s = static_cast<int>(delay + 0.5f);
-      if (ImGui::SliderFloat("Burst spacing", &spacing, 100.0f, 2000.0f, "%.0f ms", 0)) p.spacing_ms = static_cast<int>(spacing + 0.5f);
-      ImGui::TextDisabled("Burst and timer apply to the next Take screenshot or F12.");
-    }
-    ImGui::SameLine(0.0f, -1.0f);
-    if (ImGui::Button("Hide panel", ImVec2(0.0f, 0.0f))) panel_visible().store(false);
-    ImGui::SameLine(0.0f, -1.0f);
-    if (ImGui::Button("Exit", ImVec2(0.0f, 0.0f))) request_exit();
-    ImGui::SameLine(0.0f, -1.0f);
-    // Shown once there is something to undo (BeginDisabled is not exported).
-    if (has_undo_ && ImGui::Button("Undo", ImVec2(0.0f, 0.0f))) {
-      std::lock_guard<std::mutex> lock(settings_mutex());
-      s = undo_;
-    }
-
-    if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
-      ImGui::Checkbox("Pause the world", &s.freeze_world);
-      ImGui::Checkbox("Hide HUD", &s.hide_hud);
-      ImGui::Checkbox("Hide world icons", &s.hide_world_icons);
-      ImGui::SliderFloat("Field of view", &s.fov_deg, 5.0f, 120.0f, "%.1f deg", 0);
-      ImGui::SliderFloat("Roll", &s.roll_deg, -180.0f, 180.0f, "%.1f deg", 0);
-      ImGui::SliderFloat("Move speed", &s.move_speed, 0.1f, 40.0f, "%.1f m/s",
-                         ImGuiSliderFlags_Logarithmic);
-      ImGui::SliderFloat("Look speed", &s.look_speed, 0.1f, 4.0f, "%.2fx", 0);
-      if (ImGui::Button("Reset camera", ImVec2(0.0f, 0.0f))) reset_camera_request().store(true);
-      ImGui::SameLine(0.0f, -1.0f);
-      if (ImGui::Button("Level roll", ImVec2(0.0f, 0.0f))) s.roll_deg = 0.0f;
-    }
-
-    if (ImGui::CollapsingHeader("Depth of field", ImGuiTreeNodeFlags_DefaultOpen)) {
-      int mode = static_cast<int>(s.dof_mode);
-      if (ImGui::Combo("Mode", &mode, "Game default\0Off\0Focus\0Raw values\0", -1))
-        s.dof_mode = static_cast<DofMode>(mode);
-      if (s.dof_mode == DofMode::kFocus) {
-        ImGui::SliderFloat("Focus distance", &s.dof_focus, 0.2f, 200.0f, "%.2f m",
-                           ImGuiSliderFlags_Logarithmic);
-        ImGui::SliderFloat("Sharp range", &s.dof_range, 0.0f, 50.0f, "%.2f m",
-                           ImGuiSliderFlags_Logarithmic);
-        ImGui::SliderFloat("Falloff", &s.dof_falloff, 0.1f, 100.0f, "%.2f m",
-                           ImGuiSliderFlags_Logarithmic);
-        ImGui::SliderFloat("Blur strength", &s.dof_strength, 0.0f, 1.0f, "%.2f", 0);
-      } else if (s.dof_mode == DofMode::kRaw) {
-        ImGui::TextDisabled("The camera's six depth-of-field values.");
-        ImGui::SliderFloat("1 near blur", &s.dof_raw[0], 0.0f, 1.0f, "%.3f", 0);
-        ImGui::SliderFloat("2 far blur", &s.dof_raw[1], 0.0f, 1.0f, "%.3f", 0);
-        ImGui::SliderFloat("3 near plane", &s.dof_raw[2], 0.0f, 200.0f, "%.2f",
-                           ImGuiSliderFlags_Logarithmic);
-        ImGui::SliderFloat("4 near focus", &s.dof_raw[3], 0.0f, 200.0f, "%.2f",
-                           ImGuiSliderFlags_Logarithmic);
-        ImGui::SliderFloat("5 far focus", &s.dof_raw[4], 0.0f, 500.0f, "%.2f",
-                           ImGuiSliderFlags_Logarithmic);
-        ImGui::SliderFloat("6 far plane", &s.dof_raw[5], 0.0f, 1000.0f, "%.2f",
-                           ImGuiSliderFlags_Logarithmic);
-        ImGui::SliderFloat("Alpha", &s.dof_alpha, 0.0f, 1.0f, "%.2f", 0);
-      }
-    }
-
-    if (ImGui::CollapsingHeader("Lens", ImGuiTreeNodeFlags_DefaultOpen)) {
-      ImGui::SliderFloat("Vignette", &s.vignette_a, 0.0f, 1.0f, "%.2f", 0);
-      ImGui::SliderFloat("Vignette 2", &s.vignette_b, 0.0f, 1.0f, "%.2f", 0);
-      ImGui::SliderFloat("Screen blur", &s.blur, 0.0f, 1.0f, "%.2f", 0);
-    }
-
-    if (ImGui::CollapsingHeader("Colour and light", ImGuiTreeNodeFlags_DefaultOpen)) {
-      std::string names;
-      for (int i = 0; i < kFilterPresetCount; ++i) {
-        names += kFilterPresets[i].name;
-        names += '\0';
-      }
-      if (ImGui::Combo("Filter", &s.filter, names.c_str(), -1)) {
-        apply_filter(s, kFilterPresets[s.filter]);
-      }
-      ImGui::TextDisabled("1.00x = the game's own value");
-      ImGui::SliderFloat("Exposure", &s.exposure, 0.0f, 4.0f, "%.2fx", 0);
-      ImGui::SliderFloat("Contrast", &s.contrast, 0.0f, 3.0f, "%.2fx", 0);
-      ImGui::SliderFloat("Saturation", &s.saturation, 0.0f, 3.0f, "%.2fx", 0);
-      ImGui::SliderFloat("Brightness", &s.brightness, 0.0f, 3.0f, "%.2fx", 0);
-      ImGui::SliderFloat("Bloom", &s.bloom, 0.0f, 5.0f, "%.2fx", 0);
-      ImGui::SliderFloat("Bloom threshold", &s.bloom_threshold, 0.0f, 3.0f, "%.2fx", 0);
-      ImGui::SliderFloat("Sun beams", &s.sun_beams, 0.0f, 5.0f, "%.2fx", 0);
-      ImGui::SliderFloat("Film overlay", &s.overlay, 0.0f, 4.0f, "%.2fx", 0);
-      ImGui::SliderFloat("Fog", &s.fog, 0.0f, 4.0f, "%.2fx", 0);
-      ImGui::SliderFloat("Ground mist", &s.ground_mist, 0.0f, 4.0f, "%.2fx", 0);
-      if (ImGui::Button("Reset colour", ImVec2(0.0f, 0.0f))) {
-        s.filter = 0;
-        apply_filter(s, kFilterPresets[0]);
-        s.bloom_threshold = s.ground_mist = 1.0f;
-      }
-    }
-
-    if (ImGui::CollapsingHeader("Composition", 0)) {
-      static const char* kGuides = "None\0Rule of thirds\0Centre grid\0Thirds and centre\0";
-      static const char* kBars = "None\0 1.85:1\0 2.35:1\0 2.39:1\0";
-      ImGui::Combo("Guides", &s.guides, kGuides, -1);
-      ImGui::Combo("Letterbox", &s.letterbox, kBars, -1);
-      ImGui::TextDisabled("Guides and bars are drawn on screen only, never in screenshots.");
-    }
-
-    if (ImGui::CollapsingHeader("Weather and sky", 0)) {
-      ImGui::TextDisabled("Weather and sky effects, 1.00x = the game's own value");
-      ImGui::SliderFloat("Rain", &s.rain, 0.0f, 3.0f, "%.2fx", 0);
-      ImGui::SliderFloat("Snow", &s.snow, 0.0f, 3.0f, "%.2fx", 0);
-      ImGui::SliderFloat("Stars", &s.stars, 0.0f, 3.0f, "%.2fx", 0);
-      ImGui::SliderFloat("Moon glare", &s.moon_glare, 0.0f, 3.0f, "%.2fx", 0);
-      ImGui::SliderFloat("Sun disc", &s.sun_disc, 0.0f, 3.0f, "%.2fx", 0);
-    }
-
-    if (ImGui::CollapsingHeader("Time of day", ImGuiTreeNodeFlags_DefaultOpen)) {
-      ImGui::Checkbox("Set time of day", &s.override_time);
-      if (s.override_time) {
-        const int hh = static_cast<int>(s.time_hours) % 24;
-        const int mm = static_cast<int>((s.time_hours - std::floor(s.time_hours)) * 60.0f);
-        char label[16];
-        std::snprintf(label, sizeof(label), "%02d:%02d", hh, mm);
-        ImGui::SliderFloat("Time", &s.time_hours, 0.0f, 24.0f, label, 0);
-      }
-    }
-
-    if (ImGui::CollapsingHeader("Controls", 0)) {
-      ImGui::TextWrapped(
-          "Keyboard: WASD move, E / Q up and down, hold the right mouse button and drag "
-          "to look (or the arrow keys), mouse wheel or PageUp / PageDown zoom, Z / C roll, "
-          "X level roll, Shift fast, Ctrl slow, R reset camera, %s screenshot, H hide this "
-          "panel, %s or Esc exit.",
-          config::Get().photo_mode_screenshot_key.c_str(),
-          config::Get().photo_mode_toggle_key.c_str());
-      ImGui::TextWrapped(
-          "Controller: left stick move, right stick look, LT / RT down and up, LB / RB "
-          "roll, D-pad up / down zoom, hold L3 fast, A screenshot, X reset camera, Y hide "
-          "this panel, B exit. Click both sticks to enter or leave.");
-    }
-
-    ImGui::PopItemWidth();
-    ImGui::End();
-    ImGui::PopStyleVar(pushed_vars);
-    ImGui::PopStyleColor(pushed_colours);
   }
 };
 
