@@ -26,6 +26,9 @@ jobs:
       - name: Install Python test tools
         run: python -m pip install -r tests/requirements.txt
       - name: Python tests
+        # Windows runners print in cp1252, which garbles pytest-spec's pass and xfail symbols.
+        env:
+          PYTHONIOENCODING: utf-8
         run: python -m pytest --cov=tools --cov-report=term
       - name: Launcher tests
         run: dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release
