@@ -746,7 +746,12 @@ extern "C" void ProcessAndProcessAndProcess573_82B458C0(PPCContext& ctx, uint8_t
 // it so the A-press is detected no matter which input source drives it.
 extern "C" void ProcessAndProcessAndProcess1013_822B2D60(PPCContext& ctx, uint8_t* base) {
   const uint32_t state_ptr = ctx.r4.u32;
+  const uint32_t user = ctx.r3.u32;
   __imp__ProcessAndProcessAndProcess1013_822B2D60(ctx, base);
   fable2::stateprobe::observe_a_button(state_ptr);
+  // Photo mode reads the pad here, then blanks it for the game while it is on
+  // (src/core/fable2_photo_mode.h, which defines this override itself in
+  // non-remote builds).
+  fable2::photomode::on_pad_read(base, user, state_ptr, ctx.r3.u32);
 }
 #endif  // FABLE2_REMOTE_CONTROL

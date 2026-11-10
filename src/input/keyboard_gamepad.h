@@ -49,6 +49,7 @@
 
 #include "fable2_config.h"  // direct_mouse_look toggle
 #include "mouse_look.h"     // fable2::mouselook (accumulates the mouse delta)
+#include "photo_mode_state.h"  // fable2::photomode (hotkeys, RMB-drag look)
 
 #ifdef _WIN32
 #include <windows.h>
@@ -284,7 +285,14 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
       unlock_down_prev_ = unlock_down;
     }
 
-    if (focused) {
+    // Photo mode (src/core/fable2_photo_mode.h): hotkeys here; while it is on,
+    // the keyboard map is not fed to the game and the mouse only looks while
+    // the right button is held (the cursor is free for the settings panel).
+    fable2::photomode::window_focused().store(focused, std::memory_order_relaxed);
+    PollPhotoModeKeys(focused);
+    const bool photo = fable2::photomode::active();
+
+    if (focused && !photo) {
       for (const auto& m : bindings_) {
         if (has_unlock_key && m.vk == unlock_vk) continue;  // not gamepad input
         if ((GetAsyncKeyState(m.vk) & 0x8000) == 0) continue;  // not held
@@ -313,6 +321,20 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     // cursor is free while the menu is open. Fable 2 inverts Y, so mouse-up
     // (dy<0) maps to +ry (look up).
     bool looking = focused && REXCVAR_GET(mouse_look) && !console_open_;
+    if (photo) {
+      // Start a look drag only when the right button goes down over the game
+      // (not over the panel); keep it until the button is released.
+      const bool rmb = focused && (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+      if (rmb && !photo_rmb_prev_ &&
+          !fable2::photomode::ui_wants_mouse().load(std::memory_order_relaxed))
+        photo_dragging_ = true;
+      if (!rmb) photo_dragging_ = false;
+      photo_rmb_prev_ = rmb;
+      looking = photo_dragging_ && !console_open_;
+    } else {
+      photo_dragging_ = false;
+      photo_rmb_prev_ = false;
+    }
 
     // Hide/restore the cursor via the SDK Window. This is a thread-safe
     // "desired state" that the UI thread applies, so it actually takes effect
@@ -339,23 +361,25 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
             // dy>0 = down.
             const int32_t dx = p.x - c.x;
             const int32_t dy = p.y - c.y;
-            // Direct-mouse-look separation DISABLED: the mouse always drives
-            // the synthetic pad's right stick (the native path) so the game's
-            // own stick pipeline produces the look 1:1 with a real right stick.
-            // The raw-displacement path that fed fable2_hook_direct_mouse_look
-            // is commented out below (preserved for reference).
-            // if (fable2::config::Get().direct_mouse_look) {
-            //   // Direct mouse look: hand the raw displacement to the camera
-            //   // hook (fable2_hook_direct_mouse_look) and leave the pad's right
-            //   // stick neutral, so the mouse no longer drives the joystick.
-            //   fable2::mouselook::add_delta(dx, dy);
-            // } else {
+            if (photo) {
+              // Photo mode: the free camera takes the raw displacement; the pad
+              // stick stays neutral.
+              fable2::photomode::look_dx().fetch_add(dx, std::memory_order_relaxed);
+              fable2::photomode::look_dy().fetch_add(dy, std::memory_order_relaxed);
+            } else {
+              // Direct-mouse-look separation DISABLED: the mouse always drives
+              // the synthetic pad's right stick (the native path) so the game's
+              // own stick pipeline produces the look 1:1 with a real right stick.
+              // The raw-displacement path that fed fable2_hook_direct_mouse_look
+              // is commented out (preserved for reference):
+              // if (fable2::config::Get().direct_mouse_look)
+              //   fable2::mouselook::add_delta(dx, dy);
               // Map the displacement onto the right stick. Fable 2
               // inverts Y, so mouse-up (dy<0) maps to +ry (look up).
               const int32_t scale = REXCVAR_GET(mouse_look_scale);
               rx = input_detail::ClampStick(dx * scale);
               ry = input_detail::ClampStick(-dy * scale);
-            // }
+            }
           }
           SetCursorPos(c.x, c.y);  // recenter: consume this frame's movement
           mouse_centered_ = true;
@@ -401,6 +425,56 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
   }
 
  private:
+#ifdef _WIN32
+  // Photo mode hotkeys (edge-triggered). The toggle and screenshot keys come
+  // from fable2_config.toml [photo_mode]; the rest only act while it is on.
+  void PollPhotoModeKeys(bool focused) {
+    namespace pm = fable2::photomode;
+    const auto& cfg = fable2::config::Get();
+    if (!cfg.photo_mode_enabled) return;
+    if (cfg.photo_mode_toggle_key != photo_toggle_name_) {
+      photo_toggle_name_ = cfg.photo_mode_toggle_key;
+      photo_toggle_vk_ = static_cast<uint16_t>(rex::ui::ParseVirtualKey(photo_toggle_name_));
+    }
+    if (cfg.photo_mode_screenshot_key != photo_shot_name_) {
+      photo_shot_name_ = cfg.photo_mode_screenshot_key;
+      photo_shot_vk_ = static_cast<uint16_t>(rex::ui::ParseVirtualKey(photo_shot_name_));
+    }
+    const bool on = pm::active();
+    const bool typing = pm::ui_wants_keyboard().load(std::memory_order_relaxed);
+    auto edge = [&](uint16_t vk) {
+      if (vk == 0 || vk >= 256) return false;
+      const bool down = focused && (GetAsyncKeyState(vk) & 0x8000) != 0;
+      const bool hit = down && !photo_keys_prev_[vk];
+      photo_keys_prev_[vk] = down;
+      return hit;
+    };
+    if (edge(photo_toggle_vk_) && !console_open_) pm::request_toggle();
+    const bool shot = edge(photo_shot_vk_);
+    const bool esc = edge(VK_ESCAPE);
+    const bool h = edge('H');
+    const bool r = edge('R');
+    const bool x = edge('X');
+    if (!on || console_open_) return;
+    if (esc) pm::request_exit();
+    if (shot) pm::screenshot_request().store(true);
+    if (typing) return;
+    if (h) pm::panel_visible().store(!pm::panel_visible().load());
+    if (r) pm::reset_camera_request().store(true);
+    if (x) {
+      std::lock_guard<std::mutex> lock(pm::settings_mutex());
+      pm::settings_unlocked().roll_deg = 0.0f;
+    }
+  }
+  std::string photo_toggle_name_;
+  std::string photo_shot_name_;
+  uint16_t photo_toggle_vk_ = 0;
+  uint16_t photo_shot_vk_ = 0;
+  bool photo_keys_prev_[256] = {};
+  bool photo_dragging_ = false;  // RMB look drag in progress (photo mode)
+  bool photo_rmb_prev_ = false;
+#endif
+
   // Re-parse the cvar only when its text changed (cheap for a short string),
   // so the mapping is hot-reloadable from the console without a rebuild.
   void RefreshBindings() {

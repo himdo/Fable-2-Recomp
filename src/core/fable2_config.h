@@ -207,6 +207,15 @@ struct Values {
   // original (yield every call), 0 = never yield. Larger = fewer context
   // switches, less frequent CPU rotation to other guest threads.
   int32_t hotfunc_yield_every = 1;
+  // [photo_mode] (src/core/fable2_photo_mode.h): free camera + settings panel.
+  bool photo_mode_enabled = true;
+  std::string photo_mode_toggle_key = "F6";
+  std::string photo_mode_screenshot_key = "F12";
+  bool photo_mode_gamepad_toggle = true;  // L3 + R3 toggles photo mode
+  float photo_mode_move_speed = 4.0f;     // metres per second
+  float photo_mode_mouse_sensitivity = 0.0025f;  // radians per mouse pixel
+  float photo_mode_max_distance = 0.0f;   // 0 = no limit
+  std::string photo_mode_screenshot_folder = "screenshots";
 };
 
 // Load the config from `path`.

@@ -216,3 +216,45 @@ dog_fur_depth_bias = true
 # every call); 0 = never yield; larger = fewer context switches.
 # Default: 1
 hotfunc_yield_every = 1
+
+[photo_mode]
+# Photo mode: freeze the world, fly a free camera and take screenshots, with a
+# settings panel for field of view, roll, depth of field, vignette, colour
+# grading and time of day. Toggle it in game with toggle_key, or click both
+# sticks (L3 + R3) on a controller when gamepad_toggle is on.
+# false = photo mode is off and its keys do nothing.
+# Default: true
+enabled = true
+
+# Keyboard key that turns photo mode on and off (a Windows key name, e.g. F6,
+# F7, P). Escape also leaves photo mode.
+# Default: "F6"
+toggle_key = "F6"
+
+# Keyboard key that saves a screenshot while photo mode is on.
+# Default: "F12"
+screenshot_key = "F12"
+
+# Click both sticks (L3 + R3) together to enter or leave photo mode.
+# Default: true
+gamepad_toggle = true
+
+# Free-camera flying speed in metres per second (Shift = 4x, Ctrl = 1/4x).
+# The panel can change it live.
+# Default: 4.0
+move_speed = 4.0
+
+# Look speed for the mouse (hold the right mouse button and drag), in radians
+# per mouse pixel.
+# Default: 0.0025
+mouse_sensitivity = 0.0025
+
+# How far (metres) the free camera may fly from where photo mode started.
+# 0 = no limit.
+# Default: 0.0
+max_distance = 0.0
+
+# Folder for screenshots, relative to fable_2.exe (or an absolute path). Files
+# are named Fable2_YYYYMMDD_HHMMSS.png.
+# Default: "screenshots"
+screenshot_folder = "screenshots"

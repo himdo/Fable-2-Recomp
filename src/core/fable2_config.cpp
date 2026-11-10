@@ -247,6 +247,48 @@ dog_fur_depth_bias = true
 # every call); 0 = never yield; larger = fewer context switches.
 # Default: 1
 hotfunc_yield_every = 1
+
+[photo_mode]
+# Photo mode: freeze the world, fly a free camera and take screenshots, with a
+# settings panel for field of view, roll, depth of field, vignette, colour
+# grading and time of day. Toggle it in game with toggle_key, or click both
+# sticks (L3 + R3) on a controller when gamepad_toggle is on.
+# false = photo mode is off and its keys do nothing.
+# Default: true
+enabled = true
+
+# Keyboard key that turns photo mode on and off (a Windows key name, e.g. F6,
+# F7, P). Escape also leaves photo mode.
+# Default: "F6"
+toggle_key = "F6"
+
+# Keyboard key that saves a screenshot while photo mode is on.
+# Default: "F12"
+screenshot_key = "F12"
+
+# Click both sticks (L3 + R3) together to enter or leave photo mode.
+# Default: true
+gamepad_toggle = true
+
+# Free-camera flying speed in metres per second (Shift = 4x, Ctrl = 1/4x).
+# The panel can change it live.
+# Default: 4.0
+move_speed = 4.0
+
+# Look speed for the mouse (hold the right mouse button and drag), in radians
+# per mouse pixel.
+# Default: 0.0025
+mouse_sensitivity = 0.0025
+
+# How far (metres) the free camera may fly from where photo mode started.
+# 0 = no limit.
+# Default: 0.0
+max_distance = 0.0
+
+# Folder for screenshots, relative to fable_2.exe (or an absolute path). Files
+# are named Fable2_YYYYMMDD_HHMMSS.png.
+# Default: "screenshots"
+screenshot_folder = "screenshots"
 )TOML_EOF";
 
 std::string_view TypeName(toml::node_type t) {
@@ -304,8 +346,8 @@ bool Load(const std::filesystem::path& path) {
 
   // Warn about unknown top-level sections (usually a typo or a file written
   // for a newer build).
-  static constexpr std::array<std::string_view, 4> kKnownSections = {
-      "general", "input", "patches", "perf"};
+  static constexpr std::array<std::string_view, 5> kKnownSections = {
+      "general", "input", "patches", "perf", "photo_mode"};
   for (const auto& [key, value] : root) {
     const bool known =
         std::ranges::find(kKnownSections, key.str()) != kKnownSections.end();
@@ -428,6 +470,34 @@ bool Load(const std::filesystem::path& path) {
     values.hotfunc_yield_every = static_cast<int32_t>(Read<int64_t>(
         perf_table, "perf", "hotfunc_yield_every", "integer",
         values.hotfunc_yield_every));
+  }
+  const toml::path photo_path{"photo_mode"};
+  const auto photo = root[photo_path];
+  if (photo.is_table()) {
+    const toml::table& photo_table = *photo.as_table();
+    values.photo_mode_enabled = Read<bool>(photo_table, "photo_mode", "enabled",
+                                           "boolean", values.photo_mode_enabled);
+    values.photo_mode_toggle_key =
+        Read<std::string>(photo_table, "photo_mode", "toggle_key", "string",
+                          values.photo_mode_toggle_key);
+    values.photo_mode_screenshot_key =
+        Read<std::string>(photo_table, "photo_mode", "screenshot_key", "string",
+                          values.photo_mode_screenshot_key);
+    values.photo_mode_gamepad_toggle =
+        Read<bool>(photo_table, "photo_mode", "gamepad_toggle", "boolean",
+                   values.photo_mode_gamepad_toggle);
+    values.photo_mode_move_speed = static_cast<float>(
+        Read<double>(photo_table, "photo_mode", "move_speed", "number",
+                     values.photo_mode_move_speed));
+    values.photo_mode_mouse_sensitivity = static_cast<float>(
+        Read<double>(photo_table, "photo_mode", "mouse_sensitivity", "number",
+                     values.photo_mode_mouse_sensitivity));
+    values.photo_mode_max_distance = static_cast<float>(
+        Read<double>(photo_table, "photo_mode", "max_distance", "number",
+                     values.photo_mode_max_distance));
+    values.photo_mode_screenshot_folder =
+        Read<std::string>(photo_table, "photo_mode", "screenshot_folder", "string",
+                          values.photo_mode_screenshot_folder);
   }
 
   g_values = values;
