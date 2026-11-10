@@ -5,22 +5,31 @@ them need game files, a GPU or an audio device.
 
 ## Quick start
 
-From the repository root, with Python 3.11 or later and nothing else to install:
+From the repository root, with Python 3.11 or later. The first time, set up a
+virtual environment with the test tools:
+
+```sh
+python -m venv .venv
+.venv/bin/pip install -r tests/requirements.txt
+```
+
+On Windows, use `.venv\Scripts\pip` instead. Then run:
 
 ```sh
 python tools/generate_game_versions.py --check
-python -m unittest discover -s tests -p "test_*.py"
+.venv/bin/python -m pytest
 ```
 
-If `python` isn't found, use `python3`. Keep the quotes around `"test_*.py"`,
-because zsh rejects the pattern without them.
+If `python` isn't found, use `python3`. The Python tests run with
+[pytest](https://docs.pytest.org/). `pytest.ini` in the repository root sets
+them up to print one line per test.
 
 ## The test suites
 
 | Suite | Command | Needs | In CI? |
 |---|---|---|---|
 | Version check | `python tools/generate_game_versions.py --check` | Python | Yes |
-| Python tests | `python -m unittest discover -s tests -p "test_*.py"` | Python 3.11+ | Yes |
+| Python tests | `python -m pytest` | Python 3.11+ and `tests/requirements.txt` | Yes |
 | Launcher tests | `dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release` | .NET 8 SDK | Yes |
 | Native tests | `tests\run_native_tests.cmd` | Windows, a VS x64 developer shell, Clang and the patched SDK source | No |
 
@@ -52,12 +61,19 @@ Checks that the generated files in `constants/` match
 To run one file:
 
 ```sh
-python -m unittest discover -s tests -p "test_config_template.py"
+python -m pytest tests/config/test_config_template.py
+```
+
+To see how much of `tools/` the tests cover, as CI does:
+
+```sh
+python -m pytest --cov=tools --cov-report=term
 ```
 
 These tests use fake files in temporary folders, and their folders mirror the
-code they cover. A new `test_*.py` file is picked up automatically, but a new
-subfolder needs an empty `__init__.py`, or its tests are silently skipped.
+code they cover. A new `test_*.py` file is picked up automatically. A new
+subfolder needs an empty `__init__.py`, so its test files don't clash with
+same-named ones in other folders.
 
 ### Launcher tests
 
