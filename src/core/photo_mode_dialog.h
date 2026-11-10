@@ -10,6 +10,7 @@
 // ImGui functions used here (see the SDK's src/system/rexruntime.def).
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -50,6 +51,7 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
 
     Settings s = settings_copy();
     const Settings before = s;
+    DrawGuides(io, s);
     DrawPanel(io, s);
     {
       std::lock_guard<std::mutex> lock(settings_mutex());
@@ -57,11 +59,23 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
       // meantime (roll / FOV keys) is not overwritten with a stale copy.
       MergeChanged(before, s, settings_unlocked());
     }
+    // Undo keeps the settings from before the last run of changes: a drag
+    // is one run, so it undoes as one step.
+    const bool changed = std::memcmp(&before, &s, sizeof(Settings)) != 0;
+    if (changed && !changing_) {
+      undo_ = before;
+      has_undo_ = true;
+    }
+    changing_ = changed;
     ui_wants_mouse().store(io.WantCaptureMouse, std::memory_order_relaxed);
     ui_wants_keyboard().store(io.WantCaptureKeyboard, std::memory_order_relaxed);
   }
 
  private:
+  Settings undo_{};
+  bool has_undo_ = false;
+  bool changing_ = false;
+
   static void MergeChanged(const Settings& before, const Settings& after, Settings& live) {
 #define FABLE2_PM_MERGE(f) \
   if (std::memcmp(&before.f, &after.f, sizeof(before.f)) != 0) \
@@ -98,10 +112,56 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     FABLE2_PM_MERGE(stars)
     FABLE2_PM_MERGE(moon_glare)
     FABLE2_PM_MERGE(sun_disc)
+    FABLE2_PM_MERGE(guides)
+    FABLE2_PM_MERGE(letterbox)
     FABLE2_PM_MERGE(filter)
     FABLE2_PM_MERGE(override_time)
     FABLE2_PM_MERGE(time_hours)
 #undef FABLE2_PM_MERGE
+  }
+
+  // Thirds, centre grid and cinema bars, drawn over the game (the screenshot
+  // reads the game's own frame, so these never end up in it).
+  void DrawGuides(ImGuiIO& io, const Settings& s) {
+    if (s.letterbox != 0) {
+      static const float kRatios[] = {0.0f, 1.85f, 2.35f, 2.39f};
+      const float target = kRatios[s.letterbox];
+      const float w = io.DisplaySize.x;
+      const float h = io.DisplaySize.y;
+      const float bar = std::max(0.0f, (h - w / target) * 0.5f);
+      if (bar > 0.5f) {
+        const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
+                                       ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                                       ImGuiWindowFlags_NoNav;
+        ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(w, bar), ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(1.0f);
+        ImGui::Begin("##bar_top", nullptr, flags);
+        ImGui::End();
+        ImGui::SetNextWindowPos(ImVec2(0.0f, h - bar), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(w, bar), ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(1.0f);
+        ImGui::Begin("##bar_bottom", nullptr, flags);
+        ImGui::End();
+      }
+    }
+    if (s.guides == 0) return;
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    const float w = io.DisplaySize.x;
+    const float h = io.DisplaySize.y;
+    const ImU32 line = IM_COL32(255, 255, 255, 110);
+    if (s.guides == 1 || s.guides == 3) {
+      for (int i = 1; i <= 2; ++i) {
+        dl->AddLine(ImVec2(w * i / 3.0f, 0.0f), ImVec2(w * i / 3.0f, h), line, 1.0f);
+        dl->AddLine(ImVec2(0.0f, h * i / 3.0f), ImVec2(w, h * i / 3.0f), line, 1.0f);
+      }
+    }
+    if (s.guides == 2 || s.guides == 3) {
+      dl->AddLine(ImVec2(w * 0.5f, 0.0f), ImVec2(w * 0.5f, h), line, 1.0f);
+      dl->AddLine(ImVec2(0.0f, h * 0.5f), ImVec2(w, h * 0.5f), line, 1.0f);
+      dl->AddRect(ImVec2(w * 0.5f - 12.0f, h * 0.5f - 12.0f), ImVec2(w * 0.5f + 12.0f, h * 0.5f + 12.0f),
+                  line, 0.0f, 0, 1.0f);
+    }
   }
 
   void DrawHint(ImGuiIO& io) {
@@ -156,6 +216,12 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     if (ImGui::Button("Hide panel", ImVec2(0.0f, 0.0f))) panel_visible().store(false);
     ImGui::SameLine(0.0f, -1.0f);
     if (ImGui::Button("Exit", ImVec2(0.0f, 0.0f))) request_exit();
+    ImGui::SameLine(0.0f, -1.0f);
+    // Shown once there is something to undo (BeginDisabled is not exported).
+    if (has_undo_ && ImGui::Button("Undo", ImVec2(0.0f, 0.0f))) {
+      std::lock_guard<std::mutex> lock(settings_mutex());
+      s = undo_;
+    }
 
     if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
       ImGui::Checkbox("Pause the world", &s.freeze_world);
@@ -230,6 +296,14 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
         apply_filter(s, kFilterPresets[0]);
         s.bloom_threshold = s.ground_mist = 1.0f;
       }
+    }
+
+    if (ImGui::CollapsingHeader("Composition", 0)) {
+      static const char* kGuides = "None\0Rule of thirds\0Centre grid\0Thirds and centre\0";
+      static const char* kBars = "None\0 1.85:1\0 2.35:1\0 2.39:1\0";
+      ImGui::Combo("Guides", &s.guides, kGuides, -1);
+      ImGui::Combo("Letterbox", &s.letterbox, kBars, -1);
+      ImGui::TextDisabled("Guides and bars are drawn on screen only, never in screenshots.");
     }
 
     if (ImGui::CollapsingHeader("Weather and sky", 0)) {

@@ -103,6 +103,9 @@ struct Settings {
   float moon_glare = 1.0f;
   float sun_disc = 1.0f;
   int filter = 0;  // index into kFilterPresets (the panel's Filter list)
+  // Composition aids (drawn on screen only; never in a screenshot).
+  int guides = 0;      // 0 none, 1 rule of thirds, 2 centre grid, 3 both
+  int letterbox = 0;   // 0 none, 1 1.85:1, 2 2.35:1, 3 2.39:1 (cinema bars)
 
   // Time of day (0..24 h). Only applied while override_time is on.
   bool override_time = false;
