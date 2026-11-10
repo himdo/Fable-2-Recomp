@@ -178,14 +178,55 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     ImGui::End();
   }
 
+  // Parchment, brown and gold, to match the game's menus. Only the panel
+  // sets these; the game's own UI is unaffected.
+  static void PushParchment(int& pushed_colours, int& pushed_vars) {
+    struct C { ImGuiCol idx; ImVec4 col; };
+    static const C kColours[] = {
+        {ImGuiCol_WindowBg, ImVec4(0.93f, 0.87f, 0.73f, 0.95f)},
+        {ImGuiCol_PopupBg, ImVec4(0.93f, 0.87f, 0.73f, 0.98f)},
+        {ImGuiCol_Text, ImVec4(0.25f, 0.16f, 0.08f, 1.00f)},
+        {ImGuiCol_TextDisabled, ImVec4(0.48f, 0.36f, 0.20f, 1.00f)},
+        {ImGuiCol_TitleBg, ImVec4(0.36f, 0.23f, 0.11f, 1.00f)},
+        {ImGuiCol_TitleBgActive, ImVec4(0.42f, 0.27f, 0.12f, 1.00f)},
+        {ImGuiCol_Border, ImVec4(0.72f, 0.56f, 0.22f, 1.00f)},
+        {ImGuiCol_Separator, ImVec4(0.72f, 0.56f, 0.22f, 0.70f)},
+        {ImGuiCol_FrameBg, ImVec4(0.85f, 0.78f, 0.60f, 1.00f)},
+        {ImGuiCol_FrameBgHovered, ImVec4(0.90f, 0.84f, 0.66f, 1.00f)},
+        {ImGuiCol_SliderGrab, ImVec4(0.70f, 0.52f, 0.18f, 1.00f)},
+        {ImGuiCol_SliderGrabActive, ImVec4(0.85f, 0.66f, 0.25f, 1.00f)},
+        {ImGuiCol_CheckMark, ImVec4(0.55f, 0.38f, 0.12f, 1.00f)},
+        {ImGuiCol_Button, ImVec4(0.62f, 0.45f, 0.20f, 1.00f)},
+        {ImGuiCol_ButtonHovered, ImVec4(0.72f, 0.54f, 0.26f, 1.00f)},
+        {ImGuiCol_ButtonActive, ImVec4(0.50f, 0.35f, 0.14f, 1.00f)},
+        {ImGuiCol_Header, ImVec4(0.80f, 0.70f, 0.48f, 0.60f)},
+        {ImGuiCol_HeaderHovered, ImVec4(0.85f, 0.75f, 0.52f, 0.80f)},
+        {ImGuiCol_HeaderActive, ImVec4(0.80f, 0.68f, 0.42f, 1.00f)},
+    };
+    for (const C& c : kColours) {
+      ImGui::PushStyleColor(c.idx, c.col);
+      ++pushed_colours;
+    }
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 3.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
+    pushed_vars += 4;
+  }
+
   void DrawPanel(ImGuiIO& io, Settings& s) {
     const float width = 360.0f;
     ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_FirstUseEver, ImVec2(0.0f, 0.0f));
     ImGui::SetNextWindowSize(ImVec2(width, io.DisplaySize.y > 200.0f ? io.DisplaySize.y - 32.0f : 600.0f),
                              ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowBgAlpha(0.82f);
+    ImGui::SetNextWindowBgAlpha(0.95f);
+    int pushed_colours = 0;
+    int pushed_vars = 0;
+    PushParchment(pushed_colours, pushed_vars);
     if (!ImGui::Begin("Photo Mode", nullptr, ImGuiWindowFlags_NoSavedSettings)) {
       ImGui::End();
+      ImGui::PopStyleVar(pushed_vars);
+      ImGui::PopStyleColor(pushed_colours);
       return;
     }
     ImGui::PushItemWidth(-130.0f);
@@ -207,9 +248,13 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     if (ImGui::CollapsingHeader("Screenshot", 0)) {
       std::lock_guard<std::mutex> lock(shot_plan_mutex());
       ShotPlan& p = shot_plan_unlocked();
-      ImGui::SliderInt("Burst count", &p.shots, 1, 10);
-      ImGui::SliderInt("Self-timer", &p.delay_s, 0, 30, "%d s");
-      ImGui::SliderInt("Burst spacing", &p.spacing_ms, 100, 2000, "%d ms");
+      // SliderInt is not exported by the SDK, so edit through floats.
+      float count = static_cast<float>(p.shots);
+      float delay = static_cast<float>(p.delay_s);
+      float spacing = static_cast<float>(p.spacing_ms);
+      if (ImGui::SliderFloat("Burst count", &count, 1.0f, 10.0f, "%.0f", 0)) p.shots = static_cast<int>(count + 0.5f);
+      if (ImGui::SliderFloat("Self-timer", &delay, 0.0f, 30.0f, "%.0f s", 0)) p.delay_s = static_cast<int>(delay + 0.5f);
+      if (ImGui::SliderFloat("Burst spacing", &spacing, 100.0f, 2000.0f, "%.0f ms", 0)) p.spacing_ms = static_cast<int>(spacing + 0.5f);
       ImGui::TextDisabled("Burst and timer apply to the next Take screenshot or F12.");
     }
     ImGui::SameLine(0.0f, -1.0f);
@@ -342,6 +387,8 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
 
     ImGui::PopItemWidth();
     ImGui::End();
+    ImGui::PopStyleVar(pushed_vars);
+    ImGui::PopStyleColor(pushed_colours);
   }
 };
 
