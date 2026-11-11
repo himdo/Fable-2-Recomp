@@ -82,8 +82,9 @@ same-named ones in other folders.
 ### Launcher tests
 
 `Fable2.Launcher.ConfigTests/Program.cs` covers the launcher's settings files,
-graphics and FPS options, dropdown styling, game version checks, update checks
-and ISO extraction from a synthetic disc image. It prints a line for each group
+graphics and FPS options, dropdown styling, game version checks, the game
+folder check, the executable and folders a launch uses, update checks and ISO
+extraction from a synthetic disc image. It prints a line for each group
 that passes. The project targets plain .NET 8, but CI only runs it on Windows.
 
 ### Native tests
