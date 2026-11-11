@@ -266,6 +266,14 @@ skinning_cpu = true
 # Default: true
 faster_render_targets = true
 
+# GPU Frame Sync (SDK cvar gpu_sync_at_frame_start): at the start of each frame,
+# wait until the GPU has finished the previous one. Fixes flicker (blue distant
+# trees, the dog's texture, sun lighting) when the GPU falls behind, mostly at
+# higher internal resolutions. Costs a few FPS where the GPU is the limit.
+# D3D12 only. false = let the GPU run up to three frames behind.
+# Default: true
+gpu_frame_sync = true
+
 [perf]
 # NtYieldExecution batching for the hot-function overrides (see
 # src/core/hotfunc/hotfunc_yield.h): every Nth guest yield does the real
@@ -467,6 +475,9 @@ bool Load(const std::filesystem::path& path) {
     values.skinning_cpu =
         Read<bool>(patches_table, "patches", "skinning_cpu", "boolean",
                    values.skinning_cpu);
+    values.gpu_frame_sync =
+        Read<bool>(patches_table, "patches", "gpu_frame_sync", "boolean",
+                   values.gpu_frame_sync);
     values.faster_render_targets =
         Read<bool>(patches_table, "patches", "faster_render_targets", "boolean",
                    values.faster_render_targets);
