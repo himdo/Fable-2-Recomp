@@ -1,5 +1,6 @@
 """Check that gen_def.py writes a .def that keeps what consumers import plus the rex:: API."""
 import contextlib
+import gc
 import importlib.util
 import io
 from pathlib import Path
@@ -20,6 +21,10 @@ class GenDefTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory(prefix="fable2-gen-def-test-")
         self.addCleanup(temp.cleanup)
+        # gen_def.py never closes its pefile objects, which keep the files mapped
+        # until Python's garbage collector frees them, and Windows won't delete a
+        # mapped file. Cleanups run last-added first, so this runs before the delete.
+        self.addCleanup(gc.collect)
         self.folder = Path(temp.name)
         self.runtime = self.folder / "rexruntime.dll"
         self.runtime.write_bytes(export_dll(RUNTIME_EXPORTS))
