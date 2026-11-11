@@ -220,6 +220,11 @@ class Fable2App : public rex::ReXApp {
         }
       }
     }
+    if (rex::cvar::GetFlagSource("gpu_sync_at_frame_start") == rex::cvar::Source::kDefault &&
+        !rex::cvar::SetFlagByName("gpu_sync_at_frame_start",
+                                  fable2::config::Get().gpu_frame_sync ? "true" : "false")) {
+      REXSYS_WARN("[fable2-config] gpu_sync_at_frame_start cvar missing (SDK without it?)");
+    }
     // The fast memexport readback hands the guest the previous draw's output, so
     // moving geometry uses stale data and flickers. With both shaders on the CPU
     // nothing is left to read back in testing, so the exact path costs nothing.
