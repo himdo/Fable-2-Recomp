@@ -5,9 +5,9 @@ import importlib.util
 import io
 import json
 from pathlib import Path
-import tempfile
-import unittest
 from unittest.mock import patch
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("staging", ROOT / "tools/stage_renderer_sdk.py")
@@ -46,158 +46,168 @@ def sha256_of(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-class RuntimeStagingTests(unittest.TestCase):
-    def stage(self, configuration, missing=None):
-        with tempfile.TemporaryDirectory(prefix="fable2-sdk-test-") as directory:
-            base = Path(directory)
-            source, output = base / "source", base / "output"
-            suffix = "d" if configuration == "Debug" else ""
-            names = [f"{stem}{suffix}.{extension}" for stem in ("rexruntime", "rexgpu-xenos")
-                     for extension in ("dll", "lib", "pdb")]
-            if configuration == "Release":
-                names.append("rexglue.exe")
-            files = {
-                output / "include/rex/version.h": "version",
-                output / "lib/cmake/rexglue/rexglueConfig.cmake": "config",
-            }
-            for name in names:
-                if name == missing:
-                    continue
-                if name.endswith(".pdb"):
-                    files[source / "out/win-amd64" / name] = "symbols-" + name
-                else:
-                    folder = "lib" if name.endswith(".lib") else "bin"
-                    files[output / folder / name] = "built-" + name
-            for path, value in files.items():
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(value)
-            args = ["stage_renderer_sdk.py", str(source), str(output), "--configuration", configuration]
-            with patch("sys.argv", args), patch.object(staging.subprocess, "check_output",
-                                                       return_value="synthetic-revision\n"):
-                if missing:
-                    with self.assertRaisesRegex(SystemExit, "Missing build input"):
-                        staging.main()
-                    self.assertFalse((output / "renderer-sdk-provenance.json").exists())
-                    return
-                staging.main()
-            for stem in ("rexruntime", "rexgpu-xenos"):
-                name = f"{stem}{suffix}.pdb"
-                self.assertEqual((output / "bin" / name).read_text(), "symbols-" + name)
-            provenance = json.loads((output / "renderer-sdk-provenance.json").read_text())
-            self.assertEqual(provenance["configuration"], configuration)
-            self.assertEqual(provenance["sdk_commit"], "synthetic-revision")
+def make_build(base, configuration, missing=None):
+    """Write what staging reads for one configuration, and return (source, output).
 
-    def test_new_tool_clears_codegen_stamp(self):
-        with tempfile.TemporaryDirectory(prefix="fable2-sdk-test-") as directory:
-            base = Path(directory)
-            source, output, stamp = base / "source", base / "output", base / "codegen.stamp"
-            files = ["include/rex/version.h", "lib/cmake/rexglue/rexglueConfig.cmake", "bin/rexglue.exe",
-                     "bin/rexruntime.dll", "bin/rexgpu-xenos.dll", "lib/rexruntime.lib", "lib/rexgpu-xenos.lib"]
-            for name in files:
-                (output / name).parent.mkdir(parents=True, exist_ok=True)
-                (output / name).write_text("built")
-            args = ["stage_renderer_sdk.py", str(source), str(output), "--codegen-stamp", str(stamp)]
-
-            def run():
-                with patch("sys.argv", args), patch.object(staging.subprocess, "check_output",
-                                                           return_value="synthetic-revision\n"):
-                    staging.main()
-
-            run()
-            stamp.write_text("fingerprint")
-            run()
-            self.assertTrue(stamp.exists())
-            (output / "bin/rexglue.exe").write_text("rebuilt")
-            run()
-            self.assertFalse(stamp.exists())
-
-    def test_debug_uses_debug_pair_without_tool(self):
-        self.stage("Debug")
-
-    def test_release_uses_release_pair(self):
-        self.stage("Release")
-
-    def test_missing_release_tool_fails(self):
-        self.stage("Release", missing="rexglue.exe")
-
-    def test_missing_debug_runtime_fails(self):
-        self.stage("Debug", missing="rexruntimed.dll")
-
-    def test_missing_debug_plugin_library_fails(self):
-        self.stage("Debug", missing="rexgpu-xenosd.lib")
+    The install tree goes in output/, and the symbols in source/out/win-amd64, as the SDK
+    build leaves them. The file named `missing`, if any, is left out.
+    """
+    source, output = base / "source", base / "output"
+    suffix = "d" if configuration == "Debug" else ""
+    names = [f"{stem}{suffix}.{extension}" for stem in ("rexruntime", "rexgpu-xenos")
+             for extension in ("dll", "lib", "pdb")]
+    if configuration == "Release":
+        names.append("rexglue.exe")
+    files = {
+        output / "include/rex/version.h": "version",
+        output / "lib/cmake/rexglue/rexglueConfig.cmake": "config",
+    }
+    for name in names:
+        if name == missing:
+            continue
+        if name.endswith(".pdb"):
+            files[source / "out/win-amd64" / name] = "symbols-" + name
+        else:
+            folder = "lib" if name.endswith(".lib") else "bin"
+            files[output / folder / name] = "built-" + name
+    for path, value in files.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(value)
+    return source, output
 
 
-class RuntimeStagingRecordTests(unittest.TestCase):
-    def test_release_record_hashes_each_file(self):
-        with tempfile.TemporaryDirectory(prefix="fable2-sdk-test-") as directory:
-            source, output = Path(directory) / "source", Path(directory) / "output"
-            make_install(output, RELEASE_FILES)
-            record = run_staging(source, output)
-            runtime_hash = sha256_of(output / "bin/rexruntime.dll")
-            plugin_hash = sha256_of(output / "bin/rexgpu-xenos.dll")
-            tool_hash = sha256_of(output / "bin/rexglue.exe")
+def describe_main():
+    # --- Happy flow -------------------------------------------------------
 
-        self.assertEqual(record["runtime_sha256"], runtime_hash)
-        self.assertEqual(record["plugin_sha256"], plugin_hash)
-        self.assertEqual(record["codegen_tool_sha256"], tool_hash)
+    def test_should_stage_the_debug_pair_without_the_codegen_tool(tmp_path):
+        source, output = make_build(tmp_path, "Debug")
 
-    def test_debug_record_hashes_the_debug_files(self):
-        with tempfile.TemporaryDirectory(prefix="fable2-sdk-test-") as directory:
-            source, output = Path(directory) / "source", Path(directory) / "output"
-            make_install(output, DEBUG_FILES)
-            record = run_staging(source, output, "--configuration", "Debug")
-            runtime_hash = sha256_of(output / "bin/rexruntimed.dll")
-            plugin_hash = sha256_of(output / "bin/rexgpu-xenosd.dll")
+        record = run_staging(source, output, "--configuration", "Debug")
 
-        self.assertEqual(record["runtime_sha256"], runtime_hash)
-        self.assertEqual(record["plugin_sha256"], plugin_hash)
+        assert (output / "bin/rexruntimed.pdb").read_text() == "symbols-rexruntimed.pdb"
+        assert (output / "bin/rexgpu-xenosd.pdb").read_text() == "symbols-rexgpu-xenosd.pdb"
+        assert record["configuration"] == "Debug"
+        assert record["sdk_commit"] == "synthetic-revision"
 
-    def test_debug_record_has_no_tool_hash(self):
-        with tempfile.TemporaryDirectory(prefix="fable2-sdk-test-") as directory:
-            source, output = Path(directory) / "source", Path(directory) / "output"
-            make_install(output, DEBUG_FILES)
-            record = run_staging(source, output, "--configuration", "Debug")
+    def test_should_stage_the_release_pair(tmp_path):
+        source, output = make_build(tmp_path, "Release")
 
-        self.assertNotIn("codegen_tool_sha256", record)
+        record = run_staging(source, output, "--configuration", "Release")
 
-    def test_staging_works_without_symbols(self):
+        assert (output / "bin/rexruntime.pdb").read_text() == "symbols-rexruntime.pdb"
+        assert (output / "bin/rexgpu-xenos.pdb").read_text() == "symbols-rexgpu-xenos.pdb"
+        assert record["configuration"] == "Release"
+        assert record["sdk_commit"] == "synthetic-revision"
+
+    # --- Bad flow ---------------------------------------------------------
+
+    def test_should_fail_without_the_release_codegen_tool(tmp_path):
+        source, output = make_build(tmp_path, "Release", missing="rexglue.exe")
+
+        with pytest.raises(SystemExit, match="Missing build input"):
+            run_staging(source, output, "--configuration", "Release")
+
+        assert not (output / "renderer-sdk-provenance.json").exists()
+
+    def test_should_fail_without_the_debug_runtime(tmp_path):
+        source, output = make_build(tmp_path, "Debug", missing="rexruntimed.dll")
+
+        with pytest.raises(SystemExit, match="Missing build input"):
+            run_staging(source, output, "--configuration", "Debug")
+
+        assert not (output / "renderer-sdk-provenance.json").exists()
+
+    def test_should_fail_without_the_debug_plugin_library(tmp_path):
+        source, output = make_build(tmp_path, "Debug", missing="rexgpu-xenosd.lib")
+
+        with pytest.raises(SystemExit, match="Missing build input"):
+            run_staging(source, output, "--configuration", "Debug")
+
+        assert not (output / "renderer-sdk-provenance.json").exists()
+
+    # --- Edge cases -------------------------------------------------------
+
+    def test_should_work_without_symbols(tmp_path):
         # PDBs are optional: the source folder has no out/win-amd64 build output at all.
-        with tempfile.TemporaryDirectory(prefix="fable2-sdk-test-") as directory:
-            source, output = Path(directory) / "source", Path(directory) / "output"
-            make_install(output, RELEASE_FILES)
-            record = run_staging(source, output)
-            symbols = list((output / "bin").glob("*.pdb"))
+        source, output = tmp_path / "source", tmp_path / "output"
+        make_install(output, RELEASE_FILES)
 
-        self.assertEqual(record["configuration"], "Release")
-        self.assertEqual(symbols, [])
+        record = run_staging(source, output)
 
-    def test_debug_staging_keeps_the_codegen_stamp(self):
+        assert record["configuration"] == "Release"
+        assert list((output / "bin").glob("*.pdb")) == []
+
+
+def describe_provenance_record():
+    def test_should_hash_each_release_file(tmp_path):
+        source, output = tmp_path / "source", tmp_path / "output"
+        make_install(output, RELEASE_FILES)
+
+        record = run_staging(source, output)
+
+        assert record["runtime_sha256"] == sha256_of(output / "bin/rexruntime.dll")
+        assert record["plugin_sha256"] == sha256_of(output / "bin/rexgpu-xenos.dll")
+        assert record["codegen_tool_sha256"] == sha256_of(output / "bin/rexglue.exe")
+
+    def test_should_hash_the_debug_files_for_a_debug_build(tmp_path):
+        source, output = tmp_path / "source", tmp_path / "output"
+        make_install(output, DEBUG_FILES)
+
+        record = run_staging(source, output, "--configuration", "Debug")
+
+        assert record["runtime_sha256"] == sha256_of(output / "bin/rexruntimed.dll")
+        assert record["plugin_sha256"] == sha256_of(output / "bin/rexgpu-xenosd.dll")
+
+    def test_should_leave_out_the_tool_hash_for_a_debug_build(tmp_path):
+        source, output = tmp_path / "source", tmp_path / "output"
+        make_install(output, DEBUG_FILES)
+
+        record = run_staging(source, output, "--configuration", "Debug")
+
+        assert "codegen_tool_sha256" not in record
+
+
+def describe_codegen_stamp():
+    def test_should_keep_the_stamp_when_the_tool_is_unchanged(tmp_path):
+        source, output, stamp = tmp_path / "source", tmp_path / "output", tmp_path / "codegen.stamp"
+        make_install(output, RELEASE_FILES)
+        run_staging(source, output, "--codegen-stamp", str(stamp))
+        stamp.write_text("fingerprint", encoding="utf-8")
+
+        run_staging(source, output, "--codegen-stamp", str(stamp))
+
+        assert stamp.exists()
+
+    def test_should_clear_the_stamp_when_the_tool_changes(tmp_path):
+        source, output, stamp = tmp_path / "source", tmp_path / "output", tmp_path / "codegen.stamp"
+        make_install(output, RELEASE_FILES)
+        run_staging(source, output, "--codegen-stamp", str(stamp))
+        stamp.write_text("fingerprint", encoding="utf-8")
+        (output / "bin/rexglue.exe").write_text("rebuilt", encoding="utf-8")
+
+        run_staging(source, output, "--codegen-stamp", str(stamp))
+
+        assert not stamp.exists()
+
+    def test_should_clear_the_stamp_on_the_first_release_staging(tmp_path):
+        # With no earlier record there is no proof the tool is unchanged, so the stamp goes.
+        source, output, stamp = tmp_path / "source", tmp_path / "output", tmp_path / "codegen.stamp"
+        make_install(output, RELEASE_FILES)
+        stamp.write_text("fingerprint", encoding="utf-8")
+
+        run_staging(source, output, "--codegen-stamp", str(stamp))
+
+        assert not stamp.exists()
+
+    def test_should_keep_the_stamp_on_a_debug_staging(tmp_path):
         # Debug and Release share one stamp, and only Release installs the tool, so a
         # Debug run must leave the stamp alone even if the earlier record looks out of date.
-        with tempfile.TemporaryDirectory(prefix="fable2-sdk-test-") as directory:
-            base = Path(directory)
-            source, output, stamp = base / "source", base / "output", base / "codegen.stamp"
-            make_install(output, DEBUG_FILES)
-            (output / "renderer-sdk-provenance.json").write_text(
-                json.dumps({"codegen_tool_sha256": "old"}), encoding="utf-8")
-            stamp.write_text("fingerprint", encoding="utf-8")
-            run_staging(source, output, "--configuration", "Debug", "--codegen-stamp", str(stamp))
-            stamp_exists = stamp.exists()
+        source, output, stamp = tmp_path / "source", tmp_path / "output", tmp_path / "codegen.stamp"
+        make_install(output, DEBUG_FILES)
+        (output / "renderer-sdk-provenance.json").write_text(
+            json.dumps({"codegen_tool_sha256": "old"}), encoding="utf-8")
+        stamp.write_text("fingerprint", encoding="utf-8")
 
-        self.assertTrue(stamp_exists)
+        run_staging(source, output, "--configuration", "Debug", "--codegen-stamp", str(stamp))
 
-    def test_first_release_staging_clears_the_codegen_stamp(self):
-        # With no earlier record there is no proof the tool is unchanged, so the stamp goes.
-        with tempfile.TemporaryDirectory(prefix="fable2-sdk-test-") as directory:
-            base = Path(directory)
-            source, output, stamp = base / "source", base / "output", base / "codegen.stamp"
-            make_install(output, RELEASE_FILES)
-            stamp.write_text("fingerprint", encoding="utf-8")
-            run_staging(source, output, "--codegen-stamp", str(stamp))
-            stamp_exists = stamp.exists()
-
-        self.assertFalse(stamp_exists)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert stamp.exists()
