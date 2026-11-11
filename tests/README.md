@@ -80,6 +80,25 @@ code they cover. A new `test_*.py` file is picked up automatically. A new
 subfolder needs an empty `__init__.py`, so its test files don't clash with
 same-named ones in other folders.
 
+The tests are written as specs with
+[pytest-describe](https://github.com/pytest-dev/pytest-describe):
+
+```python
+def describe_trim():
+    def test_should_keep_only_the_names_in_the_def(dll, def_file):
+        ...
+```
+
+- Each `describe_<function>()` block holds the tests for one function of the
+  tool, and pytest-spec prints them as sentences under that heading.
+- Each test is named `test_should_<behavior>`, and its body stays flat:
+  arrange, act, assert, with no loops or branches.
+- Temporary files come from pytest's `tmp_path` fixture, and swapped module
+  values from `monkeypatch`, so both are undone after each test.
+- A confirmed bug gets a test for the correct behavior, marked
+  `@pytest.mark.xfail(strict=True, reason="...")`. With `strict`, the test
+  fails once the bug is fixed, as a reminder to remove the marker.
+
 ### Launcher tests
 
 `Fable2.Launcher.ConfigTests/Program.cs` covers the launcher's settings files,
