@@ -13,7 +13,6 @@
     <Compile Include="..\..\launcher\Fable2.Launcher\GraphicsSettings.cs" Link="GraphicsSettings.cs" />
     <Compile Include="..\..\launcher\Fable2.Launcher\LauncherConfigFile.cs" Link="LauncherConfigFile.cs" />
     <Compile Include="..\..\launcher\Fable2.Launcher\Fable2ConfigFile.cs" Link="Fable2ConfigFile.cs" />
-    <Compile Include="..\..\launcher\Fable2.Launcher\GuiTextureBank.cs" Link="GuiTextureBank.cs" />
     <Compile Include="..\..\launcher\Fable2.Launcher\GameCompatibility.cs" Link="GameCompatibility.cs" />
     <Compile Include="..\..\launcher\Fable2.Launcher\GameLaunchPlan.cs" Link="GameLaunchPlan.cs" />
     <Compile Include="..\..\launcher\Fable2.Launcher\DiscExtraction.cs" Link="DiscExtraction.cs" />

@@ -34,6 +34,7 @@
 #include "fable2_fit_window.h"
 #include "fable2_keycap_swap.h"
 #include "fable2_patches.h"
+#include "keyboard_prompts.h"
 // #include "fable2_deadbeef_overlay.h"
 // 30fps-cap instrumentation (writes fps_probe.log next to the exe). Disabled
 // now that the cap is lifted via REX_VSYNC=0 (see tools/fable2-uncapped.cmd).
@@ -145,6 +146,18 @@ class Fable2App : public rex::ReXApp {
 #endif  // FABLE2_REMOTE_CONTROL
       return system;  // C++14 unique_ptr<Derived> -> unique_ptr<Base>
     };
+
+    // Generate the keyboard keycap prompt textures (src/gui/keyboard_prompts.h)
+    // so the real-time prompt swap (src/core/fable2_keycap_swap.h) can show
+    // keycaps while the active input is keyboard/mouse and the original Xbox
+    // icons while a pad is in use. Runs here (OnPreSetup) because it needs both
+    // the config (loaded in OnPostInitLogging) and game_data_root (set in
+    // OnConfigurePaths), and it must run BEFORE OnPostLoadXexImage where the
+    // keycap swap module reads the sidecar. No sidecar is written (no-op) when
+    // there are no bound keys and no mouse look, so a normal launch is unchanged.
+    fable2::gui::GenerateSidecar(game_data_root(),
+                                 fable2::config::Get().keyboard_gamepad_map,
+                                 fable2::config::Get().mouse_look, "");
   }
 
   void OnPostSetup() override {

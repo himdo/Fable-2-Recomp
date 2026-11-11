@@ -21,7 +21,7 @@ class PackageReleaseTests(unittest.TestCase):
         self.launcher = self.base / "launcher/Fable2Launcher.exe"
         for path, text in {
             self.root / "README.md": "readme",
-            self.root / "launcher/Fable2.Launcher/XenosTiling/LICENSE.txt": "xenos tiling licence",
+            self.root / "thirdparty/XenosTiling/LICENSE.txt": "xenos tiling licence",
             self.root / "config/fable2_config.toml": "repo config",
             self.launcher: "launcher",
             self.build / "fable_2.exe": "game",
