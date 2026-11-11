@@ -6,9 +6,9 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-import tempfile
-import unittest
 from unittest.mock import patch
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("renderer_mspack", ROOT / "tools/prepare_renderer_mspack.py")
@@ -78,126 +78,127 @@ def read(path):
     return path.read_text(encoding="utf-8")
 
 
-class PrepareRendererMspackTests(unittest.TestCase):
-    def setUp(self):
-        temp = tempfile.TemporaryDirectory()
-        self.addCleanup(temp.cleanup)
-        # The checkout sits one level down, so a test can put a file just outside it.
-        self.outside = Path(temp.name).resolve()
-        self.dependency = self.outside / "dependency"
-        self.dependency.mkdir()
+@pytest.fixture
+def outside(tmp_path):
+    """The folder that holds the checkout, so a test can put a file just outside it."""
+    return tmp_path
 
+
+@pytest.fixture
+def dependency(outside):
+    """An empty folder for the libmspack checkout, one level below `outside`."""
+    folder = outside / "dependency"
+    folder.mkdir()
+    return folder
+
+
+def describe_main():
     # --- Happy flow -------------------------------------------------------
 
-    def test_replaces_a_symlink_text_file_with_its_target(self):
-        commit = make_dependency(self.dependency, {"link.c": "source.c"})
+    def test_should_replace_a_symlink_text_file_with_its_target(dependency):
+        commit = make_dependency(dependency, {"link.c": "source.c"})
 
-        run_tool(self.dependency, pin=commit)
+        run_tool(dependency, pin=commit)
 
-        self.assertEqual(read(self.dependency / "link.c"), SOURCE_TEXT)
+        assert read(dependency / "link.c") == SOURCE_TEXT
 
-    def test_reports_how_many_files_it_replaced(self):
-        commit = make_dependency(self.dependency, {"one.c": "source.c", "two.c": "source.c"})
+    def test_should_report_how_many_files_it_replaced(dependency):
+        commit = make_dependency(dependency, {"one.c": "source.c", "two.c": "source.c"})
 
-        output = run_tool(self.dependency, pin=commit)
+        output = run_tool(dependency, pin=commit)
 
-        self.assertIn("Materialized 2 pinned libmspack symlink files", output)
+        assert "Materialized 2 pinned libmspack symlink files" in output
 
-    def test_leaves_ordinary_files_alone(self):
+    def test_should_leave_ordinary_files_alone(dependency):
         # notes.txt holds the same text a symlink leftover would, so only git's
         # file mode tells the tool not to touch it.
-        commit = make_dependency(self.dependency, {"link.c": "source.c"},
-                                 files={"notes.txt": "source.c"})
+        commit = make_dependency(dependency, {"link.c": "source.c"}, files={"notes.txt": "source.c"})
 
-        run_tool(self.dependency, pin=commit)
+        run_tool(dependency, pin=commit)
 
-        self.assertEqual(read(self.dependency / "notes.txt"), "source.c")
+        assert read(dependency / "notes.txt") == "source.c"
 
-    def test_resolves_a_target_from_the_symlinks_own_folder(self):
-        commit = make_dependency(self.dependency, {"sub/link.c": "../source.c"})
+    def test_should_resolve_a_target_from_the_symlinks_own_folder(dependency):
+        commit = make_dependency(dependency, {"sub/link.c": "../source.c"})
 
-        run_tool(self.dependency, pin=commit)
+        run_tool(dependency, pin=commit)
 
-        self.assertEqual(read(self.dependency / "sub" / "link.c"), SOURCE_TEXT)
+        assert read(dependency / "sub" / "link.c") == SOURCE_TEXT
 
     # --- Bad flow ---------------------------------------------------------
 
-    def test_stops_when_the_checkout_is_not_at_the_public_pin(self):
-        make_dependency(self.dependency, {"link.c": "source.c"})
+    def test_should_stop_when_the_checkout_is_not_at_the_public_pin(dependency):
+        make_dependency(dependency, {"link.c": "source.c"})
 
-        with self.assertRaises(SystemExit) as caught:
-            run_tool(self.dependency, pin=WRONG_PIN)
+        with pytest.raises(SystemExit) as caught:
+            run_tool(dependency, pin=WRONG_PIN)
 
-        self.assertIn(f"Check out public libmspack pin {WRONG_PIN}", str(caught.exception))
-        self.assertEqual(read(self.dependency / "link.c"), "source.c")
+        assert f"Check out public libmspack pin {WRONG_PIN}" in str(caught.value)
+        assert read(dependency / "link.c") == "source.c"
 
-    def test_refuses_a_target_outside_the_checkout(self):
+    def test_should_refuse_a_target_outside_the_checkout(outside, dependency):
         # The outside file exists, so the refusal can only come from where it is.
-        (self.outside / "secret.c").write_text("not part of libmspack", encoding="utf-8")
-        commit = make_dependency(self.dependency, {"link.c": "../secret.c"})
+        (outside / "secret.c").write_text("not part of libmspack", encoding="utf-8")
+        commit = make_dependency(dependency, {"link.c": "../secret.c"})
 
-        with self.assertRaises(SystemExit) as caught:
-            run_tool(self.dependency, pin=commit)
+        with pytest.raises(SystemExit) as caught:
+            run_tool(dependency, pin=commit)
 
-        self.assertIn("Invalid pinned symlink target: link.c", str(caught.exception))
-        self.assertEqual(read(self.dependency / "link.c"), "../secret.c")
+        assert "Invalid pinned symlink target: link.c" in str(caught.value)
+        assert read(dependency / "link.c") == "../secret.c"
 
-    def test_refuses_a_target_that_does_not_exist(self):
-        commit = make_dependency(self.dependency, {"link.c": "missing.c"})
+    def test_should_refuse_a_target_that_does_not_exist(dependency):
+        commit = make_dependency(dependency, {"link.c": "missing.c"})
 
-        with self.assertRaises(SystemExit) as caught:
-            run_tool(self.dependency, pin=commit)
+        with pytest.raises(SystemExit) as caught:
+            run_tool(dependency, pin=commit)
 
-        self.assertIn("Invalid pinned symlink target: link.c", str(caught.exception))
+        assert "Invalid pinned symlink target: link.c" in str(caught.value)
 
-    def test_refuses_to_overwrite_a_local_edit(self):
-        commit = make_dependency(self.dependency, {"link.c": "source.c"})
-        (self.dependency / "link.c").write_text("someone's local change", encoding="utf-8")
+    def test_should_refuse_to_overwrite_a_local_edit(dependency):
+        commit = make_dependency(dependency, {"link.c": "source.c"})
+        (dependency / "link.c").write_text("someone's local change", encoding="utf-8")
 
-        with self.assertRaises(SystemExit) as caught:
-            run_tool(self.dependency, pin=commit)
+        with pytest.raises(SystemExit) as caught:
+            run_tool(dependency, pin=commit)
 
-        self.assertIn("Unexpected local edit; refusing to overwrite", str(caught.exception))
-        self.assertEqual(read(self.dependency / "link.c"), "someone's local change")
+        assert "Unexpected local edit; refusing to overwrite" in str(caught.value)
+        assert read(dependency / "link.c") == "someone's local change"
 
     # --- Edge cases -------------------------------------------------------
 
-    def test_running_twice_keeps_the_replaced_file(self):
-        commit = make_dependency(self.dependency, {"link.c": "source.c"})
-        run_tool(self.dependency, pin=commit)
+    def test_should_keep_the_replaced_file_when_run_twice(dependency):
+        commit = make_dependency(dependency, {"link.c": "source.c"})
+        run_tool(dependency, pin=commit)
 
-        run_tool(self.dependency, pin=commit)
+        run_tool(dependency, pin=commit)
 
-        self.assertEqual(read(self.dependency / "link.c"), SOURCE_TEXT)
+        assert read(dependency / "link.c") == SOURCE_TEXT
 
-    def test_accepts_a_symlink_text_file_ending_in_a_newline(self):
-        commit = make_dependency(self.dependency, {"link.c": "source.c"})
+    def test_should_accept_a_symlink_text_file_ending_in_a_newline(dependency):
+        commit = make_dependency(dependency, {"link.c": "source.c"})
         # write_bytes, because write_text would turn the newline into \r\n on Windows.
-        (self.dependency / "link.c").write_bytes(b"source.c\n")
+        (dependency / "link.c").write_bytes(b"source.c\n")
 
-        run_tool(self.dependency, pin=commit)
+        run_tool(dependency, pin=commit)
 
-        self.assertEqual(read(self.dependency / "link.c"), SOURCE_TEXT)
+        assert read(dependency / "link.c") == SOURCE_TEXT
 
-    def test_recreates_a_deleted_symlink_file(self):
-        commit = make_dependency(self.dependency, {"link.c": "source.c"})
-        (self.dependency / "link.c").unlink()
+    def test_should_recreate_a_deleted_symlink_file(dependency):
+        commit = make_dependency(dependency, {"link.c": "source.c"})
+        (dependency / "link.c").unlink()
 
-        run_tool(self.dependency, pin=commit)
+        run_tool(dependency, pin=commit)
 
-        self.assertEqual(read(self.dependency / "link.c"), SOURCE_TEXT)
+        assert read(dependency / "link.c") == SOURCE_TEXT
 
-    @unittest.skipIf(sys.platform == "win32", "Windows CI can't always create real symlinks")
-    def test_skips_a_symlink_that_is_already_real(self):
-        commit = make_dependency(self.dependency, {"link.c": "source.c"})
-        (self.dependency / "link.c").unlink()
-        os.symlink("source.c", self.dependency / "link.c")
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows CI can't always create real symlinks")
+    def test_should_skip_a_symlink_that_is_already_real(dependency):
+        commit = make_dependency(dependency, {"link.c": "source.c"})
+        (dependency / "link.c").unlink()
+        os.symlink("source.c", dependency / "link.c")
 
-        output = run_tool(self.dependency, pin=commit)
+        output = run_tool(dependency, pin=commit)
 
-        self.assertTrue((self.dependency / "link.c").is_symlink())
-        self.assertIn("Materialized 0 pinned libmspack symlink files", output)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert (dependency / "link.c").is_symlink()
+        assert "Materialized 0 pinned libmspack symlink files" in output
