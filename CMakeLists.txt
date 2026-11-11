@@ -365,6 +365,12 @@ if(NOT DEFINED REXGLUE_SDK_SOURCE)
     set(REXGLUE_SDK_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/rexglue-sdk")
 endif()
 set(FABLE2_SDK_SRC "${REXGLUE_SDK_SOURCE}")
+# Photo mode's ImGui panel (src/core/photo_mode_dialog.h) calls into the ImGui
+# compiled into rexruntime.dll, so it must see the exact imgui.h that DLL was
+# built from (the SDK source tree), not an older copy in the prebuilt SDK.
+if(EXISTS "${REXGLUE_SDK_SOURCE}/thirdparty/imgui/imgui.h")
+    target_include_directories(fable_2 BEFORE PRIVATE "${REXGLUE_SDK_SOURCE}/thirdparty/imgui")
+endif()
 set(FABLE2_SDK_ROOT "${REXGLUE_SDK_ROOT}")
 # Never replace a matched SDK with DLLs left over from an older Vulkan build.
 # (The candidate-existence checks below guard every copy, so the staging is
