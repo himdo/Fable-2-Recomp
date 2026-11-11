@@ -6,6 +6,7 @@ from pathlib import Path
 import struct
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location("normalizer", ROOT / "tools/repro/normalize_pe.py")
@@ -45,6 +46,19 @@ def build_pe(stamp=0x11111111, guid=b"\x77" * 16, pdb_path=LONG_PDB_PATH, after_
     struct.pack_into("<II", headers, 0x58 + 112 + 6 * 8, SECTION_RVA, DEBUG_ENTRY_SIZE)  # debug directory
     struct.pack_into("<IIII", headers, 0x148 + 8, len(section), SECTION_RVA, len(section), SECTION_OFFSET)
     return bytes(headers) + section
+
+
+def run_main(*args):
+    """Run the tool's main() and return (exit code, printed output, error output)."""
+    output, errors = io.StringIO(), io.StringIO()
+    argv = ["normalize_pe.py", *args]
+    with patch("sys.argv", argv), contextlib.redirect_stdout(output), \
+            contextlib.redirect_stderr(errors):
+        try:
+            normalizer.main()
+        except SystemExit as exit_request:
+            return exit_request.code, output.getvalue(), errors.getvalue()
+    return 0, output.getvalue(), errors.getvalue()
 
 
 class NormalizePeTests(unittest.TestCase):
@@ -90,6 +104,37 @@ class NormalizePeTests(unittest.TestCase):
             changed = normalizer.normalize(str(self.path), normalizer.DEFAULT_STAMP, "fable_2.pdb", quiet=True)
         self.assertFalse(changed)
         self.assertEqual(self.path.read_bytes(), b"not a pe file")
+
+    def test_skips_an_mz_file_without_a_pe_signature(self):
+        # An MZ header alone is also how an old DOS program starts.
+        data = bytearray(build_pe())
+        data[0x40:0x44] = b"NOPE"  # where the PE signature should be
+        self.path.write_bytes(data)
+        errors = io.StringIO()
+        with contextlib.redirect_stderr(errors):
+            changed = normalizer.normalize(str(self.path), normalizer.DEFAULT_STAMP, "fable_2.pdb", quiet=True)
+
+        self.assertFalse(changed)
+        self.assertEqual(self.path.read_bytes(), data)
+        self.assertIn("no PE sig", errors.getvalue())  # not the earlier "not MZ" skip
+
+    def test_main_skips_a_missing_file(self):
+        # A missing file is skipped, not an error, so one command can name files that may not exist.
+        code, output, _ = run_main(str(self.path))
+
+        self.assertEqual(code, 0)
+        self.assertIn("skip (not present)", output)
+        self.assertFalse(self.path.exists())
+
+    def test_main_exits_2_on_a_broken_pe(self):
+        # The headers end right after the PE signature, so reading them fails.
+        data = build_pe()[:0x60]
+        self.path.write_bytes(data)
+        code, _, errors = run_main(str(self.path))
+
+        self.assertEqual(code, 2)
+        self.assertIn("ERROR", errors)
+        self.assertEqual(self.path.read_bytes(), data)
 
     # Known bugs. The tool treats the PDB path as UTF-16, but the field is UTF-8 with a single NUL.
     # Once a bug is fixed its test reports an unexpected success, so remove the marker then.
