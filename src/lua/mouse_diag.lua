@@ -39,9 +39,36 @@ local function pack(...)
   return { n = select("#", ...), ... }
 end
 
-local cls = rawget(_G, "SACCamera")
-if type(cls) ~= "table" then
-  say("SACCamera is not loaded (load a save first)")
+-- Find the SACCamera class. Plain indexing, not rawget: game globals can sit
+-- behind a metatable on _G (the console's own resolve() indexes the same way).
+-- Fallback: the live camera's class, through its metatable.
+local function has_methods(t)
+  return type(t) == "table" and type(t.ProcessGameAction) == "function"
+     and type(t.FrameUpdate) == "function"
+end
+
+local function find_class()
+  local ok, c = pcall(function() return SACCamera end)
+  if ok and has_methods(c) then return c, "SACCamera" end
+  local okm, cm = pcall(function() return CameraManager end)
+  if okm and type(cm) == "table" and type(cm.GetCurrentCamera) == "function" then
+    for _, call in ipairs({ function() return cm:GetCurrentCamera() end,
+                            function() return cm.GetCurrentCamera() end }) do
+      local okc, cam = pcall(call)
+      if okc and type(cam) == "table" then
+        local mt = getmetatable(cam)
+        local idx = mt and rawget(mt, "__index")
+        if has_methods(idx) then return idx, "current camera's class" end
+        if has_methods(mt) then return mt, "current camera's metatable" end
+      end
+    end
+  end
+  return nil
+end
+
+local cls, found_as = find_class()
+if not cls then
+  say("SACCamera not found (load a save first; f2 lua type(SACCamera) shows what the console sees)")
   return
 end
 
@@ -83,7 +110,7 @@ local function install()
   cls.ProcessGameAction = st.wrap_pga
   cls.FrameUpdate = st.wrap_fu
   st.installed = true
-  say("on (no U lines in fable2_mouse.log means the live camera does not use SACCamera's methods)")
+  say("on, via " .. found_as .. " (no U lines in fable2_mouse.log means the live camera does not use these methods)")
 end
 
 local function uninstall()

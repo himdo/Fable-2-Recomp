@@ -57,6 +57,17 @@ REXCVAR_DEFINE_INT32(mouse_look_scale, 256, "Input",
                      "mouse movement (larger = more sensitive). Default comes "
                      "from fable2_config.toml [input] mouse_look_scale.")
     .range(1, 4096);
+REXCVAR_DEFINE_BOOL(mouse_look_smoothing, true, "Input",
+                    "Turn the mouse into an even camera turn: report the mouse's "
+                    "velocity over one camera update and undo the game's stick "
+                    "deadzone and diagonal boost (src/input/mouse_stick.h). false = "
+                    "the previous per-poll mapping. Default comes from "
+                    "fable2_config.toml [input] mouse_look_smoothing.");
+REXCVAR_DEFINE_INT32(mouse_look_window_ms, 0, "Input",
+                     "Mouse-look velocity window in milliseconds; 0 = one camera "
+                     "update (67 ms, or 33 ms with high_tick_rate). Default comes "
+                     "from fable2_config.toml [input] mouse_look_window_ms.")
+    .range(0, 500);
 REXCVAR_DEFINE_BOOL(mouse_look_diag, false, "Input",
                     "Write mouse-look diagnostics to fable2_mouse.log next to the "
                     "exe: every input poll, camera updates from `f2 mouse trace`, "

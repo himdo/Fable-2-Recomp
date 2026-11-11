@@ -44,6 +44,11 @@ struct Values {
   // Shared mouse-look sensitivity slider (1..4096, 256 = 1x): legacy stick
   // units-per-pixel, and a multiplier on mouse_look_*_sens for direct look.
   int32_t mouse_look_scale = 256;  // range 1..4096 (cvar constraint)
+  // Even mouse-look turning (src/input/mouse_stick.h): velocity over one camera
+  // update, game deadzone and diagonal boost undone. Seeds the cvars of the
+  // same names; false = the previous per-poll mapping.
+  bool mouse_look_smoothing = true;
+  int32_t mouse_look_window_ms = 0;  // 0 = one camera update; range 0..500
   // Mouse-look diagnostics to fable2_mouse.log (src/input/mouse_diag.h).
   // Seeds the mouse_look_diag cvar; `f2 mouse diag on|off` changes it live.
   bool mouse_look_diag = false;

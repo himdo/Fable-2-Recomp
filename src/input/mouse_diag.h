@@ -10,7 +10,9 @@
 // Off by default: [input] mouse_look_diag in fable2_config.toml, the
 // mouse_look_diag cvar, or `f2 mouse diag on`. When on, the file
 // fable2_mouse.log is created next to the exe (truncated once per run) with:
-//   P  one line per input poll of the keyboard/mouse pad (input driver)
+//   P  one line per input poll of the keyboard/mouse pad (input driver); sm=1
+//      means the velocity-window path (mouse_look_smoothing) chose the stick,
+//      and w= is the movement in its window
 //   U  one line per camera update, from the Lua camera trace
 //      (scripts/recomp/mouse_diag.lua, started with `f2 mouse trace on`)
 //   S  a summary once per second
@@ -68,8 +70,10 @@ struct PollRecord {
   int32_t dx = 0, dy = 0;          // cursor displacement this poll (screen px, y down)
   int32_t inj_dx = 0, inj_dy = 0;  // synthetic movement added this poll
   int32_t rx = 0, ry = 0;          // right stick reported to the game
-  bool clamped = false;            // an axis hit full deflection: movement lost
+  int32_t win_x = 0, win_y = 0;    // movement in the velocity window (smoothing on)
+  bool clamped = false;            // capped at full stick: movement lost
   bool looking = false;            // focus + mouse_look + debug menu closed
+  bool smoothing = false;          // mouse_look_smoothing (velocity window path)
 };
 
 // Running sums for one reporting window (one second for S lines, or the time
@@ -147,12 +151,13 @@ class Diag {
     }
     if (!log) return;
     EnsureWriterLocked();
-    char buf[200];
+    char buf[240];
     std::snprintf(buf, sizeof buf,
-                  "P t=%lld tid=%llx gap=%lld dx=%d dy=%d inj=%d,%d rx=%d ry=%d clamp=%d look=%d\n",
+                  "P t=%lld tid=%llx gap=%lld dx=%d dy=%d inj=%d,%d rx=%d ry=%d clamp=%d look=%d "
+                  "sm=%d w=%d,%d\n",
                   static_cast<long long>(t), static_cast<unsigned long long>(tid & 0xffffff),
                   static_cast<long long>(gap), r.dx, r.dy, r.inj_dx, r.inj_dy, r.rx, r.ry,
-                  r.clamped ? 1 : 0, r.looking ? 1 : 0);
+                  r.clamped ? 1 : 0, r.looking ? 1 : 0, r.smoothing ? 1 : 0, r.win_x, r.win_y);
     AppendLocked(buf);
   }
 

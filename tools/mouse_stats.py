@@ -10,9 +10,11 @@ segment.
 For each segment:
   polls, updates      input polls and camera updates, with rates
   polls/update        how many polls the game made per camera update
-  visible             share of the mouse movement the game could have seen,
-                      assuming each camera update uses the last poll before it
-                      (stick values are per poll, so the rest is lost)
+  visible             share of the x movement that reached the camera. The
+                      camera reads the first poll after its previous update
+                      (measured 2026-11-11), so this counts that poll's
+                      movement: its own pixels with smoothing off (sm=0), or
+                      its velocity window (w=) with smoothing on (sm=1)
   clamped             polls where the stick hit full deflection (speed cap)
   yaw per update      RotateRight going into each update, over the steady
                       middle of the run (the first and last 15% are skipped):
@@ -169,7 +171,7 @@ def analyse(records, segment):
     stats = Stats(segment.label, span / 1e6)
     steady_from = segment.start + STEADY_SKIP * span
     steady_to = segment.end - STEADY_SKIP * span
-    last_poll_px = None  # movement of the latest poll, for `visible`
+    after_update = False  # a camera update happened and its next poll is still to come
     for r in records:
         if r.kind == "P" and segment.start <= r.t <= segment.end:
             x, y = poll_px(r)
@@ -180,7 +182,11 @@ def analyse(records, segment):
                 stats.moving_polls += 1
                 if r.fields.get("clamp") == "1":
                     stats.clamped += 1
-            last_poll_px = x
+            if after_update:
+                # The poll the next camera update will read.
+                seen = abs(pair(r.fields.get("w"))[0]) if r.fields.get("sm") == "1" else x
+                stats.visible_x += seen
+                after_update = False
         elif r.kind == "U" and segment.start <= r.t <= segment.end + TAIL_US:
             srr = number(r.fields.get("srr"))
             if srr is not None:
@@ -191,9 +197,7 @@ def analyse(records, segment):
             tick = number(r.fields.get("tick"))
             if tick is not None:
                 stats.ticks.append(tick)
-            if last_poll_px is not None:
-                stats.visible_x += last_poll_px
-                last_poll_px = None  # one update can only use one poll
+            after_update = True
             rr = number(r.fields.get("rr"))
             if steady_from <= r.t <= steady_to:
                 stats.steady_rr.append(rr or 0.0)

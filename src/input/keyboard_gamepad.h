@@ -51,6 +51,7 @@
 #include "fable2_config.h"  // direct_mouse_look toggle
 #include "mouse_diag.h"     // fable2_mouse.log + `f2 mouse inject` movement
 #include "mouse_look.h"     // fable2::mouselook (accumulates the mouse delta)
+#include "mouse_stick.h"    // velocity window + deadzone compensation
 
 #ifdef _WIN32
 #include <windows.h>
@@ -60,6 +61,8 @@
 REXCVAR_DECLARE(std::string, keyboard_gamepad_map);
 REXCVAR_DECLARE(bool, mouse_look);
 REXCVAR_DECLARE(int32_t, mouse_look_scale);
+REXCVAR_DECLARE(bool, mouse_look_smoothing);
+REXCVAR_DECLARE(int32_t, mouse_look_window_ms);
 REXCVAR_DECLARE(std::string, mouse_unlock_key);
 
 namespace fable2 {
@@ -379,12 +382,44 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     if (!injecting) inj_dx = inj_dy = 0;
 
     bool clamped = false;
-    if (cursor_read || injecting) {
+    int32_t win_x = 0;
+    int32_t win_y = 0;
+    const bool smoothing = REXCVAR_GET(mouse_look_smoothing);
+    if (smoothing) {
+      // Report the velocity over the last camera update, with the game's
+      // deadzone and diagonal boost undone (src/input/mouse_stick.h).
+      namespace ms = fable2::mousestick;
+      const int64_t now = fable2::mousediag::NowUs();
+      const int64_t since = last_poll_us_ ? last_poll_us_ : now;
+      last_poll_us_ = now;
+      if (cursor_read || injecting) window_.Add(since, now, cur_dx + inj_dx, cur_dy + inj_dy);
+      // Discard movement while mouse look is inactive, so resuming doesn't snap.
+      // A running inject counts as active even between its deliveries.
+      const bool inject_live = REXCVAR_GET(mouse_look) && !console_open_ &&
+                               (injecting || fable2::mousediag::Injector::Get().Active());
+      if (!looking && !inject_live) window_.Clear();
+      const int64_t window_us = WindowUs();
+      double sum_x = 0.0;
+      double sum_y = 0.0;
+      window_.Sum(now, window_us, sum_x, sum_y);
+      win_x = static_cast<int32_t>(std::lround(sum_x));
+      win_y = static_cast<int32_t>(std::lround(sum_y));
+      double cx = 0.0;
+      double cy = 0.0;
+      ms::WindowToControl(sum_x, sum_y, window_us / 1e6, REXCVAR_GET(mouse_look_scale), cx, cy);
+      clamped = ms::StickForControl(cx, cy, rx, ry);
+    } else if (cursor_read || injecting) {
+      // Previous behaviour: this poll's movement straight onto the stick.
+      window_.Clear();
+      last_poll_us_ = 0;
       clamped = input_detail::MouseToStick(cur_dx + inj_dx, cur_dy + inj_dy,
                                            REXCVAR_GET(mouse_look_scale), rx, ry);
     }
 
     fable2::mousediag::PollRecord rec;
+    rec.win_x = win_x;
+    rec.win_y = win_y;
+    rec.smoothing = smoothing;
     rec.dx = cur_dx;
     rec.dy = cur_dy;
     rec.inj_dx = inj_dx;
@@ -446,6 +481,18 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
   // connected silently shadows this driver -- the guest only sees the real
   // pad and this driver is never polled (dead keyboard, no mouse lock).
   static constexpr DeviceId kDeviceId{1ull << 60};
+
+  // Velocity window length: mouse_look_window_ms, or one camera update when
+  // it's 0 (the camera script runs on the LF tick: 15 Hz, 30 with
+  // high_tick_rate).
+  static int64_t WindowUs() {
+    const int32_t ms = REXCVAR_GET(mouse_look_window_ms);
+    if (ms > 0) return static_cast<int64_t>(ms) * 1000;
+    return fable2::mousestick::DefaultWindowUs(fable2::config::Get().high_tick_rate);
+  }
+
+  fable2::mousestick::VelocityWindow window_;
+  int64_t last_poll_us_ = 0;  // previous poll (smoothing path), for movement intervals
   std::vector<input_detail::Mapping> bindings_;
   std::string cached_text_;
   uint32_t packet_number_ = 0;

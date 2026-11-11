@@ -398,6 +398,8 @@ class Fable2App : public rex::ReXApp {
     seed_cvar("keyboard_gamepad_map", cfg.keyboard_gamepad_map);
     seed_cvar("mouse_look", cfg.mouse_look ? "true" : "false");
     seed_cvar("mouse_look_scale", std::to_string(cfg.mouse_look_scale));
+    seed_cvar("mouse_look_smoothing", cfg.mouse_look_smoothing ? "true" : "false");
+    seed_cvar("mouse_look_window_ms", std::to_string(cfg.mouse_look_window_ms));
     seed_cvar("mouse_look_diag", cfg.mouse_look_diag ? "true" : "false");
     // NOTE: the hero/dog readback fix (readback_resolve_force_addresses) is a
     // GPU-PLUGIN cvar, so it is seeded in OnPostSetup() (after the plugin is

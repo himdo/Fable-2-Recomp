@@ -13,8 +13,9 @@ mouse_stats = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mouse_stats)
 
 
-def poll(t, dx=0, dy=0, inj=(0, 0), clamp=0):
-    return f"P t={t} tid=1 gap=0 dx={dx} dy={dy} inj={inj[0]},{inj[1]} rx=0 ry=0 clamp={clamp} look=1"
+def poll(t, dx=0, dy=0, inj=(0, 0), clamp=0, sm=0, w=(0, 0)):
+    return (f"P t={t} tid=1 gap=0 dx={dx} dy={dy} inj={inj[0]},{inj[1]} rx=0 ry=0 clamp={clamp} "
+            f"look=1 sm={sm} w={w[0]},{w[1]}")
 
 
 def update(t, rr, srr=None, tick=30):
@@ -93,13 +94,13 @@ class AnalyseTests(unittest.TestCase):
         return mouse_stats.analyse(records, segment).as_dict()
 
     def test_two_polls_per_update_means_half_the_movement_is_visible(self):
-        # 10 px per poll, two polls per camera update: the game only ever sees
-        # the last poll before each update.
+        # 10 px per poll, two polls per camera update: the camera reads only
+        # the first poll after its previous update.
         lines = ["N t=0 inject dx=200 dy=0 ms=1000"]
         for i in range(10):
             base = i * 100_000
-            lines += [poll(base + 10_000, inj=(10, 0)), poll(base + 60_000, inj=(10, 0)),
-                      update(base + 90_000, -2.0)]
+            lines += [update(base + 1_000, -2.0), poll(base + 10_000, inj=(10, 0)),
+                      poll(base + 60_000, inj=(10, 0))]
         d = self.analyse(lines)
         self.assertEqual(d["polls"], 20)
         self.assertEqual(d["updates"], 10)
@@ -107,6 +108,17 @@ class AnalyseTests(unittest.TestCase):
         self.assertEqual(d["px"], [200, 0])
         self.assertEqual(d["visible_share"], 0.5)
         self.assertEqual(d["tick_rates"], [30.0])
+
+    def test_with_smoothing_the_read_poll_carries_its_whole_window(self):
+        # Same movement, but each poll reports the movement of the last 100 ms
+        # (w=), so the poll the camera reads carries all of it.
+        lines = ["N t=0 inject dx=200 dy=0 ms=1000"]
+        for i in range(10):
+            base = i * 100_000
+            lines += [update(base + 1_000, -2.0), poll(base + 10_000, inj=(10, 0), sm=1, w=(20, 0)),
+                      poll(base + 60_000, inj=(10, 0), sm=1, w=(20, 0))]
+        d = self.analyse(lines)
+        self.assertEqual(d["visible_share"], 1.0)
 
     def test_steady_yaw_skips_the_ends_and_scores_the_variation(self):
         # Updates every 50 ms over one second; the steady middle (150-850 ms)

@@ -1064,6 +1064,8 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
   }
   if (name == "mouse") {
     // mouse                        settings, rates since the last `mouse`, last poll
+    // mouse smoothing on|off       velocity window + deadzone compensation
+    //                              (cvar mouse_look_smoothing; off = old mapping)
     // mouse diag on|off            fable2_mouse.log (cvar mouse_look_diag)
     // mouse trace on|off           Lua camera trace into the log (needs a loaded save)
     // mouse inject <dx> <dy> [ms]  move dx, dy pixels in total, evenly over ms
@@ -1082,9 +1084,19 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     };
     if (sub == "status") {
       out("mouse", "mouse_look=" + flag("mouse_look") + " scale=" + flag("mouse_look_scale") +
+                       " smoothing=" + flag("mouse_look_smoothing") +
+                       " window_ms=" + flag("mouse_look_window_ms") + " (0 = one camera update)" +
                        " diag=" + flag("mouse_look_diag") +
                        " inject=" + (md::Injector::Get().Active() ? "running" : "idle"));
       out("mouse", md::Diag::Get().StatusAndReset());
+      return true;
+    }
+    if (sub == "smoothing") {
+      bool on = false;
+      if (!on_off(on)) return out("mouse", "usage: mouse smoothing on|off", true), true;
+      rex::cvar::SetFlagByName("mouse_look_smoothing", on ? "true" : "false");
+      md::Diag::Get().Note(std::string("smoothing ") + (on ? "on" : "off"));
+      out("mouse", std::string("smoothing ") + (on ? "on" : "off (previous per-poll mapping)"));
       return true;
     }
     if (sub == "diag") {
@@ -1137,7 +1149,7 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
       out("mouse", "inject stopped");
       return true;
     }
-    out("mouse", "usage: mouse [status] | mouse diag on|off | mouse trace on|off | mouse inject <dx> <dy> [ms] | mouse stop", true);
+    out("mouse", "usage: mouse [status] | mouse smoothing on|off | mouse diag on|off | mouse trace on|off | mouse inject <dx> <dy> [ms] | mouse stop", true);
     return true;
   }
   if (name == "step") {

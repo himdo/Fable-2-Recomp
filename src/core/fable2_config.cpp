@@ -86,6 +86,19 @@ keyboard_prompt_images = false
 # Larger = more sensitive. Default: 256
 mouse_look_scale = 256
 
+# Even mouse look: the stick reports the mouse's speed over one camera update
+# (so no movement is lost between input checks), and the game's 30% stick
+# deadzone and diagonal boost are undone (so slow movement turns the camera
+# slowly instead of not at all, and diagonals aren't faster). The top turn
+# speed is unchanged. false = the previous mapping, one input check at a time.
+# Default: true
+mouse_look_smoothing = true
+
+# Length of that speed window in milliseconds. 0 = one camera update (67 ms,
+# or 33 ms with high_tick_rate). Longer is smoother but adds delay.
+# Default: 0
+mouse_look_window_ms = 0
+
 # Mouse-look diagnostics: write fable2_mouse.log next to the exe (every input
 # poll, camera updates from `f2 mouse trace on`, and a per-second summary).
 # For measuring mouse stutter; leave off for normal play. `f2 mouse diag on`
@@ -391,6 +404,12 @@ bool Load(const std::filesystem::path& path) {
     values.mouse_look_scale = static_cast<int32_t>(Read<int64_t>(
         input_table, "input", "mouse_look_scale", "integer",
         values.mouse_look_scale));
+    values.mouse_look_smoothing =
+        Read<bool>(input_table, "input", "mouse_look_smoothing", "boolean",
+                   values.mouse_look_smoothing);
+    values.mouse_look_window_ms = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "mouse_look_window_ms", "integer",
+        values.mouse_look_window_ms));
     values.mouse_look_diag =
         Read<bool>(input_table, "input", "mouse_look_diag", "boolean",
                    values.mouse_look_diag);
