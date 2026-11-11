@@ -326,6 +326,19 @@ class Fable2App : public rex::ReXApp {
     REXSYS_INFO("[photo-mode] {} (enabled={}, toggle key {})", fable2::photomode::kBuildTag,
                 fable2::config::Get().photo_mode_enabled,
                 fable2::config::Get().photo_mode_toggle_key);
+    {
+      // Controller shortcut (Guide by default), changeable from the menu.
+      namespace pm = fable2::photomode;
+      const std::string& combo = fable2::config::Get().photo_mode_gamepad_toggle;
+      uint16_t mask = pm::kPadGuide;
+      if (!pm::ParsePadCombo(combo, mask)) {
+        REXSYS_WARN("[photo-mode] gamepad_toggle \"{}\" not understood; using Guide", combo);
+        mask = pm::kPadGuide;
+      }
+      pm::pad_toggle_mask().store(mask);
+      pm::pad_toggle_saver() = [](const std::string& c) { fable2::config::SavePhotoModeGamepadToggle(c); };
+      REXSYS_INFO("[photo-mode] controller shortcut: {}", pm::PadComboName(mask));
+    }
     // Screenshots read the game's frame from the window's presenter. Query it
     // when a screenshot is taken: the presenter does not exist yet here.
     fable2::photomode::presenter_provider() =

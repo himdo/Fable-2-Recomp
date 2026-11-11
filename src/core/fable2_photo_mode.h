@@ -20,7 +20,8 @@
 //                 they apply exactly, the same frame.
 //   ProcessAndProcessAndProcess1013_822B2D60
 //                 the game's only XamInputGetState call. Photo mode reads the pad
-//                 here (for the camera and the L3 + R3 toggle) and then blanks the
+//                 here, merged with a host XInput read (src/input/host_pad.h, which also
+//                 sees Guide for the controller shortcut), then blanks the
 //                 state the game sees, so the hero and the menus ignore it.
 //
 // CECCamera fields (bytes from the camera object, floats unless noted):
@@ -56,6 +57,7 @@
 
 #include "fable2_config.h"
 #include "fable2_frame_capture.h"
+#include "host_pad.h"
 #include "mouse_look.h"
 #include "photo_mode_state.h"
 
@@ -123,6 +125,10 @@ struct State {
   Pad pad[4]{};
   Pad pad_prev_frame{};  // merged pad at the previous world update
   uint16_t toggle_prev[4] = {0, 0, 0, 0};
+  Pad host_pad{};           // controllers read on the host (XInput), merged in
+  uint16_t rebind_peak = 0;  // buttons held so far while recording a shortcut
+  bool rebind_armed = false; // all buttons let go since recording started
+  int64_t rebind_session = 0;  // pad_rebind_started_ms of the recording seen
   Repeater rep_up, rep_down, rep_left, rep_right;  // D-pad menu navigation
   std::atomic<bool> suppress_pad{false};  // keep blanking until all released
 
@@ -517,7 +523,8 @@ inline Pad merged_pad() {
   std::lock_guard<std::mutex> lock(g.pad_mutex);
   Pad m{};
   auto bigger = [](int16_t a, int16_t b) { return std::abs(int(b)) > std::abs(int(a)) ? b : a; };
-  for (const Pad& p : g.pad) {
+  for (const Pad* pp : {&g.pad[0], &g.pad[1], &g.pad[2], &g.pad[3], &g.host_pad}) {
+    const Pad& p = *pp;
     m.buttons |= p.buttons;
     m.lt = std::max(m.lt, p.lt);
     m.rt = std::max(m.rt, p.rt);
@@ -544,7 +551,12 @@ inline void integrate(float dt) {
   const auto& cfg = config::Get();
   const bool keys = window_focused().load(std::memory_order_relaxed) &&
                     !ui_wants_keyboard().load(std::memory_order_relaxed);
-  const Pad pad = merged_pad();
+  Pad pad = merged_pad();
+  if (pad_rebinding().load()) {
+    // Recording a new controller shortcut: the pad drives nothing else.
+    pad = Pad{};
+  }
+  pad.buttons &= ~kPadGuide;  // Guide is only ever the shortcut
   const Pad prev = g.pad_prev_frame;
   g.pad_prev_frame = pad;
   auto pressed = [&](uint16_t mask) { return (pad.buttons & mask) && !(prev.buttons & mask); };
@@ -694,6 +706,7 @@ inline void enter(PPCContext& ctx, uint8_t* base) {
 
 inline void leave(PPCContext& ctx, uint8_t* base) {
   State& g = st();
+  pad_rebinding().store(false);
   if (g.applied_hud >= 0) {
     g.applied_hud = -1;
     ctx.r3.u64 = g.saved_draw_gui;
@@ -1013,25 +1026,76 @@ inline void on_pad_read(uint8_t* base, uint32_t user, uint32_t state_ptr, uint32
   }
 
   const auto& cfg = config::Get();
-  const uint16_t both = 0x0040 | 0x0080;  // L3 + R3
-  if (p.buttons != (diag_pad_buttons().load() & 0xFFFF) && !active()) {
-    // Button changes outside photo mode, rate-limited: shows whether the pad
-    // reaches this hook at all and what L3 / R3 look like.
-    static int64_t last = 0;
-    if ((p.buttons & both) || now_ms() - last > 2000) {
-      last = now_ms();
-      char buf[96];
-      std::snprintf(buf, sizeof(buf), "pad user %u buttons %04X", u, p.buttons);
+  // Controllers read on the host (XInput, with Guide), merged as user 0.
+  uint16_t host_buttons = 0;
+  if (u == 0) {
+    const hostpad::State hs = hostpad::Poll();
+    const bool focused = window_focused().load(std::memory_order_relaxed);
+    {
+      std::lock_guard<std::mutex> lock(g.pad_mutex);
+      g.host_pad = (hs.connected && focused) ? hs.pad : Pad{};
+    }
+    if (hs.connected && focused) host_buttons = hs.pad.buttons;
+    static bool logged = false;
+    if (hs.connected && !logged) {
+      logged = true;
+      char buf[128];
+      std::snprintf(buf, sizeof(buf), "host controller found (XInput%s); shortcut %s",
+                    hostpad::has_guide() ? ", Guide readable" : ", no Guide",
+                    PadComboName(pad_toggle_mask().load()).c_str());
       log_line(buf);
     }
   }
-  diag_pad_buttons().store(p.buttons);
-  if (cfg.photo_mode_enabled && cfg.photo_mode_gamepad_toggle) {
-    const bool now = (p.buttons & both) == both;
-    const bool before = (g.toggle_prev[u] & both) == both;
-    if (now && !before) request_toggle();
+  const uint16_t all = p.buttons | host_buttons;
+  if (all != diag_pad_buttons().load() && (all & 0x04C0)) {
+    // Guide / L3 / R3 changes, rate-limited: shows what the shortcut sees.
+    static int64_t last = 0;
+    if (now_ms() - last > 250) {
+      last = now_ms();
+      char buf[96];
+      std::snprintf(buf, sizeof(buf), "pad user %u buttons %04X (game %04X, host %04X)", u, all, p.buttons,
+                    host_buttons);
+      log_line(buf);
+    }
   }
-  g.toggle_prev[u] = p.buttons;
+  diag_pad_buttons().store(all);
+
+  // Recording a new shortcut from the menu (user 0 carries the host pad).
+  if (u == 0 && pad_rebinding().load()) {
+    if (g.rebind_session != pad_rebind_started_ms().load()) {
+      g.rebind_session = pad_rebind_started_ms().load();
+      g.rebind_armed = false;
+      g.rebind_peak = 0;
+    }
+    if (!g.rebind_armed) {
+      g.rebind_armed = all == 0;  // wait for the A press that started it to end
+      g.rebind_peak = 0;
+    } else if (all != 0) {
+      g.rebind_peak |= all;
+    } else if (g.rebind_peak != 0) {
+      set_pad_toggle(g.rebind_peak);
+      set_status("Shortcut set to " + PadComboName(g.rebind_peak));
+      log_line(("shortcut recorded: " + PadComboName(g.rebind_peak)).c_str());
+      g.rebind_peak = 0;
+      g.rebind_armed = false;
+      pad_rebinding().store(false);
+    }
+    if (pad_rebinding().load() && now_ms() - pad_rebind_started_ms().load() > 10000) {
+      set_status("Shortcut unchanged");
+      g.rebind_peak = 0;
+      g.rebind_armed = false;
+      pad_rebinding().store(false);
+    }
+    g.toggle_prev[u] = all;
+  } else {
+    const uint16_t mask = pad_toggle_mask().load();
+    if (cfg.photo_mode_enabled && mask != 0) {
+      const bool now = (all & mask) == mask;
+      const bool before = (g.toggle_prev[u] & mask) == mask;
+      if (now && !before) request_toggle();
+    }
+    g.toggle_prev[u] = all;
+  }
 
   if (g.suppress_pad && !active()) {
     const bool neutral = p.buttons == 0 && p.lt < 30 && p.rt < 30 && std::abs(int(p.lx)) < 7849 &&

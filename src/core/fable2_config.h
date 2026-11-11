@@ -211,7 +211,9 @@ struct Values {
   bool photo_mode_enabled = true;
   std::string photo_mode_toggle_key = "F6";
   std::string photo_mode_screenshot_key = "F12";
-  bool photo_mode_gamepad_toggle = true;  // L3 + R3 toggles photo mode
+  // Controller shortcut that toggles photo mode: buttons joined by "+"
+  // ("Guide", "L3 + R3", "Back + Start"), "Off" for none. true = Guide.
+  std::string photo_mode_gamepad_toggle = "Guide";
   float photo_mode_move_speed = 4.0f;     // metres per second
   float photo_mode_mouse_sensitivity = 0.0025f;  // radians per mouse pixel
   float photo_mode_max_distance = 0.0f;   // 0 = no limit
@@ -229,6 +231,10 @@ bool Load(const std::filesystem::path& path);
 
 // Parsed values (in-memory defaults until Load() succeeds).
 const Values& Get();
+
+// Change [photo_mode] gamepad_toggle in memory and in the file Load() read
+// (only that line is rewritten; comments and the rest are kept).
+bool SavePhotoModeGamepadToggle(const std::string& combo);
 
 // The default template written when the file is missing. Must match
 // config/fable2_config.toml in the repo (staged next to the exe by the build).

@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -333,6 +334,90 @@ struct Pad {
   uint8_t lt = 0, rt = 0;
   int16_t lx = 0, ly = 0, rx = 0, ry = 0;
 };
+
+// --- Controller shortcut that opens / closes photo mode ----------------------
+// A set of X_INPUT_GAMEPAD buttons (0x0400 = Guide) that must all be held; 0 =
+// off. Set from [photo_mode] gamepad_toggle at startup and from the menu.
+inline constexpr uint16_t kPadGuide = 0x0400;
+struct PadButtonName {
+  uint16_t mask;
+  const char* name;
+};
+inline constexpr PadButtonName kPadButtonNames[] = {
+    {0x0400, "Guide"}, {0x1000, "A"},     {0x2000, "B"},     {0x4000, "X"},    {0x8000, "Y"},
+    {0x0100, "LB"},    {0x0200, "RB"},    {0x0010, "Start"}, {0x0020, "Back"}, {0x0040, "L3"},
+    {0x0080, "R3"},    {0x0001, "Up"},    {0x0002, "Down"},  {0x0004, "Left"}, {0x0008, "Right"}};
+
+// "Guide", "L3 + R3", "back+start", "Off" -> mask. Returns false on an unknown name.
+inline bool ParsePadCombo(const std::string& text, uint16_t& out) {
+  uint16_t m = 0;
+  std::string tok;
+  auto flush = [&]() -> bool {
+    size_t a = tok.find_first_not_of(" \t"), b = tok.find_last_not_of(" \t");
+    std::string t = a == std::string::npos ? "" : tok.substr(a, b - a + 1);
+    tok.clear();
+    if (t.empty()) return true;
+    for (char& c : t) c = char(std::tolower(uint8_t(c)));
+    if (t == "off" || t == "none" || t == "false") return true;
+    if (t == "true") t = "guide";
+    if (t == "ls" || t == "lthumb") t = "l3";
+    if (t == "rs" || t == "rthumb") t = "r3";
+    if (t == "select") t = "back";
+    if (t == "home" || t == "xbox") t = "guide";
+    for (const auto& n : kPadButtonNames) {
+      std::string ln = n.name;
+      for (char& c : ln) c = char(std::tolower(uint8_t(c)));
+      if (ln == t) {
+        m |= n.mask;
+        return true;
+      }
+    }
+    return false;
+  };
+  for (char c : text) {
+    if (c == '+' || c == ',') {
+      if (!flush()) return false;
+    } else {
+      tok += c;
+    }
+  }
+  if (!flush()) return false;
+  out = m;
+  return true;
+}
+inline std::string PadComboName(uint16_t mask) {
+  if (mask == 0) return "Off";
+  std::string s;
+  for (const auto& n : kPadButtonNames) {
+    if (!(mask & n.mask)) continue;
+    if (!s.empty()) s += " + ";
+    s += n.name;
+  }
+  return s;
+}
+inline std::atomic<uint16_t>& pad_toggle_mask() {
+  static std::atomic<uint16_t> v{kPadGuide};
+  return v;
+}
+// Recording a new shortcut from the menu: the buttons held together are
+// collected until all are let go. The pad drives nothing else meanwhile.
+inline std::atomic<bool>& pad_rebinding() {
+  static std::atomic<bool> v{false};
+  return v;
+}
+inline std::atomic<int64_t>& pad_rebind_started_ms() {
+  static std::atomic<int64_t> v{0};
+  return v;
+}
+// Saves the shortcut to fable2_config.toml (set by the app).
+inline std::function<void(const std::string&)>& pad_toggle_saver() {
+  static std::function<void(const std::string&)> f;
+  return f;
+}
+inline void set_pad_toggle(uint16_t mask) {
+  pad_toggle_mask().store(mask);
+  if (pad_toggle_saver()) pad_toggle_saver()(PadComboName(mask));
+}
 
 // Presenter for screenshots (set by Fable2App; the presenter may not exist yet
 // at startup, so it is queried when a screenshot is taken).

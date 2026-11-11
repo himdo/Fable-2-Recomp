@@ -220,8 +220,8 @@ hotfunc_yield_every = 1
 [photo_mode]
 # Photo mode: freeze the world, fly a free camera and take screenshots, with a
 # settings panel for field of view, roll, depth of field, vignette, colour
-# grading and time of day. Toggle it in game with toggle_key, or click both
-# sticks (L3 + R3) on a controller when gamepad_toggle is on.
+# grading and time of day. Toggle it in game with toggle_key, or with the
+# controller shortcut in gamepad_toggle (the Guide button by default).
 # false = photo mode is off and its keys do nothing.
 # Default: true
 enabled = true
@@ -235,9 +235,12 @@ toggle_key = "F6"
 # Default: "F12"
 screenshot_key = "F12"
 
-# Click both sticks (L3 + R3) together to enter or leave photo mode.
-# Default: true
-gamepad_toggle = true
+# Controller shortcut that enters and leaves photo mode: button names joined
+# with "+" (Guide, A, B, X, Y, LB, RB, Start, Back, L3, R3, Up, Down, Left,
+# Right), e.g. "Guide", "L3 + R3" or "Back + Start"; "Off" for none. It can
+# also be changed in photo mode (Capture > Controller Shortcut).
+# Default: "Guide"
+gamepad_toggle = "Guide"
 
 # Free-camera flying speed in metres per second (Shift = 4x, Ctrl = 1/4x).
 # The panel can change it live.

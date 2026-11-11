@@ -334,6 +334,28 @@ inline std::vector<Page> BuildPages() {
     p.items.push_back(gap);
     p.items.push_back(Action("Take Photo", "Saved as a PNG in the screenshots folder next to the game.",
                              [](Settings&) { screenshot_request().store(true); }));
+    {
+      // Controller shortcut that opens / closes photo mode (saved to
+      // fable2_config.toml, [photo_mode] gamepad_toggle).
+      static const uint16_t kPresets[] = {kPadGuide, 0x0040 | 0x0080, 0x0010 | 0x0020, 0x0100 | 0x0200, 0};
+      Item sc = Option(
+          "Controller Shortcut", "The controller buttons that open and close photo mode.",
+          {"Guide", "L3 + R3", "Back + Start", "LB + RB", "Off"},
+          [](const Settings&) {
+            const uint16_t m = pad_toggle_mask().load();
+            for (int i = 0; i < 5; ++i)
+              if (kPresets[i] == m) return float(i);
+            return -1.0f;  // recorded combination: the next step goes to Guide
+          },
+          [](Settings&, float v) { set_pad_toggle(kPresets[std::clamp(int(std::lround(v)), 0, 4)]); });
+      sc.fmt = [](float) { return PadComboName(pad_toggle_mask().load()); };
+      p.items.push_back(sc);
+      p.items.push_back(Action("Record Shortcut",
+                               "Hold the controller buttons you want, then let go of them.", [](Settings&) {
+                                 pad_rebind_started_ms().store(now_ms());
+                                 pad_rebinding().store(true);
+                               }));
+    }
     p.items.push_back(Action("Open Photo Folder", "Show your photos in Explorer.", [](Settings&) {
 #ifdef _WIN32
       const std::filesystem::path dir = PhotosFolder();
@@ -795,7 +817,8 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
         }
         case menu::Kind::kOption: {
           const int idx = std::clamp(int(std::lround(it.get(s))), 0, int(it.options.size()) - 1);
-          const char* name = it.options[idx].c_str();
+          const std::string shown = it.fmt ? it.fmt(float(idx)) : it.options[idx];
+          const char* name = shown.c_str();
           const float right = cur ? BarX1() - X(14.0f) : BarX1();
           TextRight(right, ty2, kText, label_col, name);
           if (cur) {
@@ -898,6 +921,19 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
         const float w = TextW(b, kLarge, 2.0f);
         Text(ImVec2(W * 0.5f - w * 0.5f, X(40.0f)), kLarge, menu::kCream, b, true, 2.0f);
       }
+    }
+    if (pad_rebinding().load()) {
+      // Recording a controller shortcut: say so in the middle of the screen.
+      const float H = io.DisplaySize.y;
+      const char* t1 = "Hold the buttons for the new shortcut, then let go";
+      const char* t2 = "Nothing pressed for 10 seconds keeps the current one";
+      const float w1 = TextW(t1, kNormal), w2 = TextW(t2, kSmall);
+      const float cy = H * 0.5f;
+      dl_->AddRectFilled(ImVec2(0, cy - X(50.0f)), ImVec2(W, cy + X(50.0f)), IM_COL32(0, 0, 0, 170), 0.0f, 0);
+      Rule(W * 0.5f - X(260.0f), W * 0.5f + X(260.0f), cy - X(50.0f), 1.0f);
+      Rule(W * 0.5f - X(260.0f), W * 0.5f + X(260.0f), cy + X(50.0f), 1.0f);
+      Text(ImVec2(W * 0.5f - w1 * 0.5f, cy - X(32.0f)), kNormal, menu::kCream, t1);
+      Text(ImVec2(W * 0.5f - w2 * 0.5f, cy + X(6.0f)), kSmall, menu::with_alpha(menu::kCreamDim, 0.9f), t2);
     }
     if (toast_.empty()) return;
     const float age = float(now_ms() - toast_ms_) / 1000.0f;

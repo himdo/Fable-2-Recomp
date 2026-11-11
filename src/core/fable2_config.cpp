@@ -15,6 +15,8 @@
 #include <array>
 #include <format>
 #include <fstream>
+#include <iterator>
+#include <string_view>
 
 #include <rex/logging/macros.h>
 #include <rex/system.h>
@@ -25,6 +27,7 @@ namespace fable2::config {
 namespace {
 
 Values g_values;
+std::filesystem::path g_path;  // file Load() read (for SavePhotoModeGamepadToggle)
 
 // Kept in sync with config/fable2_config.toml (staged next to the exe by the
 // build); this copy is what a first launch writes out.
@@ -251,8 +254,8 @@ hotfunc_yield_every = 1
 [photo_mode]
 # Photo mode: freeze the world, fly a free camera and take screenshots, with a
 # settings panel for field of view, roll, depth of field, vignette, colour
-# grading and time of day. Toggle it in game with toggle_key, or click both
-# sticks (L3 + R3) on a controller when gamepad_toggle is on.
+# grading and time of day. Toggle it in game with toggle_key, or with the
+# controller shortcut in gamepad_toggle (the Guide button by default).
 # false = photo mode is off and its keys do nothing.
 # Default: true
 enabled = true
@@ -266,9 +269,12 @@ toggle_key = "F6"
 # Default: "F12"
 screenshot_key = "F12"
 
-# Click both sticks (L3 + R3) together to enter or leave photo mode.
-# Default: true
-gamepad_toggle = true
+# Controller shortcut that enters and leaves photo mode: button names joined
+# with "+" (Guide, A, B, X, Y, LB, RB, Start, Back, L3, R3, Up, Down, Left,
+# Right), e.g. "Guide", "L3 + R3" or "Back + Start"; "Off" for none. It can
+# also be changed in photo mode (Capture > Controller Shortcut).
+# Default: "Guide"
+gamepad_toggle = "Guide"
 
 # Free-camera flying speed in metres per second (Shift = 4x, Ctrl = 1/4x).
 # The panel can change it live.
@@ -483,9 +489,18 @@ bool Load(const std::filesystem::path& path) {
     values.photo_mode_screenshot_key =
         Read<std::string>(photo_table, "photo_mode", "screenshot_key", "string",
                           values.photo_mode_screenshot_key);
-    values.photo_mode_gamepad_toggle =
-        Read<bool>(photo_table, "photo_mode", "gamepad_toggle", "boolean",
-                   values.photo_mode_gamepad_toggle);
+    // gamepad_toggle: a button combo string; older files have a boolean
+    // (true = the default shortcut, false = off).
+    if (const auto node = photo_table.get("gamepad_toggle")) {
+      if (const auto b = node->value<bool>()) {
+        values.photo_mode_gamepad_toggle = *b ? "Guide" : "Off";
+      } else if (const auto str = node->value<std::string>()) {
+        values.photo_mode_gamepad_toggle = *str;
+      } else {
+        REXSYS_WARN("[fable2-config] photo_mode.gamepad_toggle should be a string like \"Guide\"; using {}",
+                    values.photo_mode_gamepad_toggle);
+      }
+    }
     values.photo_mode_move_speed = static_cast<float>(
         Read<double>(photo_table, "photo_mode", "move_speed", "number",
                      values.photo_mode_move_speed));
@@ -501,12 +516,61 @@ bool Load(const std::filesystem::path& path) {
   }
 
   g_values = values;
+  g_path = path;
   REXSYS_INFO("[fable2-config] loaded {} (config_version={})", path.string(),
               values.config_version);
   return true;
 }
 
 const Values& Get() { return g_values; }
+
+bool SavePhotoModeGamepadToggle(const std::string& combo) {
+  g_values.photo_mode_gamepad_toggle = combo;
+  if (g_path.empty()) return false;
+  std::string text;
+  {
+    std::ifstream in(g_path, std::ios::binary);
+    if (!in) return false;
+    text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+  }
+  const std::string line = "gamepad_toggle = \"" + combo + "\"";
+  const std::string eol = text.find("\r\n") != std::string::npos ? "\r\n" : "\n";
+  // Find the [photo_mode] section and, inside it, the gamepad_toggle line.
+  size_t sec = text.find("\n[photo_mode]");
+  if (sec == std::string::npos && text.rfind("[photo_mode]", 0) == 0) sec = 0;
+  if (sec == std::string::npos) {
+    if (!text.empty() && text.back() != '\n') text += eol;
+    text += eol + "[photo_mode]" + eol + line + eol;
+  } else {
+    const size_t body = text.find('\n', sec + 1);
+    size_t end = body == std::string::npos ? text.size() : text.find("\n[", body);
+    if (end == std::string::npos) end = text.size();
+    size_t pos = body == std::string::npos ? std::string::npos : body + 1;
+    bool replaced = false;
+    while (pos != std::string::npos && pos < end) {
+      size_t le = text.find('\n', pos);
+      if (le == std::string::npos) le = text.size();
+      const std::string_view l(text.data() + pos, le - pos);
+      const size_t k = l.find_first_not_of(" \t");
+      if (k != std::string_view::npos && l.substr(k).rfind("gamepad_toggle", 0) == 0) {
+        const size_t cut = (le > pos && text[le - 1] == '\r') ? le - 1 : le;
+        text.replace(pos, cut - pos, line);
+        replaced = true;
+        break;
+      }
+      pos = le + 1;
+    }
+    if (!replaced) {
+      const size_t at = body == std::string::npos ? text.size() : body + 1;
+      text.insert(at, line + eol);
+    }
+  }
+  std::ofstream out(g_path, std::ios::binary | std::ios::trunc);
+  if (!out) return false;
+  out << text;
+  REXSYS_INFO("[fable2-config] photo_mode.gamepad_toggle = \"{}\" saved to {}", combo, g_path.string());
+  return bool(out);
+}
 
 const char* DefaultTemplate() { return kTemplate; }
 
