@@ -621,6 +621,18 @@ class Fable2App : public rex::ReXApp {
     REXSYS_INFO("[photo-mode] menu fonts: {} of {} loaded (large {} / normal {} / small {} glyphs)", added,
                 int(gf::kSizeCount), gf::font(gf::kLarge).glyphs.size(), gf::font(gf::kNormal).glyphs.size(),
                 gf::font(gf::kSmall).glyphs.size());
+    // The game's controller button icons (data/art/gui/gui_textures.bnk).
+    namespace gi = fable2::gameicons;
+    int icons = 0;
+    std::string icon_log;
+    for (const auto& root : roots) {
+      icon_log.clear();
+      icons = gi::Load(root, icon_log);
+      if (icons > 0) break;
+    }
+    const int icons_added = gi::AddAllToAtlas(atlas);
+    REXSYS_INFO("[photo-mode] button icons: {} of {} from gui_textures.bnk ({} in atlas){}", icons,
+                int(gi::kIconCount), icons_added, icon_log);
   }
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     // fable2::deadbeef_overlay::register_overlay(drawer);

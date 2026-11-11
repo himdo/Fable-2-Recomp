@@ -30,6 +30,7 @@
 
 #include "fable2_config.h"
 #include "photo_mode_font.h"
+#include "photo_mode_icons.h"
 #include "photo_mode_state.h"
 
 #ifdef _WIN32
@@ -547,7 +548,14 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     const Face* face = nullptr;
     for (const Face& f : kFaces)
       if (std::strcmp(f.name, button) == 0) face = &f;
-    if (face) {
+    const int game_icon = gameicons::Find(button);
+    if (gameicons::Ready(game_icon)) {
+      // The game's own button art (gui_textures.bnk), a little larger than the
+      // cap since the art has a margin around the button.
+      const float s = h * 1.25f;
+      if (!measure_only) gameicons::Draw(dl_, game_icon, ImVec2(x - (s - h) * 0.5f, cy - s * 0.5f), s);
+      w = h;
+    } else if (face) {
       const float r = h * 0.5f;
       if (!measure_only) {
         dl_->AddCircleFilled(ImVec2(x + r, cy), r, IM_COL32(20, 20, 20, 230), 24);
