@@ -40,6 +40,29 @@ def make_checkout(directory, files):
         git(directory, "commit", "-m", "Test checkout")
 
 
+# Stands in for the SDK's own libmspack pin, which its public remote no longer has.
+BROKEN_LIBMSPACK_PIN = "1" * 40
+
+
+def make_gitlink_checkout(directory):
+    """Create a git repo that records libmspack as a submodule gitlink at the broken pin.
+
+    There is no .gitmodules entry, so `git submodule update` fails at once without
+    going to the network.
+    """
+    make_checkout(directory, {"CMakeLists.txt": "project(sdk)"})
+    git(directory, "update-index", "--add", "--cacheinfo",
+        f"160000,{BROKEN_LIBMSPACK_PIN},thirdparty/libmspack")
+    git(directory, "commit", "-m", "Add libmspack as a submodule")
+
+
+def libmspack_index_entry(directory):
+    """Return git's index line for thirdparty/libmspack: mode, commit, stage and path."""
+    result = subprocess.run(["git", "-C", str(directory), "ls-files", "-s", "thirdparty/libmspack"],
+                            check=True, capture_output=True, text=True)
+    return result.stdout
+
+
 def run_prepare(*args):
     """Run the script with these arguments and return its exit code and error output."""
     argv = ["prepare_runtime_sdk.py", *args]
@@ -151,6 +174,43 @@ class PrepareRuntimeSdkLibmspackTests(unittest.TestCase):
 
         self.assertEqual(code, 0)
         self.assertTrue(marker_is_folder)
+
+    def test_second_run_keeps_the_vendored_marker(self):
+        # The build runs this step every time, so a second run must succeed too.
+        with tempfile.TemporaryDirectory(prefix="fable2-prepare-test-") as directory:
+            source = Path(directory)
+            make_checkout(source, {"thirdparty/libmspack/mspack.h": "header"})
+            first_code, _ = run_prepare(str(source))
+            second_code, _ = run_prepare(str(source))
+            marker_is_folder = (source / "thirdparty/libmspack/.git").is_dir()
+
+        self.assertEqual(first_code, 0)
+        self.assertEqual(second_code, 0)
+        self.assertTrue(marker_is_folder)
+
+    def test_submodule_libmspack_is_repinned(self):
+        # `git submodule update` reads the index, so the script points the index at a commit
+        # the public remote still has. The run then fails at the update, as there is no
+        # remote here, but the repin has already happened.
+        with tempfile.TemporaryDirectory(prefix="fable2-prepare-test-") as directory:
+            source = Path(directory)
+            make_gitlink_checkout(source)
+            code, _ = run_prepare(str(source))
+            index_entry = libmspack_index_entry(source)
+
+        self.assertEqual(code, 1)
+        self.assertIn(prepare.MSPACK_PIN, index_entry)
+
+    def test_failed_submodule_update_mentions_network(self):
+        # A fresh clone without network access is the usual cause, so the error says so.
+        with tempfile.TemporaryDirectory(prefix="fable2-prepare-test-") as directory:
+            source = Path(directory)
+            make_gitlink_checkout(source)
+            code, errors = run_prepare(str(source))
+
+        self.assertEqual(code, 1)
+        self.assertIn("submodule update failed", errors)
+        self.assertIn("network access", errors)
 
 
 if __name__ == "__main__":
