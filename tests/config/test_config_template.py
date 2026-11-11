@@ -1,7 +1,6 @@
 import json
 import re
 import tomllib
-import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -44,14 +43,15 @@ def engine_reads():
 ACCEPTED_KINDS = {"bool": {bool}, "int64_t": {int}, "double": {int, float}, "std::string": {str}}
 
 
-class ConfigTemplateTests(unittest.TestCase):
-    def test_staged_config_matches_embedded_template(self):
+def describe_config_template():
+    def test_should_match_the_template_embedded_in_the_game():
         source = (ROOT / "src/core/fable2_config.cpp").read_text(encoding="utf-8")
         embedded = re.search(r'R"TOML_EOF\((.*?)\)TOML_EOF"', source, re.S).group(1)
         staged = (ROOT / "config/fable2_config.toml").read_text(encoding="utf-8")
-        self.assertEqual(staged.strip().splitlines(), embedded.strip().splitlines())
 
-    def test_launcher_defaults_match_staged_config(self):
+        assert staged.strip().splitlines() == embedded.strip().splitlines()
+
+    def test_should_match_the_launcher_defaults():
         """Fail if a default in the launcher differs from the staged config.
 
         Fable2ConfigValues repeats the defaults from config/fable2_config.toml. The launcher
@@ -74,31 +74,30 @@ class ConfigTemplateTests(unittest.TestCase):
         # Fable2ConfigFile.Read() pairs each TOML key with the property it fills.
         settings = dict(re.findall(r'key == "(\w+)"\) values\.(\w+) =', launcher))
         # Also fails if a regex stops matching, or Read() never fills a property.
-        self.assertEqual(sorted(settings.values()), sorted(defaults))
+        assert sorted(settings.values()) == sorted(defaults)
 
-        self.maxDiff = None  # Show the whole diff, so every mismatched setting is named.
-        launcher_values = {key: defaults[prop] for key, prop in settings.items()}
-        staged_values = {key: staged.get(key) for key in settings}
-        self.assertEqual(launcher_values, staged_values)
+        # Only the mismatches, as {key: (launcher, staged)}, so every one is named.
+        mismatches = {key: (defaults[prop], staged.get(key))
+                      for key, prop in settings.items() if defaults[prop] != staged.get(key)}
+        assert mismatches == {}
 
 
-class EngineConfigReaderTests(unittest.TestCase):
+def describe_engine_config_reader():
     """The game's own config reader (src/core/fable2_config.cpp and .h) against the staged config."""
 
-    def test_understands_every_read_call(self):
+    def test_should_understand_every_read_call():
         """Fail if a Read<...>() call in fable2_config.cpp is written in a shape the regex misses.
 
-        The other tests in this class only see the read lines engine_read_calls() finds. If a
+        The other tests in this block only see the read lines engine_read_calls() finds. If a
         reformat broke the regex, they would compare empty results and pass without checking
         anything, so this guards them.
         """
         read_calls_in_source = engine_source().count("Read<")
-        self.assertEqual(
-            len(engine_read_calls()), read_calls_in_source,
-            "engine_read_calls() missed a Read<...>() call. Check its regex against the new line shape.",
-        )
 
-    def test_engine_reads_every_staged_setting(self):
+        assert len(engine_read_calls()) == read_calls_in_source, \
+            "engine_read_calls() missed a Read<...>() call. Check its regex against the new line shape."
+
+    def test_should_read_every_staged_setting():
         """Fail if the game doesn't read a setting from the section it is staged in.
 
         Each setting in config/fable2_config.toml needs its own Read<...>() call in
@@ -106,9 +105,10 @@ class EngineConfigReaderTests(unittest.TestCase):
         name gives no error: the game silently ignores the setting and uses its default.
         """
         staged = set(staged_settings()) - LAUNCHER_ONLY
-        self.assertEqual(engine_reads(), staged)
 
-    def test_engine_defaults_match_staged_config(self):
+        assert engine_reads() == staged
+
+    def test_should_have_the_same_defaults_as_the_staged_config():
         """Fail if a default in the game's Values struct differs from the staged config.
 
         src/core/fable2_config.h repeats the defaults from config/fable2_config.toml. The game
@@ -124,14 +124,15 @@ class EngineConfigReaderTests(unittest.TestCase):
         defaults["keyboard_gamepad_map"] = "".join(re.findall(r'"([^"]*)"', keybinds))
 
         # Each Values member has the same name as the key it is read from.
+        # Only the mismatches, as {(section, key): (engine, staged)}, so every one is named.
         staged = staged_settings()
-        engine_values = {(section, key): defaults.get(key) for section, key in engine_reads()}
-        staged_values = {(section, key): staged.get((section, key)) for section, key in engine_reads()}
+        mismatches = {(section, key): (defaults.get(key), staged.get((section, key)))
+                      for section, key in engine_reads()
+                      if defaults.get(key) != staged.get((section, key))}
 
-        self.maxDiff = None  # Show the whole diff, so every mismatched setting is named.
-        self.assertEqual(engine_values, staged_values)
+        assert mismatches == {}
 
-    def test_staged_values_are_the_kind_the_engine_reads(self):
+    def test_should_get_staged_values_of_the_kind_it_reads():
         """Fail if a staged value is the wrong kind, such as mouse_look = 1 instead of true.
 
         Read<...>() in src/core/fable2_config.cpp only accepts the exact TOML kind for bools,
@@ -140,14 +141,16 @@ class EngineConfigReaderTests(unittest.TestCase):
         Python treats True and 1 as equal.
         """
         staged = staged_settings()
+
         wrong_kinds = {
             (section, key): f"Read<{read_type}>, staged as {type(staged.get((section, key))).__name__}"
             for _, read_type, section, key in engine_read_calls()
             if type(staged.get((section, key))) not in ACCEPTED_KINDS[read_type]
         }
-        self.assertEqual(wrong_kinds, {})
 
-    def test_engine_stores_each_setting_under_its_own_name(self):
+        assert wrong_kinds == {}
+
+    def test_should_store_each_setting_under_its_own_name():
         """Fail if a Read<...>() call stores a setting in another setting's member.
 
         The read lines are copied from one another, so a missed edit such as
@@ -160,8 +163,5 @@ class EngineConfigReaderTests(unittest.TestCase):
             for member, _, section, key in engine_read_calls()
             if member != key
         }
-        self.assertEqual(wrong_members, {})
 
-
-if __name__ == "__main__":
-    unittest.main()
+        assert wrong_members == {}
