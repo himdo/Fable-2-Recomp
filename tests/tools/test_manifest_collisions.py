@@ -4,9 +4,9 @@ import importlib.util
 import io
 from pathlib import Path
 import struct
-import tempfile
-import unittest
 from unittest.mock import patch
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("collisions", ROOT / "tools/check_manifest_collisions.py")
@@ -58,104 +58,134 @@ def run_check(manifest, dll=None):
     return code, output.getvalue()
 
 
-class ManifestCollisionTests(unittest.TestCase):
-    def setUp(self):
-        temp = tempfile.TemporaryDirectory(prefix="fable2-collision-test-")
-        self.addCleanup(temp.cleanup)
-        base = Path(temp.name)
-        self.manifest = base / "manifest.toml"
-        self.manifest.write_text('[[functions]]\nname = "GuestFunction"\n')
-        self.dll = base / "rexruntimed.dll"
+@pytest.fixture
+def manifest(tmp_path):
+    """A manifest that names one guest function, GuestFunction."""
+    path = tmp_path / "manifest.toml"
+    path.write_text('[[functions]]\nname = "GuestFunction"\n')
+    return path
 
-    def test_reads_export_names_from_a_dll(self):
-        self.dll.write_bytes(build_pe(["__imp__NtClose", "RealExport"]))
+
+@pytest.fixture
+def dll(tmp_path):
+    """Where a test writes the fake runtime DLL. It doesn't exist until the test writes it."""
+    return tmp_path / "rexruntimed.dll"
+
+
+def describe_pe_exports():
+    def test_should_read_export_names_from_a_dll(dll):
+        dll.write_bytes(build_pe(["__imp__NtClose", "RealExport"]))
+
         with contextlib.redirect_stdout(io.StringIO()):
-            exports = collisions.pe_exports(self.dll)
-        self.assertEqual(exports, {"__imp__NtClose", "RealExport"})
+            exports = collisions.pe_exports(dll)
 
-    def test_no_collision_passes(self):
-        self.dll.write_bytes(build_pe(["__imp__NtClose"]))
-        code, _ = run_check(self.manifest, self.dll)
-        self.assertEqual(code, 0)
+        assert exports == {"__imp__NtClose", "RealExport"}
 
-    def test_name_matching_an_imp_export_fails(self):
-        self.dll.write_bytes(build_pe(["__imp__GuestFunction"]))
-        code, output = run_check(self.manifest, self.dll)
-        self.assertEqual(code, 1)
-        self.assertIn("GuestFunction", output)
 
-    def test_name_matching_a_bare_export_fails(self):
-        self.dll.write_bytes(build_pe(["GuestFunction"]))
-        code, output = run_check(self.manifest, self.dll)
-        self.assertEqual(code, 1)
-        self.assertIn("GuestFunction", output)
+def describe_main():
+    # --- Happy flow -------------------------------------------------------
 
-    def test_missing_manifest_is_a_usage_error(self):
-        self.dll.write_bytes(build_pe(["__imp__NtClose"]))
-        self.manifest.unlink()
-        code, _ = run_check(self.manifest, self.dll)
-        self.assertEqual(code, 2)
+    def test_should_pass_without_a_collision(manifest, dll):
+        dll.write_bytes(build_pe(["__imp__NtClose"]))
 
-    def test_dll_that_is_not_a_pe_is_a_usage_error(self):
-        self.dll.write_bytes(b"\0" * 0x100)
-        code, _ = run_check(self.manifest, self.dll)
-        self.assertEqual(code, 2)
+        code, _ = run_check(manifest, dll)
 
-    def test_missing_dll_is_a_usage_error(self):
+        assert code == 0
+
+    def test_should_ignore_a_commented_out_name(manifest, dll):
+        manifest.write_text('[[functions]]\n# name = "GuestFunction"\n')
+        dll.write_bytes(build_pe(["__imp__GuestFunction"]))
+
+        code, _ = run_check(manifest, dll)
+
+        assert code == 0
+
+    # --- Bad flow ---------------------------------------------------------
+
+    def test_should_fail_on_a_name_matching_an_imp_export(manifest, dll):
+        dll.write_bytes(build_pe(["__imp__GuestFunction"]))
+
+        code, output = run_check(manifest, dll)
+
+        assert code == 1
+        assert "GuestFunction" in output
+
+    def test_should_fail_on_a_name_matching_a_bare_export(manifest, dll):
+        dll.write_bytes(build_pe(["GuestFunction"]))
+
+        code, output = run_check(manifest, dll)
+
+        assert code == 1
+        assert "GuestFunction" in output
+
+    def test_should_report_every_collision(manifest, dll):
+        manifest.write_text('[[functions]]\nname = "GuestFunction"\n'
+                            '[[functions]]\nname = "OtherFunction"\n')
+        dll.write_bytes(build_pe(["__imp__GuestFunction", "OtherFunction"]))
+
+        code, output = run_check(manifest, dll)
+
+        assert code == 1
+        assert "GuestFunction:" in output
+        assert "OtherFunction:" in output
+
+    def test_should_give_a_usage_error_for_a_missing_manifest(manifest, dll):
+        dll.write_bytes(build_pe(["__imp__NtClose"]))
+        manifest.unlink()
+
+        code, _ = run_check(manifest, dll)
+
+        assert code == 2
+
+    def test_should_give_a_usage_error_for_a_dll_that_is_not_a_pe(manifest, dll):
+        dll.write_bytes(b"\0" * 0x100)
+
+        code, _ = run_check(manifest, dll)
+
+        assert code == 2
+
+    def test_should_give_a_usage_error_for_a_missing_dll(manifest, dll):
         # A missing manifest also exits with 2, so the message shows which check stopped it.
-        code, output = run_check(self.manifest, self.dll)
+        code, output = run_check(manifest, dll)
 
-        self.assertEqual(code, 2)
-        self.assertIn("could not read any DLL exports", output)
+        assert code == 2
+        assert "could not read any DLL exports" in output
 
-    def test_dll_without_exports_is_a_usage_error(self):
+    def test_should_give_a_usage_error_for_a_dll_without_exports(manifest, dll):
         # An empty export table can't prove there are no collisions, so it counts as unreadable.
-        self.dll.write_bytes(build_pe([]))
-        code, output = run_check(self.manifest, self.dll)
+        dll.write_bytes(build_pe([]))
 
-        self.assertEqual(code, 2)
-        self.assertIn("could not read any DLL exports", output)
+        code, output = run_check(manifest, dll)
 
-    def test_reports_every_collision(self):
-        self.manifest.write_text('[[functions]]\nname = "GuestFunction"\n'
-                                 '[[functions]]\nname = "OtherFunction"\n')
-        self.dll.write_bytes(build_pe(["__imp__GuestFunction", "OtherFunction"]))
-        code, output = run_check(self.manifest, self.dll)
+        assert code == 2
+        assert "could not read any DLL exports" in output
 
-        self.assertEqual(code, 1)
-        self.assertIn("GuestFunction:", output)
-        self.assertIn("OtherFunction:", output)
+    # --- Known issues -----------------------------------------------------
 
-    def test_commented_out_name_is_ignored(self):
-        self.manifest.write_text('[[functions]]\n# name = "GuestFunction"\n')
-        self.dll.write_bytes(build_pe(["__imp__GuestFunction"]))
-        code, _ = run_check(self.manifest, self.dll)
-
-        self.assertEqual(code, 0)
-
-    @unittest.expectedFailure
-    def test_finds_the_dll_the_build_installs(self):
-        # Known issue: without a DLL argument the tool looks in thirdparty/rexglue-sdk and
+    @pytest.mark.xfail(strict=True, reason="without a DLL argument the tool looks in old SDK folders, "
+                       "not where build.cmd installs the runtime")
+    def test_should_find_the_dll_the_build_installs(manifest, monkeypatch):
+        # Without a DLL argument the tool looks in thirdparty/rexglue-sdk and
         # ../rexglue-sdk-0.10.0-win-amd64 for rexruntimed.dll or rexruntimedd.dll. build.cmd
         # installs the runtime to out/tooling/runtime-sdk/win-amd64/bin/rexruntime.dll instead,
         # so the default run never finds a DLL and exits with a usage error.
-        root = self.manifest.parent
+        root = manifest.parent
         installed = root / "out/tooling/runtime-sdk/win-amd64/bin/rexruntime.dll"
         installed.parent.mkdir(parents=True)
         installed.write_bytes(build_pe(["__imp__NtClose"]))
-        with patch.object(collisions, "ROOT", root):
-            code, _ = run_check(self.manifest)
+        monkeypatch.setattr(collisions, "ROOT", root)
 
-        self.assertEqual(code, 0)
+        code, _ = run_check(manifest)
 
-    def test_real_manifest_keeps_the_kernel_wait_names_free(self):
+        assert code == 0
+
+
+def describe_the_real_manifest():
+    def test_should_keep_the_kernel_wait_names_free():
         # These names once hijacked the kernel imports and broke audio (see the README).
         names = collisions.manifest_names(ROOT / "fable_2_manifest.toml")
-        self.assertNotIn("KeWaitForSingleObject", names)
-        self.assertNotIn("KeWaitForMultipleObjects", names)
-        self.assertIn("KeWaitForSingleObject_Guest", names)
-        self.assertIn("KeWaitForMultipleObjects_Guest", names)
 
-
-if __name__ == "__main__":
-    unittest.main()
+        assert "KeWaitForSingleObject" not in names
+        assert "KeWaitForMultipleObjects" not in names
+        assert "KeWaitForSingleObject_Guest" in names
+        assert "KeWaitForMultipleObjects_Guest" in names
