@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import socket
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -58,6 +59,13 @@ class FakeSocket:
 
     def __exit__(self, *error):
         return False
+
+
+class SilentSocket(FakeSocket):
+    """Stands in for a server that takes the request but never answers in time."""
+
+    def recv(self, size):
+        raise socket.timeout("timed out")
 
 
 def run_against(server, token=""):
@@ -434,6 +442,25 @@ class Fable2ControlConnectionTests(unittest.TestCase):
         response = run_against(server)
 
         self.assertEqual(response, expected)
+
+    def test_run_reports_a_server_that_times_out(self):
+        # A timeout is an OSError, so it is reported as JSON like a refused connection.
+        server = SilentSocket()
+        expected = (1, {"ok": False, "error": "timed out"})
+        response = run_against(server)
+
+        self.assertEqual(response, expected)
+
+    @unittest.expectedFailure
+    def test_run_reports_a_reply_that_is_not_json(self):
+        # Known issue: run() only catches OSError, so a reply that isn't JSON ends in a
+        # JSONDecodeError traceback. The tool's docstring promises JSON output either way,
+        # so shell loops can always parse it.
+        server = FakeSocket(b"not json\n")
+        code, reply = run_against(server)
+
+        self.assertEqual(code, 1)
+        self.assertFalse(reply["ok"])
 
     def test_run_joins_a_reply_split_over_two_reads(self):
         server = FakeSocket(b'{"ok":', b' true}\n')
