@@ -261,6 +261,7 @@ Controls the fit-window module (`src/core/fable2_fit_window.h`), which renders a
 |---|---|---|---|
 | `pad` | `pad <A\|B\|X\|Y\|LB\|RB\|LT\|RT\|Up\|Down\|Left\|Right\|Start\|Back\|L3\|R3>[+...] [frames]` | Presses guest buttons through a synthetic gamepad, held for frames (default 12), then released. `+` combines inputs (`pad LB+A`). | Works without window focus. The command queue waits while it is held, so `pad Down; pad A` are two presses. |
 | `pad stick` | `pad stick <lx> <ly> [frames]` | Holds the left stick (-32768..32767, ly positive = forward). | |
+| `pad rstick` | `pad rstick <rx> <ry> [frames]` | Holds the right stick, which turns the camera (ry positive = look up). | console-v12. Mixes with the mouse like a real pad: the larger value wins per axis. |
 | `pad off` | `pad off` | Releases everything now. | |
 
 Example `console\autoexec.txt` that gets from boot to in-game with the last save (timings depend on the machine):
@@ -275,6 +276,29 @@ pad A
 wait 6s
 pad A
 ```
+
+## Mouse look (console-v12)
+
+Diagnostics for mouse-look stutter and speed (`src/input/mouse_diag.h`). The log, `fable2_mouse.log`, is written next to the exe and starts empty each run. `tools/mouse_stats.py fable2_mouse.log` turns it into numbers, one block per `mouse inject` run.
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `mouse` | `mouse` / `mouse status` | Shows `mouse_look`, the scale, whether the log is on, then poll and camera-update rates since the previous `mouse`, and the last poll's movement and stick value. | |
+| `mouse diag` | `mouse diag on\|off` | Turns the log on or off (cvar `mouse_look_diag`, also `[input] mouse_look_diag` in `fable2_config.toml`). Logs one `P` line per input poll and an `S` summary per second. | Writes are buffered and done every 250 ms by a separate thread, so logging doesn't add stutter. |
+| `mouse trace` | `mouse trace on\|off` | Wraps the gameplay camera script (`SACCamera.ProcessGameAction` and `FrameUpdate`) and logs one `U` line per camera update: frame, tick rate, stick actions received, `RotateRight`, `SmoothRotateRight` and the camera height. Turns the log on too. | Needs a loaded save. Runs `mousetrace on\|off` in Lua (`scripts/recomp/mouse_diag.lua`). Doesn't change the camera. |
+| `mouse inject` | `mouse inject <dx> <dy> [ms]` | Moves the mouse dx, dy pixels in total, evenly over ms (default 1000), from a 1 kHz thread, like a hand at constant speed. | Ignores window focus, so it works from `console\in.txt`. Still needs `mouse_look` on and the F4 menu closed. The queue waits until it finishes. |
+| `mouse stop` | `mouse stop` | Cancels a running `mouse inject`. | |
+
+A before/after run, with a save loaded and the camera free:
+
+```
+mouse diag on; mouse trace on
+mouse inject 2400 0 4000; wait 1s
+cvar frame_limit 30; mouse inject 2400 0 4000; wait 1s
+cvar frame_limit 120; mouse inject 2400 0 4000
+```
+
+Then run `python tools\mouse_stats.py out\build\win-amd64-debug\fable2_mouse.log`. For each run it prints polls per camera update, how much of the movement the game could see, the share of polls that hit full stick, and the yaw per update's mean, spread and `cv` (lower is smoother).
 
 ## GUI states (console-v11)
 

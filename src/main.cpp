@@ -57,6 +57,11 @@ REXCVAR_DEFINE_INT32(mouse_look_scale, 256, "Input",
                      "mouse movement (larger = more sensitive). Default comes "
                      "from fable2_config.toml [input] mouse_look_scale.")
     .range(1, 4096);
+REXCVAR_DEFINE_BOOL(mouse_look_diag, false, "Input",
+                    "Write mouse-look diagnostics to fable2_mouse.log next to the "
+                    "exe: every input poll, camera updates from `f2 mouse trace`, "
+                    "and a per-second summary (see src/input/mouse_diag.h). "
+                    "Default comes from fable2_config.toml [input] mouse_look_diag.");
 
 // Key that toggles the debug menu (F4). While the menu is open the mouse lock
 // is released (free cursor); closing it re-locks. This key is excluded from

@@ -33,6 +33,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <string>
@@ -48,6 +49,7 @@
 #include <rex/ui/keybinds.h>
 
 #include "fable2_config.h"  // direct_mouse_look toggle
+#include "mouse_diag.h"     // fable2_mouse.log + `f2 mouse inject` movement
 #include "mouse_look.h"     // fable2::mouselook (accumulates the mouse delta)
 
 #ifdef _WIN32
@@ -84,6 +86,18 @@ inline int32_t ClampStick(int32_t v) {
   if (v > kStickMax) return kStickMax;
   if (v < -kStickMax) return -kStickMax;
   return v;
+}
+
+// Mouse displacement since the last poll (screen pixels, y down) -> right
+// stick. Fable 2 inverts Y, so mouse-up (dy < 0) maps to +ry (look up).
+// Returns true when an axis hit full deflection, i.e. some of the movement
+// was lost to the stick's range.
+inline bool MouseToStick(int32_t dx, int32_t dy, int32_t scale, int32_t& rx, int32_t& ry) {
+  const int64_t x = static_cast<int64_t>(dx) * scale;
+  const int64_t y = -static_cast<int64_t>(dy) * scale;
+  rx = static_cast<int32_t>(std::clamp<int64_t>(x, -kStickMax, kStickMax));
+  ry = static_cast<int32_t>(std::clamp<int64_t>(y, -kStickMax, kStickMax));
+  return rx != x || ry != y;
 }
 
 // One host-key -> guest-input binding. Exactly one of button/trigger/axis
@@ -327,6 +341,14 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
       cursor_hidden_ = false;
     }
 
+    // This poll's cursor displacement in screen pixels (dx>0 = right,
+    // dy>0 = down). The direct-mouse-look path that fed
+    // fable2_hook_direct_mouse_look stays disabled: the mouse always drives
+    // the synthetic pad's right stick, so the game's own stick code moves the
+    // camera.
+    int32_t cur_dx = 0;
+    int32_t cur_dy = 0;
+    bool cursor_read = false;
     if (looking) {
       RECT rc;
       POINT p;
@@ -336,27 +358,9 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
         c.y = rc.top + rc.bottom / 2;
         if (ClientToScreen(hwnd, &c)) {
           if (mouse_centered_) {
-            // This poll's cursor displacement in screen pixels. dx>0 = right,
-            // dy>0 = down.
-            const int32_t dx = p.x - c.x;
-            const int32_t dy = p.y - c.y;
-            // Direct-mouse-look separation DISABLED: the mouse always drives
-            // the synthetic pad's right stick (the native path) so the game's
-            // own stick pipeline produces the look 1:1 with a real right stick.
-            // The raw-displacement path that fed fable2_hook_direct_mouse_look
-            // is commented out below (preserved for reference).
-            // if (fable2::config::Get().direct_mouse_look) {
-            //   // Direct mouse look: hand the raw displacement to the camera
-            //   // hook (fable2_hook_direct_mouse_look) and leave the pad's right
-            //   // stick neutral, so the mouse no longer drives the joystick.
-            //   fable2::mouselook::add_delta(dx, dy);
-            // } else {
-              // Map the displacement onto the right stick. Fable 2
-              // inverts Y, so mouse-up (dy<0) maps to +ry (look up).
-              const int32_t scale = REXCVAR_GET(mouse_look_scale);
-              rx = input_detail::ClampStick(dx * scale);
-              ry = input_detail::ClampStick(-dy * scale);
-            // }
+            cur_dx = p.x - c.x;
+            cur_dy = p.y - c.y;
+            cursor_read = true;
           }
           SetCursorPos(c.x, c.y);  // recenter: consume this frame's movement
           mouse_centered_ = true;
@@ -365,6 +369,31 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     } else {
       mouse_centered_ = false;  // re-prime on (re)focus to avoid a jump
     }
+
+    // `f2 mouse inject` movement is added on top. It ignores focus so tests
+    // can be driven from console\in.txt, but still respects mouse_look.
+    int32_t inj_dx = 0;
+    int32_t inj_dy = 0;
+    fable2::mousediag::TakeInjected(inj_dx, inj_dy);
+    const bool injecting = (inj_dx != 0 || inj_dy != 0) && REXCVAR_GET(mouse_look) && !console_open_;
+    if (!injecting) inj_dx = inj_dy = 0;
+
+    bool clamped = false;
+    if (cursor_read || injecting) {
+      clamped = input_detail::MouseToStick(cur_dx + inj_dx, cur_dy + inj_dy,
+                                           REXCVAR_GET(mouse_look_scale), rx, ry);
+    }
+
+    fable2::mousediag::PollRecord rec;
+    rec.dx = cur_dx;
+    rec.dy = cur_dy;
+    rec.inj_dx = inj_dx;
+    rec.inj_dy = inj_dy;
+    rec.rx = rx;
+    rec.ry = ry;
+    rec.clamped = clamped;
+    rec.looking = looking;
+    fable2::mousediag::Diag::Get().OnPoll(rec);
 #endif
 
     out_state->packet_number.set(packet_number_++);

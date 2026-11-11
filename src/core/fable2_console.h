@@ -1,4 +1,4 @@
-// fable_2 - developer commands, console-v11.
+// fable_2 - developer commands, console-v12.
 //
 // Typed in the SDK's `~` console as   f2 <command>   for example
 //   f2 warp 1 2 3        f2 god on        f2 warp save a; wait 60; warp a
@@ -21,7 +21,8 @@
 // Host commands: wait, waitfor, exec, echo, peek, poke, expect, find <number>,
 // freeze, unfreeze, trace, status, hosthelp, cvars, dumpmem; v6 adds cvar,
 // history, again, repeat, every, autoexec, peekf, pokef, freezef, peekstr,
-// findstr, findf, fill, scan; v11 adds widescreen (ws), pause and step. Addresses are Xbox 360 guest
+// findstr, findf, fill, scan; v11 adds widescreen (ws), pause and step; v12 adds mouse
+// (diag, trace, inject) and pad rstick. Addresses are Xbox 360 guest
 // virtual addresses (hex, with or without 0x); values are big-endian as in the game.
 
 #pragma once
@@ -48,6 +49,7 @@
 #include "fable2_f5_lua.h"
 #include "fable2_fit_window.h"
 #include "fable2_gui_lua.h"
+#include "mouse_diag.h"
 #include "remote_input_state.h"
 
 // The SDK's `~` console (ImGui overlay) logs through REXLOG_* and can register
@@ -58,7 +60,7 @@
 #define FABLE2_CONSOLE_HAVE_REXLOG 1
 #endif
 
-#define FABLE2_CONSOLE_BUILD "console-v11"
+#define FABLE2_CONSOLE_BUILD "console-v12"
 
 REXCVAR_DEFINE_BOOL(console_enabled, true, "Input",
                     "Developer command file transport (console\\in.txt / out.txt / state.txt "
@@ -592,14 +594,14 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
   }
   if (name == "help") {
     out("help", "host commands: wait waitfor exec echo peek poke expect find <number> freeze unfreeze trace status cvars dumpmem "
-                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad. "
+                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad mouse. "
                 "Chain with ';'. Lua commands follow (their text appears in the log).");
     return false;  // Lua prints its own command list too
   }
   if (name == "hosthelp") {
     out("help",
         "host commands: wait waitfor exec echo peek poke expect find freeze unfreeze trace status cvars dumpmem "
-        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad. "
+        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad mouse. "
         "Everything else (warp, god, gold, giveall, ...) runs in Lua: type help. "
         "Separate commands with ';'. Addresses are hex guest addresses.");
     return true;
@@ -1010,13 +1012,14 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
   if (name == "pad") {
     // pad <A|B|X|Y|LB|RB|LT|RT|Up|Down|Left|Right|Start|Back|L3|R3>[+...] [frames]
     // pad stick <lx> <ly> [frames]  (-32768..32767, ly + = forward)  |  pad off
+    // pad rstick <rx> <ry> [frames] (right stick: camera; ry + = look up)
     // Holds the input for frames (default 12: menus miss 6), then releases it. While held
     // the command queue waits, so "pad A; pad Down; pad A" are separate presses.
     static const std::pair<const char*, uint16_t> kBtn[] = {
         {"up", 0x0001}, {"down", 0x0002}, {"left", 0x0004}, {"right", 0x0008}, {"start", 0x0010},
         {"back", 0x0020}, {"l3", 0x0040}, {"r3", 0x0080}, {"lb", 0x0100}, {"rb", 0x0200},
         {"a", 0x1000}, {"b", 0x2000}, {"x", 0x4000}, {"y", 0x8000}};
-    if (W.size() < 2) return out("pad", "usage: pad <button>[+button] [frames] | pad stick <lx> <ly> [frames] | pad off", true), true;
+    if (W.size() < 2) return out("pad", "usage: pad <button>[+button] [frames] | pad stick <lx> <ly> [frames] | pad rstick <rx> <ry> [frames] | pad off", true), true;
     fable2::remote::InputSnapshot snap;
     size_t fi = 2;
     std::string what = W[1];
@@ -1031,6 +1034,12 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
       if (W.size() < 4 || !parse_i(W[2], lx) || !parse_i(W[3], ly)) return out("pad", "usage: pad stick <lx> <ly> [frames]", true), true;
       snap.stk_lx = static_cast<int32_t>(std::clamp<int64_t>(lx, -32768, 32767));
       snap.stk_ly = static_cast<int32_t>(std::clamp<int64_t>(ly, -32768, 32767));
+      fi = 4;
+    } else if (what == "rstick") {
+      int64_t rx = 0, ry = 0;
+      if (W.size() < 4 || !parse_i(W[2], rx) || !parse_i(W[3], ry)) return out("pad", "usage: pad rstick <rx> <ry> [frames]", true), true;
+      snap.stk_rx = static_cast<int32_t>(std::clamp<int64_t>(rx, -32768, 32767));
+      snap.stk_ry = static_cast<int32_t>(std::clamp<int64_t>(ry, -32768, 32767));
       fi = 4;
     } else {
       std::stringstream ss(what);
@@ -1051,6 +1060,84 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     s.pad_frames = frames;
     s.wait_frames = frames + 2;  // hold, then a short gap before the next command
     s.wait_time = false;
+    return true;
+  }
+  if (name == "mouse") {
+    // mouse                        settings, rates since the last `mouse`, last poll
+    // mouse diag on|off            fable2_mouse.log (cvar mouse_look_diag)
+    // mouse trace on|off           Lua camera trace into the log (needs a loaded save)
+    // mouse inject <dx> <dy> [ms]  move dx, dy pixels in total, evenly over ms
+    //                              (default 1000), as if by hand; ignores focus
+    // mouse stop                   cancel an inject
+    // See src/input/mouse_diag.h and tools/mouse_stats.py.
+    namespace md = fable2::mousediag;
+    std::string sub = W.size() > 1 ? W[1] : "status";
+    for (auto& c : sub) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    auto flag = [](const char* cvar) { return rex::cvar::GetFlagByName(cvar); };
+    auto on_off = [&](bool& v) {
+      if (W.size() < 3) return false;
+      if (W[2] == "on" || W[2] == "1" || W[2] == "true") return v = true, true;
+      if (W[2] == "off" || W[2] == "0" || W[2] == "false") return v = false, true;
+      return false;
+    };
+    if (sub == "status") {
+      out("mouse", "mouse_look=" + flag("mouse_look") + " scale=" + flag("mouse_look_scale") +
+                       " diag=" + flag("mouse_look_diag") +
+                       " inject=" + (md::Injector::Get().Active() ? "running" : "idle"));
+      out("mouse", md::Diag::Get().StatusAndReset());
+      return true;
+    }
+    if (sub == "diag") {
+      bool on = false;
+      if (!on_off(on)) return out("mouse", "usage: mouse diag on|off", true), true;
+      rex::cvar::SetFlagByName("mouse_look_diag", on ? "true" : "false");
+      if (on) {
+        md::Diag::Get().Start();
+        md::Diag::Get().Note("diag on");
+      }
+      out("mouse", std::string("diag ") + (on ? "on: fable2_mouse.log next to the exe" : "off"));
+      return true;
+    }
+    if (sub == "trace") {
+      bool on = false;
+      if (!on_off(on)) return out("mouse", "usage: mouse trace on|off", true), true;
+      if (on) {
+        // The trace only writes to the log, so turn the log on with it.
+        rex::cvar::SetFlagByName("mouse_look_diag", "true");
+        md::Diag::Get().Start();
+      }
+      md::Diag::Get().Note(std::string("trace ") + (on ? "on" : "off"));
+      // Runs in Lua next frame (scripts/recomp/console_cmds.lua -> mouse_diag.lua).
+      enqueue_text(std::string("mousetrace ") + (on ? "on" : "off"), true);
+      out("mouse", std::string("trace ") + (on ? "on" : "off") + " sent to Lua (needs a loaded save)");
+      return true;
+    }
+    if (sub == "inject") {
+      int64_t dx = 0, dy = 0;
+      uint64_t ms = 1000;
+      if (W.size() < 4 || !parse_i(W[2], dx) || !parse_i(W[3], dy) ||
+          (W.size() > 4 && (!parse_u(W[4], ms) || ms == 0 || ms > 600000)))
+        return out("mouse", "usage: mouse inject <dx> <dy> [ms]  (total pixels, spread over ms; default 1000)", true), true;
+      dx = std::clamp<int64_t>(dx, -1000000, 1000000);
+      dy = std::clamp<int64_t>(dy, -1000000, 1000000);
+      md::Injector::Get().Start(static_cast<int32_t>(dx), static_cast<int32_t>(dy), static_cast<int64_t>(ms));
+      md::Diag::Get().Note("inject dx=" + std::to_string(dx) + " dy=" + std::to_string(dy) +
+                           " ms=" + std::to_string(ms));
+      // Hold the queue until the movement is done, so "mouse inject ...; mouse" reads the result.
+      s.wait_until = Clock::now() + std::chrono::milliseconds(ms + 100);
+      s.wait_time = true;
+      s.wait_frames = 0;
+      out("mouse", "inject " + std::to_string(dx) + "," + std::to_string(dy) + " px over " +
+                       std::to_string(ms) + " ms");
+      return true;
+    }
+    if (sub == "stop") {
+      md::Injector::Get().Stop();
+      md::Diag::Get().Note("inject stopped");
+      out("mouse", "inject stopped");
+      return true;
+    }
+    out("mouse", "usage: mouse [status] | mouse diag on|off | mouse trace on|off | mouse inject <dx> <dy> [ms] | mouse stop", true);
     return true;
   }
   if (name == "step") {
@@ -1803,43 +1890,59 @@ extern "C" void sub_82A19CD8(PPCContext& ctx, uint8_t* base) {
     const char* e = std::getenv("FABLE2_CPRINT_HOOK");
     return !(e && *e == '0');
   }();
-  if (hook_on && (s.active.load(std::memory_order_relaxed) || fable2::console::enabled())) {
-    if (L && ta::rdable2(base, L, 0x10)) {
-      const uint32_t top = ta::load_be(base, L + 8), bot = ta::load_be(base, L + 0xC);
-      if (bot && top > bot && top - bot <= 8 * 16 && ta::rdable2(base, bot, top - bot)) {
-        const uint32_t tt = ta::load_be(base, bot + 4);
-        const uint32_t ts = ta::load_be(base, bot);
-        if (tt == 4 && ta::rdable2(base, ts, 16)) {
-          uint32_t len = ta::load_be(base, ts + 12);
-          if (len > 64000) len = 64000;
-          if (ta::rdable2(base, ts + 16, len)) {
-            std::string text(reinterpret_cast<const char*>(ta::host_addr(base, ts + 16)), len);
-            static const std::string kTag = "[console] ";
-            if (text.rfind(kTag, 0) == 0) {
-              const std::string body = text.substr(kTag.size());
-              if (body == "__f2 ready") {
-                s.pump_ready.store(true);
-                ctx.r3.u64 = 0;
-                return;
-              }
-              if (body.rfind("__f2 done ", 0) == 0) {
-                s.lua_done.store(std::strtoull(body.c_str() + 10, nullptr, 10));
-                ctx.r3.u64 = 0;
-                return;
-              }
-              std::istringstream is(body);
-              std::string ln;
-              while (std::getline(is, ln)) fable2::console::out("lua", ln);
-              // Handled here: the release cprint copies into a fixed-size guest
-              // stack buffer, and long console output overran it (exit
-              // 0xC0000409 / garbage reads). A Lua C function returns its result
-              // count in r3; cprint returns none.
-              ctx.r3.u64 = 0;
-              return;
-            }
-          }
-        }
+  static const std::string kTag = "[console] ";
+  static const std::string kDiag = "[f2diag] ";  // scripts/recomp/mouse_diag.lua
+
+  // Copies the first argument into `text` when it is a string starting with
+  // `tag`. The prefix is compared in guest memory first, so the game's own
+  // prints are not copied.
+  auto tagged_arg = [&](const std::string& tag, std::string& text) -> bool {
+    if (!L || !ta::rdable2(base, L, 0x10)) return false;
+    const uint32_t top = ta::load_be(base, L + 8), bot = ta::load_be(base, L + 0xC);
+    if (!bot || top <= bot || top - bot > 8 * 16 || !ta::rdable2(base, bot, top - bot)) return false;
+    const uint32_t tt = ta::load_be(base, bot + 4);
+    const uint32_t ts = ta::load_be(base, bot);
+    if (tt != 4 || !ta::rdable2(base, ts, 16)) return false;
+    uint32_t len = ta::load_be(base, ts + 12);
+    if (len > 64000) len = 64000;
+    if (len < tag.size() || !ta::rdable2(base, ts + 16, len)) return false;
+    const char* p = reinterpret_cast<const char*>(ta::host_addr(base, ts + 16));
+    if (std::memcmp(p, tag.data(), tag.size()) != 0) return false;
+    text.assign(p, len);
+    return true;
+  };
+
+  if (hook_on) {
+    std::string text;
+    // Mouse-look camera trace: to fable2_mouse.log, whether or not the
+    // console is on (src/input/mouse_diag.h).
+    if (tagged_arg(kDiag, text)) {
+      fable2::mousediag::Diag::Get().OnLuaLine(std::string_view(text).substr(kDiag.size()));
+      ctx.r3.u64 = 0;  // a Lua C function returns its result count in r3
+      return;
+    }
+    if ((s.active.load(std::memory_order_relaxed) || fable2::console::enabled()) &&
+        tagged_arg(kTag, text)) {
+      const std::string body = text.substr(kTag.size());
+      if (body == "__f2 ready") {
+        s.pump_ready.store(true);
+        ctx.r3.u64 = 0;
+        return;
       }
+      if (body.rfind("__f2 done ", 0) == 0) {
+        s.lua_done.store(std::strtoull(body.c_str() + 10, nullptr, 10));
+        ctx.r3.u64 = 0;
+        return;
+      }
+      std::istringstream is(body);
+      std::string ln;
+      while (std::getline(is, ln)) fable2::console::out("lua", ln);
+      // Handled here: the release cprint copies into a fixed-size guest
+      // stack buffer, and long console output overran it (exit
+      // 0xC0000409 / garbage reads). A Lua C function returns its result
+      // count in r3; cprint returns none.
+      ctx.r3.u64 = 0;
+      return;
     }
   }
   __imp__sub_82A19CD8(ctx, base);

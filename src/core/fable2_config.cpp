@@ -86,6 +86,13 @@ keyboard_prompt_images = false
 # Larger = more sensitive. Default: 256
 mouse_look_scale = 256
 
+# Mouse-look diagnostics: write fable2_mouse.log next to the exe (every input
+# poll, camera updates from `f2 mouse trace on`, and a per-second summary).
+# For measuring mouse stutter; leave off for normal play. `f2 mouse diag on`
+# turns it on without a restart.
+# Default: false
+mouse_look_diag = false
+
 # Direct mouse-to-camera look: apply mouse movement straight to the active
 # camera's orientation (desktop-FPS style, no stick rate cap) instead of
 # writing it into the pad's right stick. false = legacy right-stick mapping.
@@ -384,6 +391,9 @@ bool Load(const std::filesystem::path& path) {
     values.mouse_look_scale = static_cast<int32_t>(Read<int64_t>(
         input_table, "input", "mouse_look_scale", "integer",
         values.mouse_look_scale));
+    values.mouse_look_diag =
+        Read<bool>(input_table, "input", "mouse_look_diag", "boolean",
+                   values.mouse_look_diag);
     values.direct_mouse_look =
         Read<bool>(input_table, "input", "direct_mouse_look", "boolean",
                    values.direct_mouse_look);

@@ -44,6 +44,9 @@ struct Values {
   // Shared mouse-look sensitivity slider (1..4096, 256 = 1x): legacy stick
   // units-per-pixel, and a multiplier on mouse_look_*_sens for direct look.
   int32_t mouse_look_scale = 256;  // range 1..4096 (cvar constraint)
+  // Mouse-look diagnostics to fable2_mouse.log (src/input/mouse_diag.h).
+  // Seeds the mouse_look_diag cvar; `f2 mouse diag on|off` changes it live.
+  bool mouse_look_diag = false;
   // Direct mouse-to-camera look (see src/input/mouse_look.h). EXPERIMENTAL.
   // When true, mouse movement bypasses the synthetic pad's right stick and is
   // applied directly to the active camera's orientation by
