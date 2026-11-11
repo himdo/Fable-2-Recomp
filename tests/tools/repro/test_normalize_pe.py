@@ -131,13 +131,13 @@ def describe_normalize():
     # The tool treats the PDB path as UTF-16, but the field is UTF-8 with a single NUL.
     # strict=True makes a fixed bug fail its test, so the marker gets removed then.
 
-    @pytest.mark.xfail(strict=True, reason='the tool treats the PDB path as UTF-16, but the field is UTF-8 with a single NUL')
+    @pytest.mark.xfail(strict=True, reason="the tool treats the PDB path as UTF-16, but the field is UTF-8 with a single NUL")
     def test_should_keep_the_pdb_path_readable_as_utf8(exe):
         result = normalize(exe, build_pe())
         path = result[PDB_PATH_OFFSET:].split(b"\0")[0]
         assert path == b"fable_2.pdb"
 
-    @pytest.mark.xfail(strict=True, reason='the tool treats the PDB path as UTF-16, but the field is UTF-8 with a single NUL')
+    @pytest.mark.xfail(strict=True, reason="the tool treats the PDB path as UTF-16, but the field is UTF-8 with a single NUL")
     def test_should_leave_the_bytes_after_the_pdb_path_alone(exe):
         after_path = b"\xAA" * 16
         result = normalize(exe, build_pe(after_path=after_path))

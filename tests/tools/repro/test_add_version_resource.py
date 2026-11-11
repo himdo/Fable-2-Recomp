@@ -248,7 +248,7 @@ def describe_add_version_resource():
 
     # --- Known issues -----------------------------------------------------
 
-    @pytest.mark.xfail(strict=True, reason='the Translation value stores the code page before the language')
+    @pytest.mark.xfail(strict=True, reason="the Translation value stores the code page before the language")
     def test_should_list_the_language_before_the_code_page(dll):
         """Windows reads each Translation value as the language in the low word and
         the code page in the high word, so US English Unicode is stored 09 04 B0 04.
@@ -263,7 +263,7 @@ def describe_add_version_resource():
         assert utf16("Translation") in version[-40:]
         assert version[-4:] == struct.pack("<HH", US_ENGLISH, UNICODE_CODE_PAGE)
 
-    @pytest.mark.xfail(strict=True, reason='the version (16) is appended after the manifest (24) instead of being sorted in')
+    @pytest.mark.xfail(strict=True, reason="the version (16) is appended after the manifest (24) instead of being sorted in")
     def test_should_list_resource_types_in_ascending_order(dll):
         """The PE format requires each resource directory's ID entries in ascending
         order, and Windows may search them assuming that. The tool appends the
