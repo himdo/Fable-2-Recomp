@@ -4,9 +4,9 @@ import importlib.util
 import io
 from pathlib import Path
 import struct
-import tempfile
-import unittest
 from unittest.mock import patch
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location("version_resource", ROOT / "tools/repro/add_version_resource.py")
@@ -148,140 +148,140 @@ def utf16(text):
     return text.encode("utf-16-le")
 
 
-class AddVersionResourceTests(unittest.TestCase):
-    def setUp(self):
-        temp = tempfile.TemporaryDirectory(prefix="fable2-version-resource-test-")
-        self.addCleanup(temp.cleanup)
-        self.path = Path(temp.name) / "test.dll"
+@pytest.fixture
+def dll(tmp_path):
+    """Where a test writes its fake DLL."""
+    return tmp_path / "test.dll"
 
-    def add(self, pe):
-        """Write `pe` to the fake DLL, run the tool on it, and return (result, new bytes)."""
-        self.path.write_bytes(pe)
-        result = version_resource.add_version_resource(str(self.path), FIELDS)
-        return result, self.path.read_bytes()
 
+def add(dll, pe):
+    """Write `pe` to the fake DLL, run the tool on it, and return (result, new bytes)."""
+    dll.write_bytes(pe)
+    result = version_resource.add_version_resource(str(dll), FIELDS)
+    return result, dll.read_bytes()
+
+
+def describe_add_version_resource():
     # --- Happy flow -------------------------------------------------------
 
-    def test_adds_a_version_resource(self):
-        result, pe = self.add(build_pe({RT_MANIFEST: MANIFEST}))
+    def test_should_add_a_version_resource(dll):
+        result, pe = add(dll, build_pe({RT_MANIFEST: MANIFEST}))
 
-        self.assertTrue(result)
-        self.assertIn(RT_VERSION, resource_types(pe))
+        assert result
+        assert RT_VERSION in resource_types(pe)
 
-    def test_version_resource_holds_the_given_fields(self):
-        _, pe = self.add(build_pe({RT_MANIFEST: MANIFEST}))
+    def test_should_write_the_given_fields(dll):
+        _, pe = add(dll, build_pe({RT_MANIFEST: MANIFEST}))
 
         version = resource_data(pe, RT_VERSION)
 
-        self.assertIn(utf16("Test Company"), version)
-        self.assertIn(utf16("Test Product"), version)
-        self.assertIn(utf16("1.2.3.4"), version)
+        assert utf16("Test Company") in version
+        assert utf16("Test Product") in version
+        assert utf16("1.2.3.4") in version
 
-    def test_keeps_the_existing_manifest(self):
-        _, pe = self.add(build_pe({RT_MANIFEST: MANIFEST}))
+    def test_should_keep_the_existing_manifest(dll):
+        _, pe = add(dll, build_pe({RT_MANIFEST: MANIFEST}))
 
-        self.assertEqual(resource_data(pe, RT_MANIFEST), MANIFEST)
+        assert resource_data(pe, RT_MANIFEST) == MANIFEST
 
-    def test_moves_the_next_section_without_changing_it(self):
+    def test_should_move_the_next_section_without_changing_it(dll):
         original = build_pe({RT_MANIFEST: MANIFEST})
 
-        _, pe = self.add(original)
+        _, pe = add(dll, original)
 
         reloc = sections(pe)[".reloc"]
         # Guard: the grown .rsrc really did push .reloc further into the file.
-        self.assertGreater(reloc["rptr"], sections(original)[".reloc"]["rptr"])
-        self.assertEqual(pe[reloc["rptr"]:reloc["rptr"] + len(RELOC_DATA)], RELOC_DATA)
+        assert reloc["rptr"] > sections(original)[".reloc"]["rptr"]
+        assert pe[reloc["rptr"]:reloc["rptr"] + len(RELOC_DATA)] == RELOC_DATA
 
-    def test_resource_directory_covers_the_new_version_data(self):
-        _, pe = self.add(build_pe({RT_MANIFEST: MANIFEST}))
+    def test_should_make_the_resource_directory_cover_the_new_data(dll):
+        _, pe = add(dll, build_pe({RT_MANIFEST: MANIFEST}))
 
         directory_rva, directory_size = struct.unpack_from("<II", pe, RESOURCE_DIRECTORY)
         version_rva, version_size = resource_entry(pe, RT_VERSION)
 
-        self.assertEqual(directory_rva, RSRC_RVA)
-        self.assertLessEqual(version_rva + version_size, directory_rva + directory_size)
-
-    def test_main_names_the_version_after_the_file(self):
-        self.path.write_bytes(build_pe({RT_MANIFEST: MANIFEST}))
-        argv = ["add_version_resource.py", str(self.path), "--company", "Test Company"]
-
-        with patch("sys.argv", argv), contextlib.redirect_stdout(io.StringIO()):
-            version_resource.main()
-
-        version = resource_data(self.path.read_bytes(), RT_VERSION)
-        self.assertIn(utf16("test.dll"), version)  # OriginalFilename
-        self.assertIn(utf16("test\0"), version)  # InternalName, the name without .dll
+        assert directory_rva == RSRC_RVA
+        assert (version_rva + version_size) <= (directory_rva + directory_size)
 
     # --- Bad flow ---------------------------------------------------------
 
-    def test_skips_a_dll_without_resources(self):
+    def test_should_skip_a_dll_without_resources(dll):
         original = build_pe({RT_MANIFEST: MANIFEST}, resource_rva=0)
 
-        result, pe = self.add(original)
+        result, pe = add(dll, original)
 
-        self.assertFalse(result)
-        self.assertEqual(pe, original)
+        assert not result
+        assert pe == original
 
-    def test_skips_when_the_next_section_leaves_no_room(self):
+    def test_should_skip_when_the_next_section_leaves_no_room(dll):
         # A manifest that nearly fills the 0x1000 bytes before .reloc starts.
         big_manifest = b"<assembly>" + b" " * 0xE00 + b"</assembly>"
         original = build_pe({RT_MANIFEST: big_manifest})
 
-        result, pe = self.add(original)
+        result, pe = add(dll, original)
 
-        self.assertFalse(result)
-        self.assertEqual(pe, original)
+        assert not result
+        assert pe == original
 
     # --- Edge cases -------------------------------------------------------
 
-    def test_leaves_a_dll_that_already_has_version_info_alone(self):
+    def test_should_leave_a_dll_with_version_info_alone(dll):
         original = build_pe({RT_VERSION: b"existing version info", RT_MANIFEST: MANIFEST})
 
-        result, pe = self.add(original)
+        result, pe = add(dll, original)
 
-        self.assertFalse(result)
-        self.assertEqual(pe, original)
+        assert not result
+        assert pe == original
 
-    def test_running_twice_changes_nothing_the_second_time(self):
-        _, first = self.add(build_pe({RT_MANIFEST: MANIFEST}))
+    def test_should_change_nothing_on_a_second_run(dll):
+        _, first = add(dll, build_pe({RT_MANIFEST: MANIFEST}))
 
-        result, second = self.add(first)
+        result, second = add(dll, first)
 
-        self.assertFalse(result)
-        self.assertEqual(second, first)
+        assert not result
+        assert second == first
 
-    def test_grows_a_resource_section_that_is_the_last_section(self):
-        _, pe = self.add(build_pe({RT_MANIFEST: MANIFEST}, with_reloc=False))
+    def test_should_grow_a_resource_section_that_is_the_last_section(dll):
+        _, pe = add(dll, build_pe({RT_MANIFEST: MANIFEST}, with_reloc=False))
 
-        self.assertIn(utf16("Test Company"), resource_data(pe, RT_VERSION))
+        assert utf16("Test Company") in resource_data(pe, RT_VERSION)
 
     # --- Known issues -----------------------------------------------------
 
-    @unittest.expectedFailure
-    def test_translation_lists_the_language_before_the_code_page(self):
+    @pytest.mark.xfail(strict=True, reason='the Translation value stores the code page before the language')
+    def test_should_list_the_language_before_the_code_page(dll):
         """Windows reads each Translation value as the language in the low word and
         the code page in the high word, so US English Unicode is stored 09 04 B0 04.
         The tool's own string table is keyed 040904B0, but it writes the Translation
         the other way round, so the two don't match.
         """
-        _, pe = self.add(build_pe({RT_MANIFEST: MANIFEST}))
+        _, pe = add(dll, build_pe({RT_MANIFEST: MANIFEST}))
 
         version = resource_data(pe, RT_VERSION)
 
         # Guard: Translation is the last value in the resource, so its 4 bytes end it.
-        self.assertIn(utf16("Translation"), version[-40:])
-        self.assertEqual(version[-4:], struct.pack("<HH", US_ENGLISH, UNICODE_CODE_PAGE))
+        assert utf16("Translation") in version[-40:]
+        assert version[-4:] == struct.pack("<HH", US_ENGLISH, UNICODE_CODE_PAGE)
 
-    @unittest.expectedFailure
-    def test_lists_resource_types_in_ascending_order(self):
+    @pytest.mark.xfail(strict=True, reason='the version (16) is appended after the manifest (24) instead of being sorted in')
+    def test_should_list_resource_types_in_ascending_order(dll):
         """The PE format requires each resource directory's ID entries in ascending
         order, and Windows may search them assuming that. The tool appends the
         version (16) after the existing manifest (24) instead of sorting them.
         """
-        _, pe = self.add(build_pe({RT_MANIFEST: MANIFEST}))
+        _, pe = add(dll, build_pe({RT_MANIFEST: MANIFEST}))
 
-        self.assertEqual(resource_types(pe), [RT_VERSION, RT_MANIFEST])
+        assert resource_types(pe) == [RT_VERSION, RT_MANIFEST]
 
 
-if __name__ == "__main__":
-    unittest.main()
+def describe_main():
+    def test_should_name_the_version_after_the_file(dll):
+        dll.write_bytes(build_pe({RT_MANIFEST: MANIFEST}))
+        argv = ["add_version_resource.py", str(dll), "--company", "Test Company"]
+
+        with patch("sys.argv", argv), contextlib.redirect_stdout(io.StringIO()):
+            version_resource.main()
+
+        version = resource_data(dll.read_bytes(), RT_VERSION)
+        assert utf16("test.dll") in version  # OriginalFilename
+        assert utf16("test\0") in version  # InternalName, the name without .dll
