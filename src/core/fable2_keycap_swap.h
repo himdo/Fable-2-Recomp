@@ -34,8 +34,10 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <rex/input/input_system.h>
@@ -82,11 +84,6 @@ struct Entry {
   uint32_t cached_addrs[4] = {0, 0, 0, 0};
   int cached_count = 0;
   int cached_order = 0;  // byte order (0 = identity, 1 = R<->B) at those buffers
-  // True once a scan has confirmed this icon has no live GPU surface (it is not
-  // currently on screen), so repeated switches skip it instead of rescanning all
-  // 512 MB. Cleared when the bank is (re)read, which is when the game allocates
-  // surfaces for newly-shown icons.
-  bool scan_stale = false;
 };
 
 // Lightweight diagnostic log (fable2_keycap_swap.log next to the exe). Lets us
@@ -154,7 +151,23 @@ class KeycapSwap {
     if (!memory_ || target == mode_) return;
     const int old = mode_;
     mode_ = target;
-    ApplyModeChange(old, target);
+    // The 512 MB physical-memory sweep is slow (~seconds). Run it on a detached
+    // background thread so the game never stalls; the live textures are patched
+    // in place once the scan finishes. If a scan is already running we let it
+    // land on the latest mode instead of starting a competing sweep.
+    if (scan_in_progress_.exchange(true)) {
+      Log("Keycap: scan in progress, will apply latest mode when it finishes");
+      return;
+    }
+    std::thread([this, old]() {
+      int new_mode;
+      {
+        std::lock_guard l(mutex_);
+        new_mode = mode_;  // patch to whatever mode is current when the scan is ready
+      }
+      if (new_mode != old) ApplyModeChange(old, new_mode);
+      scan_in_progress_.store(false);
+    }).detach();
   }
 
   // True if guest user 0's most recent non-neutral input came from a synthetic
@@ -230,6 +243,11 @@ class KeycapSwap {
       off += size;
       entries_.push_back(std::move(e));
     }
+    // Parallel to entries_: true once a scan confirmed the icon has no live GPU
+    // surface (not on screen), so repeated switches skip it instead of
+    // rescanning all 512 MB. Cleared when the bank is (re)read. Atomic because
+    // the background scan thread and the post-read hook (guest thread) touch it.
+    scan_stale_ = std::make_unique<std::atomic<bool>[]>(entries_.size());
     return true;
   }
 
@@ -274,7 +292,8 @@ class KeycapSwap {
     std::lock_guard lock(mutex_);
     const uint64_t read_start = byte_offset;
     const uint64_t read_end = byte_offset + bytes_read;
-    for (auto& entry : entries_) {
+    for (size_t i = 0; i < entries_.size(); ++i) {
+      auto& entry = entries_[i];
       if (!BankMatches(entry.bank_path, path)) continue;
       const uint64_t entry_start = entry.abs_offset;
       const uint64_t entry_end = entry.abs_offset + entry.size;
@@ -294,7 +313,7 @@ class KeycapSwap {
       }
       // The bank was (re)read, so this icon may now have a live GPU surface the
       // last scan didn't see. Let the next switch rescan it.
-      entry.scan_stale = false;
+      scan_stale_[i].store(false);
     }
   }
 
@@ -374,7 +393,7 @@ class KeycapSwap {
       // bank re-read hook clears this flag, so a newly-shown icon is scanned on
       // the next switch. This is what removes the per-switch 512 MB rescan of
       // the ~40 invisible icons that dominated the lag.
-      if (e.scan_stale && e.cached_count == 0) continue;
+      if (scan_stale_[i].load() && e.cached_count == 0) continue;
 
       // Fast path: if every cached buffer still holds the current pixels (in
       // the cached byte order), patch them in place and skip the 512 MB scan.
@@ -426,12 +445,12 @@ class KeycapSwap {
           e.cached_count = found > 4 ? 4 : found;
           for (int j = 0; j < e.cached_count; ++j) e.cached_addrs[j] = addrs[j];
           e.cached_order = order;
-          e.scan_stale = false;
+          scan_stale_[i].store(false);
         }
       }
       if (found == 0) {
         e.cached_count = 0;
-        e.scan_stale = true;
+        scan_stale_[i].store(true);
         Log("  entry[" + std::to_string(i) + "] NOT FOUND in physical RAM (first16=" +
             HexDump(cur, 16) + ")");
       }
@@ -460,8 +479,14 @@ class KeycapSwap {
   std::mutex mutex_;
   rex::memory::Memory* memory_ = nullptr;
   std::vector<Entry> entries_;
+  std::unique_ptr<std::atomic<bool>[]> scan_stale_;  // parallel to entries_, see above
   bool enabled_ = false;
   int mode_ = 0;  // 0 = controller (Xbox 360), 1 = keyboard/mouse.
+  // True while a background scan is sweeping physical RAM, so a rapid second
+  // toggle does not start a competing scan (which would race on the per-entry
+  // cache). The scan is detached: the game keeps running while it works, and the
+  // patch lands when it finishes.
+  std::atomic<bool> scan_in_progress_{false};
 };
 
 inline KeycapSwap& Instance() {
