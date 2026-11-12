@@ -22,9 +22,9 @@
 // append to an in-memory buffer under a mutex. A background thread writes the
 // buffer every 250 ms. Nothing here does file I/O on a guest thread.
 //
-// Synthetic movement: `f2 mouse inject <dx> <dy> [ms]` spreads dx, dy pixels
-// evenly over ms milliseconds from a 1 kHz host thread, like a hand moving at
-// a constant speed. The input driver adds it to the real movement on each poll.
+// Synthetic movement: `f2 mouse inject <dx> <dy> [ms] [even|ramp|flick]`
+// spreads dx, dy pixels over ms milliseconds from a 1 kHz host thread, like a
+// hand moving at a constant speed (even), speeding up (ramp) or flicking. The input driver adds it to the real movement on each poll.
 // It ignores window focus, so tests can run from console\in.txt.
 
 #pragma once
@@ -74,6 +74,7 @@ struct PollRecord {
   bool clamped = false;            // capped at full stick: movement lost
   bool looking = false;            // focus + mouse_look + debug menu closed
   bool smoothing = false;          // mouse_look_smoothing (velocity window path)
+  bool direct = false;             // movement kept for the direct mouse camera
 };
 
 // Running sums for one reporting window (one second for S lines, or the time
@@ -154,10 +155,11 @@ class Diag {
     char buf[240];
     std::snprintf(buf, sizeof buf,
                   "P t=%lld tid=%llx gap=%lld dx=%d dy=%d inj=%d,%d rx=%d ry=%d clamp=%d look=%d "
-                  "sm=%d w=%d,%d\n",
+                  "sm=%d w=%d,%d dir=%d\n",
                   static_cast<long long>(t), static_cast<unsigned long long>(tid & 0xffffff),
                   static_cast<long long>(gap), r.dx, r.dy, r.inj_dx, r.inj_dy, r.rx, r.ry,
-                  r.clamped ? 1 : 0, r.looking ? 1 : 0, r.smoothing ? 1 : 0, r.win_x, r.win_y);
+                  r.clamped ? 1 : 0, r.looking ? 1 : 0, r.smoothing ? 1 : 0, r.win_x, r.win_y,
+                  r.direct ? 1 : 0);
     AppendLocked(buf);
   }
 
@@ -304,12 +306,37 @@ inline void TakeInjected(int32_t& dx, int32_t& dy) {
   dy = PendingY().exchange(0, std::memory_order_relaxed);
 }
 
-// Spreads a total movement evenly over a duration, like a hand moving at a
-// constant speed. Pure, so it can be unit tested: given the elapsed time it
+// How the speed of synthetic movement changes over its duration. Every
+// profile delivers the same total.
+enum class InjectProfile : uint8_t {
+  kEven,   // constant speed
+  kRamp,   // speed rises steadily from 0 (distance grows with time squared)
+  kFlick,  // speed rises and falls in a bell shape, like a real flick
+           // (minimum-jerk: peak speed 1.875x the average, at the midpoint)
+};
+
+inline const char* ProfileName(InjectProfile p) {
+  switch (p) {
+    case InjectProfile::kRamp: return "ramp";
+    case InjectProfile::kFlick: return "flick";
+    default: return "even";
+  }
+}
+
+inline bool ParseProfile(std::string_view s, InjectProfile& p) {
+  if (s == "even") return p = InjectProfile::kEven, true;
+  if (s == "ramp") return p = InjectProfile::kRamp, true;
+  if (s == "flick") return p = InjectProfile::kFlick, true;
+  return false;
+}
+
+// Spreads a total movement over a duration, like a hand moving with the given
+// speed profile. Pure, so it can be unit tested: given the elapsed time it
 // returns the pixels that should have been delivered by then.
 struct InjectPlan {
   int32_t total_x = 0, total_y = 0;
   int64_t duration_us = 0;
+  InjectProfile profile = InjectProfile::kEven;
 
   void DeliveredBy(int64_t elapsed_us, int32_t& x, int32_t& y) const {
     if (duration_us <= 0 || elapsed_us >= duration_us) {
@@ -321,8 +348,17 @@ struct InjectPlan {
       x = y = 0;
       return;
     }
-    x = static_cast<int32_t>(static_cast<int64_t>(total_x) * elapsed_us / duration_us);
-    y = static_cast<int32_t>(static_cast<int64_t>(total_y) * elapsed_us / duration_us);
+    if (profile == InjectProfile::kEven) {
+      x = static_cast<int32_t>(static_cast<int64_t>(total_x) * elapsed_us / duration_us);
+      y = static_cast<int32_t>(static_cast<int64_t>(total_y) * elapsed_us / duration_us);
+      return;
+    }
+    const double u = static_cast<double>(elapsed_us) / static_cast<double>(duration_us);
+    const double f = profile == InjectProfile::kRamp
+                         ? u * u
+                         : u * u * u * (10.0 + u * (-15.0 + 6.0 * u));
+    x = static_cast<int32_t>(std::trunc(total_x * f));
+    y = static_cast<int32_t>(std::trunc(total_y * f));
   }
 };
 
@@ -334,9 +370,10 @@ class Injector {
   }
 
   // Replaces any movement still in progress.
-  void Start(int32_t dx, int32_t dy, int64_t duration_ms) {
+  void Start(int32_t dx, int32_t dy, int64_t duration_ms,
+             InjectProfile profile = InjectProfile::kEven) {
     std::lock_guard<std::mutex> lock(mu_);
-    plan_ = InjectPlan{dx, dy, std::max<int64_t>(duration_ms, 0) * 1000};
+    plan_ = InjectPlan{dx, dy, std::max<int64_t>(duration_ms, 0) * 1000, profile};
     start_us_ = NowUs();
     sent_x_ = sent_y_ = 0;
     active_ = true;

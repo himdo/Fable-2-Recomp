@@ -279,15 +279,19 @@ pad A
 
 ## Mouse look (console-v12)
 
-Diagnostics for mouse-look stutter and speed (`src/input/mouse_diag.h`). The log, `fable2_mouse.log`, is written next to the exe and starts empty each run. `tools/mouse_stats.py fable2_mouse.log` turns it into numbers, one block per `mouse inject` run.
+Mouse-look modes and diagnostics. In the direct mode (the default, `src/input/mouse_direct.h` and `scripts/recomp/mouse_direct.lua`) the gameplay camera turns by a fixed angle per count of mouse movement; target lock, cutscenes, menus and other cameras still get the mouse as the right stick. In the stick mode the mouse always drives the right stick (`src/input/mouse_stick.h`). Diagnostics: `src/input/mouse_diag.h`. The log, `fable2_mouse.log`, is written next to the exe and starts empty each run. `tools/mouse_stats.py fable2_mouse.log` turns it into numbers, one block per `mouse inject` run.
 
 | Command | Usage | What it does | Notes |
 |---|---|---|---|
-| `mouse` | `mouse` / `mouse status` | Shows `mouse_look`, the scale, whether the log is on, then poll and camera-update rates since the previous `mouse`, and the last poll's movement and stick value. | |
+| `mouse` | `mouse` / `mouse status` | Shows the mode and direct-mode settings, whether `mouse_direct.lua` is running and where the mouse goes right now (`route=direct` or `stick`), then `mouse_look`, the scale, whether the log is on, poll and camera-update rates since the previous `mouse`, and the last poll's movement and stick value. | `lua=not running` before a save is loaded is normal: the host starts the script once it can (retried every 5 to 30 s). |
+| `mouse mode` | `mouse mode direct\|stick` | direct: the gameplay camera takes the mouse directly, with no top speed and no coasting after the mouse stops. stick: the mouse drives the right stick, like a controller. | cvar `mouse_look_mode`, also `[input] mouse_look_mode`. Switches at once, for A/B tests. |
+| `mouse sens` | `mouse sens <x> [y]` | Direct mode: degrees of turn per count of mouse movement, sideways and up/down (default 0.06 both: about 96° per inch at 1600 DPI; halve it at 3200 DPI, double it at 800). Up/down moves the camera height. | cvars `mouse_look_sens_x` / `_y`. Times `mouse_look_scale` / 256 and the in-game camera sensitivity (0.5 + slider). |
+| `mouse invert` | `mouse invert on\|off` | Direct mode: inverts up/down. | cvar `mouse_look_invert_y`. |
+| `mouse smooth` | `mouse smooth <0..0.9>` | Direct mode: share of the movement held back at each camera update and delivered over the next ones. 0 (the default) is off. | cvar `mouse_look_direct_smoothing`. Smoother, but the camera then coasts briefly. |
 | `mouse smoothing` | `mouse smoothing on\|off` | Switches between even mouse look (on, the default: the stick reports the mouse's speed over one camera update, with the game's 30% deadzone and diagonal boost undone; `src/input/mouse_stick.h`) and the previous mapping, one poll at a time (off). | cvar `mouse_look_smoothing`, also `[input] mouse_look_smoothing`. `mouse_look_window_ms` sets the window (0 = one camera update). For A/B tests. |
 | `mouse diag` | `mouse diag on\|off` | Turns the log on or off (cvar `mouse_look_diag`, also `[input] mouse_look_diag` in `fable2_config.toml`). Logs one `P` line per input poll and an `S` summary per second. | Writes are buffered and done every 250 ms by a separate thread, so logging doesn't add stutter. |
-| `mouse trace` | `mouse trace on\|off` | Wraps the gameplay camera script (`SACCamera.ProcessGameAction` and `FrameUpdate`) and logs one `U` line per camera update: frame, tick rate, stick actions received, `RotateRight`, `SmoothRotateRight` and the camera height. Turns the log on too. | Needs a loaded save. Runs `mousetrace on\|off` in Lua (`scripts/recomp/mouse_diag.lua`). Doesn't change the camera. |
-| `mouse inject` | `mouse inject <dx> <dy> [ms]` | Moves the mouse dx, dy pixels in total, evenly over ms (default 1000), from a 1 kHz thread, like a hand at constant speed. | Ignores window focus, so it works from `console\in.txt`. Still needs `mouse_look` on and the F4 menu closed. The queue waits until it finishes. |
+| `mouse trace` | `mouse trace on\|off` | Wraps the gameplay camera script (`SACCamera.ProcessGameAction` and `FrameUpdate`) and logs one `U` line per camera update: frame, tick rate, stick actions received, `RotateRight`, `SmoothRotateRight`, the camera height, and what the direct mode added (`my` yaw, `mdh` height). Turns the log on too. | Needs a loaded save. Runs `mousetrace on\|off` in Lua (`scripts/recomp/mouse_diag.lua`). Doesn't change the camera. |
+| `mouse inject` | `mouse inject <dx> <dy> [ms] [even\|ramp\|flick]` | Moves the mouse dx, dy pixels in total over ms (default 1000), from a 1 kHz thread, like a hand: at a constant speed (`even`, the default), speeding up steadily from 0 (`ramp`), or as a flick that speeds up and slows down again (`flick`, peak speed 1.875x the average). Every profile moves the same total. | Ignores window focus, so it works from `console\in.txt`. Still needs `mouse_look` on and the F4 menu closed. The queue waits until it finishes. |
 | `mouse stop` | `mouse stop` | Cancels a running `mouse inject`. | |
 
 A before/after run, with a save loaded and the camera free:
@@ -299,7 +303,15 @@ cvar frame_limit 30; mouse inject 2400 0 4000; wait 1s
 cvar frame_limit 120; mouse inject 2400 0 4000
 ```
 
-Then run `python tools\mouse_stats.py out\build\win-amd64-debug\fable2_mouse.log`. For each run it prints polls per camera update, how much of the movement the game could see, the share of polls that hit full stick, and the yaw per update's mean, spread and `cv` (lower is smoother).
+Then run `python tools\mouse_stats.py out\build\win-amd64-release\fable2_mouse.log`. For each run it prints polls per camera update, how much of the movement the game could see, the share of polls that hit full stick, and the yaw per update's mean, spread and `cv` (lower is smoother).
+
+It also prints the camera's total turn for each run (stick path plus direct mouse), how much of it arrived after the movement stopped, and how the first update compares with the steady turn. A flick test, stick mode against direct mode (one line in the `~` console):
+
+```
+f2 mouse diag on; mouse trace on; mouse mode stick; mouse inject 4000 0 150 flick; wait 2s; mouse inject 4000 0 2000; wait 2s; mouse mode direct; mouse inject 4000 0 150 flick; wait 2s; mouse inject 4000 0 2000
+```
+
+In direct mode the two runs should turn the same total, with nothing arriving after the movement stops. In stick mode the flick turns less (the stick's top speed) and keeps coasting. The trace starts after the camera is re-activated: open and close the pause menu once after `mouse trace on`.
 
 ## GUI states (console-v11)
 

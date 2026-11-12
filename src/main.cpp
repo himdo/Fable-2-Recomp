@@ -73,6 +73,23 @@ REXCVAR_DEFINE_BOOL(mouse_look_diag, false, "Input",
                     "exe: every input poll, camera updates from `f2 mouse trace`, "
                     "and a per-second summary (see src/input/mouse_diag.h). "
                     "Default comes from fable2_config.toml [input] mouse_look_diag.");
+// Direct mouse camera (src/input/mouse_direct.h, scripts/recomp/mouse_direct.lua).
+REXCVAR_DEFINE_STRING(mouse_look_mode, "direct", "Input",
+                      "How the mouse turns the camera: \"direct\" (the gameplay camera "
+                      "turns by a fixed angle per count, no top speed or coasting) or "
+                      "\"stick\" (the mouse drives the right stick). Default comes from "
+                      "fable2_config.toml [input] mouse_look_mode.");
+REXCVAR_DEFINE_DOUBLE(mouse_look_sens_x, 0.06, "Input",
+                      "Direct mouse camera: yaw degrees per count of mouse movement "
+                      "(times mouse_look_scale / 256 and the in-game camera sensitivity).");
+REXCVAR_DEFINE_DOUBLE(mouse_look_sens_y, 0.06, "Input",
+                      "Direct mouse camera: up/down sensitivity, as degrees per count "
+                      "(moves the camera height; times mouse_look_scale / 256).");
+REXCVAR_DEFINE_BOOL(mouse_look_invert_y, false, "Input",
+                    "Direct mouse camera: true = moving the mouse up makes the camera look down.");
+REXCVAR_DEFINE_DOUBLE(mouse_look_direct_smoothing, 0.0, "Input",
+                      "Direct mouse camera: share of the mouse movement held back at each "
+                      "camera update for the following ones (0 = none, up to 0.9).");
 
 // Key that toggles the debug menu (F4). While the menu is open the mouse lock
 // is released (free cursor); closing it re-locks. This key is excluded from

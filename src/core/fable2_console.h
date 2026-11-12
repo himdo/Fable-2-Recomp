@@ -50,6 +50,7 @@
 #include "fable2_fit_window.h"
 #include "fable2_gui_lua.h"
 #include "mouse_diag.h"
+#include "mouse_direct.h"
 #include "remote_input_state.h"
 
 // The SDK's `~` console (ImGui overlay) logs through REXLOG_* and can register
@@ -65,6 +66,15 @@
 REXCVAR_DEFINE_BOOL(console_enabled, true, "Input",
                     "Developer command file transport (console\\in.txt / out.txt / state.txt "
                     "next to the game data). On by default; false or FABLE2_CONSOLE=0 turns it off.");
+
+// Mouse look settings, defined in main.cpp (see src/input/mouse_direct.h).
+REXCVAR_DECLARE(bool, mouse_look);
+REXCVAR_DECLARE(int32_t, mouse_look_scale);
+REXCVAR_DECLARE(std::string, mouse_look_mode);
+REXCVAR_DECLARE(double, mouse_look_sens_x);
+REXCVAR_DECLARE(double, mouse_look_sens_y);
+REXCVAR_DECLARE(bool, mouse_look_invert_y);
+REXCVAR_DECLARE(double, mouse_look_direct_smoothing);
 
 namespace fable2::console {
 
@@ -1068,8 +1078,17 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     //                              (cvar mouse_look_smoothing; off = old mapping)
     // mouse diag on|off            fable2_mouse.log (cvar mouse_look_diag)
     // mouse trace on|off           Lua camera trace into the log (needs a loaded save)
-    // mouse inject <dx> <dy> [ms]  move dx, dy pixels in total, evenly over ms
-    //                              (default 1000), as if by hand; ignores focus
+    // mouse mode direct|stick      direct mouse camera, or the right stick
+    //                              (cvar mouse_look_mode; src/input/mouse_direct.h)
+    // mouse sens <x> [y]           direct mode: degrees per count (mouse_look_sens_x/_y)
+    // mouse invert on|off          direct mode: invert up/down (mouse_look_invert_y)
+    // mouse smooth <0..0.9>        direct mode: share of the movement held back
+    //                              for later camera updates (mouse_look_direct_smoothing)
+    // mouse inject <dx> <dy> [ms] [even|ramp|flick]
+    //                              move dx, dy pixels in total over ms (default
+    //                              1000), as if by hand: at a constant speed
+    //                              (even), speeding up (ramp) or as a flick
+    //                              (speeds up then slows down); ignores focus
     // mouse stop                   cancel an inject
     // See src/input/mouse_diag.h and tools/mouse_stats.py.
     namespace md = fable2::mousediag;
@@ -1083,6 +1102,15 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
       return false;
     };
     if (sub == "status") {
+      namespace mdir = fable2::mousedirect;
+      const int64_t now = md::NowUs();
+      out("mouse", "mode=" + flag("mouse_look_mode") + " sens=" + flag("mouse_look_sens_x") + "," +
+                       flag("mouse_look_sens_y") + " invert_y=" + flag("mouse_look_invert_y") +
+                       " direct_smoothing=" + flag("mouse_look_direct_smoothing") +
+                       " | direct: lua=" + (mdir::BootState().IsAlive(now) ? "running" : "not running") +
+                       " starts=" + std::to_string(mdir::BootState().Tries()) +
+                       " route=" + (mdir::State().RouteDirect() ? "direct" : "stick") +
+                       " camera_updates=" + std::to_string(mdir::State().Drains()));
       out("mouse", "mouse_look=" + flag("mouse_look") + " scale=" + flag("mouse_look_scale") +
                        " smoothing=" + flag("mouse_look_smoothing") +
                        " window_ms=" + flag("mouse_look_window_ms") + " (0 = one camera update)" +
@@ -1097,6 +1125,46 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
       rex::cvar::SetFlagByName("mouse_look_smoothing", on ? "true" : "false");
       md::Diag::Get().Note(std::string("smoothing ") + (on ? "on" : "off"));
       out("mouse", std::string("smoothing ") + (on ? "on" : "off (previous per-poll mapping)"));
+      return true;
+    }
+    if (sub == "mode") {
+      std::string m = W.size() > 2 ? W[2] : "";
+      for (auto& c : m) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if (m != "direct" && m != "stick") return out("mouse", "usage: mouse mode direct|stick", true), true;
+      rex::cvar::SetFlagByName("mouse_look_mode", m);
+      md::Diag::Get().Note("mode " + m);
+      out("mouse", m == "direct" ? "mode direct: the gameplay camera takes the mouse directly "
+                                   "(lock-on, cutscenes and other cameras still use the stick)"
+                                 : "mode stick: the mouse drives the right stick");
+      return true;
+    }
+    if (sub == "sens") {
+      double x = 0, y = 0;
+      if (W.size() < 3 || !parse_f(W[2], x) || x <= 0 || x > 10 ||
+          (W.size() > 3 && (!parse_f(W[3], y) || y <= 0 || y > 10)))
+        return out("mouse", "usage: mouse sens <x> [y]  (degrees per count, default 0.06)", true), true;
+      if (W.size() <= 3) y = x;
+      rex::cvar::SetFlagByName("mouse_look_sens_x", std::to_string(x));
+      rex::cvar::SetFlagByName("mouse_look_sens_y", std::to_string(y));
+      md::Diag::Get().Note("sens x=" + flag("mouse_look_sens_x") + " y=" + flag("mouse_look_sens_y"));
+      out("mouse", "sens " + flag("mouse_look_sens_x") + "," + flag("mouse_look_sens_y"));
+      return true;
+    }
+    if (sub == "invert") {
+      bool on = false;
+      if (!on_off(on)) return out("mouse", "usage: mouse invert on|off", true), true;
+      rex::cvar::SetFlagByName("mouse_look_invert_y", on ? "true" : "false");
+      md::Diag::Get().Note(std::string("invert_y ") + (on ? "on" : "off"));
+      out("mouse", std::string("invert_y ") + (on ? "on" : "off"));
+      return true;
+    }
+    if (sub == "smooth") {
+      double v = 0;
+      if (W.size() < 3 || !parse_f(W[2], v) || v < 0 || v > 0.9)
+        return out("mouse", "usage: mouse smooth <0..0.9>  (0 = off)", true), true;
+      rex::cvar::SetFlagByName("mouse_look_direct_smoothing", std::to_string(v));
+      md::Diag::Get().Note("direct_smoothing " + flag("mouse_look_direct_smoothing"));
+      out("mouse", "direct smoothing " + flag("mouse_look_direct_smoothing"));
       return true;
     }
     if (sub == "diag") {
@@ -1127,20 +1195,23 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     if (sub == "inject") {
       int64_t dx = 0, dy = 0;
       uint64_t ms = 1000;
+      md::InjectProfile profile = md::InjectProfile::kEven;
       if (W.size() < 4 || !parse_i(W[2], dx) || !parse_i(W[3], dy) ||
-          (W.size() > 4 && (!parse_u(W[4], ms) || ms == 0 || ms > 600000)))
-        return out("mouse", "usage: mouse inject <dx> <dy> [ms]  (total pixels, spread over ms; default 1000)", true), true;
+          (W.size() > 4 && (!parse_u(W[4], ms) || ms == 0 || ms > 600000)) ||
+          (W.size() > 5 && !md::ParseProfile(W[5], profile)))
+        return out("mouse", "usage: mouse inject <dx> <dy> [ms] [even|ramp|flick]  (total pixels, spread over ms; default 1000)", true), true;
       dx = std::clamp<int64_t>(dx, -1000000, 1000000);
       dy = std::clamp<int64_t>(dy, -1000000, 1000000);
-      md::Injector::Get().Start(static_cast<int32_t>(dx), static_cast<int32_t>(dy), static_cast<int64_t>(ms));
+      md::Injector::Get().Start(static_cast<int32_t>(dx), static_cast<int32_t>(dy), static_cast<int64_t>(ms),
+                                profile);
       md::Diag::Get().Note("inject dx=" + std::to_string(dx) + " dy=" + std::to_string(dy) +
-                           " ms=" + std::to_string(ms));
+                           " ms=" + std::to_string(ms) + " profile=" + md::ProfileName(profile));
       // Hold the queue until the movement is done, so "mouse inject ...; mouse" reads the result.
       s.wait_until = Clock::now() + std::chrono::milliseconds(ms + 100);
       s.wait_time = true;
       s.wait_frames = 0;
       out("mouse", "inject " + std::to_string(dx) + "," + std::to_string(dy) + " px over " +
-                       std::to_string(ms) + " ms");
+                       std::to_string(ms) + " ms (" + md::ProfileName(profile) + ")");
       return true;
     }
     if (sub == "stop") {
@@ -1149,7 +1220,9 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
       out("mouse", "inject stopped");
       return true;
     }
-    out("mouse", "usage: mouse [status] | mouse smoothing on|off | mouse diag on|off | mouse trace on|off | mouse inject <dx> <dy> [ms] | mouse stop", true);
+    out("mouse", "usage: mouse [status] | mouse mode direct|stick | mouse sens <x> [y] | mouse invert on|off | "
+                 "mouse smooth <0..0.9> | mouse smoothing on|off | mouse diag on|off | mouse trace on|off | "
+                 "mouse inject <dx> <dy> [ms] [even|ramp|flick] | mouse stop", true);
     return true;
   }
   if (name == "step") {
@@ -1603,6 +1676,25 @@ inline void start_pump(PPCContext& ctx, uint8_t* base) {
   ctx = saved;
 }
 
+// Direct mouse camera (src/input/mouse_direct.h): start
+// scripts/recomp/mouse_direct.lua, which wraps the gameplay camera and asks the
+// host for the mouse movement once per camera update. RunScript only works
+// with a save loaded, so this retries with a growing pause while the mouse is
+// being moved without reaching the camera (Boot in mouse_direct.h). Runs
+// whether or not the console is on.
+inline void poll_mouse_direct(PPCContext& ctx, uint8_t* base) {
+  if (!REXCVAR_GET(mouse_look) || REXCVAR_GET(mouse_look_mode) == "stick") return;
+  if (!fable2::mousedirect::BootState().ShouldTry(fable2::mousediag::NowUs())) return;
+  fable2::mousediag::Diag::Get().Note("direct starting mouse_direct.lua");
+  const PPCContext saved = ctx;
+  try {
+    const std::string path = "scripts/recomp/mouse_direct.lua";
+    f5lua::run_external(ctx, base, &path);
+  } catch (...) {
+  }
+  ctx = saved;
+}
+
 // Hands one line to the pump: console_run.lua = `return <seq>, [==[line]==]`.
 inline void dispatch_lua(const std::string& line) {
   State& s = S();
@@ -1726,6 +1818,8 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
   // Video letterboxing (fit-window) needs a per-frame tick; it does not
   // depend on the console being on.
   fable2::fitwindow::ui::TickVideo();
+  // The direct mouse camera doesn't depend on the console being on either.
+  poll_mouse_direct(ctx, base);
   State& s = S();
   const bool file_mode = enabled();
   if (!file_mode && !s.active.load(std::memory_order_relaxed)) return;
@@ -1904,6 +1998,7 @@ extern "C" void sub_82A19CD8(PPCContext& ctx, uint8_t* base) {
   }();
   static const std::string kTag = "[console] ";
   static const std::string kDiag = "[f2diag] ";  // scripts/recomp/mouse_diag.lua
+  static const std::string kMouse = "[f2mouse] ";  // scripts/recomp/mouse_direct.lua
 
   // Copies the first argument into `text` when it is a string starting with
   // `tag`. The prefix is compared in guest memory first, so the game's own
@@ -1926,6 +2021,50 @@ extern "C" void sub_82A19CD8(PPCContext& ctx, uint8_t* base) {
 
   if (hook_on) {
     std::string text;
+    // Direct mouse camera (src/input/mouse_direct.h). Once per camera update
+    // mouse_direct.lua calls cprint("[f2mouse] 1") (or "0" when the camera
+    // can't be turned) and gets back two numbers: the yaw in degrees and the
+    // height change. "boot" and "hb" just report that the script is running.
+    if (tagged_arg(kMouse, text)) {
+      namespace mdir = fable2::mousedirect;
+      const int64_t now = fable2::mousediag::NowUs();
+      const std::string arg = text.substr(kMouse.size());
+      mdir::BootState().Alive(now);
+      uint64_t results = 0;
+      if (arg == "1" || arg == "0") {
+        double dx = 0.0, dy = 0.0;
+        mdir::State().Drain(arg == "1", now, REXCVAR_GET(mouse_look_direct_smoothing), dx, dy);
+        mdir::Settings st;
+        st.sens_x_deg = REXCVAR_GET(mouse_look_sens_x);
+        st.sens_y_deg = REXCVAR_GET(mouse_look_sens_y);
+        st.scale = REXCVAR_GET(mouse_look_scale);
+        st.invert_y = REXCVAR_GET(mouse_look_invert_y);
+        const mdir::CameraDelta d = mdir::ToCamera(dx, dy, st);
+        const float v[2] = {static_cast<float>(d.yaw), static_cast<float>(d.height)};
+        // A Lua C function pushes its results above its arguments and returns
+        // their count in r3. Lua guarantees a C function 20 free slots below
+        // stack_last (L+0x1C), so two always fit; checked anyway.
+        const uint32_t top = ta::load_be(base, L + 8);
+        const uint32_t last = ta::load_be(base, L + 0x1C);
+        if (top && top + 16 <= last && ta::wr2(base, top, 16)) {
+          uint8_t bytes[16];
+          mdir::EncodeNumbers(v, 2, bytes);
+          std::memcpy(reinterpret_cast<void*>(ta::host_addr(base, top)), bytes, sizeof bytes);
+          fable2::console::write_be(base, L + 8, 4, top + 16);
+          results = 2;
+        }
+      } else if (arg == "boot") {
+        mdir::BootState().Booted();
+        fable2::mousediag::Diag::Get().Note("direct mouse_direct.lua running");
+      } else if (arg == "hb") {
+        if (mdir::BootState().FirstHeartbeat())
+          fable2::mousediag::Diag::Get().Note("direct keeper running");
+      } else if (arg.rfind("note ", 0) == 0) {
+        fable2::mousediag::Diag::Get().Note("direct " + arg.substr(5));
+      }
+      ctx.r3.u64 = results;
+      return;
+    }
     // Mouse-look camera trace: to fable2_mouse.log, whether or not the
     // console is on (src/input/mouse_diag.h).
     if (tagged_arg(kDiag, text)) {

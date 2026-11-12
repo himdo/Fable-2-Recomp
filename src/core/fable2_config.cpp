@@ -13,6 +13,7 @@
 #include "fable2_config.h"
 
 #include <array>
+#include <cctype>
 #include <format>
 #include <fstream>
 #include <type_traits>
@@ -81,8 +82,8 @@ mouse_look = true
 keyboard_prompt_images = false
 
 # Mouse-look sensitivity slider (1..4096; 256 = 1x). Shared by BOTH look modes:
-# for the legacy right-stick mapping it sets the stick units per pixel; for
-# direct mouse look it multiplies mouse_look_yaw_sens / mouse_look_pitch_sens.
+# for the right-stick mapping it sets the stick units per pixel; for the direct
+# mode it multiplies mouse_look_sens_x / mouse_look_sens_y.
 # Larger = more sensitive. Default: 256
 mouse_look_scale = 256
 
@@ -105,6 +106,34 @@ mouse_look_window_ms = 0
 # turns it on without a restart.
 # Default: false
 mouse_look_diag = false
+
+# How the mouse turns the camera. "direct": the gameplay camera turns by a
+# fixed angle per count of mouse movement, with no top speed and no coasting
+# after the mouse stops (target lock, cutscenes and other cameras still get the
+# mouse as the right stick). "stick": the mouse always drives the right stick,
+# like a controller (see mouse_look_smoothing).
+# Default: "direct"
+mouse_look_mode = "direct"
+
+# Direct mode: degrees of camera turn per count of mouse movement, sideways (x)
+# and up/down (y). Multiplied by mouse_look_scale / 256 and by the in-game
+# camera sensitivity. 0.06 is about 96 degrees per inch of hand movement on a
+# 1600 DPI mouse; for the same feel, halve it at 3200 DPI and double it at 800.
+# Up/down moves the camera height, which the game limits and slowly brings
+# back to the middle, as it does with the stick.
+# Default: 0.06
+mouse_look_sens_x = 0.06
+mouse_look_sens_y = 0.06
+
+# Direct mode: true = moving the mouse up makes the camera look down.
+# Default: false
+mouse_look_invert_y = false
+
+# Direct mode: share of the mouse movement held back at each camera update and
+# delivered over the following ones (0 = none, up to 0.9). Smoother, but the
+# camera then keeps turning briefly after the mouse stops.
+# Default: 0.0
+mouse_look_direct_smoothing = 0.0
 
 # Direct mouse-to-camera look: apply mouse movement straight to the active
 # camera's orientation (desktop-FPS style, no stick rate cap) instead of
@@ -413,6 +442,21 @@ bool Load(const std::filesystem::path& path) {
     values.mouse_look_diag =
         Read<bool>(input_table, "input", "mouse_look_diag", "boolean",
                    values.mouse_look_diag);
+    {
+      std::string mode = Read<std::string>(input_table, "input", "mouse_look_mode", "string",
+                                           values.mouse_look_mode);
+      for (auto& c : mode) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if (mode == "direct" || mode == "stick") values.mouse_look_mode = mode;
+    }
+    values.mouse_look_sens_x = Read<double>(input_table, "input", "mouse_look_sens_x", "number",
+                                            values.mouse_look_sens_x);
+    values.mouse_look_sens_y = Read<double>(input_table, "input", "mouse_look_sens_y", "number",
+                                            values.mouse_look_sens_y);
+    values.mouse_look_invert_y = Read<bool>(input_table, "input", "mouse_look_invert_y", "boolean",
+                                            values.mouse_look_invert_y);
+    values.mouse_look_direct_smoothing =
+        Read<double>(input_table, "input", "mouse_look_direct_smoothing", "number",
+                     values.mouse_look_direct_smoothing);
     values.direct_mouse_look =
         Read<bool>(input_table, "input", "direct_mouse_look", "boolean",
                    values.direct_mouse_look);
