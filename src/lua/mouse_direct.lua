@@ -25,9 +25,13 @@
 -- The stick is untouched: it still goes through ProcessGameAction, its top
 -- speed and its smoothing, and the mouse adds to it.
 --
--- A per-frame script (GeneralScriptManager, like console_pump.lua) re-wraps the
--- class if the camera scripts are reloaded and sends the host a heartbeat.
--- Running this file again is harmless.
+-- There is no per-frame script: GeneralScriptManager writes its scripts into
+-- save games (GetSaveTable / LoadFromSave), so an older copy came back to life
+-- from a save and fought this one over the wrappers (2026-11-12). Instead the
+-- host runs this file again when the mouse moves without reaching the camera
+-- (after a camera script reload, for example). Each run also retires keepers
+-- that older versions left in the script manager, and saves are clean again
+-- from the next save on. Running this file again is harmless.
 --
 -- Recognising our own wrappers. Each wrapper carries its own label: its
 -- function environment holds a marker with the name and the game's original,
@@ -201,11 +205,55 @@ MAKERS.GetHeight = function(original)
 end
 
 local NAMES = { "CheckForTeleport", "ApplyRotateVector", "GetHeight" }
+local OLD_KEYS = { CheckForTeleport = "o_cft", ApplyRotateVector = "o_arv", GetHeight = "o_gh" }
 
--- Wraps each method that isn't already one of our wrappers (from any copy of
--- this file). The trace (mouse_diag.lua) wraps other methods, so nothing else
--- sits on top of these. Returns true when something was wrapped, and notes
--- the details in fable2_mouse.log.
+-- Source file of a Lua function, or "".
+local function source_of(f)
+  if type(debug) ~= "table" or type(debug.getinfo) ~= "function" then return "" end
+  local ok, info = pcall(debug.getinfo, f, "S")
+  return (ok and type(info) == "table" and type(info.source) == "string") and info.source or ""
+end
+
+local function from_this_file(f)
+  return type(f) == "function" and string.find(source_of(f), "mouse_direct", 1, true) ~= nil
+end
+
+-- Follows wrappers from any version of this file back to the game's own
+-- function. Labelled wrappers name their original. Older versions kept it in
+-- an upvalue: a state table `st` (o_cft, o_arv, o_gh) or an `orig` table keyed
+-- by method name.
+local function unwrap(f, name)
+  for _ = 1, 16 do
+    local info = wrapper_info(f)
+    if info then
+      f = info.orig
+    elseif from_this_file(f) and type(debug.getupvalue) == "function" then
+      local found = nil
+      for i = 1, 32 do
+        local ok, uname, val = pcall(debug.getupvalue, f, i)
+        if not ok or uname == nil then break end
+        if type(val) == "table" then
+          if uname == "st" and type(rawget(val, OLD_KEYS[name])) == "function" then
+            found = rawget(val, OLD_KEYS[name])
+          elseif uname == "orig" and type(rawget(val, name)) == "function" then
+            found = rawget(val, name)
+          end
+        end
+        if found then break end
+      end
+      if not found then return nil end  -- ours, but can't find its original
+      f = found
+    else
+      return f
+    end
+  end
+  return nil
+end
+
+-- Wraps each method around the game's own function, unless it already holds
+-- our current wrapper for exactly that function. The trace (mouse_diag.lua)
+-- wraps other methods, so nothing else sits on top of these. Notes every wrap
+-- in fable2_mouse.log.
 local function ensure()
   if rawget(_G, "__f2_mousedirect_disabled") then return false end
   local cls = find_class()
@@ -213,12 +261,19 @@ local function ensure()
   local changed = false
   for _, name in ipairs(NAMES) do
     local cur = cls[name]
-    if type(cur) == "function" and not wrapper_info(cur) then
-      cls[name] = label(MAKERS[name](cur), name, cur)
+    local info = wrapper_info(cur)
+    local game = unwrap(cur, name)
+    if not game then
+      rawset(_G, "__f2_mousedirect_disabled", true)
+      host("note direct mode disabled: can't find the game's " .. name .. " under " .. tostring(cur))
+      return changed
+    end
+    if not (info and info.orig == game) then
+      cls[name] = label(MAKERS[name](game), name, game)
       changed = true
       local held = wrapper_info(cls[name]) ~= nil
       host("note wrapped " .. name .. " on " .. tostring(cls) .. " (was " .. tostring(cur)
-           .. "; reads back as ours: " .. tostring(held) .. ")")
+           .. ", game function " .. tostring(game) .. "; reads back as ours: " .. tostring(held) .. ")")
       if not held then
         -- Can't tell our wrappers apart here, so wrapping again later could
         -- stack them. Stop: without camera updates asking for movement, the
@@ -232,34 +287,37 @@ local function ensure()
   return changed
 end
 
--- Per-frame keeper. Only the newest one runs: each start replaces the token in
--- the global, and a keeper whose token is gone (replaced, or cleared with the
--- globals by a load) stops.
-local function start_keeper()
-  local token = {}
-  rawset(_G, "__f2_mousedirect_keeper", token)
-  local function update()
-    local n = 0
-    while rawget(_G, "__f2_mousedirect_keeper") == token do
+-- Retires per-frame keepers left by older versions of this file (they also
+-- came back from save games). The script manager drops a script whose
+-- coroutine has finished, so each one gets a coroutine that finishes at once.
+local function retire_old_keepers()
+  local gsm = rawget(_G, "GeneralScriptManager") or GeneralScriptManager
+  if type(gsm) ~= "table" then return 0 end
+  local n = 0
+  local node = gsm.CurrentlyRunningScripts
+  for _ = 1, 10000 do
+    if type(node) ~= "table" then break end
+    local script = node.value
+    if type(script) == "table" and from_this_file(rawget(script, "Update")) then
+      script.co_update = coroutine.create(function() end)
       n = n + 1
-      if n % 30 == 1 then
-        ensure()
-        host("hb")
-      end
-      coroutine.yield()
     end
+    node = node.next
   end
-  local keeper = {}
-  setmetatable(keeper, keeper)
-  keeper.__index = _G
-  keeper._G = _G
-  keeper.Update = update
-  GeneralScriptManager.AddScript(keeper)
+  -- Older keepers also stop when these change.
+  local old = rawget(_G, "__f2_mousedirect")
+  if type(old) == "table" and type(old.gen) == "number" then old.gen = old.gen + 1 end
+  rawset(_G, "__f2_mousedirect_keeper", {})
+  return n
 end
 
-local ok, err = pcall(start_keeper)
-if not ok then host("note keeper failed: " .. tostring(err)) end
-host("note getfenv " .. type(getfenv) .. ", setfenv " .. type(setfenv) .. ", debug.getregistry "
-     .. ((type(debug) == "table" and type(debug.getregistry)) or "nil"))
+local ok, retired = pcall(retire_old_keepers)
+if not ok then
+  host("note retiring old keepers failed: " .. tostring(retired))
+elseif retired > 0 then
+  host("note retired " .. retired .. " old keeper(s) (from an older version or a save game)")
+end
+host("note getfenv " .. type(getfenv) .. ", setfenv " .. type(setfenv) .. ", debug.getinfo "
+     .. ((type(debug) == "table" and type(debug.getinfo)) or "nil"))
 ensure()
 host("boot")

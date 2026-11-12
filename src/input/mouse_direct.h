@@ -155,16 +155,18 @@ inline DirectState& State() {
 }
 
 // Starting the Lua side. The host runs scripts/recomp/mouse_direct.lua through
-// the game's RunScript, which only works once a save is loaded. After that the
-// script keeps itself installed (a per-frame script re-wraps the camera after a
-// reload) and reports in: every camera update, plus a heartbeat.
+// the game's RunScript, which only works once a save is loaded. The script
+// reports in at every camera update. It has no per-frame script of its own:
+// the game writes those into save games, and an older copy restored from a
+// save fought the current one over the camera (2026-11-12).
 //
-// The host only (re)starts it when it is needed and missing: the mouse is being
+// So the host (re)starts it when it is needed and missing: the mouse is being
 // moved in direct mode but isn't reaching the camera (Wanted), and nothing has
-// been heard from the script for a while. The game's scripts stand still in
-// menus and while the window is in the background, so silence alone isn't a
-// reason (measured 2026-11-12: that restarted it every 15 s in menus). Retries
-// back off from 5 to 30 s.
+// been heard from the script for a while (after a camera script reload, say).
+// The game's scripts stand still in menus and while the window is in the
+// background, so silence alone isn't a reason (measured 2026-11-12: that
+// restarted it every 15 s in menus). Retries back off from 5 to 30 s, and a
+// run with nothing to do changes nothing.
 class Boot {
  public:
   static constexpr int64_t kFirstDelayUs = 8'000'000;
