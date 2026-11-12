@@ -28,12 +28,14 @@
 -- A per-frame script (GeneralScriptManager, like console_pump.lua) re-wraps the
 -- class if the camera scripts are reloaded and sends the host a heartbeat.
 -- Running this file again is harmless.
-
-local st = rawget(_G, "__f2_mousedirect")
-if not st then
-  st = { gen = 0 }
-  rawset(_G, "__f2_mousedirect", st)
-end
+--
+-- Which functions are ours, and the originals they call, is kept on the class
+-- table itself (cls.__f2_mousedirect), not in a global. Loading a save can
+-- clear our globals while SACCamera and an older keeper survive; with the
+-- bookkeeping in a global, a second copy took the first copy's wrappers for the
+-- game's originals and the two wrapped each other in turns, so every camera
+-- update recursed until Lua gave up and the game froze (2026-11-12). Now any
+-- copy recognises the wrappers on the class, and only the newest keeper runs.
 
 local function host(s)
   return pcall(cprint, "[f2mouse] " .. s)
@@ -59,8 +61,8 @@ local function can_turn(self)
   local okl, locking = pcall(function() return self:IsTargetLocking() end)
   if okl and locking then return false end
   local okc, can = pcall(function() return GetCanRotateCamera() end)
-  if not okc and not st.warned_gate then
-    st.warned_gate = true
+  if not okc and not rawget(_G, "__f2_mousedirect_warned_gate") then
+    rawset(_G, "__f2_mousedirect_warned_gate", true)
     host("note GetCanRotateCamera failed: " .. tostring(can))
   end
   local okp, photo = pcall(function() return CameraManager.GetCameraPhotoMode() end)
@@ -85,91 +87,101 @@ local function clamp(v, lo, hi)
   return v
 end
 
-st.w_cft = st.w_cft or function(self, ...)
-  local accept = can_turn(self)
-  local ok, yaw, dh = host(accept and "1" or "0")
-  if accept and ok and type(yaw) == "number" and type(dh) == "number" and (yaw ~= 0 or dh ~= 0) then
-    local f = sensitivity(self)
-    -- Added, not set: nothing is lost if this runs twice before it's applied.
-    self.__f2_my = (self.__f2_my or 0) + yaw * f
-    self.__f2_mdh = (self.__f2_mdh or 0) + dh * f
-    -- As the stick does for a turn: auto-alignment and follow hold off.
-    if yaw ~= 0 then self.PlayerIsManuallyRotatingCamera = true end
-  end
-  return st.o_cft(self, ...)
-end
+local NAMES = { "CheckForTeleport", "ApplyRotateVector", "GetHeight" }
 
-st.w_arv = st.w_arv or function(self, cam_pos, ...)
-  local r = pack(st.o_arv(self, cam_pos, ...))
-  local yaw = self.__f2_my
-  self.__f2_my = 0
-  self.__f2_my_last = yaw or 0  -- for the camera trace (mouse_diag.lua)
-  local focal = self.PreBoundFocalPos
-  if yaw and yaw ~= 0 and r[1] and focal then
-    local ok, out = pcall(function()
-      local v = r[1] - focal
-      v:RotateAroundDirectionByAngle(CVector3(0, 0, 1), yaw)
-      return focal + v
-    end)
-    if ok and out then
-      r[1] = out
-    elseif not st.warned_arv then
-      st.warned_arv = true
-      host("note yaw failed: " .. tostring(out))
+-- The wrappers for one class, made once per class table and kept on it. Each
+-- calls the original recorded next to it, so a wrapper never depends on which
+-- copy of this file made it.
+local function make_wrappers(w)
+  local orig = w.orig
+  w.wrap.CheckForTeleport = function(self, ...)
+    local accept = can_turn(self)
+    local ok, yaw, dh = host(accept and "1" or "0")
+    if accept and ok and type(yaw) == "number" and type(dh) == "number" and (yaw ~= 0 or dh ~= 0) then
+      local f = sensitivity(self)
+      -- Added, not set: nothing is lost if this runs twice before it's applied.
+      self.__f2_my = (self.__f2_my or 0) + yaw * f
+      self.__f2_mdh = (self.__f2_mdh or 0) + dh * f
+      -- As the stick does for a turn: auto-alignment and follow hold off.
+      if yaw ~= 0 then self.PlayerIsManuallyRotatingCamera = true end
     end
+    return orig.CheckForTeleport(self, ...)
   end
-  return unpack(r, 1, r.n)
-end
 
-st.w_gh = st.w_gh or function(self, ...)
-  local dh = self.__f2_mdh
-  self.__f2_mdh = 0
-  self.__f2_mdh_last = dh or 0  -- for the camera trace (mouse_diag.lua)
-  if dh and dh ~= 0 then
-    local hi = self.HeightOffsetUpperBound or 0.7
-    local lo = -(self.HeightOffsetLowerBound or 0.7)
-    self.ManualHeightOffset = (self.ManualHeightOffset or 0) + dh  -- clamped by the original
-    if self.CurrentManualHeightOffset then
-      self.CurrentManualHeightOffset = clamp(self.CurrentManualHeightOffset + dh, lo, hi)
+  w.wrap.ApplyRotateVector = function(self, cam_pos, ...)
+    local r = pack(orig.ApplyRotateVector(self, cam_pos, ...))
+    local yaw = self.__f2_my
+    self.__f2_my = 0
+    self.__f2_my_last = yaw or 0  -- for the camera trace (mouse_diag.lua)
+    local focal = self.PreBoundFocalPos
+    if yaw and yaw ~= 0 and r[1] and focal then
+      local ok, out = pcall(function()
+        local v = r[1] - focal
+        v:RotateAroundDirectionByAngle(CVector3(0, 0, 1), yaw)
+        return focal + v
+      end)
+      if ok and out then
+        r[1] = out
+      elseif not w.warned_arv then
+        w.warned_arv = true
+        host("note yaw failed: " .. tostring(out))
+      end
     end
+    return unpack(r, 1, r.n)
   end
-  return st.o_gh(self, ...)
+
+  w.wrap.GetHeight = function(self, ...)
+    local dh = self.__f2_mdh
+    self.__f2_mdh = 0
+    self.__f2_mdh_last = dh or 0  -- for the camera trace (mouse_diag.lua)
+    if dh and dh ~= 0 then
+      local hi = self.HeightOffsetUpperBound or 0.7
+      local lo = -(self.HeightOffsetLowerBound or 0.7)
+      self.ManualHeightOffset = (self.ManualHeightOffset or 0) + dh  -- clamped by the original
+      if self.CurrentManualHeightOffset then
+        self.CurrentManualHeightOffset = clamp(self.CurrentManualHeightOffset + dh, lo, hi)
+      end
+    end
+    return orig.GetHeight(self, ...)
+  end
 end
 
--- Wraps the class, keeping the current methods as the originals. A method that
--- is already our wrapper is left alone, so running this again never wraps a
--- wrapper. Returns true when something was (re)wrapped.
+-- Wraps the class. A method that holds our wrapper is left alone; anything
+-- else is the game's function (first run, or the camera scripts were reloaded
+-- into this table) and becomes the original. The trace (mouse_diag.lua) wraps
+-- other methods, so nothing else sits on top of these. Returns true when
+-- something was (re)wrapped.
 local function ensure()
   local cls = find_class()
   if not cls then return false end
+  local w = rawget(cls, "__f2_mousedirect")
+  if type(w) ~= "table" then
+    w = { orig = {}, wrap = {} }
+    rawset(cls, "__f2_mousedirect", w)
+  end
+  if not w.wrap.CheckForTeleport then make_wrappers(w) end
   local changed = false
-  if cls.CheckForTeleport ~= st.w_cft then
-    st.o_cft, cls.CheckForTeleport, changed = cls.CheckForTeleport, st.w_cft, true
-  end
-  if cls.ApplyRotateVector ~= st.w_arv then
-    st.o_arv, cls.ApplyRotateVector, changed = cls.ApplyRotateVector, st.w_arv, true
-  end
-  if cls.GetHeight ~= st.w_gh then
-    st.o_gh, cls.GetHeight, changed = cls.GetHeight, st.w_gh, true
+  for _, name in ipairs(NAMES) do
+    local cur = cls[name]
+    if cur ~= w.wrap[name] then
+      w.orig[name] = cur
+      cls[name] = w.wrap[name]
+      changed = true
+    end
   end
   return changed
 end
 
--- Per-frame keeper. A newer copy (after this file runs again) replaces an
--- older one through st.gen.
-local function frame_now()
-  local ok, f = pcall(Timing.GetProgramFrame)
-  return ok and type(f) == "number" and f or nil
-end
-
+-- Per-frame keeper. Only the newest one runs: each start replaces the token in
+-- the global, and a keeper whose token is gone (replaced, or cleared with the
+-- globals by a load) stops.
 local function start_keeper()
-  st.gen = st.gen + 1
-  local gen = st.gen
+  local token = {}
+  rawset(_G, "__f2_mousedirect_keeper", token)
   local function update()
     local n = 0
-    while st.gen == gen do
+    while rawget(_G, "__f2_mousedirect_keeper") == token do
       n = n + 1
-      st.keeper_frame = frame_now()
       if n % 30 == 1 then
         if ensure() then host("note camera wrapped") end
         host("hb")
@@ -185,12 +197,7 @@ local function start_keeper()
   GeneralScriptManager.AddScript(keeper)
 end
 
--- Start a keeper unless one ran in the last few seconds of game frames.
-local now = frame_now()
-local fresh = st.keeper_frame and now and (now - st.keeper_frame) < 300
-if not fresh then
-  local ok, err = pcall(start_keeper)
-  if not ok then host("note keeper failed: " .. tostring(err)) end
-end
+local ok, err = pcall(start_keeper)
+if not ok then host("note keeper failed: " .. tostring(err)) end
 if ensure() then host("note camera wrapped") end
 host("boot")

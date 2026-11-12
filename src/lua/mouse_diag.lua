@@ -20,6 +20,11 @@
 -- neither can end up wrapping the other's wrapper. Because the direct mode's
 -- wrapper runs first, man=1 also shows updates the mouse turned.
 --
+-- The on/off switch, the pending actions and the originals are kept on the
+-- class table (cls.__f2_mousetrace), not in a global: loading a save can clear
+-- our globals while SACCamera survives, and a copy of this file that didn't
+-- recognise the wrappers already on the class would wrap them again.
+--
 -- Fields of a U line:
 --   f     Timing.GetProgramFrame()
 --   tick  Timing.GetTickRate()
@@ -35,12 +40,6 @@
 --   mdh   height the direct mouse camera added this update
 
 local mode = ...
-
-local st = rawget(_G, "__f2_mousetrace")
-if not st then
-  st = { pending = {}, installed = false }
-  rawset(_G, "__f2_mousetrace", st)
-end
 
 local function say(s)
   pcall(cprint, "[console] mousetrace: " .. s)
@@ -84,73 +83,82 @@ if not cls then
   return
 end
 
--- The wrappers are made once and look at st.on, so a copy left behind after a
--- reload of this file just passes through.
-st.wrap_pga = st.wrap_pga or function(self, action, x, y, ...)
-  if st.on and (action == 2 or action == 4) then
-    local p = st.pending
-    if #p < 16 then
-      p[#p + 1] = string.format("%d:%.3f/%.3f", action, x or 0, y or 0)
+local function state()
+  local w = rawget(cls, "__f2_mousetrace")
+  if type(w) ~= "table" then
+    w = { orig = {}, wrap = {}, pending = {}, on = false }
+    rawset(cls, "__f2_mousetrace", w)
+  end
+  return w
+end
+
+local function make_wrappers(w)
+  local orig = w.orig
+  w.wrap.ProcessGameAction = function(self, action, x, y, ...)
+    if w.on and (action == 2 or action == 4) then
+      local p = w.pending
+      if #p < 16 then
+        p[#p + 1] = string.format("%d:%.3f/%.3f", action, x or 0, y or 0)
+      end
+    end
+    return orig.ProcessGameAction(self, action, x, y, ...)
+  end
+
+  w.wrap.SearchForFoesIfNeeded = function(self, ...)
+    if w.on then
+      self.__f2_tr_rr = self.RotateRight
+      self.__f2_tr_mho = self.ManualHeightOffset
+      self.__f2_tr_man = self.PlayerIsManuallyRotatingCamera
+    end
+    return orig.SearchForFoesIfNeeded(self, ...)
+  end
+
+  w.wrap.ClearTime = function(self, ...)
+    if w.on then
+      local my, mdh = self.__f2_my_last or 0, self.__f2_mdh_last or 0
+      self.__f2_my_last, self.__f2_mdh_last = 0, 0
+      local okf, f = pcall(Timing.GetProgramFrame)
+      local okt, tick = pcall(Timing.GetTickRate)
+      local act = (#w.pending > 0) and table.concat(w.pending, ";") or "-"
+      w.pending = {}
+      pcall(cprint, string.format(
+        "[f2diag] U f=%s tick=%s act=%s rr=%s srr=%s mho=%s>%s cmho=%s man=%d my=%s mdh=%s",
+        okf and tostring(f) or "?", okt and tostring(tick) or "?", act,
+        num(self.__f2_tr_rr), num(self.SmoothRotateRight), num(self.__f2_tr_mho),
+        num(self.ManualHeightOffset), num(self.CurrentManualHeightOffset),
+        self.__f2_tr_man and 1 or 0, num(my), num(mdh)))
+    end
+    return orig.ClearTime(self, ...)
+  end
+end
+
+local NAMES = { "ProcessGameAction", "SearchForFoesIfNeeded", "ClearTime" }
+
+-- Wrap each method unless it already holds our wrapper. The wrappers stay in
+-- place when the trace is off and just pass through, so on/off never stacks
+-- wrappers (mouse_direct.lua wraps other methods).
+local function install()
+  local w = state()
+  if not w.wrap.ClearTime then make_wrappers(w) end
+  local wrapped = false
+  for _, name in ipairs(NAMES) do
+    if cls[name] ~= w.wrap[name] then
+      w.orig[name] = cls[name]
+      cls[name] = w.wrap[name]
+      wrapped = true
     end
   end
-  return st.orig_pga(self, action, x, y, ...)
-end
-
-st.wrap_sff = st.wrap_sff or function(self, ...)
-  if st.on then
-    self.__f2_tr_rr = self.RotateRight
-    self.__f2_tr_mho = self.ManualHeightOffset
-    self.__f2_tr_man = self.PlayerIsManuallyRotatingCamera
-  end
-  return st.orig_sff(self, ...)
-end
-
-st.wrap_ct = st.wrap_ct or function(self, ...)
-  if st.on then
-    local my, mdh = self.__f2_my_last or 0, self.__f2_mdh_last or 0
-    self.__f2_my_last, self.__f2_mdh_last = 0, 0
-    local okf, f = pcall(Timing.GetProgramFrame)
-    local okt, tick = pcall(Timing.GetTickRate)
-    local act = (#st.pending > 0) and table.concat(st.pending, ";") or "-"
-    st.pending = {}
-    pcall(cprint, string.format(
-      "[f2diag] U f=%s tick=%s act=%s rr=%s srr=%s mho=%s>%s cmho=%s man=%d my=%s mdh=%s",
-      okf and tostring(f) or "?", okt and tostring(tick) or "?", act,
-      num(self.__f2_tr_rr), num(self.SmoothRotateRight), num(self.__f2_tr_mho),
-      num(self.ManualHeightOffset), num(self.CurrentManualHeightOffset),
-      self.__f2_tr_man and 1 or 0, num(my), num(mdh)))
-  end
-  return st.orig_ct(self, ...)
-end
-
-local function wrap(name, orig_key, wrapper_key)
-  if cls[name] ~= st[wrapper_key] then
-    st[orig_key] = cls[name]
-    cls[name] = st[wrapper_key]
-  end
-end
-
-local function install()
-  if st.on and cls.ClearTime == st.wrap_ct then return say("already on") end
-  st.pending = {}
-  wrap("ProcessGameAction", "orig_pga", "wrap_pga")
-  wrap("SearchForFoesIfNeeded", "orig_sff", "wrap_sff")
-  wrap("ClearTime", "orig_ct", "wrap_ct")
-  st.on = true
-  st.installed = true
+  if w.on and not wrapped then return say("already on") end
+  w.pending = {}
+  w.on = true
   say("on, via " .. found_as .. " (starts with the next camera update)")
 end
 
 local function uninstall()
-  if not st.on then return say("already off") end
-  st.on = false
-  st.installed = false
-  st.pending = {}
-  -- Restore only where the class still holds our wrapper (after a camera
-  -- script reload it has fresh functions and the wrappers are already gone).
-  if cls.ProcessGameAction == st.wrap_pga then cls.ProcessGameAction = st.orig_pga end
-  if cls.SearchForFoesIfNeeded == st.wrap_sff then cls.SearchForFoesIfNeeded = st.orig_sff end
-  if cls.ClearTime == st.wrap_ct then cls.ClearTime = st.orig_ct end
+  local w = state()
+  if not w.on then return say("already off") end
+  w.on = false
+  w.pending = {}
   say("off")
 end
 
@@ -159,6 +167,7 @@ if mode == "on" then
 elseif mode == "off" then
   uninstall()
 else
-  local live = st.on and cls.ClearTime == st.wrap_ct
-  say(live and "on" or (st.on and "on, but SACCamera was reloaded: run mousetrace on again" or "off"))
+  local w = state()
+  local live = w.on and cls.ClearTime == w.wrap.ClearTime
+  say(live and "on" or (w.on and "on, but SACCamera was reloaded: run mousetrace on again" or "off"))
 end
