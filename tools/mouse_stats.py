@@ -21,7 +21,22 @@ For each segment:
                       mean, standard deviation, and cv = sd / |mean|, the
                       "stutter score" (lower is smoother)
   zero                share of steady updates that got no yaw at all
-  yaw total           sum of SmoothRotateRight (the yaw actually applied)
+  yaw total           sum of SmoothRotateRight (the yaw the game's stick path
+                      applied)
+  turn                what the camera actually turned, in degrees: the stick
+                      path (srr) plus the direct mouse camera (my), over the run
+                      and up to 500 ms after it
+    total             the whole turn. The same movement should give the same
+                      total whatever its speed (compare an `inject` over 100 ms
+                      with one over 2000 ms)
+    mouse             the part the direct mouse camera added
+    tail              share of the turn that arrived after the input stopped,
+                      and in how many camera updates (the "keeps going" coast)
+    first             the first moving update's turn as a share of the steady
+                      turn per update (how quickly the turn gets going)
+
+Segments are labelled with the inject's speed profile (ramp, flick) and the
+mouse mode (`f2 mouse mode`) when the log notes one.
 
 usage: mouse_stats.py [--json] [--whole] <fable2_mouse.log>
 """
@@ -33,6 +48,7 @@ from dataclasses import dataclass, field
 
 STEADY_SKIP = 0.15  # fraction of a run skipped at each end for the steady stats
 TAIL_US = 500_000   # smoothing keeps turning the camera after the input stops
+TURN_EPS = 1e-4     # degrees; smaller turns count as none
 
 
 @dataclass
@@ -108,9 +124,21 @@ def find_segments(records, whole=False):
             return []
         return [Segment("whole log", records[0].t, records[-1].t)]
     segments = []
-    for note in injects:
+    mode = None
+    for note in (r for r in records if r.kind == "N"):
+        words = note.text.split()
+        if len(words) == 2 and words[0] == "mode":
+            mode = words[1]
+            continue
+        if note.text != "inject":
+            continue
         ms = int(note.fields.get("ms", 0) or 0)
         label = f"inject {note.fields.get('dx', '?')},{note.fields.get('dy', '?')} px over {ms} ms"
+        profile = note.fields.get("profile")
+        if profile and profile != "even":
+            label += f" ({profile})"
+        if mode:
+            label += f" [{mode}]"
         segments.append(Segment(label, note.t, note.t + ms * 1000))
     return segments
 
@@ -137,6 +165,12 @@ class Stats:
     ticks: list = field(default_factory=list)
     steady_rr: list = field(default_factory=list)
     yaw_total: float = 0.0
+    turn_total: float = 0.0   # srr + my, inside the run and in the tail
+    mouse_total: float = 0.0  # my alone
+    tail_turn: float = 0.0    # srr + my after the input stopped
+    tail_updates: int = 0     # updates after the input stopped that still turned
+    first_turn: float = None  # the first update in the run that turned
+    steady_turn: list = field(default_factory=list)
 
     def as_dict(self):
         mean, sd = mean_sd(self.steady_rr)
@@ -162,6 +196,18 @@ class Stats:
                 "zero_share": None if zero is None else round(zero, 3),
             },
             "yaw_total": round(self.yaw_total, 3),
+            "turn": self.turn_dict(),
+        }
+
+    def turn_dict(self):
+        steady, _ = mean_sd(self.steady_turn)
+        return {
+            "total": round(self.turn_total, 3),
+            "mouse": round(self.mouse_total, 3),
+            "tail_share": round(abs(self.tail_turn) / abs(self.turn_total), 3) if self.turn_total else None,
+            "tail_updates": self.tail_updates,
+            "first_share": (round(self.first_turn / steady, 3)
+                            if steady and self.first_turn is not None else None),
         }
 
 
@@ -191,8 +237,17 @@ def analyse(records, segment):
             srr = number(r.fields.get("srr"))
             if srr is not None:
                 stats.yaw_total += srr
+            my = number(r.fields.get("my")) or 0.0
+            turn = (srr or 0.0) + my
+            stats.turn_total += turn
+            stats.mouse_total += my
             if r.t > segment.end:
+                stats.tail_turn += turn
+                if abs(turn) > TURN_EPS:
+                    stats.tail_updates += 1
                 continue
+            if stats.first_turn is None and abs(turn) > TURN_EPS:
+                stats.first_turn = turn
             stats.updates += 1
             tick = number(r.fields.get("tick"))
             if tick is not None:
@@ -201,6 +256,7 @@ def analyse(records, segment):
             rr = number(r.fields.get("rr"))
             if steady_from <= r.t <= steady_to:
                 stats.steady_rr.append(rr or 0.0)
+                stats.steady_turn.append(turn)
     return stats
 
 
@@ -209,6 +265,7 @@ def format_stats(d):
         return "n/a" if value is None else f"{value}{unit}"
 
     yaw = d["yaw_per_update"]
+    turn = d["turn"]
     lines = [
         f"{d['label']}  ({d['seconds']} s)",
         f"  polls {d['polls']} ({show(d['polls_per_s'])}/s), camera updates {d['updates']} "
@@ -221,6 +278,9 @@ def format_stats(d):
             f"  yaw per update (steady, n={yaw['n']}): mean {show(yaw['mean'])} sd {show(yaw['sd'])} "
             f"cv {show(yaw['cv'])} zero {show(yaw['zero_share'])}",
             f"  yaw total {d['yaw_total']}  tick rates {d['tick_rates'] or 'n/a'}",
+            f"  turn total {turn['total']} (mouse {turn['mouse']}); after the input stopped "
+            f"{show(turn['tail_share'])} in {turn['tail_updates']} updates; "
+            f"first update {show(turn['first_share'])} of steady",
         ]
     else:
         lines.append("  no camera updates: run `f2 mouse trace on` (with a save loaded) to get yaw numbers")

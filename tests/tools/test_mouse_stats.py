@@ -160,6 +160,67 @@ class AnalyseTests(unittest.TestCase):
         self.assertEqual(d["clamped_share"], 0.5)
 
 
+def direct_update(t, my, srr=0.0):
+    """A camera update where the direct mouse camera added `my` degrees."""
+    return (f"U t={t} f=1 tick=15 act=- rr=0.0000 srr={srr} mho=0.0000>0.0000 cmho=0.0000 "
+            f"man=1 my={my} mdh=0.0000")
+
+
+class TurnTests(unittest.TestCase):
+    def analyse(self, lines, index=0):
+        records = sorted(mouse_stats.read_log(lines), key=lambda r: r.t)
+        segment = mouse_stats.find_segments(records)[index]
+        return mouse_stats.analyse(records, segment).as_dict()
+
+    def test_turn_adds_the_stick_path_and_the_direct_mouse(self):
+        lines = ["N t=0 inject dx=100 dy=0 ms=200",
+                 direct_update(50_000, -3.0), direct_update(120_000, -2.0, srr=-0.5)]
+        turn = self.analyse(lines)["turn"]
+        self.assertEqual(turn["total"], -5.5)
+        self.assertEqual(turn["mouse"], -5.0)
+        self.assertEqual(turn["tail_updates"], 0)
+        self.assertEqual(turn["tail_share"], 0.0)
+
+    def test_the_stick_coast_after_the_input_stops_is_the_tail(self):
+        # A stick-path run: smoothing keeps turning for three updates after the
+        # inject ends at 200 ms.
+        lines = ["N t=0 inject dx=100 dy=0 ms=200",
+                 update(60_000, -8.0, srr=-3.2), update(130_000, -8.0, srr=-5.1),
+                 update(260_000, 0.0, srr=-3.1), update(330_000, 0.0, srr=-1.8),
+                 update(400_000, 0.0, srr=-0.8)]
+        turn = self.analyse(lines)["turn"]
+        self.assertEqual(turn["total"], -14.0)
+        self.assertEqual(turn["tail_updates"], 3)
+        self.assertAlmostEqual(turn["tail_share"], 5.7 / 14.0, places=3)
+
+    def test_first_share_compares_the_first_turn_with_the_steady_turn(self):
+        # One update every 50 ms over a second: 1, then 2 from the second
+        # update on (the steady middle starts at 150 ms).
+        lines = ["N t=0 inject dx=100 dy=0 ms=1000"]
+        for i in range(1, 20):
+            lines.append(direct_update(i * 50_000, -float(min(i, 2))))
+        turn = self.analyse(lines)["turn"]
+        self.assertEqual(turn["first_share"], 0.5)
+
+    def test_labels_name_the_profile_and_the_mode(self):
+        records = mouse_stats.read_log([
+            "N t=10 inject dx=100 dy=0 ms=200 profile=even",
+            "N t=1000000 mode direct",
+            "N t=2000000 inject dx=100 dy=0 ms=100 profile=flick",
+            "N t=3000000 mode stick",
+            "N t=4000000 inject dx=100 dy=0 ms=100 profile=ramp",
+        ])
+        labels = [s.label for s in mouse_stats.find_segments(records)]
+        self.assertEqual(labels, ["inject 100,0 px over 200 ms",
+                                  "inject 100,0 px over 100 ms (flick) [direct]",
+                                  "inject 100,0 px over 100 ms (ramp) [stick]"])
+
+    def test_text_report_shows_the_turn_line(self):
+        code, out = run(["N t=0 inject dx=10 dy=0 ms=100", direct_update(50_000, -1.2)])
+        self.assertEqual(code, 0)
+        self.assertIn("turn total -1.2 (mouse -1.2)", out)
+
+
 class MainTests(unittest.TestCase):
     def test_text_report_explains_missing_camera_updates(self):
         code, out = run(["N t=0 inject dx=10 dy=0 ms=100", poll(10, inj=(10, 0))])
