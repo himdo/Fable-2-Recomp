@@ -2057,8 +2057,11 @@ extern "C" void sub_82A19CD8(PPCContext& ctx, uint8_t* base) {
         mdir::BootState().Booted();
         fable2::mousediag::Diag::Get().Note("direct mouse_direct.lua running");
       } else if (arg == "hb") {
+        // Only keepers from older versions send heartbeats (one can come back
+        // from a save game). Running the script again retires them.
+        mdir::BootState().RequestRun();
         if (mdir::BootState().FirstHeartbeat())
-          fable2::mousediag::Diag::Get().Note("direct keeper running");
+          fable2::mousediag::Diag::Get().Note("direct old keeper running: retiring it");
       } else if (arg.rfind("note ", 0) == 0) {
         fable2::mousediag::Diag::Get().Note("direct " + arg.substr(5));
       }

@@ -208,6 +208,17 @@ static void TestBoot() {
     CHECK(d.ShouldTry(u));
     u += B::kMaxBackoffUs;
   }
+  // An old keeper's heartbeat asks for a run even while the script reports in,
+  // once, and not before the start-up delay.
+  mdir::Boot e;
+  e.RequestRun();
+  CHECK(!e.ShouldTry(0));
+  e.Alive(B::kFirstDelayUs);
+  CHECK(e.ShouldTry(B::kFirstDelayUs));
+  CHECK(!e.ShouldTry(B::kFirstDelayUs + 1));
+  e.RequestRun();
+  CHECK(!e.ShouldTry(B::kFirstDelayUs + B::kMinBackoffUs - 1));
+  CHECK(e.ShouldTry(B::kFirstDelayUs + B::kMinBackoffUs));
   // The first heartbeat after each start is reported once.
   d.Booted();
   CHECK(d.FirstHeartbeat());

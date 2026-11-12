@@ -182,12 +182,26 @@ class Boot {
     last_wanted_us_ = now_us == 0 ? 1 : now_us;
   }
 
+  // A keeper from an older version is running (only those send heartbeats;
+  // one can come back from a save game). Run the script again soon: each run
+  // retires such keepers.
+  void RequestRun() {
+    std::lock_guard<std::mutex> lock(mu_);
+    run_requested_ = true;
+  }
+
   // Called once per frame in direct mode; true = run the script now.
   bool ShouldTry(int64_t now_us) {
     std::lock_guard<std::mutex> lock(mu_);
     if (!started_) {
       started_ = true;
       next_try_us_ = now_us + kFirstDelayUs;
+    }
+    if (run_requested_ && now_us >= next_try_us_) {
+      run_requested_ = false;
+      next_try_us_ = now_us + kMinBackoffUs;
+      ++tries_;
+      return true;
     }
     if (last_alive_us_ != 0 && now_us - last_alive_us_ <= kAliveUs) return false;
     if (last_wanted_us_ == 0 || now_us - last_wanted_us_ > kWantedUs) return false;
@@ -236,6 +250,7 @@ class Boot {
   int64_t last_wanted_us_ = 0;
   int64_t backoff_us_ = kMinBackoffUs;
   bool heartbeat_seen_ = false;
+  bool run_requested_ = false;
   uint32_t tries_ = 0;
 };
 
