@@ -20,10 +20,11 @@
 -- neither can end up wrapping the other's wrapper. Because the direct mode's
 -- wrapper runs first, man=1 also shows updates the mouse turned.
 --
--- The on/off switch, the pending actions and the originals are kept on the
--- class table (cls.__f2_mousetrace), not in a global: loading a save can clear
--- our globals while SACCamera survives, and a copy of this file that didn't
--- recognise the wrappers already on the class would wrap them again.
+-- Each wrapper carries its own label (a marker in its function environment,
+-- as in mouse_direct.lua), so running this again never wraps one of our
+-- wrappers, and each wrapper calls the game's real function. The on/off switch
+-- and the pending actions are globals: if a save load clears them the trace is
+-- simply off. Wrappers stay in place when off and just pass through.
 --
 -- Fields of a U line:
 --   f     Timing.GetProgramFrame()
@@ -83,44 +84,75 @@ if not cls then
   return
 end
 
-local function state()
-  local w = rawget(cls, "__f2_mousetrace")
-  if type(w) ~= "table" then
-    w = { orig = {}, wrap = {}, pending = {}, on = false }
-    rawset(cls, "__f2_mousetrace", w)
-  end
-  return w
+local MARK = "__f2_mousetrace_wrapper"
+
+local function is_ours(f)
+  if type(f) ~= "function" or type(getfenv) ~= "function" then return false end
+  local ok, env = pcall(getfenv, f)
+  return ok and type(env) == "table" and rawget(env, MARK) ~= nil
 end
 
-local function make_wrappers(w)
-  local orig = w.orig
-  w.wrap.ProcessGameAction = function(self, action, x, y, ...)
-    if w.on and (action == 2 or action == 4) then
-      local p = w.pending
+local function label(wrapper)
+  if type(setfenv) == "function" and type(getfenv) == "function" then
+    pcall(setfenv, wrapper, setmetatable({ [MARK] = true }, { __index = getfenv(1) }))
+  end
+  return wrapper
+end
+
+local function on()
+  return rawget(_G, "__f2_mousetrace_on") == true
+end
+
+local function pending()
+  local p = rawget(_G, "__f2_mousetrace_pending")
+  if type(p) ~= "table" then
+    p = {}
+    rawset(_G, "__f2_mousetrace_pending", p)
+  end
+  return p
+end
+
+local function pack(...)
+  return { n = select("#", ...), ... }
+end
+
+local MAKERS = {}
+
+MAKERS.ProcessGameAction = function(original)
+  return function(self, action, x, y, ...)
+    if on() and (action == 2 or action == 4) then
+      local p = pending()
       if #p < 16 then
         p[#p + 1] = string.format("%d:%.3f/%.3f", action, x or 0, y or 0)
       end
     end
-    return orig.ProcessGameAction(self, action, x, y, ...)
+    local r = pack(original(self, action, x, y, ...))
+    return unpack(r, 1, r.n)
   end
+end
 
-  w.wrap.SearchForFoesIfNeeded = function(self, ...)
-    if w.on then
+MAKERS.SearchForFoesIfNeeded = function(original)
+  return function(self, ...)
+    if on() then
       self.__f2_tr_rr = self.RotateRight
       self.__f2_tr_mho = self.ManualHeightOffset
       self.__f2_tr_man = self.PlayerIsManuallyRotatingCamera
     end
-    return orig.SearchForFoesIfNeeded(self, ...)
+    local r = pack(original(self, ...))
+    return unpack(r, 1, r.n)
   end
+end
 
-  w.wrap.ClearTime = function(self, ...)
-    if w.on then
+MAKERS.ClearTime = function(original)
+  return function(self, ...)
+    if on() then
       local my, mdh = self.__f2_my_last or 0, self.__f2_mdh_last or 0
       self.__f2_my_last, self.__f2_mdh_last = 0, 0
       local okf, f = pcall(Timing.GetProgramFrame)
       local okt, tick = pcall(Timing.GetTickRate)
-      local act = (#w.pending > 0) and table.concat(w.pending, ";") or "-"
-      w.pending = {}
+      local p = pending()
+      local act = (#p > 0) and table.concat(p, ";") or "-"
+      rawset(_G, "__f2_mousetrace_pending", {})
       pcall(cprint, string.format(
         "[f2diag] U f=%s tick=%s act=%s rr=%s srr=%s mho=%s>%s cmho=%s man=%d my=%s mdh=%s",
         okf and tostring(f) or "?", okt and tostring(tick) or "?", act,
@@ -128,37 +160,34 @@ local function make_wrappers(w)
         num(self.ManualHeightOffset), num(self.CurrentManualHeightOffset),
         self.__f2_tr_man and 1 or 0, num(my), num(mdh)))
     end
-    return orig.ClearTime(self, ...)
+    local r = pack(original(self, ...))
+    return unpack(r, 1, r.n)
   end
 end
 
 local NAMES = { "ProcessGameAction", "SearchForFoesIfNeeded", "ClearTime" }
 
--- Wrap each method unless it already holds our wrapper. The wrappers stay in
--- place when the trace is off and just pass through, so on/off never stacks
--- wrappers (mouse_direct.lua wraps other methods).
+-- Wrap each method that isn't already one of our wrappers.
 local function install()
-  local w = state()
-  if not w.wrap.ClearTime then make_wrappers(w) end
-  local wrapped = false
   for _, name in ipairs(NAMES) do
-    if cls[name] ~= w.wrap[name] then
-      w.orig[name] = cls[name]
-      cls[name] = w.wrap[name]
-      wrapped = true
+    local cur = cls[name]
+    if type(cur) == "function" and not is_ours(cur) then
+      cls[name] = label(MAKERS[name](cur))
     end
   end
-  if w.on and not wrapped then return say("already on") end
-  w.pending = {}
-  w.on = true
+  if on() then return say("already on") end
+  rawset(_G, "__f2_mousetrace_pending", {})
+  rawset(_G, "__f2_mousetrace_on", true)
+  if type(getfenv) ~= "function" then
+    say("warning: getfenv is missing, so running this again would stack wrappers")
+  end
   say("on, via " .. found_as .. " (starts with the next camera update)")
 end
 
 local function uninstall()
-  local w = state()
-  if not w.on then return say("already off") end
-  w.on = false
-  w.pending = {}
+  if not on() then return say("already off") end
+  rawset(_G, "__f2_mousetrace_on", false)
+  rawset(_G, "__f2_mousetrace_pending", {})
   say("off")
 end
 
@@ -167,7 +196,6 @@ if mode == "on" then
 elseif mode == "off" then
   uninstall()
 else
-  local w = state()
-  local live = w.on and cls.ClearTime == w.wrap.ClearTime
-  say(live and "on" or (w.on and "on, but SACCamera was reloaded: run mousetrace on again" or "off"))
+  local live = on() and is_ours(cls.ClearTime)
+  say(live and "on" or (on() and "on, but SACCamera was reloaded: run mousetrace on again" or "off"))
 end
