@@ -26,12 +26,19 @@
 -- speed and its smoothing, and the mouse adds to it.
 --
 -- There is no per-frame script: GeneralScriptManager writes its scripts into
--- save games (GetSaveTable / LoadFromSave), so an older copy came back to life
--- from a save and fought this one over the wrappers (2026-11-12). Instead the
--- host runs this file again when the mouse moves without reaching the camera
--- (after a camera script reload, for example). Each run also retires keepers
--- that older versions left in the script manager, and saves are clean again
--- from the next save on. Running this file again is harmless.
+-- save games (GetSaveTable / LoadFromSave). The host runs this file again when
+-- the mouse moves without reaching the camera (after a camera script reload,
+-- for example). Running it again is harmless.
+--
+-- Saves made with an early version of this branch carry that version's
+-- per-frame keeper, and loading one brings it back. It re-wraps the camera
+-- every 2 s and takes whatever it finds for the original, so wrapping on top
+-- of it makes a loop (the camera update spins until the game runs out of
+-- memory, 2026-11-12). Functions restored from a save can't be inspected here
+-- (no debug information), so such a keeper can't be found or stopped. Only
+-- that keeper sends heartbeats, so the host knows when one is alive: then this
+-- file leaves the camera alone, and the old keeper's own wrappers, which use
+-- the same host channel, drive the direct mode.
 --
 -- Recognising our own wrappers. Each wrapper carries its own label: its
 -- function environment holds a marker with the name and the game's original,
@@ -143,15 +150,17 @@ local function label(wrapper, name, original)
 end
 
 -- Calls the game's function. If our wrapper for this method is entered again
--- while it is still running, something has put it in a loop: stop with an
--- error (that camera update is lost) and switch direct mode off, instead of
--- spinning until the game runs out of memory.
+-- while it is still running, something has put it in a loop. Then it doesn't
+-- call further (that is what would spin forever) but returns `fallback`, and
+-- direct mode switches off. Raising an error instead may take the game down.
 local ACTIVE = {}
-local function guarded(name, original, ...)
+local function guarded(name, fallback, original, ...)
   if ACTIVE[name] then
-    rawset(_G, "__f2_mousedirect_disabled", true)
-    host("note wrapper loop in " .. name .. ": direct mode switched off")
-    error("mouse_direct: wrapper loop in " .. name, 0)
+    if not rawget(_G, "__f2_mousedirect_disabled") then
+      rawset(_G, "__f2_mousedirect_disabled", true)
+      host("note wrapper loop in " .. name .. ": direct mode switched off")
+    end
+    return fallback
   end
   ACTIVE[name] = true
   local r = pack(pcall(original, ...))
@@ -175,13 +184,13 @@ MAKERS.CheckForTeleport = function(original)
       -- As the stick does for a turn: auto-alignment and follow hold off.
       if yaw ~= 0 then self.PlayerIsManuallyRotatingCamera = true end
     end
-    return guarded("CheckForTeleport", original, self, ...)
+    return guarded("CheckForTeleport", nil, original, self, ...)
   end
 end
 
 MAKERS.ApplyRotateVector = function(original)
   return function(self, cam_pos, ...)
-    local r = pack(guarded("ApplyRotateVector", original, self, cam_pos, ...))
+    local r = pack(guarded("ApplyRotateVector", cam_pos, original, self, cam_pos, ...))
     local yaw = self.__f2_my
     self.__f2_my = 0
     self.__f2_my_last = yaw or 0  -- for the camera trace (mouse_diag.lua)
@@ -216,81 +225,20 @@ MAKERS.GetHeight = function(original)
         self.CurrentManualHeightOffset = clamp(self.CurrentManualHeightOffset + dh, lo, hi)
       end
     end
-    return guarded("GetHeight", original, self, ...)
+    local r = pack(guarded("GetHeight", self.__f2_last_height, original, self, ...))
+    if type(r[1]) == "number" then self.__f2_last_height = r[1] end
+    return unpack(r, 1, r.n)
   end
 end
 
 local NAMES = { "CheckForTeleport", "ApplyRotateVector", "GetHeight" }
-local OLD_ORIG = { CheckForTeleport = "o_cft", ApplyRotateVector = "o_arv", GetHeight = "o_gh" }
-local OLD_WRAP = { CheckForTeleport = "w_cft", ApplyRotateVector = "w_arv", GetHeight = "w_gh" }
-local IS_NAME = { CheckForTeleport = true, ApplyRotateVector = true, GetHeight = true }
-
--- Source file of a Lua function, or "" (functions restored from a save game
--- may have none, so this is only ever an extra hint).
-local function from_this_file(f)
-  if type(f) ~= "function" or type(debug) ~= "table" or type(debug.getinfo) ~= "function" then
-    return false
-  end
-  local ok, info = pcall(debug.getinfo, f, "S")
-  local src = (ok and type(info) == "table" and type(info.source) == "string") and info.source or ""
-  return string.find(src, "mouse_direct", 1, true) ~= nil
-end
-
--- The values a function closes over (no names needed: functions restored
--- from a save game carry no debug information).
-local function upvalues(f)
-  local out = {}
-  if type(f) ~= "function" or type(debug) ~= "table" or type(debug.getupvalue) ~= "function" then
-    return out
-  end
-  for i = 1, 64 do
-    local ok, uname, val = pcall(debug.getupvalue, f, i)
-    if not ok or uname == nil then break end
-    out[#out + 1] = val
-  end
-  return out
-end
-
--- An older version's state table: it holds that version's wrappers (w_cft,
--- w_arv, w_gh) and the functions they call (o_cft, o_arv, o_gh), and its
--- keeper runs while gen stays the same.
-local function is_old_state(t)
-  return type(t) == "table" and type(rawget(t, "w_cft")) == "function"
-end
-
--- One step from a wrapper of any version to the function it calls, or nil
--- when f isn't one of ours. Found by value, never by name or source file,
--- since wrappers restored from a save game have neither.
-local function inner(f, name)
-  local info = wrapper_info(f)
-  if info then return info.orig end
-  for _, val in ipairs(upvalues(f)) do
-    if type(val) == "table" then
-      -- Versions up to e9d8fda: the state table names this very function as
-      -- its wrapper. Retire that version's keeper while we're here.
-      if rawget(val, OLD_WRAP[name]) == f then
-        if type(rawget(val, "gen")) == "number" then val.gen = val.gen + 1 end
-        local o = rawget(val, OLD_ORIG[name])
-        if type(o) == "function" then return o end
-      end
-      -- 9909cb7: an `orig` table keyed by method name only.
-      local only_names, fn = true, rawget(val, name)
-      for k in pairs(val) do
-        if not IS_NAME[k] then only_names = false break end
-      end
-      if only_names and type(fn) == "function" and fn ~= f then return fn end
-    end
-  end
-  return nil
-end
-
--- Follows wrappers from any version back to the game's own function; nil if
--- the chain doesn't end (a loop) within 16 steps.
-local function unwrap(f, name)
+-- Follows our labelled wrappers back to the game's own function; nil if the
+-- chain doesn't end within 16 steps.
+local function unwrap(f)
   for _ = 1, 16 do
-    local nxt = inner(f, name)
-    if nxt == nil then return f end
-    f = nxt
+    local info = wrapper_info(f)
+    if not info then return f end
+    f = info.orig
   end
   return nil
 end
@@ -307,7 +255,7 @@ local function ensure()
   for _, name in ipairs(NAMES) do
     local cur = cls[name]
     local info = wrapper_info(cur)
-    local game = unwrap(cur, name)
+    local game = unwrap(cur)
     if not game then
       rawset(_G, "__f2_mousedirect_disabled", true)
       host("note direct mode disabled: can't find the game's " .. name .. " under " .. tostring(cur))
@@ -332,56 +280,11 @@ local function ensure()
   return changed
 end
 
--- Retires per-frame keepers left by older versions of this file (they also
--- came back from save games). Found by value: the keeper's update function
--- closes over that version's state table, or over its keeper token. The script
--- manager drops a script whose coroutine has finished, so each gets one that
--- finishes at once; versions up to e9d8fda also stop when their gen changes.
-local function is_old_keeper(update)
-  for _, val in ipairs(upvalues(update)) do
-    if is_old_state(val) then
-      if type(rawget(val, "gen")) == "number" then val.gen = val.gen + 1 end
-      return true
-    end
-  end
-  return false
+host("note getfenv " .. type(getfenv) .. ", setfenv " .. type(setfenv))
+local ok_old, old = host("old")
+if ok_old and old == 1 then
+  host("note an older version's keeper is running (from a save game): leaving the camera to it")
+else
+  ensure()
 end
-
-local function retire_old_keepers()
-  local gsm = rawget(_G, "GeneralScriptManager") or GeneralScriptManager
-  if type(gsm) ~= "table" then return 0 end
-  local n = 0
-  local node = gsm.CurrentlyRunningScripts
-  for _ = 1, 10000 do
-    if type(node) ~= "table" then break end
-    local script = node.value
-    if type(script) == "table" then
-      local update = rawget(script, "Update")
-      local tokened = false
-      for _, val in ipairs(upvalues(update)) do
-        -- 9909cb7 / bf50426 keepers: a token table, also kept in this global.
-        if type(val) == "table" and val == rawget(_G, "__f2_mousedirect_keeper") then tokened = true end
-      end
-      if tokened or is_old_keeper(update) or from_this_file(update) then
-        script.co_update = coroutine.create(function() end)
-        n = n + 1
-      end
-    end
-    node = node.next
-  end
-  local old = rawget(_G, "__f2_mousedirect")
-  if is_old_state(old) and type(old.gen) == "number" then old.gen = old.gen + 1 end
-  rawset(_G, "__f2_mousedirect_keeper", {})
-  return n
-end
-
-local ok, retired = pcall(retire_old_keepers)
-if not ok then
-  host("note retiring old keepers failed: " .. tostring(retired))
-elseif retired > 0 then
-  host("note retired " .. retired .. " old keeper(s) (from an older version or a save game)")
-end
-host("note getfenv " .. type(getfenv) .. ", setfenv " .. type(setfenv) .. ", debug.getinfo "
-     .. ((type(debug) == "table" and type(debug.getinfo)) or "nil"))
-ensure()
 host("boot")

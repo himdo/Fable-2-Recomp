@@ -2024,13 +2024,30 @@ extern "C" void sub_82A19CD8(PPCContext& ctx, uint8_t* base) {
     // Direct mouse camera (src/input/mouse_direct.h). Once per camera update
     // mouse_direct.lua calls cprint("[f2mouse] 1") (or "0" when the camera
     // can't be turned) and gets back two numbers: the yaw in degrees and the
-    // height change. "boot" and "hb" just report that the script is running.
+    // height change. "old" returns 1 while a keeper from an early version is
+    // alive (restored from a save game), so the script leaves the camera to it.
+    // "boot" and "note ..." are for the log; "hb" comes only from such a keeper.
     if (tagged_arg(kMouse, text)) {
       namespace mdir = fable2::mousedirect;
       const int64_t now = fable2::mousediag::NowUs();
       const std::string arg = text.substr(kMouse.size());
       mdir::BootState().Alive(now);
       uint64_t results = 0;
+      // Pushes numbers as the C function's results (above its arguments, count
+      // in r3). Lua guarantees a C function 20 free slots below stack_last
+      // (L+0x1C), so two always fit; checked anyway.
+      auto push = [&](const float* v, int n) {
+        const uint32_t top = ta::load_be(base, L + 8);
+        const uint32_t last = ta::load_be(base, L + 0x1C);
+        const uint32_t size = 8u * static_cast<uint32_t>(n);
+        if (top && top + size <= last && ta::wr2(base, top, size)) {
+          uint8_t bytes[16];
+          mdir::EncodeNumbers(v, n, bytes);
+          std::memcpy(reinterpret_cast<void*>(ta::host_addr(base, top)), bytes, size);
+          fable2::console::write_be(base, L + 8, 4, top + size);
+          results = static_cast<uint64_t>(n);
+        }
+      };
       if (arg == "1" || arg == "0") {
         double dx = 0.0, dy = 0.0;
         mdir::State().Drain(arg == "1", now, REXCVAR_GET(mouse_look_direct_smoothing), dx, dy);
@@ -2041,27 +2058,18 @@ extern "C" void sub_82A19CD8(PPCContext& ctx, uint8_t* base) {
         st.invert_y = REXCVAR_GET(mouse_look_invert_y);
         const mdir::CameraDelta d = mdir::ToCamera(dx, dy, st);
         const float v[2] = {static_cast<float>(d.yaw), static_cast<float>(d.height)};
-        // A Lua C function pushes its results above its arguments and returns
-        // their count in r3. Lua guarantees a C function 20 free slots below
-        // stack_last (L+0x1C), so two always fit; checked anyway.
-        const uint32_t top = ta::load_be(base, L + 8);
-        const uint32_t last = ta::load_be(base, L + 0x1C);
-        if (top && top + 16 <= last && ta::wr2(base, top, 16)) {
-          uint8_t bytes[16];
-          mdir::EncodeNumbers(v, 2, bytes);
-          std::memcpy(reinterpret_cast<void*>(ta::host_addr(base, top)), bytes, sizeof bytes);
-          fable2::console::write_be(base, L + 8, 4, top + 16);
-          results = 2;
-        }
+        push(v, 2);
+      } else if (arg == "old") {
+        const float v[1] = {mdir::BootState().OldKeeperAlive(now) ? 1.0f : 0.0f};
+        push(v, 1);
       } else if (arg == "boot") {
         mdir::BootState().Booted();
         fable2::mousediag::Diag::Get().Note("direct mouse_direct.lua running");
-      } else if (arg == "hb") {
-        // Only keepers from older versions send heartbeats (one can come back
-        // from a save game). Running the script again retires them.
-        mdir::BootState().RequestRun();
+      } else if (arg == "hb" || arg == "note camera wrapped") {
+        // Only a keeper from an early version sends these (see OldKeeperSeen).
+        mdir::BootState().OldKeeperSeen(now);
         if (mdir::BootState().FirstHeartbeat())
-          fable2::mousediag::Diag::Get().Note("direct old keeper running: retiring it");
+          fable2::mousediag::Diag::Get().Note("direct an early version's keeper is running (from a save game)");
       } else if (arg.rfind("note ", 0) == 0) {
         fable2::mousediag::Diag::Get().Note("direct " + arg.substr(5));
       }
