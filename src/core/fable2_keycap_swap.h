@@ -82,6 +82,11 @@ struct Entry {
   uint32_t cached_addrs[4] = {0, 0, 0, 0};
   int cached_count = 0;
   int cached_order = 0;  // byte order (0 = identity, 1 = R<->B) at those buffers
+  // True once a scan has confirmed this icon has no live GPU surface (it is not
+  // currently on screen), so repeated switches skip it instead of rescanning all
+  // 512 MB. Cleared when the bank is (re)read, which is when the game allocates
+  // surfaces for newly-shown icons.
+  bool scan_stale = false;
 };
 
 // Lightweight diagnostic log (fable2_keycap_swap.log next to the exe). Lets us
@@ -287,6 +292,9 @@ class KeycapSwap {
         }
         entry.guest_address_valid = true;
       }
+      // The bank was (re)read, so this icon may now have a live GPU surface the
+      // last scan didn't see. Let the next switch rescan it.
+      entry.scan_stale = false;
     }
   }
 
@@ -362,6 +370,12 @@ class KeycapSwap {
       const uint8_t* cur = (old_mode != 0) ? e.keyboard.data() + 4 : e.original.data() + 4;
       const uint8_t* nxt = (new_mode != 0) ? e.keyboard.data() + 4 : e.original.data() + 4;
 
+      // Skip icons confirmed to have no live GPU surface (not on screen). The
+      // bank re-read hook clears this flag, so a newly-shown icon is scanned on
+      // the next switch. This is what removes the per-switch 512 MB rescan of
+      // the ~40 invisible icons that dominated the lag.
+      if (e.scan_stale && e.cached_count == 0) continue;
+
       // Fast path: if every cached buffer still holds the current pixels (in
       // the cached byte order), patch them in place and skip the 512 MB scan.
       // This is the common case when swapping input devices within a menu, so
@@ -412,10 +426,12 @@ class KeycapSwap {
           e.cached_count = found > 4 ? 4 : found;
           for (int j = 0; j < e.cached_count; ++j) e.cached_addrs[j] = addrs[j];
           e.cached_order = order;
+          e.scan_stale = false;
         }
       }
       if (found == 0) {
         e.cached_count = 0;
+        e.scan_stale = true;
         Log("  entry[" + std::to_string(i) + "] NOT FOUND in physical RAM (first16=" +
             HexDump(cur, 16) + ")");
       }
