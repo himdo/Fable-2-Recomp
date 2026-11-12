@@ -40,20 +40,14 @@
 -- file leaves the camera alone, and the old keeper's own wrappers, which use
 -- the same host channel, drive the direct mode.
 --
--- Recognising our own wrappers. Each wrapper carries its own label: its
--- function environment holds a marker with the name and the game's original,
--- so any copy of this file, in any state, can tell one of ours by looking at
--- the function itself, and every wrapper calls the game's real function, never
--- another wrapper.
---
--- Two earlier attempts kept this bookkeeping elsewhere and froze the game
--- (2026-11-12). In a global, a save load cleared it while an older keeper
--- survived: two copies wrapped each other's wrappers. On the class table, the
--- record didn't stick (SACCamera as seen through the globals is not a stable
--- table), so a new wrapper went on top of the last one every pass until the
--- chain pointed back at itself. Wrappers also no longer tail-call the
--- original: if a loop ever forms again, Lua runs out of stack and reports an
--- error instead of the camera update spinning forever.
+-- Recognising our own wrappers. Every wrapper is recorded, with the game's
+-- function it calls, in a weak table in the Lua registry, which outlives our
+-- globals within a game session. Before wrapping, a method is followed back
+-- through our wrappers to the game's function, so a wrapper always calls the
+-- game's function and never another wrapper, and running this file again never
+-- stacks wrappers. Wrappers restored from a save game can't be recognised at
+-- all (see above), which is why the file stays away while an old keeper is
+-- alive.
 
 local function host(s)
   return pcall(cprint, "[f2mouse] " .. s)
@@ -107,9 +101,8 @@ end
 
 local MARK = "__f2_mousedirect_wrapper"
 
--- A weak table of our wrappers, as a fallback where getfenv/setfenv are
--- missing. Kept in the Lua registry when the debug library offers it, since
--- that survives a save load clearing the globals.
+-- The weak table of our wrappers. Kept in the Lua registry when the debug
+-- library offers it, since that survives a save load clearing the globals.
 local function known_table()
   local reg = nil
   if type(debug) == "table" and type(debug.getregistry) == "function" then
@@ -125,48 +118,45 @@ local function known_table()
   return k
 end
 
--- The label of one of our wrappers (any copy), or nil for anything else.
+-- The label of one of our wrappers (any copy of this file), or nil.
 local function wrapper_info(f)
   if type(f) ~= "function" then return nil end
-  if type(getfenv) == "function" then
-    local ok, env = pcall(getfenv, f)
-    if ok and type(env) == "table" then
-      local info = rawget(env, MARK)
-      if type(info) == "table" then return info end
-    end
-  end
   return known_table()[f]
 end
 
 -- Labels a new wrapper with the game's original.
 local function label(wrapper, name, original)
-  local info = { name = name, orig = original }
-  if type(setfenv) == "function" and type(getfenv) == "function" then
-    local env = setmetatable({ [MARK] = info }, { __index = getfenv(1) })
-    pcall(setfenv, wrapper, env)
-  end
-  known_table()[wrapper] = info
+  known_table()[wrapper] = { name = name, orig = original }
   return wrapper
 end
 
--- Calls the game's function. If our wrapper for this method is entered again
--- while it is still running, something has put it in a loop. Then it doesn't
--- call further (that is what would spin forever) but returns `fallback`, and
--- direct mode switches off. Raising an error instead may take the game down.
+-- Loop guard, without pcall (wrapping the game's camera functions in pcall
+-- is the main change in the hot path since the runs that worked, and a clean
+-- new game then crashed, 2026-11-12). enter() returns false when our wrapper
+-- for `name` is entered again while it is still running, i.e. something has
+-- put it in a loop: the wrapper then returns a neutral value instead of
+-- calling further, and direct mode switches off. The mark is the program
+-- frame, so a mark left behind by an error in the game's function is stale by
+-- the next frame.
 local ACTIVE = {}
-local function guarded(name, fallback, original, ...)
-  if ACTIVE[name] then
+local function frame()
+  local ok, f = pcall(Timing.GetProgramFrame)
+  return ok and f or 0
+end
+local function enter(name)
+  local f = frame()
+  if ACTIVE[name] == f then
     if not rawget(_G, "__f2_mousedirect_disabled") then
       rawset(_G, "__f2_mousedirect_disabled", true)
       host("note wrapper loop in " .. name .. ": direct mode switched off")
     end
-    return fallback
+    return false
   end
-  ACTIVE[name] = true
-  local r = pack(pcall(original, ...))
+  ACTIVE[name] = f
+  return true
+end
+local function leave(name)
   ACTIVE[name] = nil
-  if not r[1] then error(r[2], 0) end
-  return unpack(r, 2, r.n)
 end
 
 -- One wrapper per method, around the game's own function `original`.
@@ -184,13 +174,18 @@ MAKERS.CheckForTeleport = function(original)
       -- As the stick does for a turn: auto-alignment and follow hold off.
       if yaw ~= 0 then self.PlayerIsManuallyRotatingCamera = true end
     end
-    return guarded("CheckForTeleport", nil, original, self, ...)
+    if not enter("CheckForTeleport") then return end
+    local r = pack(original(self, ...))
+    leave("CheckForTeleport")
+    return unpack(r, 1, r.n)
   end
 end
 
 MAKERS.ApplyRotateVector = function(original)
   return function(self, cam_pos, ...)
-    local r = pack(guarded("ApplyRotateVector", cam_pos, original, self, cam_pos, ...))
+    if not enter("ApplyRotateVector") then return cam_pos end
+    local r = pack(original(self, cam_pos, ...))
+    leave("ApplyRotateVector")
     local yaw = self.__f2_my
     self.__f2_my = 0
     self.__f2_my_last = yaw or 0  -- for the camera trace (mouse_diag.lua)
@@ -225,7 +220,9 @@ MAKERS.GetHeight = function(original)
         self.CurrentManualHeightOffset = clamp(self.CurrentManualHeightOffset + dh, lo, hi)
       end
     end
-    local r = pack(guarded("GetHeight", self.__f2_last_height, original, self, ...))
+    if not enter("GetHeight") then return self.__f2_last_height end
+    local r = pack(original(self, ...))
+    leave("GetHeight")
     if type(r[1]) == "number" then self.__f2_last_height = r[1] end
     return unpack(r, 1, r.n)
   end
@@ -280,7 +277,7 @@ local function ensure()
   return changed
 end
 
-host("note getfenv " .. type(getfenv) .. ", setfenv " .. type(setfenv))
+host("note debug.getregistry " .. ((type(debug) == "table" and type(debug.getregistry)) or "nil"))
 local ok_old, old = host("old")
 if ok_old and old == 1 then
   host("note an older version's keeper is running (from a save game): leaving the camera to it")
