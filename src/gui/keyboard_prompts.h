@@ -24,8 +24,10 @@
 #include <unordered_set>
 #include <vector>
 
+#include "bank_rebuild.h"
 #include "gui_texture_bank.h"
 #include "keycap_render.h"
+#include "gui_tex_codec.h"
 
 namespace fable2::gui {
 
@@ -116,6 +118,14 @@ std::vector<uint8_t> ReadAllBytes(const std::filesystem::path& path) {
   }
   std::fclose(f);
   return out;
+}
+
+bool WriteAllBytes(const std::filesystem::path& path, const std::vector<uint8_t>& data) {
+  std::FILE* f = std::fopen(path.string().c_str(), "wb");
+  if (!f) return false;
+  bool ok = data.empty() || std::fwrite(data.data(), 1, data.size(), f) == data.size();
+  ok = std::fclose(f) == 0 && ok;
+  return ok;
 }
 
 }  // namespace
@@ -263,11 +273,17 @@ inline bool GenerateSidecar(const std::filesystem::path& game_data_root, const s
 
   struct SidecarEntry {
     std::string bank_path;
+    std::string name_ci;  // lowercase bank entry name (for offset lookup)
     uint64_t offset = 0;
     uint32_t size = 0;
-    std::vector<uint8_t> payload;
+    std::vector<uint8_t> original;  // full-RGBA (0x00A2) original pixels
+    std::vector<uint8_t> keyboard;  // full-RGBA (0x00A2) keycap pixels
   };
   std::vector<SidecarEntry> sidecar;
+  // Texture-bank replacements: compressed icons -> decoded full-RGBA payload.
+  std::unordered_map<std::string, std::vector<uint8_t>> texture_replacements;
+  // Header-bank updates: name -> new full-RGBA pixel_byte_count.
+  std::unordered_map<std::string, uint32_t> header_updates;
   std::unordered_map<std::string, std::vector<uint8_t>> rendered;
   for (const auto& [key, entry] : textureBank.entries()) {
     auto labelOpt = IconLabel(entry.name, labels, mouseLook);
@@ -275,41 +291,106 @@ inline bool GenerateSidecar(const std::filesystem::path& game_data_root, const s
     auto headerIt = headerBank.entries().find(Ci(entry.name));
     if (headerIt == headerBank.entries().end() || headerIt->second.length != rawHeaderLen) continue;
     const uint8_t* metadata = headerBank.Payload(headerIt->second);
-    int size = GuiTextureBank::ReadIntBE(metadata + 16);
-    if ((size != 32 && size != 64) || GuiTextureBank::ReadIntBE(metadata + 20) != size ||
-        GuiTextureBank::ReadIntBE(metadata + 4) != entry.length)
-      continue;
-    std::string renderKey = *labelOpt + "|" + std::to_string(size);
+    const int w = GuiTextureBank::ReadIntBE(metadata + 16);
+    const int h = GuiTextureBank::ReadIntBE(metadata + 20);
+    if ((w != 32 && w != 64) || h != w) continue;
+    const int format = GuiTextureBank::ReadIntBE(metadata + 12);
+    const int a2_size = 4 + w * h * 4;
+    // The original full-RGBA payload: the existing bytes when the icon is already
+    // uncompressed (0x00A2), else the decoded compressed icon (Huffman BC3 / raw BC3).
+    std::vector<uint8_t> original;
+    if (format == 0xA2) {
+      if (entry.length != a2_size) continue;
+      original.assign(textureBank.Payload(entry), textureBank.Payload(entry) + entry.length);
+    } else {
+      if (!DecodeCompressedIconToTile(textureBank.Payload(entry), entry.length, w, h, original) ||
+          int(original.size()) != a2_size)
+        continue;
+    }
+    // The keyboard (keycap) full-RGBA payload, rendered at the icon size.
+    std::string renderKey = *labelOpt + "|" + std::to_string(w);
     auto it = rendered.find(renderKey);
-    if (it == rendered.end()) it = rendered.emplace(renderKey, RenderKeycap(*labelOpt, size)).first;
-    if (it->second.size() != size_t(entry.length)) continue;
-    sidecar.push_back({kTextures, uint64_t(entry.offset), uint32_t(entry.length), it->second});
+    if (it == rendered.end()) it = rendered.emplace(renderKey, RenderKeycap(*labelOpt, w)).first;
+    if (int(it->second.size()) != a2_size) continue;
+    // Compressed icons must be converted to 0x00A2 (the game would otherwise try
+    // to decode the full-RGBA replacement as a compressed block), so record them
+    // for the bank rebuild. Full-RGBA icons are left in place.
+    if (format != 0xA2) {
+      texture_replacements[Ci(entry.name)] = original;
+      header_updates[Ci(entry.name)] = uint32_t(a2_size);
+    }
+    sidecar.push_back({kTextures, Ci(entry.name), uint64_t(entry.offset), uint32_t(a2_size),
+                       std::move(original), it->second});
   }
   if (sidecar.empty()) return false;
 
-  // Little-endian: magic "KBPM" (u32), version (u32 = 1), entry_count (u32),
-  // then per entry: bank_path_len (u32), bank_path (utf8), abs_offset (u64),
-  // size (u32), payload (size). Read by src/core/fable2_keycap_swap.h.
+  // Rebuild the banks so the compressed icons carry full-RGBA (0x00A2) payloads:
+  // the game then reads them as plain pixels, which the keycap swap's post-read
+  // hook and physical-RAM scan rely on (a compressed entry's decoded surface
+  // would not match the full-RGBA keycap in a byte-exact scan). This mirrors the
+  // original C# launcher, which rewrote the banks on disk. The pristine banks are
+  // kept once as <bank>.orig so the change is reversible. A failed rebuild just
+  // means the compressed icons are skipped (the full-RGBA ones still work).
+  std::unordered_map<std::string, uint64_t> new_offsets;
+  bool rebuilt = false;
+  if (!texture_replacements.empty()) {
+    std::vector<uint8_t> rebuilt_textures, rebuilt_headers;
+    if (RebuildBank(textures, texture_replacements, rebuilt_textures, new_offsets) &&
+        RebuildHeaderBank(headers, header_updates, rebuilt_headers)) {
+      // Keep a one-time backup of the pristine banks, then overwrite them.
+      const auto tex_path = game_data_root / kTextures;
+      const auto hdr_path = game_data_root / kHeaders;
+      const auto tex_orig = game_data_root / (kTextures + ".orig");
+      const auto hdr_orig = game_data_root / (kHeaders + ".orig");
+      std::error_code ec;
+      if (!std::filesystem::exists(tex_orig, ec))
+        std::filesystem::copy(tex_path, tex_orig, std::filesystem::copy_options::overwrite_existing, ec);
+      if (!std::filesystem::exists(hdr_orig, ec))
+        std::filesystem::copy(hdr_path, hdr_orig, std::filesystem::copy_options::overwrite_existing, ec);
+      if (WriteAllBytes(tex_path, rebuilt_textures) &&
+          WriteAllBytes(hdr_path, rebuilt_headers))
+        rebuilt = true;
+    }
+  }
+  // Point each rebuilt (compressed) entry at its new location in the rebuilt
+  // bank. Drop any rebuilt entry whose bank rebuild failed (it would not swap).
+  std::vector<SidecarEntry> out_entries;
+  out_entries.reserve(sidecar.size());
+  for (auto& e : sidecar) {
+    auto oit = new_offsets.find(e.name_ci);
+    if (oit != new_offsets.end()) {
+      if (!rebuilt) continue;  // rebuild failed: compressed icon can't swap
+      e.offset = oit->second;
+    }
+    out_entries.push_back(std::move(e));
+  }
+  if (out_entries.empty()) return false;
+
+  // Little-endian sidecar (version 2): magic "KBPM" (u32), version (u32 = 2),
+  // entry_count (u32), then per entry: bank_path_len (u32), bank_path (utf8),
+  // abs_offset (u64), size (u32), original (size), keyboard (size). Read by
+  // src/core/fable2_keycap_swap.h.
   auto write_le = [](std::FILE* f, const void* p, size_t n) { std::fwrite(p, 1, n, f); };
   const uint32_t magic = 0x4D50424Bu;
-  const uint32_t version = 1;
-  const uint32_t count = uint32_t(sidecar.size());
+  const uint32_t version = 2;
+  const uint32_t count = uint32_t(out_entries.size());
   std::FILE* f = std::fopen((game_data_root / "keyboard_prompts.bin").string().c_str(), "wb");
   if (!f) return false;
   bool ok = true;
   write_le(f, &magic, 4);
   write_le(f, &version, 4);
   write_le(f, &count, 4);
-  for (const auto& e : sidecar) {
+  for (const auto& e : out_entries) {
     const uint32_t name_len = uint32_t(e.bank_path.size());
     write_le(f, &name_len, 4);
     write_le(f, e.bank_path.data(), name_len);
     write_le(f, &e.offset, 8);
     write_le(f, &e.size, 4);
-    write_le(f, e.payload.data(), e.payload.size());
+    write_le(f, e.original.data(), e.original.size());
+    write_le(f, e.keyboard.data(), e.keyboard.size());
   }
   ok = std::fclose(f) == 0;
-  return ok && !sidecar.empty();
+  return ok && !out_entries.empty();
 }
 
 }  // namespace fable2::gui

@@ -58,7 +58,11 @@ namespace fable2::keycap {
 inline constexpr const char* kSidecarName = "keyboard_prompts.bin";
 // Little-endian magic for the sidecar: 'K','B','P','M'.
 inline constexpr uint32_t kSidecarMagic = 0x4D50424Bu;
-inline constexpr uint32_t kSidecarVersion = 1;
+// Sidecar version 2 carries both the original (full-RGBA) and keyboard (keycap)
+// payloads per entry, so the swap module does not need to read the bank for the
+// original (the compressed icons are served from a rebuilt .keycap/ bank, and the
+// original's decoded pixels are not in the on-disk bank).
+inline constexpr uint32_t kSidecarVersion = 2;
 
 // One affected bank entry (a controller icon texture).
 struct Entry {
@@ -126,8 +130,9 @@ class KeycapSwap {
     Log("Init: enabled, " + std::to_string(entries_.size()) +
         " entries (prompt variant follows the active input device)");
     for (size_t i = 0; i < entries_.size(); ++i) {
-      Log("  [" + std::to_string(i) + "] " + entries_[i].bank_path + " offset=0x"
-          + std::to_string(entries_[i].abs_offset) + " size=" + std::to_string(entries_[i].size));
+      Log("  [" + std::to_string(i) + "] " + entries_[i].bank_path + " offset="
+          + HexAddr(static_cast<uint32_t>(entries_[i].abs_offset)) +
+          " size=" + std::to_string(entries_[i].size));
     }
     // Install the hook (a no-op if the feature is disabled, but harmless).
     rex::system::RexSetXFilePostReadHook(&KeycapSwap::FileReadTrampoline);
@@ -209,18 +214,15 @@ class KeycapSwap {
       std::memcpy(&abs_offset, raw.data() + off, 8);
       off += 8;
       uint32_t size = rd_u32(off);
-      if (off + size > raw.size()) return false;
+      if (off + 2u * size > raw.size()) return false;
       Entry e;
       e.bank_path = bank_path;
       e.abs_offset = abs_offset;
       e.size = size;
+      e.original.assign(raw.begin() + off, raw.begin() + off + size);
+      off += size;
       e.keyboard.assign(raw.begin() + off, raw.begin() + off + size);
       off += size;
-      // Read the original payload from the on-disk bank (the sidecar only
-      // carries the keyboard variant, to keep the file small).
-      if (!ReadBankRange(game_data_root / e.bank_path, e.abs_offset, e.size, e.original)) {
-        return false;
-      }
       entries_.push_back(std::move(e));
     }
     return true;
