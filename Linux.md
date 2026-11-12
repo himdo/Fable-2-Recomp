@@ -202,10 +202,14 @@ Suggested settings on the Deck:
   and frame times. The F3 debug overlay also shows it, but while any ImGui
   overlay is open the window is repainted at the display refresh rate, so
   external FPS counters then read the refresh rate instead.
-- Every 5 seconds the log (`logs/` next to the executable) gets a line like
+- For measuring, `log_guest_fps = true` in `fable_2.toml` adds a line every
+  5 seconds to the log (`logs/` next to the executable), like
   `[guest-fps] 47.9 fps over 5.0 s, slowest frame 61.2 ms, 3 of 240 frames
   over 33 ms; host presented 47.9/s`. The "over 33 ms" count is the number of
-  visible stutters. `log_guest_fps = false` in `fable_2.toml` turns it off.
+  visible stutters. With it on, the same summaries with CPU time per thread,
+  CPU/GPU clocks and per-frame work counts also go to `perf_log.txt` next to
+  the executable (`log_perf_file`), and `log_perf_profile = true` adds the
+  busiest functions every 30 s. All three are off by default.
 
 ## Display and performance settings
 
