@@ -42,32 +42,46 @@ void MaybeYield();
 namespace fable2::hotfunc {
 
 // Idle-spin backoff ([perf] idle_yield_sleep_us). A guest thread that is
-// waiting for another one polls by yielding in a tight loop; the host yield
-// returns immediately when nothing else wants the core, so the loop burns a
-// full core for as long as the wait lasts. Yields that arrive back to back
-// (under kSpinGap apart, i.e. no real work between them) kSpinStreak times in
-// a row are treated as such a poll, and each further one sleeps briefly. Any
-// real work between two yields resets the streak, so work loops that yield
-// once per iteration are unaffected. Returns true if it slept.
+// waiting for another one (or for the clock, like the game thread's tick loop
+// in ProcessGameFrame_82276C30) polls by yielding in a tight loop; the host
+// yield returns immediately when nothing else wants the core, so the loop
+// burns a full core for as long as the wait lasts. Yields with almost no work
+// between them (under kSpinGap from the end of one yield to the start of the
+// next) kSpinStreak times in a row are treated as such a poll, and each
+// further one sleeps briefly. Real work between two yields resets the streak,
+// so work loops that yield once per iteration are unaffected.
+//
+// The gap is measured from the END of the previous yield: a yield that hands
+// the core to another thread can itself take many microseconds on a loaded
+// machine, and counting that as work kept the backoff from ever starting
+// there (on the Steam Deck the game thread spent half its time in
+// sched_yield).
+struct IdleSpinState {
+  std::chrono::steady_clock::time_point last_end{};
+  uint32_t streak = 0;
+};
+inline IdleSpinState& IdleSpin() {
+  static thread_local IdleSpinState state;
+  return state;
+}
+
+// Call before yielding. Returns true if it slept instead (no yield needed).
 inline bool IdleSpinBackoff(int32_t sleep_us) {
   using clock = std::chrono::steady_clock;
   constexpr auto kSpinGap = std::chrono::microseconds(3);
-  constexpr uint32_t kSpinStreak = 1000;
-  static thread_local clock::time_point last{};
-  static thread_local uint32_t streak = 0;
-  const auto now = clock::now();
-  const bool back_to_back = now - last < kSpinGap;
-  last = now;
+  constexpr uint32_t kSpinStreak = 500;
+  IdleSpinState& state = IdleSpin();
+  const bool back_to_back = clock::now() - state.last_end < kSpinGap;
   if (!back_to_back) {
-    streak = 0;
+    state.streak = 0;
     return false;
   }
-  if (streak < kSpinStreak) {
-    ++streak;
+  if (state.streak < kSpinStreak) {
+    ++state.streak;
     return false;
   }
   std::this_thread::sleep_for(std::chrono::microseconds(sleep_us));
-  last = clock::now();  // the sleep itself is not "work"
+  state.last_end = clock::now();  // the sleep itself is not "work"
   return true;
 }
 
@@ -80,16 +94,19 @@ inline void BatchedYield() {
   const int32_t every = fable2::config::Get().hotfunc_yield_every;
   if (every <= 0) {
     std::atomic_signal_fence(std::memory_order_seq_cst);  // compiler barrier only, no mfence
-    return;
-  }
-  static thread_local uint32_t n = 0;
-  if (++n >= static_cast<uint32_t>(every)) {
-    n = 0;
-    rex::thread::MaybeYield();  // SwitchToThread() + full MemoryBarrier()
   } else {
-    // Compiler-only barrier: no mfence on x86. TSO covers hardware ordering;
-    // this just stops the optimizer reordering guest accesses across the point.
-    std::atomic_signal_fence(std::memory_order_seq_cst);
+    static thread_local uint32_t n = 0;
+    if (++n >= static_cast<uint32_t>(every)) {
+      n = 0;
+      rex::thread::MaybeYield();  // SwitchToThread() + full MemoryBarrier()
+    } else {
+      // Compiler-only barrier: no mfence on x86. TSO covers hardware ordering;
+      // this just stops the optimizer reordering guest accesses across the point.
+      std::atomic_signal_fence(std::memory_order_seq_cst);
+    }
+  }
+  if (idle_sleep_us > 0) {
+    IdleSpin().last_end = std::chrono::steady_clock::now();
   }
 }
 
