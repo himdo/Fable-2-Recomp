@@ -269,19 +269,17 @@ inline std::vector<uint8_t> RenderKeycapInset(const std::string& label, int hIns
   return result;
 }
 
-// Replaces a 64x64 sub-region of a larger 0x00A2 tile with a 64x64 keycap tile,
-// re-mapping pixels between the two Xenos tile pitches (the keycap is tiled at
-// pitch 64, the atlas at pitch big_w). `ox`/`oy` is the sub-region's top-left in
-// the atlas. This is used to swap a single prompt button inside a shared atlas
-// (e.g. the A button in art\gui\persistant\abyx.tex) without touching the rest.
+// Replaces a cap_size x cap_size sub-region of a larger 0x00A2 tile with a
+// keycap tile of the same size, re-mapping pixels between the two Xenos tile
+// pitches. `ox`/`oy` is the sub-region's top-left in the atlas. Used to swap a
+// single prompt button inside a shared atlas without touching the rest.
 inline void ReplaceKeycapRegion(std::vector<uint8_t>& atlas, const std::vector<uint8_t>& keycap,
-                                int big_w, int big_h, int ox, int oy) {
-  const int kCap = 64;
-  for (int y = 0; y < kCap; ++y) {
-    for (int x = 0; x < kCap; ++x) {
+                                int big_w, int big_h, int ox, int oy, int cap_size = 64) {
+  for (int y = 0; y < cap_size; ++y) {
+    for (int x = 0; x < cap_size; ++x) {
       const int bx = ox + x, by = oy + y;
       if (bx < 0 || by < 0 || bx >= big_w || by >= big_h) continue;
-      const uint8_t* src = keycap.data() + 4 + XenosTiledOffset(x, y, kCap);
+      const uint8_t* src = keycap.data() + 4 + XenosTiledOffset(x, y, cap_size);
       uint8_t* dst = atlas.data() + 4 + XenosTiledOffset(bx, by, big_w);
       dst[0] = src[0];
       dst[1] = src[1];
@@ -289,6 +287,76 @@ inline void ReplaceKeycapRegion(std::vector<uint8_t>& atlas, const std::vector<u
       dst[3] = src[3];
     }
   }
+}
+
+// Renders a keycap for `label` at `size` x `size` pixels (any size), by
+// rendering at 64x64 and bilinearly downsampling. Returns linear RGBA
+// (size*size*4 bytes, A,R,G,B per pixel in row-major order). Use
+// PlaceLinearRegion to write this into a tiled atlas.
+inline std::vector<uint8_t> RenderKeycapLinear(const std::string& label, int size) {
+  if (size <= 0) return {};
+  std::vector<uint8_t> keycap = RenderKeycap(label, 64);
+  if (int(keycap.size()) != 4 + 64 * 64 * 4) return {};
+  // De-tile to linear.
+  std::vector<uint8_t> linear((size_t)64 * 64 * 4, 0);
+  for (int y = 0; y < 64; ++y)
+    for (int x = 0; x < 64; ++x) {
+      const uint8_t* s = keycap.data() + 4 + XenosTiledOffset(x, y, 64);
+      uint8_t* d = linear.data() + ((size_t)y * 64 + x) * 4;
+      d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
+    }
+  // Premultiplied bilinear downscale to size x size.
+  std::vector<uint8_t> out((size_t)size * size * 4, 0);
+  const float scale = 64.0f / (float)size;
+  for (int y = 0; y < size; ++y)
+    for (int x = 0; x < size; ++x) {
+      const float sx = (x + 0.5f) * scale - 0.5f;
+      const float sy = (y + 0.5f) * scale - 0.5f;
+      const int x0 = (int)sx, y0 = (int)sy;
+      const float fx = sx - x0, fy = sy - y0;
+      float pmr = 0, pmg = 0, pmb = 0, pmA = 0;
+      for (int dy = 0; dy < 2; ++dy)
+        for (int dx = 0; dx < 2; ++dx) {
+          const int px = x0 + dx, py = y0 + dy;
+          if (px < 0 || py < 0 || px >= 64 || py >= 64) continue;
+          const uint8_t* s = linear.data() + ((size_t)py * 64 + px) * 4;
+          const int A = s[0], R = s[1], G = s[2], B = s[3];
+          const float w = (dx ? fx : 1.0f - fx) * (dy ? fy : 1.0f - fy);
+          pmA += A * w;
+          pmr += R * (A / 255.0f) * w;
+          pmg += G * (A / 255.0f) * w;
+          pmb += B * (A / 255.0f) * w;
+        }
+      const int A = (int)(pmA + 0.5f);
+      uint8_t* o = out.data() + ((size_t)y * size + x) * 4;
+      o[0] = (uint8_t)std::min(255, A);
+      if (A > 0) {
+        o[1] = (uint8_t)std::min(255.0f, pmr * 255.0f / A + 0.5f);
+        o[2] = (uint8_t)std::min(255.0f, pmg * 255.0f / A + 0.5f);
+        o[3] = (uint8_t)std::min(255.0f, pmb * 255.0f / A + 0.5f);
+      } else {
+        o[1] = o[2] = o[3] = 0;
+      }
+    }
+  return out;
+}
+
+// Places a size x size linear RGBA region (A,R,G,B per pixel, row-major) into
+// a 0x00A2 tiled atlas at position (ox, oy). Uses the atlas width for the
+// Xenos tile offset (works for any region size, not just power-of-2).
+inline void PlaceLinearRegion(std::vector<uint8_t>& atlas, const uint8_t* linear,
+                              int region_size, int atlas_w, int atlas_h, int ox, int oy) {
+  for (int y = 0; y < region_size; ++y)
+    for (int x = 0; x < region_size; ++x) {
+      const int bx = ox + x, by = oy + y;
+      if (bx < 0 || by < 0 || bx >= atlas_w || by >= atlas_h) continue;
+      const uint8_t* src = linear + ((size_t)y * region_size + x) * 4;
+      uint8_t* dst = atlas.data() + 4 + XenosTiledOffset(bx, by, atlas_w);
+      dst[0] = src[0];
+      dst[1] = src[1];
+      dst[2] = src[2];
+      dst[3] = src[3];
+    }
 }
 
 inline std::optional<std::string> Directions(
@@ -517,6 +585,54 @@ inline bool GenerateSidecar(const std::filesystem::path& game_data_root, const s
           }
           }  // if (allOk)
         }  // if (w == 256 && h == 256)
+      }
+    }
+  }
+
+  // frame_elements.tex: replace B key at (46, 193) and A key at (13, 172), size 46x46.
+  {
+    const std::string frameName = "art\\gui\\frames\\frames_elements.tex";
+    auto at = textureBank.entries().find(Ci(frameName));
+    if (at != textureBank.entries().end()) {
+      auto ah = headerBank.entries().find(Ci(frameName));
+      if (ah != headerBank.entries().end() && ah->second.length == rawHeaderLen) {
+        const uint8_t* md = headerBank.Payload(ah->second);
+        const int w = GuiTextureBank::ReadIntBE(md + 16);
+        const int h = GuiTextureBank::ReadIntBE(md + 20);
+        const int format = GuiTextureBank::ReadIntBE(md + 12);
+        const int a2_size = 4 + w * h * 4;
+        if (w == 512 && h == 512) {
+          struct KeycapSpec { const char* key; int x, y; };
+          const KeycapSpec specs[] = { {"b", 46, 193}, {"a", 13, 372} };
+          std::vector<uint8_t> original;
+          if (format == 0xA2) {
+            if (at->second.length == a2_size)
+              original.assign(textureBank.Payload(at->second),
+                              textureBank.Payload(at->second) + at->second.length);
+          } else if (DecodeCompressedIconToTile(textureBank.Payload(at->second),
+                                                 at->second.length, w, h, original) &&
+                     int(original.size()) == a2_size) {
+            // ok
+          }
+          if (!original.empty()) {
+            std::vector<uint8_t> keyboard = original;
+            const int kSize = 46;
+            for (auto& spec : specs) {
+              auto labelIt = labels.find(spec.key);
+              if (labelIt == labels.end()) continue;
+              auto keycap = RenderKeycapLinear(labelIt->second, kSize);
+              if (int(keycap.size()) != kSize * kSize * 4) continue;
+              if (spec.x < 0 || spec.y < 0 || spec.x + kSize > w || spec.y + kSize > h) continue;
+              PlaceLinearRegion(keyboard, keycap.data(), kSize, w, h, spec.x, spec.y);
+            }
+            if (format != 0xA2) {
+              texture_replacements[Ci(frameName)] = original;
+              header_updates[Ci(frameName)] = uint32_t(a2_size);
+            }
+            sidecar.push_back({kTextures, Ci(frameName), uint64_t(at->second.offset),
+                               uint32_t(a2_size), std::move(original), std::move(keyboard)});
+          }
+        }
       }
     }
   }
