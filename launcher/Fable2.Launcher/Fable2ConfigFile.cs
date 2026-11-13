@@ -29,9 +29,6 @@ public class Fable2ConfigValues
     // The older direct_mouse_look key isn't managed; it's left as it is.
     public string MouseLookMode { get; set; } = "direct";
 
-    public static string NormalizeMouseLookMode(string? mode) =>
-        mode == "stick" ? "stick" : "direct";
-
     // [patches]
     public bool UnlockWebsite { get; set; } = true;
     public bool UnlockCe { get; set; } = true;
@@ -60,6 +57,10 @@ public class KeybindEntry
 /// </summary>
 public static class Fable2ConfigFile
 {
+    /// <summary>mouse_look_mode is "direct" or "stick"; anything else is "direct".</summary>
+    public static string NormalizeMouseLookMode(string? mode) =>
+        mode == "stick" ? "stick" : "direct";
+
     // Host key names understood by rex::ui::ParseVirtualKey (see
     // src/ui/keybinds.cpp) plus the mouse-button aliases from
     // src/input/keyboard_gamepad.h. Used to populate the key dropdowns.
