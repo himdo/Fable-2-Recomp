@@ -1004,8 +1004,13 @@ end)
 -- first (ExpressionPerformer.SetExpressionAsAvailable(hero, name, true)).
 -- `pose relock` makes the expressions it had to make available unavailable
 -- again (photo mode runs it when it closes), so nothing stays unlocked.
-add("pose", "pose <expression>|relock  the hero performs an expression, e.g. pose ExpressionDance", function(W)
-  if not W[2] then return out("usage: pose <expression>|relock  (e.g. pose ExpressionDance)") end
+-- `pose <expression> slow`: everything but the hero runs at this speed (the
+-- Slow Time spell's Debug.SetHeroSlowTime: the world slows, the hero's own
+-- time is sped up to match). It takes a number; below about 0.02 the hero's
+-- physics blow up (0.01 threw the hero off the map after a walk).
+local POSE_SLOW = 0.05
+add("pose", "pose <expression> [slow]|relock  the hero performs an expression (slow: the rest of the world at 5% speed until relock), e.g. pose ExpressionDance", function(W)
+  if not W[2] then return out("usage: pose <expression> [slow]|relock  (e.g. pose ExpressionDance)") end
   local hero = need_hero()
   if not hero then return end
   local EPr = rawget(_G, "ExpressionPerformer")
@@ -1015,7 +1020,16 @@ add("pose", "pose <expression>|relock  the hero performs an expression, e.g. pos
       if type(EPr) == "table" and pcall(EPr.SetExpressionAsAvailable, hero, name, false) then n = n + 1 end
     end
     C.pose_unlocked = nil
-    return out("pose: locked " .. n .. " expressions again")
+    local slow = ""
+    if C.pose_slow then
+      pcall(dbgf("SetHeroSlowTime"), 1)  -- 1 ends the slow time
+      C.pose_slow = nil
+      slow = ", world speed back to normal"
+    end
+    return out("pose: locked " .. n .. " expressions again" .. slow)
+  end
+  if W[3] and W[3]:lower() == "slow" and not C.pose_slow then
+    if pcall(dbgf("SetHeroSlowTime"), POSE_SLOW) then C.pose_slow = true end
   end
   local name = W[2]
   if not name:find("^Expression") then name = "Expression" .. name end

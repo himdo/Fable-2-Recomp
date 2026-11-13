@@ -1025,7 +1025,10 @@ inline void on_world_update_impl(PPCContext& ctx, uint8_t* base, bool force_run)
 
   // Poses: hand the line to the game's Lua (developer console
   // pump, which runs in the world's script update) and let the world run for
-  // the hold time so the expression plays, then freeze.
+  // the hold time so the expression plays, then freeze. With the world frozen,
+  // `slow` puts everything but the hero at 5% speed (the Slow Time spell's
+  // hero time), so only the hero moves while the pose plays; leaving photo
+  // mode (`pose relock`) ends it.
   if (g.phase == Phase::kOn) {
     auto run = [&](const std::string& line) {
       if (game_command()) {
@@ -1037,7 +1040,7 @@ inline void on_world_update_impl(PPCContext& ctx, uint8_t* base, bool force_run)
     };
     const int64_t hold_ms = int64_t(std::clamp(g.s.pose_hold, 0.2f, 6.0f) * 1000.0f);
     if (const int p = pose_request().exchange(0); p > 0 && p <= kPoseCount) {
-      run(std::string("pose ") + kPoses[p - 1].record);
+      run(std::string("pose ") + kPoses[p - 1].record + (g.s.freeze_world ? " slow" : ""));
       g.posed = true;
       // The command waits a frame or two for the Lua pump before the pose starts.
       g.thaw_hold_ms = std::max(g.thaw_hold_ms, hold_ms + 150);
