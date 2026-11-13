@@ -23,7 +23,12 @@ jobs:
           dotnet-version: "8.0.x"
       - name: Check generated version files
         run: python tools/generate_game_versions.py --check
+      - name: Install Python test tools
+        run: python -m pip install -r tests/requirements.txt
       - name: Python tests
-        run: python -m unittest discover -s tests -p test_*.py
+        # Windows runners print in cp1252, which garbles pytest-spec's pass and xfail symbols.
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python -m pytest --cov=tools --cov-report=term
       - name: Launcher tests
         run: dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release

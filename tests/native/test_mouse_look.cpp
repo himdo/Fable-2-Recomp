@@ -5,13 +5,19 @@
 //   - MouseToStick: scale, Y inversion, full-deflection clamping (the speed
 //     cap) and that it reports when movement was lost to the clamp;
 //   - InjectPlan: `f2 mouse inject` spreads the movement evenly over time and
-//     always delivers exactly the requested total;
-//   - FormatWindow: the per-second summary maths (rates, gap mean / sd);
+//     always delivers exactly the requested total, in either direction and at
+//     the console's largest movement and duration;
+//   - TakeInjected: a poll takes the injected movement once;
+//   - FormatWindow / Window: the per-second summary maths (rates, gap mean /
+//     sd), a window without gaps, dropped lines and the 8-thread limit;
+//   - GameControl: matches the measurements, and caps at full speed;
 //   - StickForControl: the stick it picks makes the game's measured mapping
 //     (GameControl) deliver exactly the wanted camera input, in every
-//     direction, including tiny inputs just past the deadzone;
-//   - VelocityWindow / WindowToControl: movement over one camera update, and
-//     the same top speed as the previous mapping.
+//     direction, including tiny inputs just past the deadzone and capped
+//     diagonals;
+//   - VelocityWindow / WindowToControl: movement over one camera update,
+//     zero-length intervals (the first smoothed poll), and the same top speed
+//     as the previous mapping.
 
 #include <rex/cvar.h>  // FlagEntry (needed for the stub below)
 
@@ -123,6 +129,43 @@ static void TestInjectPlan() {
   InjectPlan z{5, 6, 0};
   z.DeliveredBy(0, x, y);
   CHECK(x == 5 && y == 6);
+
+  // Leftward and upward movement also only grows toward the total.
+  InjectPlan n{-777, -3, 333000};
+  px = py = sum_x = sum_y = 0;
+  monotonic = true;
+  for (int64_t t = 0; t <= 340000; t += 1000) {
+    n.DeliveredBy(t, x, y);
+    if (x > px || y > py) monotonic = false;
+    sum_x += x - px;
+    sum_y += y - py;
+    px = x;
+    py = y;
+  }
+  CHECK(monotonic);
+  CHECK(sum_x == -777 && sum_y == -3);
+
+  // The console's limits: 1,000,000 px over 600,000 ms. total * elapsed is
+  // ~6e14 here, far past int32, so it must be worked out in 64 bits.
+  InjectPlan big{1000000, -1000000, 600000000};
+  big.DeliveredBy(300000000, x, y);
+  CHECK(x == 500000 && y == -500000);
+  big.DeliveredBy(599999999, x, y);
+  CHECK(x == 999999 && y == -999999);
+  big.DeliveredBy(600000000, x, y);
+  CHECK(x == 1000000 && y == -1000000);
+}
+
+static void TestTakeInjected() {
+  // The injector thread adds to the pending movement; a poll takes all of it.
+  fable2::mousediag::PendingX().fetch_add(5);
+  fable2::mousediag::PendingY().fetch_add(-7);
+  int32_t x = 0, y = 0;
+  fable2::mousediag::TakeInjected(x, y);
+  CHECK(x == 5 && y == -7);
+  // The next poll gets nothing new.
+  fable2::mousediag::TakeInjected(x, y);
+  CHECK(x == 0 && y == 0);
 }
 
 static void TestFormatWindow() {
@@ -150,6 +193,20 @@ static void TestFormatWindow() {
   CHECK(s.find(" px=120,30 ") != std::string::npos);
   CHECK(s.find(" clamp=4 ") != std::string::npos);
   CHECK(s.find(" threads=2 ") != std::string::npos);
+  CHECK(s.find(" dropped=0") != std::string::npos);
+
+  // A window with no gaps between polls (one poll, or none) reports zeros.
+  Window empty;
+  empty.dropped = 3;
+  const std::string e = FormatWindow("S", 1000000, empty);
+  CHECK(e.find(" gapmean=0 gapsd=0 gapmax=0 ") != std::string::npos);
+  CHECK(e.size() >= 10 && e.compare(e.size() - 10, 10, " dropped=3") == 0);
+
+  // Only the first 8 polling threads are told apart.
+  Window many;
+  for (uint64_t id = 1; id <= 9; ++id) many.AddThread(id);
+  CHECK(many.thread_count == 8);
+  CHECK(FormatWindow("S", 1000000, many).find(" threads=8 ") != std::string::npos);
 }
 
 namespace ms = fable2::mousestick;
@@ -169,6 +226,11 @@ static void TestGameControlMatchesMeasurements() {
   double cx, cy;
   ms::GameControl(0.29, 0.0, cx, cy);
   CHECK(cx == 0.0 && cy == 0.0);
+
+  // Full stick on a diagonal is boosted past 1 and capped back to full speed.
+  ms::GameControl(1.0, 1.0, cx, cy);
+  CHECK(std::fabs(std::hypot(cx, cy) - 1.0) < 1e-9);
+  CHECK(std::fabs(cx - cy) < 1e-12);
 }
 
 static void TestStickForControl() {
@@ -209,6 +271,13 @@ static void TestStickForControl() {
   double gx, gy;
   ms::GameControl(rx / 32767.0, ry / 32767.0, gx, gy);
   CHECK(std::fabs(std::hypot(gx, gy) - 0.5) < 0.0002);
+
+  // More than full speed on a diagonal is capped, reported, and still turns at
+  // exactly full speed: the game's diagonal boost doesn't push it past 1.
+  CHECK(ms::StickForControl(3.0, 3.0, rx, ry));
+  CHECK(rx == ry && rx > 0 && rx < 32767);
+  ms::GameControl(rx / 32767.0, ry / 32767.0, gx, gy);
+  CHECK(std::fabs(std::hypot(gx, gy) - 1.0) < 0.0002);
 }
 
 static bool Near(double a, double b, double tol = 1e-6) { return std::fabs(a - b) <= tol; }
@@ -247,6 +316,27 @@ static void TestVelocityWindow() {
   w.Clear();
   w.Sum(2003000, 1000000, x, y);
   CHECK(x == 0 && y == 0);
+}
+
+// The first poll on the smoothing path has no previous poll, so the driver
+// adds its movement as a zero-length interval (t0 == t1). It counts in full
+// while it is inside the window.
+static void TestVelocityWindowZeroSpan() {
+  ms::VelocityWindow w;
+  double x = 1, y = 1;
+  w.Add(100000, 100000, 12, -6);
+  w.Sum(100000, 66667, x, y);
+  CHECK(Near(x, 12) && Near(y, -6));
+  w.Sum(150000, 66667, x, y);  // window (83.3, 150 ms]: still inside
+  CHECK(Near(x, 12) && Near(y, -6));
+  w.Sum(170000, 66667, x, y);  // window (103.3, 170 ms]: gone
+  CHECK(x == 0 && y == 0);
+
+  // A start after the end (clock skew) is treated as zero-length too.
+  w.Clear();
+  w.Add(300000, 200000, 5, 0);
+  w.Sum(200000, 66667, x, y);
+  CHECK(Near(x, 5) && Near(y, 0));
 }
 
 // The poll pattern measured in game: moving polls ~33.3 ms apart with gaps
@@ -302,6 +392,10 @@ static void TestWindowToControl() {
   CHECK(cx == 0.0 && cy > 0.0);
   CHECK(std::fabs(cy - 5.0 * 512 / 32767.0) < 1e-9);
 
+  // An empty window asks for no turn rather than dividing by zero.
+  ms::WindowToControl(10, 5, 0.0, 256, cx, cy);
+  CHECK(cx == 0.0 && cy == 0.0);
+
   CHECK(ms::DefaultWindowUs(false) == 66667);
   CHECK(ms::DefaultWindowUs(true) == 33333);
 }
@@ -309,10 +403,12 @@ static void TestWindowToControl() {
 int main() {
   TestMouseToStick();
   TestInjectPlan();
+  TestTakeInjected();
   TestFormatWindow();
   TestGameControlMatchesMeasurements();
   TestStickForControl();
   TestVelocityWindow();
+  TestVelocityWindowZeroSpan();
   TestVelocityWindowIsSteadyUnderJitter();
   TestWindowToControl();
   if (failures) {

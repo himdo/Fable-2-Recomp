@@ -251,32 +251,6 @@ public partial class MainWindow : Window
                 WorkingDirectory = plan.WorkingDirectory,
                 UseShellExecute = false
             };
-            string gameRoot = plan.GameRoot;
-            var input = Fable2ConfigFile.Read(AdvancedConfigPath());
-            if (input.KeyboardPromptImages)
-            {
-                var cvars = LauncherConfigFile.ReadValues(Path.Combine(plan.WorkingDirectory, "fable_2.toml"));
-                string InputCvar(string key, string fallback) =>
-                    Environment.GetEnvironmentVariable("REX_" + key.ToUpperInvariant()) ??
-                    (cvars.TryGetValue(key, out string? value) ? Unquote(value) : fallback);
-                string map = InputCvar("keyboard_gamepad_map", input.KeyboardGamepadMap);
-                bool mouseLook = InputCvar("mouse_look", input.MouseLook ? "true" : "false") switch
-                {
-                    "1" => true, "0" => false,
-                    var value => ParseBool(value, input.MouseLook)
-                };
-                string reservedKey = InputCvar("mouse_unlock_key", "F4");
-                gameRoot = KeyboardPrompts.Prepare(gameRoot, map, mouseLook, reservedKey);
-                if (gameRoot != plan.GameRoot)
-                {
-                    // Other data in the prompt view is linked to the source.
-                    startInfo.ArgumentList.Add("--allow_game_relative_writes=false");
-                    string updateRoot = Path.Combine(plan.GameRoot, "$SystemUpdate");
-                    if (Directory.Exists(updateRoot) && InputCvar("update_data_root", "") == "")
-                        startInfo.ArgumentList.Add("--update_data_root=" + updateRoot);
-                }
-            }
-            startInfo.ArgumentList.Add("--game_data_root=" + gameRoot);
             Process.Start(startInfo);
             StatusText.Text = "Fable II launched.";
             ConfigStateText.Text = "Game running";
@@ -698,7 +672,6 @@ public partial class MainWindow : Window
         try
         {
             MouseLookCheck.IsChecked = _advanced.MouseLook;
-            KeyboardPromptImagesCheck.IsChecked = _advanced.KeyboardPromptImages;
             DirectMouseLookCheck.IsChecked = _advanced.DirectMouseLook;
             MouseSensitivitySlider.Value = _advanced.MouseLookScale;
             MouseSensitivityBox.Text = _advanced.MouseLookScale.ToString(CultureInfo.InvariantCulture);
@@ -1117,7 +1090,6 @@ public partial class MainWindow : Window
         }
 
         _advanced.MouseLook = MouseLookCheck.IsChecked == true;
-        _advanced.KeyboardPromptImages = KeyboardPromptImagesCheck.IsChecked == true;
         _advanced.DirectMouseLook = DirectMouseLookCheck.IsChecked == true;
         _advanced.MouseLookScale = (int)MouseSensitivitySlider.Value;
         _advanced.HotFuncYieldEvery = int.TryParse(HotFuncYieldBox.Text, NumberStyles.Integer,
