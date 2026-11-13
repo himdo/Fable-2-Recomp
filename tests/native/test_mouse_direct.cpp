@@ -3,21 +3,34 @@
 // audio device needed.
 //
 // Covers:
-//   - ToCamera: degrees per count, mouse_look_scale, the yaw sign (mouse right
-//     turns like stick right) and the up/down sign and inversion;
+//   - ToCamera: degrees per count, mouse_look_scale (including 0 and negative),
+//     the yaw sign (mouse right turns like stick right) and the up/down sign
+//     and inversion;
 //   - DirectState: nothing is kept until the camera has asked for movement,
 //     everything is delivered once, smoothing holds a share back without a
-//     tail of fractions, and movement is discarded (never released later) when
-//     the camera can't take it or stops asking;
+//     tail of fractions (also at the 0.9 maximum, and below 0), and movement
+//     is discarded (never released later) when the camera can't take it or
+//     stops asking;
+//   - time 0: NowUs() starts at 0, so a camera update or report at t=0 counts;
 //   - RouteTimeoutUs and Boot: the route timeout and the retry schedule for
-//     starting mouse_direct.lua;
-//   - EncodeNumbers: the Lua 5.1 number TValues the cprint override returns;
+//     starting mouse_direct.lua, which starts again from the shortest pause
+//     after the script has been running;
+//   - EncodeNumbers: the Lua 5.1 number TValues the cprint override returns,
+//     one or two of them;
 //   - InjectPlan profiles: ramp and flick deliver the same total as even, move
-//     monotonically, and follow their curves.
+//     monotonically, and follow their curves;
+//   - non-finite settings (known bugs): a NaN or infinite sensitivity or
+//     smoothing from fable2_config.toml must not reach the camera.
+//
+// KNOWN_BUG checks are the native form of pytest's strict xfail: they test the
+// correct behaviour of a confirmed bug, print "KNOWN BUG" while it is broken,
+// and fail once it is fixed, as a reminder to turn them into CHECKs.
 
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
+#include <string>
 
 #include "src/input/mouse_diag.h"
 #include "src/input/mouse_direct.h"
@@ -33,6 +46,19 @@ static int failures = 0;
       std::printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond);            \
       ++failures;                                                            \
     }                                                                        \
+  } while (0)
+
+static int known_bugs = 0;
+#define KNOWN_BUG(cond, reason)                                                       \
+  do {                                                                                \
+    if (cond) {                                                                       \
+      std::printf("FAIL %s:%d: known bug now fixed, remove the KNOWN_BUG marker: %s\n", \
+                  __FILE__, __LINE__, #cond);                                         \
+      ++failures;                                                                     \
+    } else {                                                                          \
+      std::printf("KNOWN BUG %s:%d: %s\n", __FILE__, __LINE__, reason);               \
+      ++known_bugs;                                                                   \
+    }                                                                                 \
   } while (0)
 
 static bool Near(double a, double b, double eps = 1e-9) { return std::abs(a - b) <= eps; }
@@ -54,6 +80,8 @@ static void TestToCamera() {
   s.scale = 512;  // 2x
   CHECK(Near(mdir::ToCamera(100, 0, s).yaw, -24.0));
   s.scale = 0;  // never divides by or multiplies with zero
+  CHECK(Near(mdir::ToCamera(256, 0, s).yaw, -0.12));
+  s.scale = -256;  // nor turns the other way: a negative scale counts as the smallest
   CHECK(Near(mdir::ToCamera(256, 0, s).yaw, -0.12));
   s = Sens012();
   // Mouse up (dy < 0) lowers the height offset, as stick up does (look up).
@@ -154,6 +182,79 @@ static void TestDirectState() {
     st.Drain(true, 6000, 5.0, dx, dy);
     CHECK(Near(dx, 1.0, 1e-9));
   }
+  {
+    // Negative smoothing is clamped to 0: everything is delivered at once.
+    mdir::DirectState st;
+    st.Drain(true, 1000, 0.0, dx, dy);
+    st.Feed(true, 2000, timeout, 10, -6);
+    st.Drain(true, 3000, -1.0, dx, dy);
+    CHECK(Near(dx, 10) && Near(dy, -6));
+  }
+  {
+    // At the 0.9 maximum a large flick still arrives in full, and the tail
+    // ends (after ~94 camera updates for 1000 counts: about 6 s at 15 Hz).
+    mdir::DirectState st;
+    st.Drain(true, 1000, 0.0, dx, dy);
+    st.Feed(true, 2000, timeout, 1000, 0);
+    double sx = 0;
+    int drains = 0;
+    for (int i = 0; i < 1000; ++i) {
+      st.Drain(true, 3000 + i, 0.9, dx, dy);
+      if (dx == 0 && dy == 0) break;
+      sx += dx;
+      ++drains;
+    }
+    CHECK(Near(sx, 1000, 1e-6));
+    CHECK(drains < 100);
+  }
+}
+
+// NowUs() counts from the first call, so the first camera update or report can
+// be at t=0. Each "last seen" time stores 0 as 1, so t=0 still counts as seen.
+static void TestTimeZero() {
+  double dx = 0, dy = 0;
+  mdir::DirectState st;
+  st.Drain(true, 0, 0.0, dx, dy);
+  CHECK(st.Feed(true, 0, 200000, 1, 0));
+  mdir::Boot b;
+  b.Alive(0);
+  CHECK(b.IsAlive(0));
+  b.OldKeeperSeen(0);
+  CHECK(b.OldKeeperAlive(0));
+}
+
+// Settings come from fable2_config.toml, where `nan` and `inf` are valid
+// numbers, and the config reader doesn't reject them.
+static void TestNonFiniteSettings() {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double inf = std::numeric_limits<double>::infinity();
+  double dx = 0, dy = 0;
+  {
+    mdir::DirectState st;
+    st.Drain(true, 1000, 0.0, dx, dy);
+    st.Feed(true, 2000, 200000, 10, 0);
+    st.Drain(true, 3000, nan, dx, dy);
+    KNOWN_BUG(std::isfinite(dx) && std::isfinite(dy),
+              "NaN mouse_look_direct_smoothing gets past std::clamp and Drain returns NaN");
+    // The kept movement must not stay poisoned once smoothing is valid again.
+    st.Feed(true, 4000, 200000, 5, 0);
+    st.Drain(true, 5000, 0.0, dx, dy);
+    KNOWN_BUG(std::isfinite(dx),
+              "after one NaN smoothing every later camera update gets a NaN yaw");
+  }
+  {
+    mdir::Settings s;
+    s.sens_x_deg = nan;
+    KNOWN_BUG(std::isfinite(mdir::ToCamera(10, 0, s).yaw),
+              "NaN mouse_look_sens_x gives a NaN yaw, which mouse_direct.lua applies");
+    s.sens_x_deg = inf;
+    KNOWN_BUG(std::isfinite(mdir::ToCamera(10, 0, s).yaw),
+              "infinite mouse_look_sens_x gives an infinite yaw");
+    s = mdir::Settings{};
+    s.sens_y_deg = nan;
+    KNOWN_BUG(std::isfinite(mdir::ToCamera(0, 10, s).height),
+              "NaN mouse_look_sens_y gives a NaN height change");
+  }
 }
 
 static void TestRouteTimeout() {
@@ -214,6 +315,16 @@ static void TestBoot() {
   e.OldKeeperSeen(1000);
   CHECK(e.OldKeeperAlive(1000 + B::kOldKeeperUs));
   CHECK(!e.OldKeeperAlive(1000 + B::kOldKeeperUs + 1));
+  // After the script has been running, a new search starts from the shortest
+  // pause again, not from the pause the earlier searches had grown to.
+  d.Alive(u);
+  u += B::kAliveUs + 1;
+  d.Wanted(u);
+  CHECK(d.ShouldTry(u));  // gone while wanted: at once
+  d.Wanted(u + B::kMinBackoffUs - 1);
+  CHECK(!d.ShouldTry(u + B::kMinBackoffUs - 1));
+  d.Wanted(u + B::kMinBackoffUs);
+  CHECK(d.ShouldTry(u + B::kMinBackoffUs));  // 5 s later, not 30
   // The first heartbeat after each start is reported once.
   d.Booted();
   CHECK(d.FirstHeartbeat());
@@ -230,6 +341,15 @@ static void TestEncodeNumbers() {
   const uint8_t want[16] = {0x3F, 0x80, 0x00, 0x00, 0, 0, 0, 3,
                             0xC1, 0x48, 0x00, 0x00, 0, 0, 0, 3};
   CHECK(std::memcmp(out, want, sizeof want) == 0);
+
+  // The reply to "old" is one number: the slot after it stays untouched.
+  const float one[1] = {1.0f};
+  std::memset(out, 0xAA, sizeof out);
+  mdir::EncodeNumbers(one, 1, out);
+  CHECK(std::memcmp(out, want, 8) == 0);
+  bool untouched = true;
+  for (int i = 8; i < 16; ++i) untouched = untouched && out[i] == 0xAA;
+  CHECK(untouched);
 }
 
 static void TestInjectProfiles() {
@@ -274,14 +394,17 @@ static void TestInjectProfiles() {
 int main() {
   TestToCamera();
   TestDirectState();
+  TestTimeZero();
   TestRouteTimeout();
   TestBoot();
   TestEncodeNumbers();
   TestInjectProfiles();
+  TestNonFiniteSettings();
   if (failures) {
     std::printf("%d failure(s)\n", failures);
     return 1;
   }
+  if (known_bugs) std::printf("%d known bug(s), see KNOWN BUG above\n", known_bugs);
   std::printf("mouse direct tests passed\n");
   return 0;
 }

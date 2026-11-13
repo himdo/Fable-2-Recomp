@@ -61,6 +61,11 @@ def inject_notes():
     return [re.findall(r'"([^"]*)"|[\w:]+\((\w+)\)', call) for call in calls]
 
 
+def mode_notes():
+    """The variable the `f2 mouse mode` note is built from, as in Note("mode " + m)."""
+    return re.findall(r'Note\(\s*"mode "\s*\+\s*(\w+)\s*\)', source(CONSOLE_H))
+
+
 def fill(fmt, samples):
     """Fill each key=%... field with samples[key], and any other field with 0."""
     return FIELD.sub(lambda m: f"{m.group(1)}={samples.get(m.group(1), '0')}", fmt).replace("\\n", "")
@@ -75,7 +80,7 @@ def poll_line():
 def update_line():
     """A U line as it reaches the log: the Lua line with the host's time added by OnLuaLine."""
     samples = {"f": "1", "tick": "30", "act": "2:0.500/0.000", "rr": "-2.0000", "srr": "-1.5000",
-               "mho": "0.0000>0.0000", "cmho": "0.0000", "man": "1"}
+               "mho": "0.0000>0.0000", "cmho": "0.0000", "man": "1", "my": "-1.2500"}
     lua_line = fill(update_formats()[0], samples)
     text = lua_line[len(diag_tags()[0]):]
     return "U t=500000 " + text[len("U "):]
@@ -153,6 +158,11 @@ def describe_camera_update_line():
 
         assert mouse_stats.number(record.fields.get("tick")) == 30.0
 
+    def test_should_carry_the_turn_the_direct_mouse_camera_added():
+        record = mouse_stats.parse_line(update_line())
+
+        assert mouse_stats.number(record.fields.get("my")) == -1.25
+
 
 def describe_inject_note():
     def test_should_be_found_once_in_the_console():
@@ -182,3 +192,16 @@ def describe_inject_note():
         segments = mouse_stats.find_segments(records)
 
         assert segments[0].label == "inject 2400,0 px over 4000 ms (flick)"
+
+
+def describe_mode_note():
+    def test_should_be_found_once_in_the_console():
+        assert len(mode_notes()) == 1
+
+    def test_should_name_the_mouse_mode_in_the_next_run():
+        # `f2 mouse mode direct` writes Note("mode " + m) with m = "direct".
+        records = mouse_stats.read_log(["N t=500 mode direct", inject_note_line()])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert segments[0].label == "inject 2400,0 px over 4000 ms [direct]"

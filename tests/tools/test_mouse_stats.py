@@ -239,6 +239,29 @@ def describe_find_segments():
                                                "inject 100,0 px over 100 ms (flick) [direct]",
                                                "inject 100,0 px over 100 ms (ramp) [stick]"]
 
+    def test_should_keep_the_mouse_mode_for_every_later_run():
+        records = mouse_stats.read_log(["N t=10 mode direct", inject(1000, 10, 0, 100), inject(2_000_000, 20, 0, 100)])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert [s.label for s in segments] == ["inject 10,0 px over 100 ms [direct]",
+                                               "inject 20,0 px over 100 ms [direct]"]
+
+    def test_should_not_take_a_route_note_as_the_mouse_mode():
+        # The input driver writes "route direct" or "route stick" whenever the route changes.
+        records = mouse_stats.read_log(["N t=10 mode stick", "N t=20 route direct", inject(1000, 10, 0, 100)])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert segments[0].label == "inject 10,0 px over 100 ms [stick]"
+
+    def test_should_ignore_a_mode_note_without_a_mode():
+        records = mouse_stats.read_log(["N t=10 mode", inject(1000, 10, 0, 100)])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert segments[0].label == "inject 10,0 px over 100 ms"
+
     @pytest.mark.xfail(strict=True, reason="find_segments ignores the 'inject stopped' note that `f2 mouse "
                        "stop` writes, so a stopped run still lasts its full ms, and the time after the stop "
                        "counts as steady updates without yaw")
@@ -393,6 +416,40 @@ def describe_analyse():
 
         assert turn["first_share"] == 0.5
 
+    def test_should_give_no_coast_share_when_the_camera_never_turned():
+        turn = analyse_first([inject(0, 100, 0, 200), direct_update(50_000, 0.0)])["turn"]
+
+        assert turn["tail_share"] is None
+
+    def test_should_give_no_first_share_when_the_camera_never_turned():
+        turn = analyse_first([inject(0, 100, 0, 200), direct_update(50_000, 0.0)])["turn"]
+
+        assert turn["first_share"] is None
+
+    def test_should_give_no_first_share_when_the_steady_turn_is_zero():
+        # The first update turns, then the steady middle (150-850 ms) doesn't.
+        lines = [inject(0, 100, 0, 1000), direct_update(50_000, -1.0), direct_update(500_000, 0.0)]
+
+        turn = analyse_first(lines)["turn"]
+
+        assert turn["first_share"] is None
+
+    def test_should_not_take_a_turn_below_the_threshold_as_the_first_turn():
+        # -0.00005 degrees is below TURN_EPS; the first real turn is the -2 at 200 ms.
+        lines = [inject(0, 100, 0, 1000), direct_update(50_000, -0.00005),
+                 direct_update(200_000, -2.0), direct_update(300_000, -2.0)]
+
+        turn = analyse_first(lines)["turn"]
+
+        assert turn["first_share"] == 1.0
+
+    def test_should_not_count_a_turn_below_the_threshold_as_coasting():
+        lines = [inject(0, 100, 0, 200), direct_update(100_000, -2.0), direct_update(300_000, -0.00005)]
+
+        turn = analyse_first(lines)["turn"]
+
+        assert turn["tail_updates"] == 0
+
 
 def describe_format_stats():
     def test_should_report_how_much_movement_the_game_saw():
@@ -414,6 +471,12 @@ def describe_format_stats():
         text = mouse_stats.format_stats(analyse_first([inject(0, 10, 0, 100), direct_update(50_000, -1.2)]))
 
         assert "turn total -1.2 (mouse -1.2)" in text
+
+    def test_should_mark_the_turn_shares_as_not_available_when_the_camera_never_turned():
+        text = mouse_stats.format_stats(analyse_first([inject(0, 10, 0, 100), direct_update(50_000, 0.0)]))
+
+        assert ("  turn total 0.0 (mouse 0.0); after the input stopped n/a in 0 updates; "
+                "first update n/a of steady") in text.splitlines()
 
     def test_should_mark_a_missing_number_as_not_available():
         text = mouse_stats.format_stats(analyse_first([inject(0, 10, 0, 100), poll(10, inj=(10, 0))]))
