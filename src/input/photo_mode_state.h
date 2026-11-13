@@ -123,19 +123,35 @@ struct Settings {
 };
 
 // --- Hero: outfits and pose cards ---------------------------------------------
-// Outfits are the game's own full outfits (Debug.SetHeroWearing<Name>Outfit,
-// the console's `outfit <key>`). Poses are the hero's expressions
-// (ExpressionPerformer.PerformExpression, the console's `pose <record>`), each
-// with the game's own expression icon from gui_textures.bnk.
+// Outfits are clothes only, worn for photo mode and taken off again when it
+// closes (the console's `photooutfit set <types>` / `photooutfit restore`).
+// The sets are the clothing of the game's own Debug.SetHeroWearing<Name>Outfit
+// presets; those presets also reset the hero (age, morality, hair, tattoos,
+// chapter progress...), so they are not called. Poses are the hero's
+// expressions (ExpressionPerformer.PerformExpression, the console's
+// `pose <record>`), each with the game's own expression icon.
 struct OutfitDef {
   const char* label;
-  const char* key;  // console `outfit` name; nullptr = leave as worn
+  const char* items;  // clothing types, space separated; nullptr = the hero's own clothes
 };
 inline constexpr OutfitDef kOutfits[] = {
-    {"As Worn", nullptr},          {"Barbarian", "barbarian"},     {"Brawler", "brawler"},
-    {"Martial Arts", "martialarts"}, {"Pirate", "pirate"},         {"Swashbuckler", "swashbuckler"},
-    {"Pure Evil", "pureevil"},     {"Goth", "goth"},               {"Cross-Dresser", "crossdresser"},
-    {"Year Outfit", "year"},
+    {"As Worn", nullptr},
+    {"Barbarian", "ObjectClothingTrousersPoorSkirtF ObjectClothingBootsBanditM ObjectClothingGlovesBanditM"},
+    {"Brawler", "ObjectClothingTrousersBanditM ObjectClothingBootsPoorM"},
+    {"Martial Arts",
+     "ObjectClothingCoatAssassinM ObjectClothingTrousersYearOut ObjectClothingGlovesCultistGoodM "
+     "ObjectClothingBootsCultistGoodM"},
+    {"Pirate",
+     "ObjectAccessoryEyepatch ObjectClothingHatHighwaymanM ObjectClothingCoatPoorF ObjectClothingShirtGypsyM "
+     "ObjectClothingTrousersBanditM ObjectClothingBootsMiddleM"},
+    {"Swashbuckler",
+     "ObjectClothingCoatPoshM ObjectClothingShirtYearOut ObjectClothingTrousersHighwayman ObjectClothingBootsPoshM"},
+    {"Pure Evil", "ObjectClothingTrousersLucienGuardM ObjectClothingGlovesLucienGuardM ObjectClothingBootsBanditM"},
+    {"Goth", "ObjectClothingTrousersMiddleM ObjectClothingCorset_OLD ObjectClothingBootsHighF"},
+    {"Cross-Dresser",
+     "ObjectClothingShirtWhoreF ObjectClothingTrousersWhoreSkirtF ObjectClothingBootsWhoreF ObjectClothingGlovesPoorM"},
+    {"Year Out",
+     "ObjectClothingCoatYearOut ObjectClothingShirtYearOut ObjectClothingTrousersYearOut ObjectClothingBootsYearOut"},
 };
 inline constexpr int kOutfitCount = int(sizeof(kOutfits) / sizeof(kOutfits[0]));
 

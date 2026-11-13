@@ -322,11 +322,11 @@ inline std::vector<Page> BuildPages() {
     std::vector<std::string> outfits;
     for (const auto& o : kOutfits) outfits.push_back(o.label);
     p.items.push_back(Option(
-        "Outfit", "Dress your hero in one of the game's full outfits. It stays on after photo mode, like changing clothes in the game.",
+        "Outfit", "Dress your hero for the photo. Only clothes change; your own clothes go back on when photo mode closes (or pick As Worn).",
         std::move(outfits), [](const Settings& s) { return float(s.outfit); },
         [](Settings& s, float v) {
           s.outfit = std::clamp(int(std::lround(v)), 0, kOutfitCount - 1);
-          if (kOutfits[s.outfit].key) outfit_request().store(s.outfit + 1);
+          outfit_request().store(s.outfit + 1);
         }));
     pages.push_back(std::move(p));
   }

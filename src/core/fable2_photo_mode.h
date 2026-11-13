@@ -131,6 +131,8 @@ struct State {
   bool rebind_armed = false; // all buttons let go since recording started
   int64_t rebind_session = 0;  // pad_rebind_started_ms of the recording seen
   int64_t thaw_until_ms = 0;   // world runs until then (a pose or outfit plays out)
+  bool outfit_changed = false; // photo mode dressed the hero: put the own clothes back on leaving
+  bool posed = false;          // relock the expressions a pose had to make available
   int64_t thaw_hold_ms = 0;    // hold to count once the console has run the line
   int64_t thaw_busy_since = 0; // when the world started waiting for the console
   Repeater rep_up, rep_down, rep_left, rep_right;  // D-pad menu navigation
@@ -729,6 +731,22 @@ inline void enter(PPCContext& ctx, uint8_t* base) {
 inline void leave(PPCContext& ctx, uint8_t* base) {
   State& g = st();
   pad_rebinding().store(false);
+  // Undo what the Hero page did: the hero's own clothes back on, expressions
+  // the poses unlocked locked again (the console runs these once the world runs).
+  if (game_command()) {
+    if (g.outfit_changed) {
+      game_command()("photooutfit restore");
+      log_line("hero: photooutfit restore (leaving)");
+    }
+    if (g.posed) game_command()("pose relock");
+  }
+  g.outfit_changed = false;
+  g.posed = false;
+  {
+    std::lock_guard<std::mutex> lock(settings_mutex());
+    settings_unlocked().outfit = 0;
+    settings_unlocked().pose = -1;
+  }
   pose_grid_open().store(false);
   pose_request().store(0);
   outfit_request().store(0);
@@ -983,8 +1001,14 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
       }
     };
     const int64_t hold_ms = int64_t(std::clamp(g.s.pose_hold, 0.2f, 6.0f) * 1000.0f);
-    if (const int o = outfit_request().exchange(0); o > 0 && o <= kOutfitCount && kOutfits[o - 1].key) {
-      run(std::string("outfit ") + kOutfits[o - 1].key);
+    if (const int o = outfit_request().exchange(0); o > 0 && o <= kOutfitCount) {
+      if (kOutfits[o - 1].items) {
+        run(std::string("photooutfit set ") + kOutfits[o - 1].items);
+        g.outfit_changed = true;
+      } else {
+        run("photooutfit restore");  // As Worn: the hero's own clothes back
+        g.outfit_changed = false;
+      }
       // A little extra on top of the hold: the outfit's meshes and textures stream in.
       g.thaw_hold_ms = std::max(g.thaw_hold_ms, hold_ms + 500);
       g.thaw_until_ms = std::max(g.thaw_until_ms, now_ms() + g.thaw_hold_ms);
@@ -992,6 +1016,7 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
     }
     if (const int p = pose_request().exchange(0); p > 0 && p <= kPoseCount) {
       run(std::string("pose ") + kPoses[p - 1].record);
+      g.posed = true;
       // The command waits a frame or two for the Lua pump before the pose starts.
       g.thaw_hold_ms = std::max(g.thaw_hold_ms, hold_ms + 150);
       g.thaw_until_ms = std::max(g.thaw_until_ms, now_ms() + g.thaw_hold_ms);
