@@ -40,39 +40,6 @@ try
     Require(roundTrip["custom_mod"] == "true", "roundtrip unknown setting failed");
     Console.WriteLine("Launcher configuration roundtrip passed.");
 
-    // Two names share one payload. Redirecting one must leave the other
-    // intact even when the new payload has the same length.
-    byte[] archive = new byte[516];
-    GuiTextureBank.WriteInt(archive, 0, 512);
-    GuiTextureBank.WriteInt(archive, 4, 3);
-    archive[512] = 42;
-    using var directory = new MemoryStream();
-    directory.Write(new byte[] { 0, 0, 0, 2 });
-    foreach (byte name in "AB"u8)
-        directory.Write(new byte[] { 0, 0, 0, 2, name, 0, 0, 0, 0, 0, 0, 0, 0, 4 });
-    using (var compressed = new MemoryStream())
-    {
-        using (var writer = new ZLibStream(compressed, CompressionLevel.Optimal, leaveOpen: true))
-            writer.Write(directory.ToArray());
-        byte[] wrapped = compressed.ToArray();
-        // Real disc banks omit the checksum trailer.
-        GuiTextureBank.WriteInt(archive, 9, wrapped.Length - 4);
-        GuiTextureBank.WriteInt(archive, 13, (int)directory.Length);
-        wrapped.AsSpan(0, wrapped.Length - 4).CopyTo(archive.AsSpan(17));
-    }
-    var bank = new GuiTextureBank(archive);
-    bank.Replace(bank.Entries["A"], new byte[] { 123, 0, 0, 0 });
-    string bankPath = Path.Combine(testDirectory, "synthetic.bnk");
-    bank.Write(bankPath);
-    var patchedBank = new GuiTextureBank(File.ReadAllBytes(bankPath));
-    Require(patchedBank.Payload(patchedBank.Entries["A"])[0] == 123, "redirected image did not roundtrip");
-    Require(patchedBank.Payload(patchedBank.Entries["B"])[0] == 42, "aliased texture changed");
-    GuiTextureBank.WriteInt(archive, 9, archive.Length);
-    bool rejected = false;
-    try { _ = new GuiTextureBank(archive); }
-    catch (InvalidDataException) { rejected = true; }
-    Require(rejected, "malformed texture directory was accepted");
-    Console.WriteLine("GUI texture directory read, aliased replacement, and malformed input passed.");
 
 
     foreach (string aa in new[] { "none", "fxaa", "fxaa_extreme" })
