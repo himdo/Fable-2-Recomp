@@ -7,7 +7,8 @@
 // Three recompiled functions are overridden with strong definitions (the
 // originals stay callable as __imp__*):
 //
-//   sub_821D43D8  world game-state update (vtable 0x8200249C slot 6). It does
+//   GameWorldState_Update_821D43D8
+//                 world game-state update (vtable 0x8200249C slot 6). It does
 //                 nothing unless the world state is on top of the game-state
 //                 stack (that is how the pause menu freezes the world), then
 //                 updates the world, the theme (colour grading) and finally the
@@ -18,7 +19,7 @@
 //                 the free-camera pose and the lens settings into the camera's
 //                 current AND target fields with the ease coefficient at 1, so
 //                 they apply exactly, the same frame.
-//   ProcessAndProcessAndProcess1013_822B2D60
+//   InputGetPadState_822B2D60
 //                 the game's only XamInputGetState call. Photo mode reads the pad
 //                 here, merged with a host XInput read (src/input/host_pad.h, which also
 //                 sees Guide for the controller shortcut), then blanks the
@@ -876,7 +877,7 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
   const bool want = cfg.photo_mode_enabled && want_active().load();
   if (g.phase == Phase::kOff && !want) {
     if (g.restore_updates_left > 0 && --g.restore_updates_left == 0) g.cam_count = 0;
-    __imp__sub_821D43D8(ctx, base);
+    __imp__GameWorldState_Update_821D43D8(ctx, base);
     return;
   }
   const PPCContext saved = ctx;
@@ -894,13 +895,13 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
     }
     ctx = saved;
     if (g.phase == Phase::kOff) {
-      __imp__sub_821D43D8(ctx, base);
+      __imp__GameWorldState_Update_821D43D8(ctx, base);
       return;
     }
   } else if (!want) {
     leave(ctx, base);
     ctx = saved;
-    __imp__sub_821D43D8(ctx, base);
+    __imp__GameWorldState_Update_821D43D8(ctx, base);
     return;
   }
 
@@ -949,7 +950,7 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
     ctx = saved;
   } else {
     ctx = saved;
-    __imp__sub_821D43D8(ctx, base);
+    __imp__GameWorldState_Update_821D43D8(ctx, base);
   }
   apply_theme(base);
   {
@@ -1117,7 +1118,7 @@ inline void on_pad_read(uint8_t* base, uint32_t user, uint32_t state_ptr, uint32
 }  // namespace fable2::photomode
 
 // --- Strong overrides of the recompiled functions --------------------------------------------
-extern "C" void sub_821D43D8(PPCContext& ctx, uint8_t* base) {
+extern "C" void GameWorldState_Update_821D43D8(PPCContext& ctx, uint8_t* base) {
   fable2::photomode::on_world_update(ctx, base);
 }
 
@@ -1129,10 +1130,10 @@ extern "C" void CECCameraUpdateFrame_822A47C0(PPCContext& ctx, uint8_t* base) {
 // The remote-control build already overrides the pad read (state probe); it
 // calls fable2::photomode::on_pad_read from there.
 #ifndef FABLE2_REMOTE_CONTROL
-extern "C" void ProcessAndProcessAndProcess1013_822B2D60(PPCContext& ctx, uint8_t* base) {
+extern "C" void InputGetPadState_822B2D60(PPCContext& ctx, uint8_t* base) {
   const uint32_t user = ctx.r3.u32;
   const uint32_t state_ptr = ctx.r4.u32;
-  __imp__ProcessAndProcessAndProcess1013_822B2D60(ctx, base);
+  __imp__InputGetPadState_822B2D60(ctx, base);
   fable2::photomode::on_pad_read(base, user, state_ptr, ctx.r3.u32);
 }
 #endif
