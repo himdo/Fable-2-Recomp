@@ -263,18 +263,31 @@ Controls the fit-window module (`src/core/fable2_fit_window.h`), which renders a
 | `pad stick` | `pad stick <lx> <ly> [frames]` | Holds the left stick (-32768..32767, ly positive = forward). | |
 | `pad off` | `pad off` | Releases everything now. | |
 
-Example `console\autoexec.txt` that gets from boot to in-game with the last save (timings depend on the machine):
+To get from start-up into a save, use `boot` (below) rather than timed `pad` presses: fixed waits miss when the start-up screens take longer, and a press can land on the wrong menu (for example New Game).
+
+## Start-up and menus without window focus
+
+These run with the game window minimized or in the background. They wait on the game's own Gameface UI events (the same events the log shows as `[ui-layout] fireEvent: <NAME>`) instead of timers.
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `boot` | `boot slot <n>` / `boot continue` | From the start-up screens into a save: waits for the title, presses A, opens **Load Game** and picks save slot `n` (1 = the top slot, the newest save), and waits until play starts. `boot continue` is `boot slot 1`. Prints `[boot] in game`, or `[boot] ERR gave up: <step>`. | Every press waits for the game's answer and is pressed again (up to 4 times) if none comes. Presses are held 250 ms (not a frame count), so they register at any frame rate. The command queue waits until `boot` ends. Put `boot slot 1` alone in `console\autoexec.txt` to load the first slot on every start. |
+| `waitui` | `waitui <EVENT> [timeout]` | Holds the queue until a Gameface UI event fires (one that fired in the last 3 s counts). Default timeout 180 s; on timeout the rest of the queue is dropped. | Events seen on the way in: `CAN_PRESS_A` and `END_LEGAL` (start-up screens; the title takes a button about 2 s after `END_LEGAL`), `END_STARTED` (the title took the press; it repeats every 2 s on the main menu), `onDirtyHighlight` (a menu highlight moved), `LOAD_CARD_ACTIVE` (the Load Game save list opened), `FINISHED_TRANSITIONING_TO_GAME` (play started). |
+
+Example `console\autoexec.txt`, from start-up to photo mode in the first save:
 
 ```
-wait 38s
-pad A
-wait 10s
-pad Down
-wait 2s
-pad A
-wait 6s
-pad A
+boot slot 1
+wait 5s
+photo on
 ```
+
+## Photo mode and research (console-v11)
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `photo` | `photo on` / `photo off` / `photo toggle` | Enters or leaves photo mode, like the toggle key or the controller shortcut. | Only works in play (not in menus or cutscenes); the log says `[photo-mode] entered`. |
+| `traceworld` | `traceworld [n]` | Traces the next `n` world updates (default 1, at most 120) to `fable2_func_trace.log` next to the exe: every guest function entered, in order, between `==== traceworld frame begin/end ====` lines. | Runs each traced update even while photo mode has the world frozen. Each line starts with a thread tag (`t<n> name x count`); the world thread is the one that writes the frame markers. |
 
 ## GUI states (console-v11)
 
