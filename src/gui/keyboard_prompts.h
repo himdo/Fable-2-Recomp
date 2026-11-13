@@ -479,34 +479,44 @@ inline bool GenerateSidecar(const std::filesystem::path& game_data_root, const s
         const int format = GuiTextureBank::ReadIntBE(md + 12);
         const int a2_size = 4 + w * h * 4;
         if (w == 256 && h == 256) {
-          auto labelIt = labels.find("a");
-          if (labelIt != labels.end()) {
-            std::vector<uint8_t> keycap = RenderKeycapInset(labelIt->second, 10, 4, -3);
-            if (int(keycap.size()) == 4 + 64 * 64 * 4) {
-              std::vector<uint8_t> original;
-              if (format == 0xA2) {
-                if (at->second.length == a2_size)
-                  original.assign(textureBank.Payload(at->second),
-                                  textureBank.Payload(at->second) + at->second.length);
-              } else if (DecodeCompressedIconToTile(textureBank.Payload(at->second),
-                                                     at->second.length, w, h, original) &&
-                         int(original.size()) == a2_size) {
-                // ok
-              }
-              if (!original.empty()) {
-                std::vector<uint8_t> keyboard = original;
-                ReplaceKeycapRegion(keyboard, keycap, w, h, 0, 0);
-                ReplaceKeycapRegion(keyboard, keycap, w, h, 0, 64);
-                if (format != 0xA2) {
-                  texture_replacements[Ci(abyxName)] = original;
-                  header_updates[Ci(abyxName)] = uint32_t(a2_size);
-                }
-                sidecar.push_back({kTextures, Ci(abyxName), uint64_t(at->second.offset),
-                                   uint32_t(a2_size), std::move(original), std::move(keyboard)});
-              }
-            }
+          // Render keycaps for all four face buttons (A, B, Y, X).
+          const char* btnKeys[] = {"a", "b", "y", "x"};
+          std::vector<uint8_t> keycaps[4];
+          bool allOk = true;
+          for (int i = 0; i < 4; ++i) {
+            auto it = labels.find(btnKeys[i]);
+            if (it == labels.end()) { allOk = false; break; }
+            keycaps[i] = RenderKeycapInset(it->second, 10, 4, -3);
+            if (int(keycaps[i].size()) != 4 + 64 * 64 * 4) { allOk = false; break; }
           }
-        }
+          if (allOk) {
+          std::vector<uint8_t> original;
+          if (format == 0xA2) {
+            if (at->second.length == a2_size)
+              original.assign(textureBank.Payload(at->second),
+                              textureBank.Payload(at->second) + at->second.length);
+          } else if (DecodeCompressedIconToTile(textureBank.Payload(at->second),
+                                                 at->second.length, w, h, original) &&
+                     int(original.size()) == a2_size) {
+            // ok
+          }
+          if (!original.empty()) {
+          std::vector<uint8_t> keyboard = original;
+          // Replace each button in the top row (y=0) and bottom row (y=64).
+          for (int i = 0; i < 4; ++i) {
+            const int ox = i * 64;
+            ReplaceKeycapRegion(keyboard, keycaps[i], w, h, ox, 0);
+            ReplaceKeycapRegion(keyboard, keycaps[i], w, h, ox, 64);
+          }
+          if (format != 0xA2) {
+            texture_replacements[Ci(abyxName)] = original;
+            header_updates[Ci(abyxName)] = uint32_t(a2_size);
+          }
+          sidecar.push_back({kTextures, Ci(abyxName), uint64_t(at->second.offset),
+                             uint32_t(a2_size), std::move(original), std::move(keyboard)});
+          }
+          }  // if (allOk)
+        }  // if (w == 256 && h == 256)
       }
     }
   }
