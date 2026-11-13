@@ -939,11 +939,16 @@ inline void on_world_update_impl(PPCContext& ctx, uint8_t* base, bool force_run)
     // Warm up the console's Lua pump during normal play, so a pose in photo
     // mode runs within a frame or two instead of waiting (with the world
     // running) for the pump to start. Any Lua line starts it; `pose relock`
-    // changes nothing when no pose unlocked anything.
-    if (cfg.photo_mode_enabled && game_command() && game_command_ready() && !game_command_ready()()) {
+    // changes nothing when no pose unlocked anything. A Lua line holds the
+    // console's queue until the pump answers, so it is only sent while the
+    // console is idle, and at most twice per run.
+    if (cfg.photo_mode_enabled && game_command() && game_command_ready() && !game_command_ready()() &&
+        !(game_command_busy() && game_command_busy()())) {
       static int64_t last_try = 0;
-      if (now_ms() - last_try > 15000) {
+      static int tries = 0;
+      if (tries < 2 && now_ms() - last_try > 30000) {
         last_try = now_ms();
+        ++tries;
         const PPCContext saved_ctx = ctx;
         const bool top_now = world_is_top(ctx, base, self);
         ctx = saved_ctx;

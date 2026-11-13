@@ -124,6 +124,8 @@ struct State {
     int64_t step_ms = 0;    // when the current step started
     int64_t press_ms = 0;   // when the last button was pressed
     int64_t release_ms = 0; // when the held button is let go (0 = none held)
+    int moved = 0;          // Downs the save list answered (onDirtyHighlight)
+    int64_t counted_press_ms = 0;  // the press last counted in `moved`
   } boot;
   std::string wu_name;
   int64_t wu_after_ms = 0;  // the event must fire at or after this time
@@ -1716,13 +1718,16 @@ inline void hold_paused(uint8_t* base, bool file_mode) {
 //   4 wait for the load to start (any event but END_STARTED) or play
 //     (FINISHED_TRANSITIONING_TO_GAME); press A again if nothing answers
 //   5 wait for FINISHED_TRANSITIONING_TO_GAME
-// Presses are held for a fixed 250 ms, not a frame count: minimized, the
+// Presses are held for a fixed 150 ms (long enough for the game's 30 Hz pad reads, short of the menus' hold-to-repeat), not a frame count: minimized, the
 // console runs far more frames per second than the game reads its pad, so a
 // 12-frame press can fall between two of the game's reads.
 inline void BootPress(const char* button, uint8_t* base) {
   run_host_command(std::string("pad ") + button + " 100000", base);
+  // `pad` also holds the command queue for its frame count; boot releases
+  // the button by time and holds the queue itself, so drop that wait.
+  S().wait_frames = 0;
   S().boot.press_ms = fable2::uievents::NowMs();
-  S().boot.release_ms = S().boot.press_ms + 250;
+  S().boot.release_ms = S().boot.press_ms + 150;
 }
 inline void BootFail(const std::string& why) {
   S().boot.step = -1;
@@ -1767,33 +1772,39 @@ inline void BootStep(uint8_t* base) {
         BootPress("A", base);
       }
       return;
-    case 2:  // main menu
-      if (in_step < 8000) return;
-      if (b.slot) {
-        if (b.tries == 0) {
-          BootPress("Down", base);
-          b.tries = 1;
-          return;
-        }
-        if (now - b.press_ms < 2000) return;
+    case 2:  // main menu: Down to Load Game, confirmed, then A
+      // A on the main menu's default entry asks to quit the game, so A is
+      // only pressed once the highlight has moved (onDirtyHighlight after
+      // the Down press); a Down the menu missed is pressed again.
+      // The menu ignores Up/Down for about 18-20 s after the title (its
+      // camera move-in); earlier presses are dropped.
+      if (in_step < 16000) return;
+      if (b.tries > 0 && BootFired("onDirtyHighlight", b.press_ms)) {
+        if (now - fable2::uievents::LastFired("onDirtyHighlight") < 1500) return;
         BootPress("A", base);
         return next(3);
       }
-      BootPress("A", base);
-      return next(4);
+      if (b.tries == 0 || now - b.press_ms > 3000) {
+        if (++b.tries > 10) return BootFail("the main menu did not take Down (no highlight moved)");
+        BootPress("Down", base);
+      }
+      return;
     case 3:  // the save list
       if (!BootFired("LOAD_CARD_ACTIVE", b.step_ms - 1000)) {
         if (in_step > 10000) return BootFail("the save list did not open (LOAD_CARD_ACTIVE)");
         return;
       }
       if (now - fable2::uievents::LastFired("LOAD_CARD_ACTIVE") < 3000) return;
-      if (b.tries < b.slot_n - 1) {
-        if (now - b.press_ms < 1000) return;
-        BootPress("Down", base);
+      // Slots below the first: the save list sends no UI event when its
+      // selection moves, so Down is pressed n-1 times, 1.5 s apart.
+      if (b.moved < b.slot_n - 1) {
+        if (b.tries > 0 && now - b.press_ms < 1500) return;
         ++b.tries;
+        ++b.moved;
+        BootPress("Down", base);
         return;
       }
-      if (now - b.press_ms < 1000) return;
+      if (now - b.press_ms < 1500) return;
       BootPress("A", base);
       return next(4);
     case 4: {  // the load starting
