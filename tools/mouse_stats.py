@@ -130,6 +130,11 @@ def find_segments(records, whole=False):
         if len(words) == 2 and words[0] == "mode":
             mode = words[1]
             continue
+        if note.text == "inject stopped":
+            # `f2 mouse stop` cuts the running inject short.
+            if segments and segments[-1].start <= note.t < segments[-1].end:
+                segments[-1].end = note.t
+            continue
         if note.text != "inject":
             continue
         ms = int(note.fields.get("ms", 0) or 0)

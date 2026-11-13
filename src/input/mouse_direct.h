@@ -64,11 +64,19 @@ struct CameraDelta {
 // middle a slope of h is an angle of about h radians, so sens_y in degrees per
 // count keeps up/down and left/right at the same angular sensitivity there.
 // The in-game camera sensitivity (0.5 + sens) is applied by the Lua side.
+// A NaN or infinite sensitivity (valid TOML, and settable from the console)
+// falls back to the default, so it can never reach the camera.
+inline double FiniteOr(double v, double fallback) {
+  return std::isfinite(v) ? v : fallback;
+}
+
 inline CameraDelta ToCamera(double dx, double dy, const Settings& s) {
   const double k = std::max<int32_t>(s.scale, 1) / 256.0;
+  const double sens_x = FiniteOr(s.sens_x_deg, Settings{}.sens_x_deg);
+  const double sens_y = FiniteOr(s.sens_y_deg, Settings{}.sens_y_deg);
   CameraDelta d;
-  d.yaw = -dx * s.sens_x_deg * k;
-  d.height = dy * s.sens_y_deg * kDegToRad * k * (s.invert_y ? -1.0 : 1.0);
+  d.yaw = -dx * sens_x * k;
+  d.height = dy * sens_y * kDegToRad * k * (s.invert_y ? -1.0 : 1.0);
   return d;
 }
 
@@ -119,7 +127,8 @@ class DirectState {
       return;
     }
     last_accept_us_ = now_us == 0 ? 1 : now_us;
-    const double keep = std::clamp(smoothing, 0.0, 0.9);
+    // std::clamp passes NaN through, which would poison the kept movement.
+    const double keep = std::clamp(FiniteOr(smoothing, 0.0), 0.0, 0.9);
     dx = acc_x_ * (1.0 - keep);
     dy = acc_y_ * (1.0 - keep);
     acc_x_ -= dx;

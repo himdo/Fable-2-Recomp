@@ -19,8 +19,8 @@
 //     one or two of them;
 //   - InjectPlan profiles: ramp and flick deliver the same total as even, move
 //     monotonically, and follow their curves;
-//   - non-finite settings (known bugs): a NaN or infinite sensitivity or
-//     smoothing from fable2_config.toml must not reach the camera.
+//   - non-finite settings: a NaN or infinite sensitivity or smoothing from
+//     fable2_config.toml or the console falls back to the default.
 //
 // KNOWN_BUG checks are the native form of pytest's strict xfail: they test the
 // correct behaviour of a confirmed bug, print "KNOWN BUG" while it is broken,
@@ -224,36 +224,43 @@ static void TestTimeZero() {
 }
 
 // Settings come from fable2_config.toml, where `nan` and `inf` are valid
-// numbers, and the config reader doesn't reject them.
+// numbers, and the config reader doesn't reject them. They fall back to the
+// defaults: no smoothing, and the default sensitivity.
 static void TestNonFiniteSettings() {
   const double nan = std::numeric_limits<double>::quiet_NaN();
   const double inf = std::numeric_limits<double>::infinity();
   double dx = 0, dy = 0;
   {
+    // NaN smoothing gets past std::clamp, so it has to be caught first.
     mdir::DirectState st;
     st.Drain(true, 1000, 0.0, dx, dy);
     st.Feed(true, 2000, 200000, 10, 0);
     st.Drain(true, 3000, nan, dx, dy);
-    KNOWN_BUG(std::isfinite(dx) && std::isfinite(dy),
-              "NaN mouse_look_direct_smoothing gets past std::clamp and Drain returns NaN");
-    // The kept movement must not stay poisoned once smoothing is valid again.
+    CHECK(dx == 10 && dy == 0);  // as with smoothing 0: everything at once
+    // Nothing poisoned is kept for the next update.
     st.Feed(true, 4000, 200000, 5, 0);
     st.Drain(true, 5000, 0.0, dx, dy);
-    KNOWN_BUG(std::isfinite(dx),
-              "after one NaN smoothing every later camera update gets a NaN yaw");
+    CHECK(dx == 5);
+    st.Feed(true, 6000, 200000, 5, 0);
+    st.Drain(true, 7000, inf, dx, dy);
+    CHECK(dx == 5);
   }
   {
+    const mdir::Settings defaults;
+    const double yaw = mdir::ToCamera(10, 0, defaults).yaw;
+    const double height = mdir::ToCamera(0, 10, defaults).height;
     mdir::Settings s;
     s.sens_x_deg = nan;
-    KNOWN_BUG(std::isfinite(mdir::ToCamera(10, 0, s).yaw),
-              "NaN mouse_look_sens_x gives a NaN yaw, which mouse_direct.lua applies");
+    CHECK(mdir::ToCamera(10, 0, s).yaw == yaw);
     s.sens_x_deg = inf;
-    KNOWN_BUG(std::isfinite(mdir::ToCamera(10, 0, s).yaw),
-              "infinite mouse_look_sens_x gives an infinite yaw");
-    s = mdir::Settings{};
+    CHECK(mdir::ToCamera(10, 0, s).yaw == yaw);
+    s.sens_x_deg = -inf;
+    CHECK(mdir::ToCamera(10, 0, s).yaw == yaw);
+    s = defaults;
     s.sens_y_deg = nan;
-    KNOWN_BUG(std::isfinite(mdir::ToCamera(0, 10, s).height),
-              "NaN mouse_look_sens_y gives a NaN height change");
+    CHECK(mdir::ToCamera(0, 10, s).height == height);
+    s.sens_y_deg = inf;
+    CHECK(mdir::ToCamera(0, 10, s).height == height);
   }
 }
 

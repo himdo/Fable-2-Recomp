@@ -69,8 +69,12 @@ def describe_config_template():
         for section in sections.values():
             staged.update(section)
 
-        # C# bools and ints are valid JSON as written. The keybind map is a joined string constant.
-        literals = re.findall(r"public (?:bool|int) (\w+) \{ get; set; \} = ([^;]+);", launcher)
+        # C# bools, ints and plain string literals are valid JSON as written. The keybind map
+        # is a joined string constant. Only Fable2ConfigValues holds settings.
+        values_body = re.search(r"class Fable2ConfigValues\b(.*?)\n(?:public )?(?:static )?class ",
+                                launcher, re.S).group(1)
+        literals = re.findall(r'public (?:bool|int|string) (\w+) \{ get; set; \} = '
+                              r'(true|false|-?\d+|"[^"\\]*");', values_body)
         defaults = {name: json.loads(value) for name, value in literals}
         keybinds = re.search(r"DefaultKeyboardGamepadMap =(.*?);", launcher, re.S).group(1)
         defaults["KeyboardGamepadMap"] = "".join(re.findall(r'"([^"]*)"', keybinds))

@@ -262,9 +262,6 @@ def describe_find_segments():
 
         assert segments[0].label == "inject 10,0 px over 100 ms"
 
-    @pytest.mark.xfail(strict=True, reason="find_segments ignores the 'inject stopped' note that `f2 mouse "
-                       "stop` writes, so a stopped run still lasts its full ms, and the time after the stop "
-                       "counts as steady updates without yaw")
     def test_should_end_a_run_at_its_inject_stopped_note():
         records = mouse_stats.read_log([
             inject(0, 2400, 0, 4000),

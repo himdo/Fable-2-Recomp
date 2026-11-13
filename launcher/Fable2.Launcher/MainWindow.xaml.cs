@@ -672,7 +672,7 @@ public partial class MainWindow : Window
         try
         {
             MouseLookCheck.IsChecked = _advanced.MouseLook;
-            DirectMouseLookCheck.IsChecked = _advanced.DirectMouseLook;
+            SelectByTag(MouseLookModeCombo, Fable2ConfigFile.NormalizeMouseLookMode(_advanced.MouseLookMode));
             MouseSensitivitySlider.Value = _advanced.MouseLookScale;
             MouseSensitivityBox.Text = _advanced.MouseLookScale.ToString(CultureInfo.InvariantCulture);
             HotFuncYieldSlider.Value = Math.Clamp(_advanced.HotFuncYieldEvery, 0, 16);
@@ -1090,7 +1090,7 @@ public partial class MainWindow : Window
         }
 
         _advanced.MouseLook = MouseLookCheck.IsChecked == true;
-        _advanced.DirectMouseLook = DirectMouseLookCheck.IsChecked == true;
+        _advanced.MouseLookMode = Fable2ConfigFile.NormalizeMouseLookMode(SelectedTag(MouseLookModeCombo));
         _advanced.MouseLookScale = (int)MouseSensitivitySlider.Value;
         _advanced.HotFuncYieldEvery = int.TryParse(HotFuncYieldBox.Text, NumberStyles.Integer,
             CultureInfo.InvariantCulture, out int yieldEvery)
