@@ -193,6 +193,104 @@ inline std::unordered_map<std::string, std::string> ResolveLabels(const std::str
   return labels;
 }
 
+// Renders a keycap for `label` at 64x64, then scales it down by `hInset` pixels
+// on the left/right and `vInset` on the top/bottom, and centres the result in a
+// fresh 64x64 0x00A2 tile. Used for the shared abyx atlas where the full 64x64
+// keycap would crowd the neighbouring buttons. The keycap (rounded rect + text)
+// is scaled as a whole, so the glyph shrinks proportionally.
+inline std::vector<uint8_t> RenderKeycapInset(const std::string& label, int hInset, int vInset, int dx = 0) {
+  const int kCap = 64;
+  const int kW = kCap - 2 * hInset;
+  const int kH = kCap - 2 * vInset;
+  if (kW <= 0 || kH <= 0) return {};
+  std::vector<uint8_t> keycap = RenderKeycap(label, kCap);
+  // De-tile the 64x64 keycap to linear RGBA (A,R,G,B per pixel).
+  std::vector<uint8_t> linear((size_t)kCap * kCap * 4, 0);
+  for (int y = 0; y < kCap; ++y)
+    for (int x = 0; x < kCap; ++x) {
+      const uint8_t* s = keycap.data() + 4 + XenosTiledOffset(x, y, kCap);
+      uint8_t* d = linear.data() + ((size_t)y * kCap + x) * 4;
+      d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
+    }
+  // Premultiplied bilinear downscale to kW x kH (separate x/y scale).
+  std::vector<uint8_t> shrunk((size_t)kW * kH * 4, 0);
+  const float scaleX = (float)kCap / (float)kW;
+  const float scaleY = (float)kCap / (float)kH;
+  for (int y = 0; y < kH; ++y)
+    for (int x = 0; x < kW; ++x) {
+      const float sx = (x + 0.5f) * scaleX - 0.5f;
+      const float sy = (y + 0.5f) * scaleY - 0.5f;
+      const int x0 = (int)sx, y0 = (int)sy;
+      const float fx = sx - x0, fy = sy - y0;
+      float pmr = 0, pmg = 0, pmb = 0, pmA = 0;
+      for (int dy = 0; dy < 2; ++dy)
+        for (int dx = 0; dx < 2; ++dx) {
+          const int px = x0 + dx, py = y0 + dy;
+          if (px < 0 || py < 0 || px >= kCap || py >= kCap) continue;
+          const uint8_t* s = linear.data() + ((size_t)py * kCap + px) * 4;
+          const int A = s[0], R = s[1], G = s[2], B = s[3];
+          const float w = (dx ? fx : 1.0f - fx) * (dy ? fy : 1.0f - fy);
+          pmA += A * w;
+          pmr += R * (A / 255.0f) * w;
+          pmg += G * (A / 255.0f) * w;
+          pmb += B * (A / 255.0f) * w;
+        }
+      const int A = (int)(pmA + 0.5f);  // the four weights sum to 1
+      uint8_t* o = shrunk.data() + ((size_t)y * kW + x) * 4;
+      o[0] = (uint8_t)std::min(255, A);
+      if (A > 0) {
+        o[1] = (uint8_t)std::min(255.0f, pmr * 255.0f / A + 0.5f);
+        o[2] = (uint8_t)std::min(255.0f, pmg * 255.0f / A + 0.5f);
+        o[3] = (uint8_t)std::min(255.0f, pmb * 255.0f / A + 0.5f);
+      } else {
+        o[1] = o[2] = o[3] = 0;
+      }
+    }
+  // Re-emit a 64x64 0x00A2 tile with the shrunk keycap centred.
+  const int pixbytes = kCap * kCap * 4;
+  std::vector<uint8_t> result(4 + (size_t)pixbytes, 0);
+  result[0] = (uint8_t)((pixbytes >> 24) & 0xFF);
+  result[1] = (uint8_t)((pixbytes >> 16) & 0xFF);
+  result[2] = (uint8_t)((pixbytes >> 8) & 0xFF);
+  result[3] = (uint8_t)(pixbytes & 0xFF);
+  for (int y = 0; y < kH; ++y)
+    for (int x = 0; x < kW; ++x) {
+      const uint8_t* s = shrunk.data() + ((size_t)y * kW + x) * 4;
+      if (s[0] == 0) continue;
+      const int px = hInset + dx + x;
+      const int py = vInset + y;
+      if (px < 0 || py < 0 || px >= kCap || py >= kCap) continue;
+      int off = 4 + XenosTiledOffset(px, py, kCap);
+      result[off] = s[0];
+      result[off + 1] = s[1];
+      result[off + 2] = s[2];
+      result[off + 3] = s[3];
+    }
+  return result;
+}
+
+// Replaces a 64x64 sub-region of a larger 0x00A2 tile with a 64x64 keycap tile,
+// re-mapping pixels between the two Xenos tile pitches (the keycap is tiled at
+// pitch 64, the atlas at pitch big_w). `ox`/`oy` is the sub-region's top-left in
+// the atlas. This is used to swap a single prompt button inside a shared atlas
+// (e.g. the A button in art\gui\persistant\abyx.tex) without touching the rest.
+inline void ReplaceKeycapRegion(std::vector<uint8_t>& atlas, const std::vector<uint8_t>& keycap,
+                                int big_w, int big_h, int ox, int oy) {
+  const int kCap = 64;
+  for (int y = 0; y < kCap; ++y) {
+    for (int x = 0; x < kCap; ++x) {
+      const int bx = ox + x, by = oy + y;
+      if (bx < 0 || by < 0 || bx >= big_w || by >= big_h) continue;
+      const uint8_t* src = keycap.data() + 4 + XenosTiledOffset(x, y, kCap);
+      uint8_t* dst = atlas.data() + 4 + XenosTiledOffset(bx, by, big_w);
+      dst[0] = src[0];
+      dst[1] = src[1];
+      dst[2] = src[2];
+      dst[3] = src[3];
+    }
+  }
+}
+
 inline std::optional<std::string> Directions(
     const std::unordered_map<std::string, std::string>& labels, const std::string& prefix) {
   const char* order[4] = {"Up", "Left", "Down", "Right"};
@@ -322,6 +420,97 @@ inline bool GenerateSidecar(const std::filesystem::path& game_data_root, const s
     sidecar.push_back({kTextures, Ci(entry.name), uint64_t(entry.offset), uint32_t(a2_size),
                        std::move(original), it->second});
   }
+
+  // Shared-atlas prompts: some textures pack several controller buttons into one
+  // large surface (the A/B/X/Y atlas at art\gui\persistant\abyx.tex is 256x256,
+  // with the four face buttons in the top two rows and colour swatches in the
+  // bottom half). For these we decode the whole atlas to 0x00A2, then overwrite
+  // just the one 64x64 cell that holds the button we're remapping -- here the
+  // top-left A button -- leaving every other cell (B/Y/X and the swatches) bit-
+  // for-bit identical. The atlas is converted to full-RGBA (like the controller
+  // icons) so the keycap swap can patch the live surface byte-for-byte.
+  auto addAtlasCell = [&](const std::string& name, int ox, int oy, const std::string& btn) {
+    auto at = textureBank.entries().find(Ci(name));
+    if (at == textureBank.entries().end()) return;
+    auto ah = headerBank.entries().find(Ci(name));
+    if (ah == headerBank.entries().end() || ah->second.length != rawHeaderLen) return;
+    const uint8_t* md = headerBank.Payload(ah->second);
+    const int w = GuiTextureBank::ReadIntBE(md + 16);
+    const int h = GuiTextureBank::ReadIntBE(md + 20);
+    const int format = GuiTextureBank::ReadIntBE(md + 12);
+    const int a2_size = 4 + w * h * 4;
+    if (w != 256 || h != 256) return;
+    auto labelIt = labels.find(btn);
+    if (labelIt == labels.end()) return;
+    // Shrink the keycap (6px horizontal, 4px vertical) so it sits comfortably
+    // inside its 64x64 atlas cell without crowding the neighbouring buttons.
+    std::vector<uint8_t> keycap = RenderKeycapInset(labelIt->second, 10, 4);
+    if (int(keycap.size()) != 4 + 64 * 64 * 4) return;
+    std::vector<uint8_t> original;
+    if (format == 0xA2) {
+      if (at->second.length != a2_size) return;
+      original.assign(textureBank.Payload(at->second),
+                      textureBank.Payload(at->second) + at->second.length);
+    } else if (!DecodeCompressedIconToTile(textureBank.Payload(at->second), at->second.length, w, h,
+                                           original) ||
+               int(original.size()) != a2_size) {
+      return;
+    }
+    std::vector<uint8_t> keyboard = original;
+    ReplaceKeycapRegion(keyboard, keycap, w, h, ox, oy);
+    if (format != 0xA2) {
+      texture_replacements[Ci(name)] = original;
+      header_updates[Ci(name)] = uint32_t(a2_size);
+    }
+    sidecar.push_back({kTextures, Ci(name), uint64_t(at->second.offset), uint32_t(a2_size),
+                       std::move(original), std::move(keyboard)});
+  };
+  // The abyx atlas: replace the A button at (0,0) and the smaller A variant at
+  // (0,64) with the same keycap, in a single sidecar entry.
+  {
+    const std::string abyxName = "art\\gui\\persistant\\abyx.tex";
+    auto at = textureBank.entries().find(Ci(abyxName));
+    if (at != textureBank.entries().end()) {
+      auto ah = headerBank.entries().find(Ci(abyxName));
+      if (ah != headerBank.entries().end() && ah->second.length == rawHeaderLen) {
+        const uint8_t* md = headerBank.Payload(ah->second);
+        const int w = GuiTextureBank::ReadIntBE(md + 16);
+        const int h = GuiTextureBank::ReadIntBE(md + 20);
+        const int format = GuiTextureBank::ReadIntBE(md + 12);
+        const int a2_size = 4 + w * h * 4;
+        if (w == 256 && h == 256) {
+          auto labelIt = labels.find("a");
+          if (labelIt != labels.end()) {
+            std::vector<uint8_t> keycap = RenderKeycapInset(labelIt->second, 10, 4, -3);
+            if (int(keycap.size()) == 4 + 64 * 64 * 4) {
+              std::vector<uint8_t> original;
+              if (format == 0xA2) {
+                if (at->second.length == a2_size)
+                  original.assign(textureBank.Payload(at->second),
+                                  textureBank.Payload(at->second) + at->second.length);
+              } else if (DecodeCompressedIconToTile(textureBank.Payload(at->second),
+                                                     at->second.length, w, h, original) &&
+                         int(original.size()) == a2_size) {
+                // ok
+              }
+              if (!original.empty()) {
+                std::vector<uint8_t> keyboard = original;
+                ReplaceKeycapRegion(keyboard, keycap, w, h, 0, 0);
+                ReplaceKeycapRegion(keyboard, keycap, w, h, 0, 64);
+                if (format != 0xA2) {
+                  texture_replacements[Ci(abyxName)] = original;
+                  header_updates[Ci(abyxName)] = uint32_t(a2_size);
+                }
+                sidecar.push_back({kTextures, Ci(abyxName), uint64_t(at->second.offset),
+                                   uint32_t(a2_size), std::move(original), std::move(keyboard)});
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   if (sidecar.empty()) return false;
 
   // Rebuild the banks so the compressed icons carry full-RGBA (0x00A2) payloads:
