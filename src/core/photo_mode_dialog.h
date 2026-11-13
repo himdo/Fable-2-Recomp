@@ -25,6 +25,7 @@
 #include <vector>
 
 #include <imgui.h>
+#include <rex/logging/macros.h>
 #include <rex/ui/imgui_dialog.h>
 #include <rex/ui/imgui_drawer.h>
 
@@ -637,7 +638,9 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
 
   // --- Input -------------------------------------------------------------------------------
   void Adjust(const menu::Item& it, Settings& s, int dir) {
-    if (dir == 0) return;
+    // Actions have no value: Left / Right (or the wheel) on one does nothing.
+    // (Calling the empty getter threw std::bad_function_call and ended the game.)
+    if (dir == 0 || it.kind == menu::Kind::kAction || !it.get || !it.set) return;
     const float v = it.get(s);
     float nv = v;
     switch (it.kind) {
@@ -762,6 +765,7 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
 
   void HandleGrid(ImGuiIO& io, Settings& s) {
     if (!grid_was_open_) {
+      REXSYS_INFO("[photo-mode] pose cards opened");
       // Just opened: start on the chosen pose, nothing played yet.
       grid_prev_pose_ = s.pose;
       if (s.pose >= 0) grid_cursor_ = s.pose;

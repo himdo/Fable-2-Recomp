@@ -44,6 +44,7 @@
 #include "menu_items.h"
 // The console pad (f2 pad) uses the remote-pad driver in every build.
 #include "remote_gamepad_driver.h"
+#include "fable2_crash_log.h"  // host crash report (fable2_crash.log)
 #include "photo_mode_dialog.h"  // photo mode settings panel (ImGui)
 #ifdef FABLE2_REMOTE_CONTROL
 #include "remote_control_server.h"
@@ -736,6 +737,9 @@ class Fable2App : public rex::ReXApp {
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     // fable2::deadbeef_overlay::register_overlay(drawer);
     photo_dialog_ = std::make_unique<fable2::photomode::PhotoModeDialog>(drawer);
+#ifdef _WIN32
+    fable2::crashlog::Install();  // again, after the SDK set up its own handlers
+#endif
   }
   // std::unique_ptr<rex::ui::ImGuiDialog> CreateAchievementsOverlay() override;
   // std::unique_ptr<rex::ui::AchievementNotificationDialog>
