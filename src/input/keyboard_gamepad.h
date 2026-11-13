@@ -49,6 +49,7 @@
 #include <rex/ui/keybinds.h>
 
 #include "fable2_config.h"  // direct_mouse_look toggle
+#include "../core/fable2_keycap_swap.h"  // real-time keycap prompt swap
 #include "mouse_diag.h"     // fable2_mouse.log + `f2 mouse inject` movement
 #include "mouse_look.h"     // fable2::mouselook (accumulates the mouse delta)
 #include "mouse_stick.h"    // velocity window + deadzone compensation
@@ -287,6 +288,12 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     // probe, so this just latches a flag. Runs even while the console (F4) is
     // open (F5 is a host-level developer command, not gamepad input).
     fable2::f5lua::poll_f5(focused);
+
+    // Real-time keycap prompt swap: the prompt variant follows guest user 0's
+    // most recent input device (keyboard/mouse -> keycaps, pad -> controller
+    // icons). No-op unless the launcher wrote a keyboard-prompt sidecar (see
+    // src/core/fable2_keycap_swap.h).
+    fable2::keycap::Instance().UpdateFromActiveDevice();
 
     // Debug-console toggle key (default F4). Pressing it opens/closes the menu;
     // while the menu is open we release the mouse lock (free cursor for the

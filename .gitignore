@@ -45,6 +45,12 @@ rebuild.log
 rebuild2.log
 __pycache__/
 
+# --- Python test tools (see tests/README.md) ---------------------------------
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
 # --- Fetched/external toolchain deps (created by tools/setup_sdk_src.cmd). -------
 # The tracked files in thirdparty/ (rexglue-sdk-local.patch,
 # rexglue-sdk-submodule-pins.txt, vulkan/, vk_video/) stay in the repo.
@@ -54,3 +60,4 @@ thirdparty/android-ndk/
 # --- Historical reference (pre-ReXGlue XenonRecomp configs) -------------------
 XenonRecomp
 TODO.md
+tools/texture_export/texture_export.exe

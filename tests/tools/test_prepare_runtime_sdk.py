@@ -4,9 +4,9 @@ import importlib.util
 import io
 from pathlib import Path
 import subprocess
-import tempfile
-import unittest
 from unittest.mock import patch
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("prepare", ROOT / "tools/prepare_runtime_sdk.py")
@@ -75,143 +75,135 @@ def run_prepare(*args):
     return 0, errors.getvalue()
 
 
-class PrepareRuntimeSdkCheckoutTests(unittest.TestCase):
-    def test_missing_folder_fails(self):
-        with tempfile.TemporaryDirectory(prefix="fable2-prepare-test-") as directory:
-            source = Path(directory) / "missing"
-            code, errors = run_prepare(str(source))
+def describe_checkout_checks():
+    # --- Bad flow ---------------------------------------------------------
 
-        self.assertEqual(code, 1)
-        self.assertIn("does not exist", errors)
+    def test_should_fail_for_a_missing_folder(tmp_path):
+        code, errors = run_prepare(str(tmp_path / "missing"))
 
-    def test_folder_that_is_not_a_checkout_fails(self):
-        with tempfile.TemporaryDirectory(prefix="fable2-prepare-test-") as directory:
-            code, errors = run_prepare(directory)
+        assert code == 1
+        assert "does not exist" in errors
 
-        self.assertEqual(code, 1)
-        self.assertIn("is not a git work tree", errors)
+    def test_should_fail_for_a_folder_that_is_not_a_checkout(tmp_path):
+        code, errors = run_prepare(str(tmp_path))
 
-    @unittest.expectedFailure
-    def test_checkout_without_commits_fails(self):
-        # Known issue: in a repo with no commits, `git rev-parse HEAD` fails but still
-        # prints "HEAD", and the script only checks that something was printed. The check
-        # is skipped, and the run fails later with "libmspack is missing" instead.
-        with tempfile.TemporaryDirectory(prefix="fable2-prepare-test-") as directory:
-            source = Path(directory)
-            make_checkout(source, {})
-            code, errors = run_prepare(str(source))
+        assert code == 1
+        assert "is not a git work tree" in errors
 
-        self.assertEqual(code, 1)
-        self.assertIn("has no commits", errors)
+    # --- Known issues -----------------------------------------------------
 
-    @unittest.expectedFailure
-    def test_unfetched_submodule_folder_fails(self):
-        # Known issue: a never-fetched SDK submodule is an empty folder inside the Fable
-        # repo, so git answers for the Fable repo and the folder passes as a checkout. The
-        # run fails with "libmspack is missing" instead of saying to fetch the submodule.
-        with tempfile.TemporaryDirectory(prefix="fable2-prepare-test-") as directory:
-            parent = Path(directory)
-            make_checkout(parent, {"README.md": "Fable repo"})
-            source = parent / "thirdparty/rexglue-sdk"
-            source.mkdir(parents=True)
-            code, errors = run_prepare(str(source))
+    @pytest.mark.xfail(strict=True, reason="`git rev-parse HEAD` prints HEAD even when it fails, so "
+                       "an empty repo passes the check")
+    def test_should_fail_for_a_checkout_without_commits(tmp_path):
+        # In a repo with no commits, `git rev-parse HEAD` fails but still prints "HEAD",
+        # and the script only checks that something was printed. The check is skipped,
+        # and the run fails later with "libmspack is missing" instead.
+        make_checkout(tmp_path, {})
 
-        self.assertEqual(code, 1)
-        self.assertIn("is not a git work tree", errors)
+        code, errors = run_prepare(str(tmp_path))
 
-    def test_skip_dependencies_accepts_a_checkout(self):
-        with tempfile.TemporaryDirectory(prefix="fable2-prepare-test-") as directory:
-            source = Path(directory)
-            make_checkout(source, {"CMakeLists.txt": "project(sdk)"})
-            expected = (0, "")
-            response = run_prepare(str(source), "--skip-dependencies")
+        assert code == 1
+        assert "has no commits" in errors
 
-        self.assertEqual(response, expected)
+    @pytest.mark.xfail(strict=True, reason="git answers for the parent repo, so an unfetched "
+                       "submodule folder passes as a checkout")
+    def test_should_fail_for_an_unfetched_submodule_folder(tmp_path):
+        # A never-fetched SDK submodule is an empty folder inside the Fable repo, so git
+        # answers for the Fable repo and the folder passes as a checkout. The run fails
+        # with "libmspack is missing" instead of saying to fetch the submodule.
+        make_checkout(tmp_path, {"README.md": "Fable repo"})
+        source = tmp_path / "thirdparty/rexglue-sdk"
+        source.mkdir(parents=True)
 
-    def test_skip_dependencies_leaves_libmspack_alone(self):
+        code, errors = run_prepare(str(source))
+
+        assert code == 1
+        assert "is not a git work tree" in errors
+
+    # --- Edge cases -------------------------------------------------------
+
+    def test_should_accept_a_checkout_with_skip_dependencies(tmp_path):
+        make_checkout(tmp_path, {"CMakeLists.txt": "project(sdk)"})
+
+        response = run_prepare(str(tmp_path), "--skip-dependencies")
+
+        assert response == (0, "")
+
+    def test_should_leave_libmspack_alone_with_skip_dependencies(tmp_path):
         # Only the checks run, so the libmspack marker folder must not be created.
-        with tempfile.TemporaryDirectory(prefix="fable2-prepare-test-") as directory:
-            source = Path(directory)
-            make_checkout(source, {"thirdparty/libmspack/mspack.h": "header"})
-            code, _ = run_prepare(str(source), "--skip-dependencies")
-            marker_exists = (source / "thirdparty/libmspack/.git").exists()
+        make_checkout(tmp_path, {"thirdparty/libmspack/mspack.h": "header"})
 
-        self.assertEqual(code, 0)
-        self.assertFalse(marker_exists)
+        code, _ = run_prepare(str(tmp_path), "--skip-dependencies")
+
+        assert code == 0
+        assert not (tmp_path / "thirdparty/libmspack/.git").exists()
 
 
-class PrepareRuntimeSdkLibmspackTests(unittest.TestCase):
-    def test_missing_libmspack_fails(self):
-        with tempfile.TemporaryDirectory(prefix="fable2-prepare-test-") as directory:
-            source = Path(directory)
-            make_checkout(source, {"CMakeLists.txt": "project(sdk)"})
-            code, errors = run_prepare(str(source))
+def describe_libmspack_setup():
+    # --- Happy flow -------------------------------------------------------
 
-        self.assertEqual(code, 1)
-        self.assertIn("libmspack is missing", errors)
-
-    def test_uncommitted_libmspack_counts_as_missing(self):
-        # The script looks at the last commit (HEAD), not at the files on disk.
-        with tempfile.TemporaryDirectory(prefix="fable2-prepare-test-") as directory:
-            source = Path(directory)
-            make_checkout(source, {"CMakeLists.txt": "project(sdk)"})
-            header = source / "thirdparty/libmspack/mspack.h"
-            header.parent.mkdir(parents=True)
-            header.write_text("header", encoding="utf-8")
-            code, errors = run_prepare(str(source))
-
-        self.assertEqual(code, 1)
-        self.assertIn("libmspack is missing", errors)
-
-    def test_vendored_libmspack_gets_a_git_marker(self):
+    def test_should_give_vendored_libmspack_a_git_marker(tmp_path):
         # The SDK's CMake treats a dependency as set up when <dependency>/.git exists, and
         # libmspack stored as plain files has none, so the script adds an empty folder.
-        with tempfile.TemporaryDirectory(prefix="fable2-prepare-test-") as directory:
-            source = Path(directory)
-            make_checkout(source, {"thirdparty/libmspack/mspack.h": "header"})
-            code, _ = run_prepare(str(source))
-            marker_is_folder = (source / "thirdparty/libmspack/.git").is_dir()
+        make_checkout(tmp_path, {"thirdparty/libmspack/mspack.h": "header"})
 
-        self.assertEqual(code, 0)
-        self.assertTrue(marker_is_folder)
+        code, _ = run_prepare(str(tmp_path))
 
-    def test_second_run_keeps_the_vendored_marker(self):
-        # The build runs this step every time, so a second run must succeed too.
-        with tempfile.TemporaryDirectory(prefix="fable2-prepare-test-") as directory:
-            source = Path(directory)
-            make_checkout(source, {"thirdparty/libmspack/mspack.h": "header"})
-            first_code, _ = run_prepare(str(source))
-            second_code, _ = run_prepare(str(source))
-            marker_is_folder = (source / "thirdparty/libmspack/.git").is_dir()
+        assert code == 0
+        assert (tmp_path / "thirdparty/libmspack/.git").is_dir()
 
-        self.assertEqual(first_code, 0)
-        self.assertEqual(second_code, 0)
-        self.assertTrue(marker_is_folder)
-
-    def test_submodule_libmspack_is_repinned(self):
+    def test_should_repin_libmspack_stored_as_a_submodule(tmp_path):
         # `git submodule update` reads the index, so the script points the index at a commit
         # the public remote still has. The run then fails at the update, as there is no
         # remote here, but the repin has already happened.
-        with tempfile.TemporaryDirectory(prefix="fable2-prepare-test-") as directory:
-            source = Path(directory)
-            make_gitlink_checkout(source)
-            code, _ = run_prepare(str(source))
-            index_entry = libmspack_index_entry(source)
+        make_gitlink_checkout(tmp_path)
 
-        self.assertEqual(code, 1)
-        self.assertIn(prepare.MSPACK_PIN, index_entry)
+        code, _ = run_prepare(str(tmp_path))
 
-    def test_failed_submodule_update_mentions_network(self):
+        assert code == 1
+        assert prepare.MSPACK_PIN in libmspack_index_entry(tmp_path)
+
+    # --- Bad flow ---------------------------------------------------------
+
+    def test_should_fail_when_libmspack_is_missing(tmp_path):
+        make_checkout(tmp_path, {"CMakeLists.txt": "project(sdk)"})
+
+        code, errors = run_prepare(str(tmp_path))
+
+        assert code == 1
+        assert "libmspack is missing" in errors
+
+    def test_should_count_uncommitted_libmspack_as_missing(tmp_path):
+        # The script looks at the last commit (HEAD), not at the files on disk.
+        make_checkout(tmp_path, {"CMakeLists.txt": "project(sdk)"})
+        header = tmp_path / "thirdparty/libmspack/mspack.h"
+        header.parent.mkdir(parents=True)
+        header.write_text("header", encoding="utf-8")
+
+        code, errors = run_prepare(str(tmp_path))
+
+        assert code == 1
+        assert "libmspack is missing" in errors
+
+    def test_should_mention_network_access_when_the_submodule_update_fails(tmp_path):
         # A fresh clone without network access is the usual cause, so the error says so.
-        with tempfile.TemporaryDirectory(prefix="fable2-prepare-test-") as directory:
-            source = Path(directory)
-            make_gitlink_checkout(source)
-            code, errors = run_prepare(str(source))
+        make_gitlink_checkout(tmp_path)
 
-        self.assertEqual(code, 1)
-        self.assertIn("submodule update failed", errors)
-        self.assertIn("network access", errors)
+        code, errors = run_prepare(str(tmp_path))
 
+        assert code == 1
+        assert "submodule update failed" in errors
+        assert "network access" in errors
 
-if __name__ == "__main__":
-    unittest.main()
+    # --- Edge cases -------------------------------------------------------
+
+    def test_should_keep_the_vendored_marker_on_a_second_run(tmp_path):
+        # The build runs this step every time, so a second run must succeed too.
+        make_checkout(tmp_path, {"thirdparty/libmspack/mspack.h": "header"})
+        first_code, _ = run_prepare(str(tmp_path))
+
+        second_code, _ = run_prepare(str(tmp_path))
+
+        assert first_code == 0
+        assert second_code == 0
+        assert (tmp_path / "thirdparty/libmspack/.git").is_dir()

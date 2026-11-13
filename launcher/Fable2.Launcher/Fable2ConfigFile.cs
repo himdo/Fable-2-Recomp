@@ -23,7 +23,6 @@ public class Fable2ConfigValues
     // [input]
     public string KeyboardGamepadMap { get; set; } = DefaultKeyboardGamepadMap;
     public bool MouseLook { get; set; } = true;
-    public bool KeyboardPromptImages { get; set; } = false;  // launcher-only
     public int MouseLookScale { get; set; } = 256;  // range 1..4096 (cvar constraint)
     // Experimental: drive the camera directly (desktop-FPS orbit) instead of the
     // legacy right-stick mapping. Only applies when MouseLook is on.
@@ -115,7 +114,6 @@ public static class Fable2ConfigFile
                 case "input":
                     if (key == "keyboard_gamepad_map") values.KeyboardGamepadMap = Unquote(rawValue);
                     else if (key == "mouse_look") values.MouseLook = ParseBool(rawValue, values.MouseLook);
-                    else if (key == "keyboard_prompt_images") values.KeyboardPromptImages = ParseBool(rawValue, false);
                     else if (key == "mouse_look_scale") values.MouseLookScale = ParseInt(rawValue, values.MouseLookScale);
                     else if (key == "direct_mouse_look") values.DirectMouseLook = ParseBool(rawValue, values.DirectMouseLook);
                     break;
@@ -163,7 +161,6 @@ public static class Fable2ConfigFile
             ("general", "config_version", "1"),
             ("input", "keyboard_gamepad_map", Quote(values.KeyboardGamepadMap)),
             ("input", "mouse_look", values.MouseLook ? "true" : "false"),
-            ("input", "keyboard_prompt_images", values.KeyboardPromptImages ? "true" : "false"),
             ("input", "mouse_look_scale", values.MouseLookScale.ToString(CultureInfo.InvariantCulture)),
             ("input", "direct_mouse_look", values.DirectMouseLook ? "true" : "false"),
             ("patches", "unlock_website", values.UnlockWebsite ? "true" : "false"),
