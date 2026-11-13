@@ -519,6 +519,7 @@ class Fable2App : public rex::ReXApp {
     fable2::console::set_root(game_data_root());
     // Photo mode's pose cards run console lines (`pose`).
     fable2::photomode::game_command() = [](const std::string& line) { fable2::console::enqueue_text(line); };
+    fable2::photomode::game_command_ready() = [] { return fable2::console::S().pump_ready.load(); };
     fable2::photomode::game_command_busy() = [] {
       auto& c = fable2::console::S();
       bool queued;

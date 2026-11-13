@@ -61,6 +61,7 @@
 #include "host_pad.h"
 #include "mouse_look.h"
 #include "photo_mode_state.h"
+#include "fable2_func_trace.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -904,7 +905,29 @@ inline void on_camera_update(PPCContext& ctx, uint8_t* base) {
 
 // --- World update (guest thread). Returns after running (or skipping) the
 // original. ---------------------------------------------------------------------------------
+inline void on_world_update_impl(PPCContext& ctx, uint8_t* base, bool force_run);
+
+// Research hook: the console's `traceworld <n>` traces the next n world
+// updates (every guest function entered, in order, to fable2_func_trace.log),
+// running each one even while photo mode has the world frozen.
 inline void on_world_update(PPCContext& ctx, uint8_t* base) {
+  if (trace_world_request().load() > 0) {
+    const int left = trace_world_request().fetch_sub(1);
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "traceworld: tracing a world update (%d left)", left - 1);
+    detail::log_line(buf);
+    Fable2FuncTraceSetEnabled(true);
+    Fable2FuncTraceCall("==== traceworld frame begin ====");
+    on_world_update_impl(ctx, base, true);
+    Fable2FuncTraceCall("==== traceworld frame end ====");
+    Fable2FuncTraceFlush();
+    Fable2FuncTraceSetEnabled(false);
+    return;
+  }
+  on_world_update_impl(ctx, base, false);
+}
+
+inline void on_world_update_impl(PPCContext& ctx, uint8_t* base, bool force_run) {
   using namespace detail;
   State& g = st();
   const auto& cfg = config::Get();
@@ -913,6 +936,23 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
   const bool want = cfg.photo_mode_enabled && want_active().load();
   if (g.phase == Phase::kOff && !want) {
     if (g.restore_updates_left > 0 && --g.restore_updates_left == 0) g.cam_count = 0;
+    // Warm up the console's Lua pump during normal play, so a pose in photo
+    // mode runs within a frame or two instead of waiting (with the world
+    // running) for the pump to start. Any Lua line starts it; `pose relock`
+    // changes nothing when no pose unlocked anything.
+    if (cfg.photo_mode_enabled && game_command() && game_command_ready() && !game_command_ready()()) {
+      static int64_t last_try = 0;
+      if (now_ms() - last_try > 15000) {
+        last_try = now_ms();
+        const PPCContext saved_ctx = ctx;
+        const bool top_now = world_is_top(ctx, base, self);
+        ctx = saved_ctx;
+        if (top_now) {
+          game_command()("pose relock");
+          log_line("starting the console's Lua pump for poses");
+        }
+      }
+    }
     __imp__GameWorldState_Update_821D43D8(ctx, base);
     return;
   }
@@ -1001,13 +1041,13 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
     }
     // The hold counts from when the console has run the line (its Lua pump
     // starts on the first command and needs the world running to answer);
-    // give up waiting after 20 s.
+    // give up waiting after 1 s, so the world never runs on for long.
     if (g.thaw_busy_since != 0) {
       const bool busy = game_command_busy() && game_command_busy()();
-      if (busy && now_ms() - g.thaw_busy_since < 20000) {
+      if (busy && now_ms() - g.thaw_busy_since < 1000) {
         g.thaw_until_ms = std::max(g.thaw_until_ms, now_ms() + g.thaw_hold_ms);
       } else {
-        if (busy) log_line("hero: the console did not answer within 20 s");
+        if (busy) log_line("hero: the console did not answer within 1 s; freezing anyway");
         g.thaw_busy_since = 0;
         g.thaw_hold_ms = 0;
       }
@@ -1018,7 +1058,7 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
   const bool thawing = now_ms() < g.thaw_until_ms;
 
   ++g.diag_world;
-  if (g.s.freeze_world && top && !thawing) {
+  if (g.s.freeze_world && top && !thawing && !force_run) {
     ++g.diag_frozen;
     update_cameras(ctx, base);
     if (tod_changed) rebuild_theme(ctx, base);

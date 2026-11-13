@@ -188,6 +188,18 @@ inline std::atomic<int>& nav_back() {
   static std::atomic<int> v{0};
   return v;
 }
+// True once the console's Lua pump is running (it starts on the first Lua
+// line and needs the world running to answer).
+inline std::function<bool()>& game_command_ready() {
+  static std::function<bool()> f;
+  return f;
+}
+// Research: trace (fable2_func_trace.log) this many world updates, running
+// them even while photo mode has the world frozen (console `traceworld`).
+inline std::atomic<int>& trace_world_request() {
+  static std::atomic<int> v{0};
+  return v;
+}
 // Let the world run this many ms (e.g. so a cancelled preview plays out).
 inline std::atomic<int>& world_run_request() {
   static std::atomic<int> v{0};

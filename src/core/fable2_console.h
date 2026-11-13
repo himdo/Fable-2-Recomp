@@ -49,6 +49,7 @@
 #include "fable2_fit_window.h"
 #include "fable2_gui_lua.h"
 #include "remote_input_state.h"
+#include "photo_mode_state.h"
 
 // The SDK's `~` console (ImGui overlay) logs through REXLOG_* and can register
 // commands with REXCVAR_DEFINE_COMMAND_ARGS (rex/cvar.h). Both are optional here
@@ -602,6 +603,24 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
         "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad. "
         "Everything else (warp, god, gold, giveall, ...) runs in Lua: type help. "
         "Separate commands with ';'. Addresses are hex guest addresses.");
+    return true;
+  }
+  // Photo mode from the console (research sessions run without keys).
+  if (name == "photo") {
+    namespace pm = fable2::photomode;
+    const std::string m = W.size() > 1 ? W[1] : "toggle";
+    const bool on = pm::want_active().load();
+    if (m == "toggle" || (m == "on" && !on) || (m == "off" && on)) pm::request_toggle();
+    out("photo", std::string("photo mode ") + (pm::want_active().load() ? "requested on" : "requested off"));
+    return true;
+  }
+  // traceworld [n]: trace the next n world updates (default 1) to
+  // fable2_func_trace.log, even while photo mode has the world frozen.
+  if (name == "traceworld") {
+    int64_t n = 1;
+    if (W.size() > 1 && !parse_i(W[1], n)) n = 1;
+    fable2::photomode::trace_world_request().store(int(std::clamp<int64_t>(n, 1, 120)));
+    out("traceworld", "tracing the next " + std::to_string(std::clamp<int64_t>(n, 1, 120)) + " world update(s)");
     return true;
   }
   if (name == "status") {
