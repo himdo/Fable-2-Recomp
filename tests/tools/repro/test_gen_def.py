@@ -1,12 +1,11 @@
 """Check that gen_def.py writes a .def that keeps what consumers import plus the rex:: API."""
 import contextlib
-import gc
 import importlib.util
 import io
 from pathlib import Path
-import tempfile
-import unittest
 from unittest.mock import patch
+
+import pytest
 
 from .fake_pe import (HOST_IMPORT, REX_API, RUNTIME_EXPORTS, STD_BLOAT, XENOS_IMPORT, export_dll,
                       import_exe)
@@ -17,145 +16,152 @@ gen_def = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gen_def)
 
 
-class GenDefTests(unittest.TestCase):
-    def setUp(self):
-        temp = tempfile.TemporaryDirectory(prefix="fable2-gen-def-test-")
-        self.addCleanup(temp.cleanup)
-        # gen_def.py never closes its pefile objects, which keep the files mapped
-        # until Python's garbage collector frees them, and Windows won't delete a
-        # mapped file. Cleanups run last-added first, so this runs before the delete.
-        self.addCleanup(gc.collect)
-        self.folder = Path(temp.name)
-        self.runtime = self.folder / "rexruntime.dll"
-        self.runtime.write_bytes(export_dll(RUNTIME_EXPORTS))
-        self.consumer = self.folder / "fable_2.exe"
-        self.def_file = self.folder / "rexruntime.def"
+@pytest.fixture
+def runtime(tmp_path):
+    """A fake rexruntime.dll that exports RUNTIME_EXPORTS."""
+    path = tmp_path / "rexruntime.dll"
+    path.write_bytes(export_dll(RUNTIME_EXPORTS))
+    return path
 
-    def run_main(self, *args):
-        """Run gen_def.py with these arguments, and return what it printed to stderr."""
-        argv = ["gen_def.py", *args, "--out", str(self.def_file)]
-        errors = io.StringIO()
-        with patch("sys.argv", argv), contextlib.redirect_stderr(errors):
-            gen_def.main()
-        return errors.getvalue()
 
-    def kept_names(self):
-        """Return the names listed in the written .def, without their leading dots."""
-        lines = self.def_file.read_text(encoding="utf-8").splitlines()
-        return [line[1:] for line in lines if line.startswith(".")]
+@pytest.fixture
+def consumer(tmp_path):
+    """Where a test writes its fake fable_2.exe."""
+    return tmp_path / "fable_2.exe"
 
-    # --- Reading imports and exports --------------------------------------
 
-    def test_lists_the_names_a_consumer_imports_from_the_runtime(self):
-        self.consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT]}))
+@pytest.fixture
+def def_file(tmp_path):
+    """Where gen_def.py writes the .def."""
+    return tmp_path / "rexruntime.def"
 
-        names = gen_def.consumer_imports(str(self.consumer), gen_def.REX_RUNTIME_NAMES)
 
-        self.assertEqual(names, {HOST_IMPORT})
+def run_main(def_file, *args):
+    """Run gen_def.py with these arguments, and return what it printed to stderr."""
+    argv = ["gen_def.py", *args, "--out", str(def_file)]
+    errors = io.StringIO()
+    with patch("sys.argv", argv), contextlib.redirect_stderr(errors):
+        gen_def.main()
+    return errors.getvalue()
 
-    def test_ignores_imports_from_other_dlls(self):
-        self.consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT], "KERNEL32.dll": ["Sleep"]}))
 
-        names = gen_def.consumer_imports(str(self.consumer), gen_def.REX_RUNTIME_NAMES)
+def kept_names(def_file):
+    """Return the names listed in the written .def, without their leading dots."""
+    lines = def_file.read_text(encoding="utf-8").splitlines()
+    return [line[1:] for line in lines if line.startswith(".")]
 
-        self.assertNotIn("Sleep", names)
 
-    def test_matches_the_runtime_name_in_any_case(self):
-        self.consumer.write_bytes(import_exe({"REXRUNTIME.DLL": [HOST_IMPORT]}))
+def describe_consumer_imports():
+    def test_should_list_the_names_a_consumer_imports_from_the_runtime(consumer):
+        consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT]}))
 
-        names = gen_def.consumer_imports(str(self.consumer), gen_def.REX_RUNTIME_NAMES)
+        names = gen_def.consumer_imports(str(consumer), gen_def.REX_RUNTIME_NAMES)
 
-        self.assertEqual(names, {HOST_IMPORT})
+        assert names == {HOST_IMPORT}
 
-    def test_lists_every_name_the_runtime_exports(self):
-        self.assertEqual(gen_def.dll_exports(str(self.runtime)), RUNTIME_EXPORTS)
+    def test_should_ignore_imports_from_other_dlls(consumer):
+        consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT], "KERNEL32.dll": ["Sleep"]}))
 
+        names = gen_def.consumer_imports(str(consumer), gen_def.REX_RUNTIME_NAMES)
+
+        assert "Sleep" not in names
+
+    def test_should_match_the_runtime_name_in_any_case(consumer):
+        consumer.write_bytes(import_exe({"REXRUNTIME.DLL": [HOST_IMPORT]}))
+
+        names = gen_def.consumer_imports(str(consumer), gen_def.REX_RUNTIME_NAMES)
+
+        assert names == {HOST_IMPORT}
+
+
+def describe_dll_exports():
+    def test_should_list_every_name_the_runtime_exports(runtime):
+        assert gen_def.dll_exports(str(runtime)) == RUNTIME_EXPORTS
+
+
+def describe_main():
     # --- Happy flow -------------------------------------------------------
 
-    def test_keeps_consumer_imports_and_the_rex_api(self):
-        self.consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT]}))
+    def test_should_keep_consumer_imports_and_the_rex_api(runtime, consumer, def_file):
+        consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT]}))
 
-        self.run_main(str(self.runtime), str(self.consumer))
+        run_main(def_file, str(runtime), str(consumer))
 
-        self.assertEqual(set(self.kept_names()), {REX_API, HOST_IMPORT})
+        assert set(kept_names(def_file)) == {REX_API, HOST_IMPORT}
 
-    def test_combines_the_imports_of_every_consumer(self):
-        self.consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT]}))
-        plugin = self.folder / "rexgpu-xenos.dll"
+    def test_should_combine_the_imports_of_every_consumer(tmp_path, runtime, consumer, def_file):
+        consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT]}))
+        plugin = tmp_path / "rexgpu-xenos.dll"
         plugin.write_bytes(import_exe({"rexruntime.dll": [XENOS_IMPORT]}, is_dll=True))
 
-        self.run_main(str(self.runtime), str(self.consumer), str(plugin))
+        run_main(def_file, str(runtime), str(consumer), str(plugin))
 
-        self.assertEqual(set(self.kept_names()), {REX_API, HOST_IMPORT, XENOS_IMPORT})
+        assert set(kept_names(def_file)) == {REX_API, HOST_IMPORT, XENOS_IMPORT}
 
-    def test_starts_the_def_with_its_header_lines(self):
-        self.consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT]}))
+    def test_should_start_the_def_with_its_header_lines(runtime, consumer, def_file):
+        consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT]}))
 
-        self.run_main(str(self.runtime), str(self.consumer))
+        run_main(def_file, str(runtime), str(consumer))
 
-        lines = self.def_file.read_text(encoding="utf-8").splitlines()
-        self.assertEqual(lines[:2], ["LIBRARY rexruntime", "EXPORTS"])
+        lines = def_file.read_text(encoding="utf-8").splitlines()
+        assert lines[:2] == ["LIBRARY rexruntime", "EXPORTS"]
 
-    def test_lists_the_names_in_sorted_order(self):
+    def test_should_list_the_names_in_sorted_order(runtime, consumer, def_file):
         """Sorted output keeps the .def identical from build to build. Ten names, so
         an unsorted write can't come out in order by chance."""
         rex_names = sorted(f"?Function{i}@rex@@YAXXZ" for i in range(10))
-        self.runtime.write_bytes(export_dll(rex_names))
-        self.consumer.write_bytes(import_exe({"KERNEL32.dll": ["Sleep"]}))
+        runtime.write_bytes(export_dll(rex_names))
+        consumer.write_bytes(import_exe({"KERNEL32.dll": ["Sleep"]}))
 
-        self.run_main(str(self.runtime), str(self.consumer))
+        run_main(def_file, str(runtime), str(consumer))
 
-        self.assertEqual(self.kept_names(), rex_names)
+        assert kept_names(def_file) == rex_names
 
-    def test_reports_the_counts(self):
-        self.consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT]}))
+    def test_should_report_the_counts(runtime, consumer, def_file):
+        consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT]}))
 
-        output = self.run_main(str(self.runtime), str(self.consumer))
+        output = run_main(def_file, str(runtime), str(consumer))
 
-        self.assertIn("current exports : 4", output)
-        self.assertIn("KEPT (new def)  : 2", output)
-        self.assertIn("dropped         : 2", output)
+        assert "current exports : 4" in output
+        assert "KEPT (new def)  : 2" in output
+        assert "dropped         : 2" in output
 
     # --- Bad flow ---------------------------------------------------------
 
-    def test_skips_a_consumer_that_does_not_exist(self):
-        self.consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT]}))
+    def test_should_skip_a_consumer_that_does_not_exist(tmp_path, runtime, consumer, def_file):
+        consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT]}))
 
-        self.run_main(str(self.runtime), str(self.folder / "missing.exe"), str(self.consumer))
+        run_main(def_file, str(runtime), str(tmp_path / "missing.exe"), str(consumer))
 
-        self.assertEqual(set(self.kept_names()), {REX_API, HOST_IMPORT})
+        assert set(kept_names(def_file)) == {REX_API, HOST_IMPORT}
 
-    def test_drops_an_import_the_runtime_does_not_export(self):
-        self.consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT, "?Gone@@YAXXZ"]}))
+    def test_should_drop_an_import_the_runtime_does_not_export(runtime, consumer, def_file):
+        consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT, "?Gone@@YAXXZ"]}))
 
-        output = self.run_main(str(self.runtime), str(self.consumer))
+        output = run_main(def_file, str(runtime), str(consumer))
 
-        self.assertIn("1 kept symbols not in current export set", output)
-        self.assertNotIn("?Gone@@YAXXZ", self.kept_names())
+        assert "1 kept symbols not in current export set" in output
+        assert "?Gone@@YAXXZ" not in kept_names(def_file)
 
     # --- Edge cases -------------------------------------------------------
 
-    def test_tag_also_counts_imports_from_another_runtime_name(self):
-        self.consumer.write_bytes(import_exe({"rexruntime_custom.dll": [HOST_IMPORT]}))
+    def test_should_count_imports_from_the_tagged_runtime_name(runtime, consumer, def_file):
+        consumer.write_bytes(import_exe({"rexruntime_custom.dll": [HOST_IMPORT]}))
 
-        self.run_main(str(self.runtime), str(self.consumer), "--tag", "REXRUNTIME_CUSTOM.DLL")
+        run_main(def_file, str(runtime), str(consumer), "--tag", "REXRUNTIME_CUSTOM.DLL")
 
-        self.assertIn(HOST_IMPORT, self.kept_names())
+        assert HOST_IMPORT in kept_names(def_file)
 
-    def test_without_the_tag_another_runtime_name_is_ignored(self):
-        self.consumer.write_bytes(import_exe({"rexruntime_custom.dll": [HOST_IMPORT]}))
+    def test_should_ignore_another_runtime_name_without_the_tag(runtime, consumer, def_file):
+        consumer.write_bytes(import_exe({"rexruntime_custom.dll": [HOST_IMPORT]}))
 
-        self.run_main(str(self.runtime), str(self.consumer))
+        run_main(def_file, str(runtime), str(consumer))
 
-        self.assertEqual(self.kept_names(), [REX_API])
+        assert kept_names(def_file) == [REX_API]
 
-    def test_never_keeps_unused_bloat(self):
-        self.consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT]}))
+    def test_should_never_keep_unused_bloat(runtime, consumer, def_file):
+        consumer.write_bytes(import_exe({"rexruntime.dll": [HOST_IMPORT]}))
 
-        self.run_main(str(self.runtime), str(self.consumer))
+        run_main(def_file, str(runtime), str(consumer))
 
-        self.assertNotIn(STD_BLOAT, self.kept_names())
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert STD_BLOAT not in kept_names(def_file)
