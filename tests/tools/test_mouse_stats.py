@@ -1,11 +1,9 @@
 """Check the fable2_mouse.log summariser with made-up logs, without a running game."""
-import contextlib
 import importlib.util
-import io
 import json
 from pathlib import Path
-import tempfile
-import unittest
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("mouse_stats", ROOT / "tools/mouse_stats.py")
@@ -14,176 +12,372 @@ spec.loader.exec_module(mouse_stats)
 
 
 def poll(t, dx=0, dy=0, inj=(0, 0), clamp=0, sm=0, w=(0, 0)):
+    """A P line as src/input/mouse_diag.h writes it."""
     return (f"P t={t} tid=1 gap=0 dx={dx} dy={dy} inj={inj[0]},{inj[1]} rx=0 ry=0 clamp={clamp} "
             f"look=1 sm={sm} w={w[0]},{w[1]}")
 
 
 def update(t, rr, srr=None, tick=30):
+    """A U line as the host writes it for scripts/recomp/mouse_diag.lua."""
     srr = rr if srr is None else srr
     return f"U t={t} f=1 tick={tick} act=2:0.500/0.000 rr={rr} srr={srr} mho=0.0000>0.0000 cmho=0.0000 man=1"
 
 
-def run(lines, *args):
-    """Write `lines` to a temp log, run main() and return (exit code, stdout)."""
-    with tempfile.TemporaryDirectory(prefix="fable2-mouse-stats-") as tmp:
-        log = Path(tmp) / "fable2_mouse.log"
+def inject(t, dx, dy, ms):
+    """The note `f2 mouse inject` writes."""
+    return f"N t={t} inject dx={dx} dy={dy} ms={ms}"
+
+
+def two_polls_per_update(sm=0, w=(0, 0)):
+    """A one-second inject run of 200 px: ten camera updates, each followed by two 10 px polls.
+
+    The camera reads only the first poll after its previous update.
+    """
+    lines = [inject(0, 200, 0, 1000)]
+    for i in range(10):
+        base = i * 100_000
+        lines += [update(base + 1_000, -2.0),
+                  poll(base + 10_000, inj=(10, 0), sm=sm, w=w),
+                  poll(base + 60_000, inj=(10, 0), sm=sm, w=w)]
+    return lines
+
+
+def alternating_yaw_run():
+    """Camera updates every 50 ms over a one-second run.
+
+    The steady middle (150-850 ms) holds seven -1s and seven -3s, so mean -2, sd 1 and
+    cv 0.5. The updates at the ends get -100, which would skew those numbers.
+    """
+    lines = [inject(0, 100, 0, 1000)]
+    for i in range(1, 20):
+        t = i * 50_000 + 1_000
+        if t < 150_000 or t > 850_000:
+            lines.append(update(t, -100.0))
+        else:
+            lines.append(update(t, -1.0 if i % 2 else -3.0))
+    return lines
+
+
+def records_of(lines):
+    return sorted(mouse_stats.read_log(lines), key=lambda r: r.t)
+
+
+def analyse_first(lines):
+    """Stats for the first segment of the log, as the report's dict."""
+    records = records_of(lines)
+    segment = mouse_stats.find_segments(records)[0]
+    return mouse_stats.analyse(records, segment).as_dict()
+
+
+@pytest.fixture
+def run_main(tmp_path, capsys):
+    """Return a function that writes lines to a log, runs main() on it and returns (code, out, err)."""
+    def run(lines, *args):
+        log = tmp_path / "fable2_mouse.log"
         log.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        output = io.StringIO()
-        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(io.StringIO()):
-            code = mouse_stats.main([str(log), *args])
-    return code, output.getvalue()
+        code = mouse_stats.main([str(log), *args])
+        captured = capsys.readouterr()
+        return code, captured.out, captured.err
+
+    return run
 
 
-class ParseTests(unittest.TestCase):
-    def test_reads_fields_and_free_text(self):
+def describe_parse_line():
+    def test_should_read_the_kind_and_time():
         record = mouse_stats.parse_line("N t=42 inject dx=10 dy=-3 ms=500")
-        self.assertEqual(record.kind, "N")
-        self.assertEqual(record.t, 42)
-        self.assertEqual(record.text, "inject")
-        self.assertEqual(record.fields["dx"], "10")
-        self.assertEqual(record.fields["ms"], "500")
 
-    def test_skips_comments_blank_lines_and_lines_without_a_time(self):
-        self.assertIsNone(mouse_stats.parse_line("# fable2_mouse.log v1"))
-        self.assertIsNone(mouse_stats.parse_line("   "))
-        self.assertIsNone(mouse_stats.parse_line("P dx=1"))
-        self.assertIsNone(mouse_stats.parse_line("P t=abc dx=1"))
+        assert (record.kind, record.t) == ("N", 42)
 
-    def test_numbers_treat_lua_nil_and_unknown_as_missing(self):
-        self.assertEqual(mouse_stats.number("-1.5000"), -1.5)
-        self.assertIsNone(mouse_stats.number("nil"))
-        self.assertIsNone(mouse_stats.number("?"))
-        self.assertIsNone(mouse_stats.number(None))
-        self.assertIsNone(mouse_stats.number("nan"))
+    def test_should_read_each_key_value_field():
+        record = mouse_stats.parse_line("N t=42 inject dx=10 dy=-3 ms=500")
 
-    def test_poll_movement_adds_cursor_and_injected_pixels(self):
+        assert record.fields == {"t": "42", "dx": "10", "dy": "-3", "ms": "500"}
+
+    def test_should_keep_words_without_a_value_as_text():
+        record = mouse_stats.parse_line("N t=42 inject dx=10 dy=-3 ms=500")
+
+        assert record.text == "inject"
+
+    def test_should_keep_the_first_value_of_a_repeated_key():
+        record = mouse_stats.parse_line("P t=1 dx=1 dx=2")
+
+        assert (record.fields["dx"], record.text) == ("1", "dx=2")
+
+    def test_should_skip_a_comment():
+        assert mouse_stats.parse_line("# fable2_mouse.log v1") is None
+
+    def test_should_skip_a_blank_line():
+        assert mouse_stats.parse_line("   ") is None
+
+    def test_should_skip_a_line_without_a_time():
+        assert mouse_stats.parse_line("P dx=1") is None
+
+    def test_should_skip_a_line_whose_time_is_not_a_number():
+        assert mouse_stats.parse_line("P t=abc dx=1") is None
+
+
+def describe_number():
+    def test_should_read_a_lua_number():
+        assert mouse_stats.number("-1.5000") == -1.5
+
+    def test_should_treat_lua_nil_as_missing():
+        assert mouse_stats.number("nil") is None
+
+    def test_should_treat_an_unknown_value_as_missing():
+        assert mouse_stats.number("?") is None
+
+    def test_should_treat_a_missing_field_as_missing():
+        assert mouse_stats.number(None) is None
+
+    def test_should_treat_nan_as_missing():
+        assert mouse_stats.number("nan") is None
+
+    def test_should_treat_infinity_as_missing():
+        assert mouse_stats.number("inf") is None
+
+
+def describe_pair():
+    def test_should_read_two_whole_numbers():
+        assert mouse_stats.pair("4,-1") == (4, -1)
+
+    def test_should_give_zeros_for_a_missing_field():
+        assert mouse_stats.pair(None) == (0, 0)
+
+    def test_should_give_zeros_for_three_numbers():
+        assert mouse_stats.pair("1,2,3") == (0, 0)
+
+    def test_should_give_zeros_for_values_that_are_not_numbers():
+        assert mouse_stats.pair("a,b") == (0, 0)
+
+
+def describe_poll_px():
+    def test_should_add_cursor_and_injected_pixels():
         record = mouse_stats.parse_line(poll(1, dx=-3, dy=2, inj=(4, -1)))
-        self.assertEqual(mouse_stats.poll_px(record), (7, 3))
+
+        assert mouse_stats.poll_px(record) == (7, 3)
+
+    def test_should_treat_an_empty_movement_as_zero():
+        record = mouse_stats.parse_line("P t=1 dx= dy=2")
+
+        assert mouse_stats.poll_px(record) == (0, 2)
 
 
-class SegmentTests(unittest.TestCase):
-    def test_each_inject_note_is_its_own_segment(self):
+def describe_find_segments():
+    def test_should_make_one_segment_per_inject_note():
         records = mouse_stats.read_log([
-            "N t=1000 inject dx=100 dy=0 ms=200",
+            inject(1000, 100, 0, 200),
             poll(2000, inj=(10, 0)),
-            "N t=5000000 inject dx=-50 dy=5 ms=1000",
+            inject(5_000_000, -50, 5, 1000),
         ])
+
         segments = mouse_stats.find_segments(records)
-        self.assertEqual([(s.start, s.end) for s in segments], [(1000, 201000), (5000000, 6000000)])
-        self.assertEqual(segments[1].label, "inject -50,5 px over 1000 ms")
 
-    def test_whole_log_when_there_are_no_inject_runs_or_when_asked(self):
+        assert [(s.start, s.end) for s in segments] == [(1000, 201_000), (5_000_000, 6_000_000)]
+
+    def test_should_name_a_segment_after_its_inject_run():
+        records = mouse_stats.read_log([inject(5_000_000, -50, 5, 1000)])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert segments[0].label == "inject -50,5 px over 1000 ms"
+
+    def test_should_use_the_whole_log_when_there_are_no_inject_runs():
+        records = mouse_stats.read_log([poll(20), poll(90)])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert [(s.label, s.start, s.end) for s in segments] == [("whole log", 20, 90)]
+
+    def test_should_use_the_whole_log_when_asked():
+        records = mouse_stats.read_log([inject(10, 1, 0, 1), poll(20), poll(90)])
+
+        segments = mouse_stats.find_segments(records, whole=True)
+
+        assert [(s.label, s.start, s.end) for s in segments] == [("whole log", 10, 90)]
+
+    def test_should_give_no_segments_without_records():
+        assert mouse_stats.find_segments([]) == []
+
+    @pytest.mark.xfail(strict=True, reason="find_segments ignores the 'inject stopped' note that `f2 mouse "
+                       "stop` writes, so a stopped run still lasts its full ms, and the time after the stop "
+                       "counts as steady updates without yaw")
+    def test_should_end_a_run_at_its_inject_stopped_note():
         records = mouse_stats.read_log([
-            "N t=10 inject dx=1 dy=0 ms=1",
-            poll(20),
-            poll(90),
+            inject(0, 2400, 0, 4000),
+            poll(100_000, inj=(60, 0)),
+            "N t=1000000 inject stopped",
         ])
-        whole = mouse_stats.find_segments(records, whole=True)
-        self.assertEqual([(s.label, s.start, s.end) for s in whole], [("whole log", 10, 90)])
-        plain = mouse_stats.find_segments(records[1:])
-        self.assertEqual([(s.start, s.end) for s in plain], [(20, 90)])
 
-    def test_no_records_gives_no_segments(self):
-        self.assertEqual(mouse_stats.find_segments([]), [])
+        segments = mouse_stats.find_segments(records)
+
+        assert [(s.start, s.end) for s in segments] == [(0, 1_000_000)]
 
 
-class AnalyseTests(unittest.TestCase):
-    def analyse(self, lines):
-        records = sorted(mouse_stats.read_log(lines), key=lambda r: r.t)
-        segment = mouse_stats.find_segments(records)[0]
-        return mouse_stats.analyse(records, segment).as_dict()
+def describe_analyse():
+    def test_should_count_input_polls_and_camera_updates():
+        d = analyse_first(two_polls_per_update())
 
-    def test_two_polls_per_update_means_half_the_movement_is_visible(self):
-        # 10 px per poll, two polls per camera update: the camera reads only
-        # the first poll after its previous update.
-        lines = ["N t=0 inject dx=200 dy=0 ms=1000"]
-        for i in range(10):
-            base = i * 100_000
-            lines += [update(base + 1_000, -2.0), poll(base + 10_000, inj=(10, 0)),
-                      poll(base + 60_000, inj=(10, 0))]
-        d = self.analyse(lines)
-        self.assertEqual(d["polls"], 20)
-        self.assertEqual(d["updates"], 10)
-        self.assertEqual(d["polls_per_update"], 2.0)
-        self.assertEqual(d["px"], [200, 0])
-        self.assertEqual(d["visible_share"], 0.5)
-        self.assertEqual(d["tick_rates"], [30.0])
+        assert (d["polls"], d["updates"], d["polls_per_update"]) == (20, 10, 2.0)
 
-    def test_with_smoothing_the_read_poll_carries_its_whole_window(self):
-        # Same movement, but each poll reports the movement of the last 100 ms
-        # (w=), so the poll the camera reads carries all of it.
-        lines = ["N t=0 inject dx=200 dy=0 ms=1000"]
-        for i in range(10):
-            base = i * 100_000
-            lines += [update(base + 1_000, -2.0), poll(base + 10_000, inj=(10, 0), sm=1, w=(20, 0)),
-                      poll(base + 60_000, inj=(10, 0), sm=1, w=(20, 0))]
-        d = self.analyse(lines)
-        self.assertEqual(d["visible_share"], 1.0)
+    def test_should_add_up_the_movement():
+        d = analyse_first(two_polls_per_update())
 
-    def test_steady_yaw_skips_the_ends_and_scores_the_variation(self):
-        # Updates every 50 ms over one second; the steady middle (150-850 ms)
-        # holds seven -1s and seven -3s, so mean -2, sd 1, cv 0.5. The ends
-        # would skew it.
-        lines = ["N t=0 inject dx=100 dy=0 ms=1000"]
-        for i in range(1, 20):
-            t = i * 50_000 + 1_000
-            if t < 150_000 or t > 850_000:
-                rr = -100.0
-            else:
-                rr = -1.0 if i % 2 else -3.0
-            lines.append(update(t, rr))
-        yaw = self.analyse(lines)["yaw_per_update"]
-        self.assertEqual(yaw["mean"], -2.0)
-        self.assertAlmostEqual(yaw["sd"], 1.0, places=3)
-        self.assertAlmostEqual(yaw["cv"], 0.5, places=3)
-        self.assertEqual(yaw["zero_share"], 0.0)
+        assert d["px"] == [200, 0]
 
-    def test_updates_without_yaw_count_as_zero(self):
-        lines = ["N t=0 inject dx=100 dy=0 ms=1000"]
-        lines += [update(500_000, "nil"), update(510_000, -2.0)]
-        yaw = self.analyse(lines)["yaw_per_update"]
-        self.assertEqual(yaw["n"], 2)
-        self.assertEqual(yaw["zero_share"], 0.5)
+    def test_should_see_half_the_movement_with_two_polls_per_update():
+        d = analyse_first(two_polls_per_update())
 
-    def test_yaw_total_includes_the_smoothing_tail_but_rates_do_not(self):
-        lines = ["N t=0 inject dx=100 dy=0 ms=100"]
-        lines += [update(50_000, -1.0, srr=-0.4), update(300_000, 0.0, srr=-0.6),
-                  update(900_000, 0.0, srr=-9.0)]
-        d = self.analyse(lines)
-        self.assertEqual(d["updates"], 1)  # only the one inside the run
-        self.assertEqual(d["yaw_total"], -1.0)  # -0.4 inside + -0.6 in the tail; 900 ms is past it
+        assert d["visible_share"] == 0.5
 
-    def test_clamped_share_counts_only_moving_polls(self):
-        lines = ["N t=0 inject dx=100 dy=0 ms=1000",
+    def test_should_see_all_the_movement_when_the_read_poll_carries_its_smoothing_window():
+        # Each poll reports the movement of the last 100 ms (w=), so the poll the camera
+        # reads carries all of it.
+        d = analyse_first(two_polls_per_update(sm=1, w=(20, 0)))
+
+        assert d["visible_share"] == 1.0
+
+    def test_should_see_nothing_when_a_smoothed_poll_has_no_window():
+        lines = [inject(0, 10, 0, 1000), update(1_000, -1.0), "P t=10000 dx=0 dy=0 inj=10,0 sm=1"]
+
+        d = analyse_first(lines)
+
+        assert d["visible_share"] == 0.0
+
+    def test_should_list_the_tick_rates_seen():
+        d = analyse_first(two_polls_per_update())
+
+        assert d["tick_rates"] == [30.0]
+
+    def test_should_skip_an_unknown_tick_rate():
+        d = analyse_first([inject(0, 10, 0, 1000), update(500_000, -1.0, tick="?")])
+
+        assert d["tick_rates"] == []
+
+    def test_should_leave_the_ends_of_the_run_out_of_the_steady_yaw():
+        yaw = analyse_first(alternating_yaw_run())["yaw_per_update"]
+
+        assert yaw["n"] == 14
+
+    def test_should_score_how_much_the_steady_yaw_varies():
+        yaw = analyse_first(alternating_yaw_run())["yaw_per_update"]
+
+        assert (yaw["mean"], yaw["sd"], yaw["cv"], yaw["zero_share"]) == (-2.0, 1.0, 0.5, 0.0)
+
+    def test_should_count_updates_without_yaw_as_zero():
+        yaw = analyse_first([inject(0, 100, 0, 1000), update(500_000, "nil"), update(510_000, -2.0)])["yaw_per_update"]
+
+        assert (yaw["n"], yaw["zero_share"]) == (2, 0.5)
+
+    def test_should_give_no_stutter_score_when_the_camera_never_turned():
+        yaw = analyse_first([inject(0, 100, 0, 1000), update(500_000, 0.0), update(510_000, 0.0)])["yaw_per_update"]
+
+        assert (yaw["cv"], yaw["zero_share"]) == (None, 1.0)
+
+    def test_should_count_only_updates_inside_the_run():
+        lines = [inject(0, 100, 0, 100),
+                 update(50_000, -1.0, srr=-0.4), update(300_000, 0.0, srr=-0.6), update(900_000, 0.0, srr=-9.0)]
+
+        d = analyse_first(lines)
+
+        assert d["updates"] == 1
+
+    def test_should_add_the_smoothing_tail_to_the_yaw_total():
+        # -0.4 inside the run and -0.6 in the 500 ms tail; 900 ms is past the tail.
+        lines = [inject(0, 100, 0, 100),
+                 update(50_000, -1.0, srr=-0.4), update(300_000, 0.0, srr=-0.6), update(900_000, 0.0, srr=-9.0)]
+
+        d = analyse_first(lines)
+
+        assert d["yaw_total"] == -1.0
+
+    def test_should_count_clamped_polls_only_among_moving_polls():
+        lines = [inject(0, 100, 0, 1000),
                  poll(10, inj=(50, 0), clamp=1), poll(20, inj=(5, 0)), poll(30), poll(40, clamp=1)]
-        d = self.analyse(lines)
-        self.assertEqual(d["clamped_share"], 0.5)
+
+        d = analyse_first(lines)
+
+        assert d["clamped_share"] == 0.5
+
+    def test_should_not_count_polls_from_a_later_run():
+        lines = [inject(0, 5, 0, 100), poll(50_000, inj=(5, 0)),
+                 inject(1_000_000, 7, 0, 100), poll(1_050_000, inj=(7, 0))]
+
+        d = analyse_first(lines)
+
+        assert (d["polls"], d["px"]) == (1, [5, 0])
+
+    def test_should_not_count_polls_from_before_the_run():
+        d = analyse_first([poll(500, inj=(9, 0)), inject(1000, 5, 0, 100), poll(50_000, inj=(5, 0))])
+
+        assert (d["polls"], d["px"]) == (1, [5, 0])
 
 
-class MainTests(unittest.TestCase):
-    def test_text_report_explains_missing_camera_updates(self):
-        code, out = run(["N t=0 inject dx=10 dy=0 ms=100", poll(10, inj=(10, 0))])
-        self.assertEqual(code, 0)
-        self.assertIn("inject 10,0 px over 100 ms", out)
-        self.assertIn("f2 mouse trace on", out)
+def describe_format_stats():
+    def test_should_report_how_much_movement_the_game_saw():
+        text = mouse_stats.format_stats(analyse_first(two_polls_per_update()))
 
-    def test_json_report_has_one_entry_per_run(self):
-        code, out = run(["N t=0 inject dx=10 dy=0 ms=100", update(50, -1.0),
-                         "N t=1000000 inject dx=20 dy=0 ms=100", update(1000050, -2.0)], "--json")
-        self.assertEqual(code, 0)
-        data = json.loads(out)
-        self.assertEqual([d["label"] for d in data],
-                         ["inject 10,0 px over 100 ms", "inject 20,0 px over 100 ms"])
+        assert "  visible to the game: 0.5 of x movement" in text.splitlines()
 
-    def test_missing_or_empty_log_fails(self):
-        code, _ = run(["# only a header"])
-        self.assertEqual(code, 1)
-        output = io.StringIO()
-        with contextlib.redirect_stderr(output):
-            code = mouse_stats.main([str(ROOT / "no-such-dir" / "fable2_mouse.log")])
-        self.assertEqual(code, 1)
-        self.assertIn("cannot read", output.getvalue())
+    def test_should_report_the_steady_yaw_per_update():
+        text = mouse_stats.format_stats(analyse_first(two_polls_per_update()))
+
+        assert "  yaw per update (steady, n=7): mean -2.0 sd 0.0 cv 0.0 zero 0.0" in text.splitlines()
+
+    def test_should_report_the_yaw_total_and_tick_rates():
+        text = mouse_stats.format_stats(analyse_first(two_polls_per_update()))
+
+        assert "  yaw total -20.0  tick rates [30.0]" in text.splitlines()
+
+    def test_should_mark_a_missing_number_as_not_available():
+        text = mouse_stats.format_stats(analyse_first([inject(0, 10, 0, 100), poll(10, inj=(10, 0))]))
+
+        assert "polls/update n/a" in text
+
+    def test_should_explain_how_to_get_camera_updates_when_there_are_none():
+        text = mouse_stats.format_stats(analyse_first([inject(0, 10, 0, 100), poll(10, inj=(10, 0))]))
+
+        assert "f2 mouse trace on" in text
 
 
-if __name__ == "__main__":
-    unittest.main()
+def describe_main():
+    def test_should_name_each_inject_run_in_the_text_report(run_main):
+        code, out, _ = run_main([inject(0, 10, 0, 100), poll(10, inj=(10, 0))])
+
+        assert code == 0
+        assert out.startswith("inject 10,0 px over 100 ms")
+
+    def test_should_print_one_json_entry_per_inject_run(run_main):
+        lines = [inject(0, 10, 0, 100), update(50, -1.0), inject(1_000_000, 20, 0, 100), update(1_000_050, -2.0)]
+
+        code, out, _ = run_main(lines, "--json")
+
+        assert code == 0
+        assert [d["label"] for d in json.loads(out)] == ["inject 10,0 px over 100 ms", "inject 20,0 px over 100 ms"]
+
+    def test_should_merge_the_runs_into_one_when_asked_for_the_whole_log(run_main):
+        lines = [inject(0, 10, 0, 100), update(50, -1.0), inject(1_000_000, 20, 0, 100), update(1_000_050, -2.0)]
+
+        _, out, _ = run_main(lines, "--json", "--whole")
+
+        assert [d["label"] for d in json.loads(out)] == ["whole log"]
+
+    def test_should_sort_lines_written_out_of_order(run_main):
+        # The writer thread and the Lua trace append from different threads.
+        lines = two_polls_per_update()
+
+        _, in_order, _ = run_main(lines, "--json")
+        _, reversed_order, _ = run_main(lines[::-1], "--json")
+
+        assert reversed_order == in_order
+
+    def test_should_fail_on_a_log_without_records(run_main):
+        code, _, err = run_main(["# only a header"])
+
+        assert code == 1
+        assert "no records in the log" in err
+
+    def test_should_fail_on_a_missing_log(tmp_path, capsys):
+        code = mouse_stats.main([str(tmp_path / "missing" / "fable2_mouse.log")])
+
+        assert code == 1
+        assert "cannot read" in capsys.readouterr().err

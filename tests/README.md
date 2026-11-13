@@ -47,7 +47,7 @@ Checks that the generated files in `constants/` match
 
 | File | What it checks |
 |---|---|
-| `config/test_config_template.py` | The template in `src/core/fable2_config.cpp`, the launcher's default settings, and the game's own config reader and defaults all match `config/fable2_config.toml`. Each staged value is the kind the game accepts, and each setting is stored under its own name |
+| `config/test_config_template.py` | The template in `src/core/fable2_config.cpp`, the launcher's default settings, and the game's own config reader and defaults all match `config/fable2_config.toml`. Each staged value is the kind the game accepts, and each setting is stored under its own name. Each cvar the game seeds from the config is seeded from the setting of the same name, and its default in `src/main.cpp` matches the staged value |
 | `tools/repro/test_add_version_resource.py` | The release step that adds version info to a DLL writes the given company, product and version, keeps the existing manifest, moves the sections after `.rsrc` without changing them, and names the version after the file. It leaves a DLL alone when it has no resources, already has version info, or has no room to grow. Two known issues are marked as expected failures |
 | `tools/repro/test_clean_pe.py` | The release build's post-build step trims `rexruntime.dll` to what the game and the GPU plugin import plus the `rex::` API, keeps each name pointing at its own function, and pins every timestamp. It reports a broken DLL and carries on, skips a runtime without exports, leaves other DLLs' exports alone, and changes nothing on a second run |
 | `tools/repro/test_gen_def.py` | The `.def` generator keeps what every consumer imports from the runtime plus the `rex::` API, in sorted order. It drops imports the runtime doesn't export, skips missing consumers, and honors `--tag` |
@@ -58,6 +58,8 @@ Checks that the generated files in `constants/` match
 | `tools/test_game_versions.py` | Generated version files match the catalogue, invalid or duplicate entries are rejected, the default profile must be compatible and in the validated code group, only those versions get a CMake profile, and `--check` reports stale files. One known issue is marked as an expected failure |
 | `tools/test_make_hotfunc_overrides.py` | The override generator extracts and transforms functions correctly and never overwrites a hand-tuned file. Four known issues are marked as expected failures |
 | `tools/test_manifest_collisions.py` | The check for manifest names that clash with DLL exports reports every clash, ignores commented-out names, rejects a missing, unreadable or empty DLL, and the real manifest avoids the kernel wait names that once broke audio. One known issue is marked as an expected failure |
+| `tools/test_mouse_log_format.py` | The lines the game writes to `fable2_mouse.log` (poll lines from `src/input/mouse_diag.h`, camera updates from `mouse_diag.lua`, and the `f2 mouse inject` note) are read the way `mouse_stats.py` expects. Reads the format strings from the source, so a renamed field fails here |
+| `tools/test_mouse_stats.py` | The `fable2_mouse.log` summariser splits the log into one run per `f2 mouse inject`, counts polls and camera updates, works out how much movement the camera saw with and without smoothing, scores the steady yaw per update while leaving out the ends of a run, and prints the text and JSON reports. One known issue is marked as an expected failure |
 | `tools/test_package_release.py` | The release zip holds only the listed files, its build info is stamped with the version while the build folder's copy stays unstamped, symbols stay separate, checksums match, files from an earlier package are removed, and a missing file, symbol file or recomp Lua script stops packaging before anything is written |
 | `tools/test_prepare_renderer_mspack.py` | The libmspack fallback replaces symlinks that Windows checked out as text files with their targets' contents, and reports how many it replaced. It leaves ordinary files and real symlinks alone, and also works on a second run, a deleted file or a trailing newline. It stops when the checkout isn't at the public pin, a target is missing or outside the checkout, or a file has local edits. Uses small throwaway git repos |
 | `tools/test_prepare_runtime_sdk.py` | The SDK prepare step rejects a missing or non-git folder and a checkout without libmspack, skips setup with `--skip-dependencies`, marks libmspack stored as plain files as set up (also on a second run), repins libmspack stored as a submodule, and says a failed submodule update needs network access. Uses small throwaway git repos. Two known issues are marked as expected failures |
@@ -110,7 +112,9 @@ that passes. The project targets plain .NET 8, but CI only runs it on Windows.
 ### Native tests
 
 `native/` holds C++ tests for audio pacing, FPS limiting, FPS metering,
-keyboard and mouse map parsing, and the version catalogue in each build profile.
+keyboard and mouse map parsing, mouse look (stick mapping, the velocity window
+and the diagnostics' inject and summary maths), and the version catalogue in
+each build profile.
 Test executables go under `out/tests`.
 
 The runner uses `thirdparty/rexglue-sdk` by default, and an optional first

@@ -160,3 +160,71 @@ def describe_engine_config_reader():
         }
 
         assert wrong_members == {}
+
+
+def cvar_defaults():
+    """Return {cvar: default} for each bool and int cvar defined in src/main.cpp."""
+    source = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
+    defines = re.findall(r"REXCVAR_DEFINE_(?:BOOL|INT32)\(\s*(\w+),\s*([^,]+),", source)
+    # C++ true/false and whole numbers are valid JSON as written.
+    return {name: json.loads(value.strip()) for name, value in defines}
+
+
+def cvar_seeds():
+    """Return (cvar, member) for each cvar src/core/fable_2_app.h seeds from the config.
+
+    A seed line looks like `seed_cvar("mouse_look", cfg.mouse_look ? "true" : "false")`.
+    """
+    source = (ROOT / "src/core/fable_2_app.h").read_text(encoding="utf-8")
+    return re.findall(r'seed_cvar\("(\w+)",[^;]*?\bcfg\.(\w+)', source)
+
+
+# keyboard_gamepad_map's cvar defaults to "" on purpose: the map itself lives in the config.
+STRING_CVARS = {"keyboard_gamepad_map"}
+
+
+def describe_cvar_defaults():
+    """The cvars in src/main.cpp that the game seeds from the config at startup.
+
+    Each cvar repeats its setting's default. It is used whenever the config doesn't set
+    the cvar (no config file yet, or a setting missing from it), so a stale default
+    silently changes how the game behaves.
+    """
+
+    def test_should_understand_every_seed_call():
+        """Fail if a seed_cvar() call from the config is written in a shape the regex misses."""
+        source = (ROOT / "src/core/fable_2_app.h").read_text(encoding="utf-8")
+        seeds_from_config = len(re.findall(r'seed_cvar\("\w+",[^;]*?\bcfg\.', source))
+
+        assert len(cvar_seeds()) == seeds_from_config
+
+    def test_should_find_a_default_for_every_seeded_cvar():
+        """Fail if a seeded cvar isn't a bool or int defined in src/main.cpp, so it would go unchecked."""
+        seeded = {cvar for cvar, _ in cvar_seeds()}
+
+        assert seeded - STRING_CVARS - set(cvar_defaults()) == set()
+
+    def test_should_seed_each_cvar_from_the_setting_of_the_same_name():
+        wrong_members = {cvar: f"seeded from cfg.{member}" for cvar, member in cvar_seeds() if cvar != member}
+
+        assert wrong_members == {}
+
+    def test_should_seed_only_staged_settings():
+        staged_keys = {key for _, key in staged_settings()}
+
+        assert {cvar for cvar, _ in cvar_seeds()} - staged_keys == set()
+
+    def test_should_have_the_same_defaults_as_the_staged_config():
+        staged = {key: value for (_, key), value in staged_settings().items()}
+        defaults = cvar_defaults()
+
+        # Only the mismatches, as {cvar: (main.cpp, staged)}, so every one is named. Types are
+        # compared too, because Python treats True and 1 as equal.
+        mismatches = {
+            cvar: (defaults[cvar], staged.get(cvar))
+            for cvar, _ in cvar_seeds()
+            if cvar not in STRING_CVARS
+            and (defaults[cvar] != staged.get(cvar) or type(defaults[cvar]) is not type(staged.get(cvar)))
+        }
+
+        assert mismatches == {}
