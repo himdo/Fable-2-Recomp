@@ -5,9 +5,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# Only the launcher uses these keys, so the game never reads them.
-LAUNCHER_ONLY = {("input", "keyboard_prompt_images")}
-
 
 def staged_settings():
     """Return {(section, key): value} for every setting in the staged config."""
@@ -104,9 +101,7 @@ def describe_engine_config_reader():
         src/core/fable2_config.cpp. A missing call, a misspelled key or the wrong section
         name gives no error: the game silently ignores the setting and uses its default.
         """
-        staged = set(staged_settings()) - LAUNCHER_ONLY
-
-        assert engine_reads() == staged
+        assert engine_reads() == set(staged_settings())
 
     def test_should_have_the_same_defaults_as_the_staged_config():
         """Fail if a default in the game's Values struct differs from the staged config.

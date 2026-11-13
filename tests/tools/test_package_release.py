@@ -20,8 +20,10 @@ def inputs(tmp_path):
                               launcher=tmp_path / "launcher/Fable2Launcher.exe", dist=tmp_path / "dist")
     for path, text in {
         folders.root / "README.md": "readme",
-        folders.root / "launcher/Fable2.Launcher/XenosTiling/LICENSE.txt": "xenos tiling licence",
+        folders.root / "thirdparty/XenosTiling/LICENSE.txt": "xenos tiling licence",
         folders.root / "config/fable2_config.toml": "repo config",
+        folders.root / "assets/fonts/Google Sans/GoogleSans.ttf": "keycap font",
+        folders.root / "assets/fonts/Google Sans/OFL.txt": "font licence",
         folders.launcher: "launcher",
         folders.build / "fable_2.exe": "game",
         folders.build / "fable_2.pdb": "symbols",
@@ -61,7 +63,8 @@ def describe_package():
 
         assert names == {f"Fable 2 1.6.0/{name}" for name in (
             "fable_2.exe", "rexruntime.dll", "rexgpu-xenos.dll", "fable2_build.json", "Fable2Launcher.exe",
-            "README.md", "licenses/XenosTiling-LICENSE.txt", "fable2_config.toml", "data/scripts/recomp/F5.lua")}
+            "README.md", "licenses/XenosTiling-LICENSE.txt", "fable2_config.toml", "data/scripts/recomp/F5.lua",
+            "assets/fonts/Google Sans/GoogleSans.ttf", "assets/fonts/Google Sans/OFL.txt")}
         assert config == "repo config"
         assert build_info == {"profiles": ["goty"], "version": "1.6.0"}
 
