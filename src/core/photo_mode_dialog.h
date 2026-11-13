@@ -299,8 +299,13 @@ inline std::vector<Page> BuildPages() {
   // Hero -----------------------------------------------------------------------------
   {
     Page p{"Hero"};
-    p.items.push_back(Action("Pose", "Pick one of your hero's expressions from the cards. The world runs for a moment so the pose plays, then freezes again.",
-                             [](Settings&) { pose_grid_open().store(true); }));
+    Item pose = Action("Pose", "Pick one of your hero's expressions from the cards. Resting on a card plays it on your hero; the world runs for the hold time, then freezes again.",
+                       [](Settings&) { pose_grid_open().store(true); });
+    pose.fmt = [](float) {
+      const Settings s = settings_copy();
+      return std::string(s.pose >= 0 && s.pose < kPoseCount ? kPoses[s.pose].label : "None");
+    };
+    p.items.push_back(pose);
     Item replay = Action("Replay Pose", "Play the last pose again.", [](Settings& s) {
       if (s.pose >= 0 && s.pose < kPoseCount) pose_request().store(s.pose + 1);
     });
@@ -699,12 +704,29 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
 
   // --- Pose cards -----------------------------------------------------------------------
   // A page of kPoseColumns x kPoseRows cards (the game's expression icons) in
-  // place of the list; D-pad / arrows move, A / Enter plays the pose, LB / RB
-  // or the mouse wheel turn the page, B / Esc go back to the list.
+  // place of the list, after Banjo Re-Tooie's pose cards:
+  //  - the pose under the cursor plays on the hero after a short pause (live
+  //    preview), so the hero shows it as well as the card;
+  //  - A / Enter / a click chooses it and goes back to the list, B / Esc / a
+  //    right click cancels and puts the pose chosen before back;
+  //  - D-pad / arrows / left stick move (held keys repeat), LB / RB turn a page,
+  //    the mouse wheel scrolls a row;
+  //  - LT / RT, [ / ] or dragging the bar under the cards scrub the pose hold
+  //    (how far into the pose the world freezes) and play it again.
   int grid_cursor_ = 0;
+  bool grid_was_open_ = false;
+  int grid_prev_pose_ = -1;   // pose chosen when the cards opened (cancel puts it back)
+  int grid_previewed_ = -1;   // pose last played as a preview
+  int64_t preview_due_ms_ = 0;
+  int grid_page_shown_ = 0;   // for the page slide
+  int64_t slide_ms_ = 0;
+  int slide_dir_ = 0;
+  bool hold_drag_ = false;
   static constexpr float kCardW = 104.0f;
-  static constexpr float kCardH = 84.0f;
-  static constexpr float kIcon = 64.0f;
+  static constexpr float kCardH = 80.0f;
+  static constexpr float kIcon = 60.0f;
+  static constexpr int64_t kPreviewDelayMs = 350;  // pause before the hovered pose plays
+  static constexpr float kHoldLo = 0.2f, kHoldHi = 6.0f;
 
   menu::Box CardRect(int slot) const {
     const int c = slot % kPoseColumns, r = slot / kPoseColumns;
@@ -712,96 +734,218 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     const float y = X(kListY + kCardH * r);
     return menu::Box{ImVec2(x, y), ImVec2(x + X(kCardW - 8.0f), y + X(kCardH - 8.0f))};
   }
+  float GridBottom() const { return X(kListY + kCardH * kPoseRows); }
+  // The pose hold bar under the cards.
+  float HoldBarY() const { return GridBottom() + X(62.0f); }
+  float HoldBarX0() const { return X(kLeft + 118.0f); }
+  float HoldBarX1() const { return X(kRight - 70.0f); }
 
-  void PlayPose(Settings& s, int index) {
-    if (index < 0 || index >= kPoseCount) return;
-    s.pose = index;
-    pose_request().store(index + 1);
+  void MoveCursor(int to) {
+    to = std::clamp(to, 0, kPoseCount - 1);
+    if (to == grid_cursor_) return;
+    grid_cursor_ = to;
+    preview_due_ms_ = now_ms() + kPreviewDelayMs;
+  }
+  void CloseGrid() {
+    pose_grid_open().store(false);
+    preview_due_ms_ = 0;
+    hold_drag_ = false;
+  }
+  void Choose(Settings& s) {
+    s.pose = grid_cursor_;
+    // Play it now unless the preview of this card already did.
+    if (grid_previewed_ != grid_cursor_ || preview_due_ms_ != 0) pose_request().store(grid_cursor_ + 1);
+    CloseGrid();
+  }
+  void Cancel(Settings& s) {
+    if (grid_previewed_ >= 0 && grid_previewed_ != grid_prev_pose_) {
+      if (grid_prev_pose_ >= 0) {
+        pose_request().store(grid_prev_pose_ + 1);  // the pose chosen before
+      } else {
+        world_run_request().store(3000);  // let the preview finish back to idle
+      }
+    }
+    s.pose = grid_prev_pose_;
+    CloseGrid();
   }
 
   void HandleGrid(ImGuiIO& io, Settings& s) {
+    if (!grid_was_open_) {
+      // Just opened: start on the chosen pose, nothing played yet.
+      grid_prev_pose_ = s.pose;
+      if (s.pose >= 0) grid_cursor_ = s.pose;
+      grid_previewed_ = -1;
+      preview_due_ms_ = 0;
+      grid_page_shown_ = grid_cursor_ / kPosePage;
+      slide_ms_ = 0;
+    }
     nav_tab_direct().store(0);
     grid_cursor_ = std::clamp(grid_cursor_, 0, kPoseCount - 1);
-    if (const int t = nav_tab().exchange(0); t != 0)
-      grid_cursor_ = std::clamp(grid_cursor_ + t * kPosePage, 0, kPoseCount - 1);
+    if (const int t = nav_tab().exchange(0); t != 0) MoveCursor(grid_cursor_ + t * kPosePage);
     if (const int dy = nav_y().exchange(0); dy != 0) {
       const int n = grid_cursor_ + dy * kPoseColumns;
-      if (n >= 0 && n < kPoseCount) grid_cursor_ = n;
+      if (n >= 0 && n < kPoseCount) MoveCursor(n);
+      else if (dy > 0) MoveCursor(kPoseCount - 1);  // short last row
     }
-    if (const int dx = nav_x().exchange(0); dx != 0) grid_cursor_ = std::clamp(grid_cursor_ + dx, 0, kPoseCount - 1);
-    for (int a = nav_activate().exchange(0); a > 0; --a) PlayPose(s, grid_cursor_);
-    if (nav_back().exchange(0) > 0) {
-      pose_grid_open().store(false);
+    if (const int dx = nav_x().exchange(0); dx != 0) MoveCursor(grid_cursor_ + dx);
+    if (const int sc = nav_scrub().exchange(0); sc != 0) {
+      s.pose_hold = std::clamp(std::round((s.pose_hold + 0.1f * sc) * 10.0f) / 10.0f, kHoldLo, kHoldHi);
+      preview_due_ms_ = now_ms() + kPreviewDelayMs;  // play it again at the new hold
+    }
+    if (nav_activate().exchange(0) > 0) {
+      Choose(s);
       return;
     }
+    if (nav_back().exchange(0) > 0) {
+      Cancel(s);
+      return;
+    }
+
+    // Mouse: hover moves the cursor, a click chooses, a right click cancels,
+    // the wheel scrolls a row, dragging the bar scrubs the hold.
     const ImVec2 m = io.MousePos;
     const bool moved = std::fabs(m.x - last_mouse_.x) + std::fabs(m.y - last_mouse_.y) > 0.5f;
     last_mouse_ = m;
     mouse_in_panel_ = m.x >= 0 && m.x < X(kRight + 60.0f) && m.y >= 0 && m.y < io.DisplaySize.y;
     if (moved && mouse_in_panel_) prompts_pad().store(false, std::memory_order_relaxed);
-    if (mouse_in_panel_ && io.MouseWheel != 0.0f)
-      grid_cursor_ = std::clamp(grid_cursor_ + (io.MouseWheel > 0 ? -kPosePage : kPosePage), 0, kPoseCount - 1);
-    const int page = grid_cursor_ / kPosePage;
-    for (int slot = 0; slot < kPosePage; ++slot) {
-      const int index = page * kPosePage + slot;
-      if (index >= kPoseCount) break;
-      if (!CardRect(slot).Contains(m)) continue;
-      if (moved) grid_cursor_ = index;
-      if (io.MouseClicked[0]) {
-        grid_cursor_ = index;
-        PlayPose(s, index);
-      }
-      break;
+    if (mouse_in_panel_ && io.MouseWheel != 0.0f) {
+      const int n = grid_cursor_ + (io.MouseWheel > 0 ? -kPoseColumns : kPoseColumns);
+      if (n >= 0 && n < kPoseCount) MoveCursor(n);
     }
-    if (io.MouseClicked[1]) pose_grid_open().store(false);  // right click: back
+    const float by = HoldBarY();
+    if (io.MouseClicked[0] && m.y > by - X(14.0f) && m.y < by + X(14.0f) && m.x > HoldBarX0() - X(10.0f) &&
+        m.x < HoldBarX1() + X(10.0f))
+      hold_drag_ = true;
+    if (hold_drag_) {
+      const float t = std::clamp((m.x - HoldBarX0()) / (HoldBarX1() - HoldBarX0()), 0.0f, 1.0f);
+      s.pose_hold = std::round((kHoldLo + (kHoldHi - kHoldLo) * t) * 10.0f) / 10.0f;
+      if (!io.MouseDown[0]) {
+        hold_drag_ = false;
+        preview_due_ms_ = now_ms() + 50;  // play it again at the new hold
+      }
+    } else {
+      const int page = grid_cursor_ / kPosePage;
+      for (int slot = 0; slot < kPosePage; ++slot) {
+        const int index = page * kPosePage + slot;
+        if (index >= kPoseCount) break;
+        if (!CardRect(slot).Contains(m)) continue;
+        if (moved) MoveCursor(index);
+        if (io.MouseClicked[0]) {
+          MoveCursor(index);
+          Choose(s);
+          return;
+        }
+        break;
+      }
+    }
+    if (io.MouseClicked[1] && mouse_in_panel_) {
+      Cancel(s);
+      return;
+    }
+
+    // Live preview of the card under the cursor once it has rested there.
+    if (preview_due_ms_ != 0 && now_ms() >= preview_due_ms_) {
+      preview_due_ms_ = 0;
+      grid_previewed_ = grid_cursor_;
+      pose_request().store(grid_cursor_ + 1);
+    }
   }
 
   void DrawGrid(const Settings& s, float fade) {
     const int page = grid_cursor_ / kPosePage;
     const int pages = (kPoseCount + kPosePage - 1) / kPosePage;
+    // Pages slide in from the side they were turned to.
+    if (page != grid_page_shown_) {
+      slide_dir_ = page > grid_page_shown_ ? 1 : -1;
+      grid_page_shown_ = page;
+      slide_ms_ = now_ms();
+    }
+    float slide = 1.0f;
+    if (slide_ms_ != 0) {
+      slide = std::clamp(float(now_ms() - slide_ms_) / 180.0f, 0.0f, 1.0f);
+      slide = 1.0f - (1.0f - slide) * (1.0f - slide);  // ease out
+      if (slide >= 1.0f) slide_ms_ = 0;
+    }
+    const float offset = (1.0f - slide) * X(48.0f) * float(slide_dir_);
+    const float cards_fade = fade * (0.35f + 0.65f * slide);
+    // The cursor card breathes a little.
+    const float pulse = 0.5f + 0.5f * std::sin(float(now_ms() % 100000) / 1000.0f * 4.0f);
+
     for (int slot = 0; slot < kPosePage; ++slot) {
       const int index = page * kPosePage + slot;
       if (index >= kPoseCount) break;
-      const menu::Box r = CardRect(slot);
+      menu::Box r = CardRect(slot);
+      r.Min.x += offset;
+      r.Max.x += offset;
       const bool cur = index == grid_cursor_;
-      const bool played = index == s.pose;
-      dl_->AddRectFilled(r.Min, r.Max, IM_COL32(18, 15, 10, int((cur ? 210 : 150) * fade)), X(6.0f), 0);
-      const ImU32 edge = cur ? menu::with_alpha(menu::kGold, fade)
-                             : played ? menu::with_alpha(menu::kGold, 0.55f * fade)
-                                      : menu::with_alpha(menu::kCreamDim, 0.25f * fade);
+      const bool chosen = index == s.pose;
+      if (cur) {
+        // Soft gold glow behind the cursor card.
+        const float gl = X(5.0f);
+        dl_->AddRectFilled(ImVec2(r.Min.x - gl, r.Min.y - gl), ImVec2(r.Max.x + gl, r.Max.y + gl),
+                           menu::with_alpha(menu::kGold, (0.10f + 0.10f * pulse) * cards_fade), X(9.0f), 0);
+      }
+      dl_->AddRectFilled(r.Min, r.Max, IM_COL32(18, 15, 10, int((cur ? 225 : 160) * cards_fade)), X(6.0f), 0);
+      const ImU32 edge = cur      ? menu::with_alpha(menu::kGold, cards_fade)
+                         : chosen ? menu::with_alpha(menu::kGold, 0.55f * cards_fade)
+                                  : menu::with_alpha(menu::kCreamDim, 0.22f * cards_fade);
       dl_->AddRect(r.Min, r.Max, edge, X(6.0f), 0, std::max(1.0f, X(cur ? 2.0f : 1.0f)));
-      const float icon = X(kIcon) * (cur ? 1.06f : 1.0f);
+      const float icon = X(kIcon) * (cur ? 1.08f : 1.0f);
       const ImVec2 c((r.Min.x + r.Max.x) * 0.5f, (r.Min.y + r.Max.y) * 0.5f);
       const int img = gameicons::FindExtra(kPoses[index].icon);
       if (gameicons::ExtraReady(img)) {
         gameicons::DrawExtra(dl_, img, ImVec2(c.x - icon * 0.5f, c.y - icon * 0.5f), icon,
-                             menu::with_alpha(IM_COL32(255, 255, 255, 255), (cur || played ? 1.0f : 0.8f) * fade));
+                             menu::with_alpha(IM_COL32(255, 255, 255, 255), (cur || chosen ? 1.0f : 0.72f) * cards_fade));
       } else {
         // No icon (game data missing or not decodable): the name instead.
         TextWrapped(ImVec2(r.Min.x + X(6.0f), r.Min.y + X(8.0f)), kSmall, (r.Max.x - r.Min.x) - X(12.0f),
-                    menu::with_alpha(cur ? menu::kCream : menu::kCreamDim, fade), kPoses[index].label);
+                    menu::with_alpha(cur ? menu::kCream : menu::kCreamDim, cards_fade), kPoses[index].label);
       }
-      if (played) Diamond(ImVec2(r.Max.x - X(9.0f), r.Min.y + X(9.0f)), X(4.0f), menu::with_alpha(menu::kGold, fade));
+      if (chosen)
+        Diamond(ImVec2(r.Max.x - X(9.0f), r.Min.y + X(9.0f)), X(4.0f), menu::with_alpha(menu::kGold, cards_fade));
     }
-    // Name of the card under the cursor and the page dots.
-    const float y = X(kListY + kCardH * kPoseRows + 4.0f);
+
+    // Under the cards: the name of the card under the cursor, the page, and
+    // the pose hold bar.
+    const float y = GridBottom() + X(2.0f);
     Rule(X(kLeft - 14.0f), X(kRight + 10.0f), y, 0.5f * fade);
-    Text(ImVec2(X(kLeft), y + X(10.0f)), kNormal, menu::with_alpha(menu::kCream, fade), kPoses[grid_cursor_].label);
+    Text(ImVec2(X(kLeft), y + X(8.0f)), kNormal, menu::with_alpha(menu::kCream, fade), kPoses[grid_cursor_].label);
     if (pages > 1) {
-      for (int p = 0; p < pages; ++p) {
-        const float dx = X(kRight - 12.0f - 16.0f * (pages - 1 - p));
-        Diamond(ImVec2(dx, y + X(24.0f)), X(p == page ? 5.0f : 3.5f),
-                menu::with_alpha(p == page ? menu::kGold : menu::kCreamDim, fade));
-      }
+      const std::string pg = std::to_string(page + 1) + " / " + std::to_string(pages);
+      TextRight(X(kRight), y + X(11.0f), kSmall, menu::with_alpha(menu::kFaint, fade), pg.c_str());
     }
+    const float by = HoldBarY();
+    const float ly = by - X(kSmall) * 0.52f;
+    Text(ImVec2(X(kLeft), ly), kSmall, menu::with_alpha(menu::kCreamDim, fade), "Hold");
+    const bool pad = prompts_pad().load(std::memory_order_relaxed);
+    {
+      // LT / [ on the left of the bar, RT / ] on the right.
+      const float pw = Prompt(0, 0, pad ? "LT" : "[", nullptr, true);
+      Prompt(HoldBarX0() - pw - X(10.0f), by - X(15.0f), pad ? "LT" : "[", nullptr);
+      Prompt(HoldBarX1() + X(10.0f), by - X(15.0f), pad ? "RT" : "]", nullptr);
+    }
+    const float t = std::clamp((s.pose_hold - kHoldLo) / (kHoldHi - kHoldLo), 0.0f, 1.0f);
+    const float bh = std::max(2.0f, X(3.0f));
+    const float x0 = HoldBarX0(), x1 = HoldBarX1();
+    dl_->AddRectFilled(ImVec2(x0, by - bh * 0.5f), ImVec2(x1, by + bh * 0.5f), IM_COL32(255, 255, 255, int(40 * fade)),
+                       bh * 0.5f, 0);
+    dl_->AddRectFilled(ImVec2(x0, by - bh * 0.5f), ImVec2(x0 + (x1 - x0) * t, by + bh * 0.5f),
+                       menu::with_alpha(menu::kGold, fade), bh * 0.5f, 0);
+    Diamond(ImVec2(x0 + (x1 - x0) * t, by), X(hold_drag_ ? 7.0f : 6.0f), menu::with_alpha(menu::kGold, fade));
+    const std::string hv = menu::Fmt("%.1f s", s.pose_hold);
+    TextRight(X(kRight + 10.0f), ly, kSmall, menu::with_alpha(menu::kCream, fade), hv.c_str());
   }
 
   void HandleInput(ImGuiIO& io, Settings& s) {
-    if (pose_grid_open().load()) {
+    const bool grid = pose_grid_open().load();
+    if (grid) {
       HandleGrid(io, s);
+      grid_was_open_ = pose_grid_open().load();
       return;
     }
+    grid_was_open_ = false;
     nav_back().store(0);
+    nav_scrub().store(0);
     const Settings start = s;
     if (const int d = nav_tab_direct().exchange(0); d > 0 && d <= int(pages_.size())) SetPage(d - 1);
     if (const int t = nav_tab().exchange(0); t != 0) SetPage(page_ + t);
@@ -987,6 +1131,11 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
           break;
         }
         case menu::Kind::kAction:
+          if (it.fmt) {
+            // An action that shows its current value (e.g. the chosen pose).
+            const std::string val = it.fmt(0.0f);
+            TextRight(cur ? BarX1() - X(14.0f) : BarX1(), ty2, kText, label_col, val.c_str());
+          }
           if (cur) Chevron(ImVec2(BarX1() - X(4.0f), cy), X(5.0f), true, menu::with_alpha(menu::kGold, fade));
           break;
       }
@@ -1016,8 +1165,8 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
         else if (it.kind != menu::Kind::kSlider) a = "Change";
       }
       if (pose_grid_open().load()) {
-        list = pad ? std::vector<P>{{"A", "Pose"}, {"Y", "Hide Menu"}, {"B", "Back"}}
-                   : std::vector<P>{{"Enter", "Pose"}, {"H", "Hide Menu"}, {"Esc", "Back"}};
+        list = pad ? std::vector<P>{{"A", "Choose"}, {"Y", "Hide Menu"}, {"B", "Cancel"}}
+                   : std::vector<P>{{"Enter", "Choose"}, {"H", "Hide Menu"}, {"Esc", "Cancel"}};
       } else if (pad) {
         list = {{"A", a}, {"X", "Reset Camera"}, {"Y", "Hide Menu"}, {"B", "Exit"}};
       } else {

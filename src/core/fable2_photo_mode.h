@@ -134,6 +134,8 @@ struct State {
   int64_t thaw_hold_ms = 0;    // hold to count once the console has run the line
   int64_t thaw_busy_since = 0; // when the world started waiting for the console
   Repeater rep_up, rep_down, rep_left, rep_right;  // D-pad menu navigation
+  Repeater rep_su, rep_sd, rep_sl, rep_sr;          // left stick on the pose cards
+  Repeater rep_lt, rep_rt;                          // triggers scrub the pose hold
   std::atomic<bool> suppress_pad{false};  // keep blanking until all released
 
   // Cameras touched this session. After leaving, each is restored on its next
@@ -553,8 +555,10 @@ inline float stick(int16_t v) {
 inline void integrate(float dt) {
   State& g = st();
   const auto& cfg = config::Get();
+  // The pose cards own the controls while they are open: the camera stays put.
+  const bool grid = pose_grid_open().load() && panel_visible().load();
   const bool keys = window_focused().load(std::memory_order_relaxed) &&
-                    !ui_wants_keyboard().load(std::memory_order_relaxed);
+                    !ui_wants_keyboard().load(std::memory_order_relaxed) && !grid;
   Pad pad = merged_pad();
   if (pad_rebinding().load()) {
     // Recording a new controller shortcut: the pad drives nothing else.
@@ -587,6 +591,15 @@ inline void integrate(float dt) {
   if (pad.buttons != 0 || pad.lt > 30 || pad.rt > 30 || stick(pad.lx) != 0.0f || stick(pad.ly) != 0.0f ||
       stick(pad.rx) != 0.0f || stick(pad.ry) != 0.0f)
     prompts_pad().store(true, std::memory_order_relaxed);
+  if (grid) {
+    // Left stick moves like the D-pad, the triggers scrub the pose hold.
+    nav_x().fetch_add(g.rep_sr.Fire(pad.lx > 16000, now) - g.rep_sl.Fire(pad.lx < -16000, now));
+    nav_y().fetch_add(g.rep_sd.Fire(pad.ly < -16000, now) - g.rep_su.Fire(pad.ly > 16000, now));
+    nav_scrub().fetch_add(g.rep_rt.Fire(pad.rt > 100, now) - g.rep_lt.Fire(pad.lt > 100, now));
+    pad.lx = pad.ly = pad.rx = pad.ry = 0;
+    pad.lt = pad.rt = 0;
+    pad.buttons &= ~uint16_t(0x00C0);  // no L3 boost / R3 level either
+  }
 
   float speed = g.s.move_speed;
   if (keys && key_down(0x10)) speed *= 4.0f;   // Shift
@@ -719,6 +732,7 @@ inline void leave(PPCContext& ctx, uint8_t* base) {
   pose_grid_open().store(false);
   pose_request().store(0);
   outfit_request().store(0);
+  world_run_request().store(0);
   g.thaw_until_ms = 0;
   g.thaw_hold_ms = 0;
   g.thaw_busy_since = 0;
@@ -997,6 +1011,8 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
       }
     }
   }
+  if (const int ms = world_run_request().exchange(0); ms > 0 && g.phase == Phase::kOn)
+    g.thaw_until_ms = std::max(g.thaw_until_ms, now_ms() + ms);
   const bool thawing = now_ms() < g.thaw_until_ms;
 
   ++g.diag_world;

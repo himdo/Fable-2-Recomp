@@ -206,6 +206,16 @@ inline std::atomic<int>& nav_back() {
   static std::atomic<int> v{0};
   return v;
 }
+// Let the world run this many ms (e.g. so a cancelled preview plays out).
+inline std::atomic<int>& world_run_request() {
+  static std::atomic<int> v{0};
+  return v;
+}
+// Pose cards: steps to move Pose Hold (LT / RT, [ / ]); each step is 0.1 s.
+inline std::atomic<int>& nav_scrub() {
+  static std::atomic<int> v{0};
+  return v;
+}
 // Runs one developer-console line in the game's Lua (set by the app to
 // fable2::console::enqueue_text, which runs it in the game's script update).
 inline std::function<void(const std::string&)>& game_command() {

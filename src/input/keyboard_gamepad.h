@@ -473,6 +473,8 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     auto held = [&](int vk) { return focused && (GetAsyncKeyState(vk) & 0x8000) != 0; };
     const int dy = photo_rep_[1].Fire(held(VK_DOWN), now) - photo_rep_[0].Fire(held(VK_UP), now);
     const int dx = photo_rep_[3].Fire(held(VK_RIGHT), now) - photo_rep_[2].Fire(held(VK_LEFT), now);
+    // [ and ] scrub the pose hold while the pose cards are open.
+    const int scrub = photo_rep_[5].Fire(held(VK_OEM_6), now) - photo_rep_[4].Fire(held(VK_OEM_4), now);
     if (!on || console_open_) return;
     if (esc) {
       // Esc goes back from the pose cards first.
@@ -481,7 +483,7 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     }
     if (shot) pm::screenshot_request().store(true);
     if (typing) return;
-    const bool any = h || r || x || tab || enter || digit || dx || dy;
+    const bool any = h || r || x || tab || enter || digit || dx || dy || scrub;
     if (any) pm::prompts_pad().store(false, std::memory_order_relaxed);
     if (h) pm::panel_visible().store(!pm::panel_visible().load());
     if (r) pm::reset_camera_request().store(true);
@@ -494,8 +496,9 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     if (enter) pm::nav_activate().fetch_add(1);
     if (dy) pm::nav_y().fetch_add(dy);
     if (dx) pm::nav_x().fetch_add(dx);
+    if (scrub && pm::pose_grid_open().load()) pm::nav_scrub().fetch_add(scrub);
   }
-  fable2::photomode::Repeater photo_rep_[4];  // up, down, left, right
+  fable2::photomode::Repeater photo_rep_[6];  // up, down, left, right, [, ]
   std::string photo_toggle_name_;
   std::string photo_shot_name_;
   uint16_t photo_toggle_vk_ = 0;
