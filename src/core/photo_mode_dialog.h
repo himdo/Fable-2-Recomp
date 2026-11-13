@@ -311,7 +311,7 @@ inline std::vector<Page> BuildPages() {
     });
     replay.visible = [](const Settings& s) { return s.pose >= 0; };
     p.items.push_back(replay);
-    Item hold{"Pose Hold", "How long the world runs after a pose or outfit change before it freezes again. Longer catches later moments of the pose.", Kind::kSlider};
+    Item hold{"Pose Hold", "How long the world runs after a pose before it freezes again. Longer catches later moments of the pose.", Kind::kSlider};
     hold.get = [](const Settings& s) { return s.pose_hold; };
     hold.set = [](Settings& s, float v) { s.pose_hold = v; };
     hold.lo = 0.2f;
@@ -319,15 +319,6 @@ inline std::vector<Page> BuildPages() {
     hold.step = 0.1f;
     hold.fmt = [](float v) { return Fmt("%.1f s", v); };
     p.items.push_back(hold);
-    std::vector<std::string> outfits;
-    for (const auto& o : kOutfits) outfits.push_back(o.label);
-    p.items.push_back(Option(
-        "Outfit", "Dress your hero for the photo. Only clothes change; your own clothes go back on when photo mode closes (or pick As Worn).",
-        std::move(outfits), [](const Settings& s) { return float(s.outfit); },
-        [](Settings& s, float v) {
-          s.outfit = std::clamp(int(std::lround(v)), 0, kOutfitCount - 1);
-          outfit_request().store(s.outfit + 1);
-        }));
     pages.push_back(std::move(p));
   }
 
@@ -1313,7 +1304,6 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     FABLE2_PM_MERGE(tint)
     FABLE2_PM_MERGE(override_time)
     FABLE2_PM_MERGE(time_hours)
-    FABLE2_PM_MERGE(outfit)
     FABLE2_PM_MERGE(pose)
     FABLE2_PM_MERGE(pose_hold)
 #undef FABLE2_PM_MERGE

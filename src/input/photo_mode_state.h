@@ -116,45 +116,15 @@ struct Settings {
   bool override_time = false;
   float time_hours = 12.0f;
 
-  // Hero (outfits and pose cards).
-  int outfit = 0;          // index into kOutfits (0 = as worn)
+  // Hero (pose cards).
   int pose = -1;           // last pose card played (index into kPoses), -1 none
-  float pose_hold = 1.5f;  // seconds the world runs after a pose / outfit before it freezes again
+  float pose_hold = 1.5f;  // seconds the world runs after a pose before it freezes again
 };
 
-// --- Hero: outfits and pose cards ---------------------------------------------
-// Outfits are clothes only, worn for photo mode and taken off again when it
-// closes (the console's `photooutfit set <types>` / `photooutfit restore`).
-// The sets are the clothing of the game's own Debug.SetHeroWearing<Name>Outfit
-// presets; those presets also reset the hero (age, morality, hair, tattoos,
-// chapter progress...), so they are not called. Poses are the hero's
-// expressions (ExpressionPerformer.PerformExpression, the console's
-// `pose <record>`), each with the game's own expression icon.
-struct OutfitDef {
-  const char* label;
-  const char* items;  // clothing types, space separated; nullptr = the hero's own clothes
-};
-inline constexpr OutfitDef kOutfits[] = {
-    {"As Worn", nullptr},
-    {"Barbarian", "ObjectClothingTrousersPoorSkirtF ObjectClothingBootsBanditM ObjectClothingGlovesBanditM"},
-    {"Brawler", "ObjectClothingTrousersBanditM ObjectClothingBootsPoorM"},
-    {"Martial Arts",
-     "ObjectClothingCoatAssassinM ObjectClothingTrousersYearOut ObjectClothingGlovesCultistGoodM "
-     "ObjectClothingBootsCultistGoodM"},
-    {"Pirate",
-     "ObjectAccessoryEyepatch ObjectClothingHatHighwaymanM ObjectClothingCoatPoorF ObjectClothingShirtGypsyM "
-     "ObjectClothingTrousersBanditM ObjectClothingBootsMiddleM"},
-    {"Swashbuckler",
-     "ObjectClothingCoatPoshM ObjectClothingShirtYearOut ObjectClothingTrousersHighwayman ObjectClothingBootsPoshM"},
-    {"Pure Evil", "ObjectClothingTrousersLucienGuardM ObjectClothingGlovesLucienGuardM ObjectClothingBootsBanditM"},
-    {"Goth", "ObjectClothingTrousersMiddleM ObjectClothingCorset_OLD ObjectClothingBootsHighF"},
-    {"Cross-Dresser",
-     "ObjectClothingShirtWhoreF ObjectClothingTrousersWhoreSkirtF ObjectClothingBootsWhoreF ObjectClothingGlovesPoorM"},
-    {"Year Out",
-     "ObjectClothingCoatYearOut ObjectClothingShirtYearOut ObjectClothingTrousersYearOut ObjectClothingBootsYearOut"},
-};
-inline constexpr int kOutfitCount = int(sizeof(kOutfits) / sizeof(kOutfits[0]));
-
+// --- Hero: pose cards ----------------------------------------------------------
+// Poses are the hero's expressions (ExpressionPerformer.PerformExpression, the
+// console's `pose <record>`), each with the game's own expression icon from
+// gui_textures.bnk.
 struct PoseDef {
   const char* label;
   const char* record;  // GDB expression record
@@ -206,10 +176,6 @@ inline constexpr int kPosePage = kPoseColumns * kPoseRows;
 
 // Requests from the menu to the guest thread (index + 1; 0 = none).
 inline std::atomic<int>& pose_request() {
-  static std::atomic<int> v{0};
-  return v;
-}
-inline std::atomic<int>& outfit_request() {
   static std::atomic<int> v{0};
   return v;
 }

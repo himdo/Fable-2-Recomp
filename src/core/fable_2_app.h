@@ -516,7 +516,7 @@ class Fable2App : public rex::ReXApp {
     // this appends any file that is on disk but unlisted. Idempotent.
     fable2::manifestheal::EnsureComplete(game_data_root());
     fable2::console::set_root(game_data_root());
-    // Photo mode's outfits and pose cards run console lines (`outfit`, `pose`).
+    // Photo mode's pose cards run console lines (`pose`).
     fable2::photomode::game_command() = [](const std::string& line) { fable2::console::enqueue_text(line); };
     fable2::photomode::game_command_busy() = [] {
       auto& c = fable2::console::S();

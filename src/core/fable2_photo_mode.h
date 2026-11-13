@@ -130,8 +130,7 @@ struct State {
   uint16_t rebind_peak = 0;  // buttons held so far while recording a shortcut
   bool rebind_armed = false; // all buttons let go since recording started
   int64_t rebind_session = 0;  // pad_rebind_started_ms of the recording seen
-  int64_t thaw_until_ms = 0;   // world runs until then (a pose or outfit plays out)
-  bool outfit_changed = false; // photo mode dressed the hero: put the own clothes back on leaving
+  int64_t thaw_until_ms = 0;   // world runs until then (a pose plays out)
   bool posed = false;          // relock the expressions a pose had to make available
   int64_t thaw_hold_ms = 0;    // hold to count once the console has run the line
   int64_t thaw_busy_since = 0; // when the world started waiting for the console
@@ -731,25 +730,16 @@ inline void enter(PPCContext& ctx, uint8_t* base) {
 inline void leave(PPCContext& ctx, uint8_t* base) {
   State& g = st();
   pad_rebinding().store(false);
-  // Undo what the Hero page did: the hero's own clothes back on, expressions
-  // the poses unlocked locked again (the console runs these once the world runs).
-  if (game_command()) {
-    if (g.outfit_changed) {
-      game_command()("photooutfit restore");
-      log_line("hero: photooutfit restore (leaving)");
-    }
-    if (g.posed) game_command()("pose relock");
-  }
-  g.outfit_changed = false;
+  // Lock again the expressions the poses had to make available (the console
+  // runs this once the world runs).
+  if (game_command() && g.posed) game_command()("pose relock");
   g.posed = false;
   {
     std::lock_guard<std::mutex> lock(settings_mutex());
-    settings_unlocked().outfit = 0;
     settings_unlocked().pose = -1;
   }
   pose_grid_open().store(false);
   pose_request().store(0);
-  outfit_request().store(0);
   world_run_request().store(0);
   g.thaw_until_ms = 0;
   g.thaw_hold_ms = 0;
@@ -988,9 +978,9 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
     }
   }
 
-  // Poses and outfits: hand the line to the game's Lua (developer console
+  // Poses: hand the line to the game's Lua (developer console
   // pump, which runs in the world's script update) and let the world run for
-  // the hold time so the expression plays and the clothes load, then freeze.
+  // the hold time so the expression plays, then freeze.
   if (g.phase == Phase::kOn) {
     auto run = [&](const std::string& line) {
       if (game_command()) {
@@ -1001,19 +991,6 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
       }
     };
     const int64_t hold_ms = int64_t(std::clamp(g.s.pose_hold, 0.2f, 6.0f) * 1000.0f);
-    if (const int o = outfit_request().exchange(0); o > 0 && o <= kOutfitCount) {
-      if (kOutfits[o - 1].items) {
-        run(std::string("photooutfit set ") + kOutfits[o - 1].items);
-        g.outfit_changed = true;
-      } else {
-        run("photooutfit restore");  // As Worn: the hero's own clothes back
-        g.outfit_changed = false;
-      }
-      // A little extra on top of the hold: the outfit's meshes and textures stream in.
-      g.thaw_hold_ms = std::max(g.thaw_hold_ms, hold_ms + 500);
-      g.thaw_until_ms = std::max(g.thaw_until_ms, now_ms() + g.thaw_hold_ms);
-      g.thaw_busy_since = now_ms();
-    }
     if (const int p = pose_request().exchange(0); p > 0 && p <= kPoseCount) {
       run(std::string("pose ") + kPoses[p - 1].record);
       g.posed = true;
