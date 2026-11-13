@@ -38,7 +38,7 @@ Checks that the generated files in `constants/` match
 
 | File | What it checks |
 |---|---|
-| `config/test_config_template.py` | The template in `src/core/fable2_config.cpp` and the launcher's default settings both match `config/fable2_config.toml` |
+| `config/test_config_template.py` | The template in `src/core/fable2_config.cpp`, the launcher's default settings, and the game's own config reader and defaults all match `config/fable2_config.toml`. Each staged value is the kind the game accepts, and each setting is stored under its own name |
 | `tools/repro/test_add_version_resource.py` | The release step that adds version info to a DLL writes the given company, product and version, keeps the existing manifest, moves the sections after `.rsrc` without changing them, and names the version after the file. It leaves a DLL alone when it has no resources, already has version info, or has no room to grow. Two known issues are marked as expected failures |
 | `tools/repro/test_normalize_pe.py` | The stable-hash step pins timestamps and the PDB GUID, so two builds come out identical. It leaves files that aren't a PE alone, skips missing files, and exits with 2 on a broken PE. Three known bugs are marked as expected failures |
 | `tools/test_apply_recomp_patches.py` | The patch step applies each patch once, fails on a missing anchor and honors its on/off switch. One known issue is marked as an expected failure |

@@ -23,6 +23,8 @@ class PackageReleaseTests(unittest.TestCase):
             self.root / "README.md": "readme",
             self.root / "thirdparty/XenosTiling/LICENSE.txt": "xenos tiling licence",
             self.root / "config/fable2_config.toml": "repo config",
+            self.root / "assets/fonts/Google Sans/GoogleSans.ttf": "keycap font",
+            self.root / "assets/fonts/Google Sans/OFL.txt": "font licence",
             self.launcher: "launcher",
             self.build / "fable_2.exe": "game",
             self.build / "fable_2.pdb": "symbols",
@@ -54,7 +56,8 @@ class PackageReleaseTests(unittest.TestCase):
             build_info = json.loads(archive.read("Fable 2 1.6.0/fable2_build.json"))
         self.assertEqual(names, {f"Fable 2 1.6.0/{name}" for name in (
             "fable_2.exe", "rexruntime.dll", "rexgpu-xenos.dll", "fable2_build.json", "Fable2Launcher.exe",
-            "README.md", "licenses/XenosTiling-LICENSE.txt", "fable2_config.toml", "data/scripts/recomp/F5.lua")})
+            "README.md", "licenses/XenosTiling-LICENSE.txt", "fable2_config.toml", "data/scripts/recomp/F5.lua",
+            "assets/fonts/Google Sans/GoogleSans.ttf", "assets/fonts/Google Sans/OFL.txt")})
         self.assertEqual(config, "repo config")
         self.assertEqual(build_info, {"profiles": ["goty"], "version": "1.6.0"})
 
