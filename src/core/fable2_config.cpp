@@ -76,10 +76,6 @@ keyboard_gamepad_map = "LMB:X,RMB:Y,MMB:B,Shift:A,E:A,Q:LT,Tab:RB,R:RT,Z:LB,B:B,
 # Default: true
 mouse_look = true
 
-# Launcher-only option: generate keyboard/mouse prompt images from the
-# startup bindings. Launch through Fable2Launcher.exe to use this option.
-keyboard_prompt_images = false
-
 # Mouse-look sensitivity slider (1..4096; 256 = 1x). Shared by BOTH look modes:
 # for the legacy right-stick mapping it sets the stick units per pixel; for
 # direct mouse look it multiplies mouse_look_yaw_sens / mouse_look_pitch_sens.
@@ -265,6 +261,14 @@ skinning_cpu = true
 # false = as the SDK defaults.
 # Default: true
 faster_render_targets = true
+
+# GPU Frame Sync (SDK cvar gpu_sync_at_frame_start): at the start of each frame,
+# wait until the GPU has finished the previous one. Fixes flicker (blue distant
+# trees, the dog's texture, sun lighting) when the GPU falls behind, mostly at
+# higher internal resolutions. Costs a few FPS where the GPU is the limit.
+# D3D12 only. false = let the GPU run up to three frames behind.
+# Default: true
+gpu_frame_sync = true
 
 [perf]
 # NtYieldExecution batching for the hot-function overrides (see
@@ -467,6 +471,9 @@ bool Load(const std::filesystem::path& path) {
     values.skinning_cpu =
         Read<bool>(patches_table, "patches", "skinning_cpu", "boolean",
                    values.skinning_cpu);
+    values.gpu_frame_sync =
+        Read<bool>(patches_table, "patches", "gpu_frame_sync", "boolean",
+                   values.gpu_frame_sync);
     values.faster_render_targets =
         Read<bool>(patches_table, "patches", "faster_render_targets", "boolean",
                    values.faster_render_targets);

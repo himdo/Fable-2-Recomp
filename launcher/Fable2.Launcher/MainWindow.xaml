@@ -264,11 +264,6 @@
                 <TextBlock Text="Click a host-key box, then press the key or mouse button you want to bind (Esc cancels). Changes are saved to fable2_config.toml and take effect the next time the game is launched."
                            FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,12,0,0"
                            TextWrapping="Wrap" />
-                <CheckBox x:Name="KeyboardPromptImagesCheck" Content="Show keyboard and mouse prompt images"
-                          Margin="0,12,0,0" Foreground="{StaticResource TextBrush}" />
-                <TextBlock Text="Uses your startup bindings when launched here. Disable to show controller prompts."
-                           FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0"
-                           TextWrapping="Wrap" />
               </StackPanel>
             </Border>
 

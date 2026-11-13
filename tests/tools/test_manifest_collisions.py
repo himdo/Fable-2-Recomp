@@ -44,10 +44,15 @@ def build_pe(exports):
     return bytes(headers) + section
 
 
-def run_check(manifest, dll):
-    """Run the tool's main() and return (exit code, printed output)."""
+def run_check(manifest, dll=None):
+    """Run the tool's main() and return (exit code, printed output).
+
+    Without a dll, the tool looks for the runtime DLL in its default places.
+    """
     output = io.StringIO()
-    args = ["check_manifest_collisions.py", str(manifest), str(dll)]
+    args = ["check_manifest_collisions.py", str(manifest)]
+    if dll is not None:
+        args.append(str(dll))
     with patch("sys.argv", args), contextlib.redirect_stdout(output):
         code = collisions.main()
     return code, output.getvalue()
@@ -95,6 +100,53 @@ class ManifestCollisionTests(unittest.TestCase):
         self.dll.write_bytes(b"\0" * 0x100)
         code, _ = run_check(self.manifest, self.dll)
         self.assertEqual(code, 2)
+
+    def test_missing_dll_is_a_usage_error(self):
+        # A missing manifest also exits with 2, so the message shows which check stopped it.
+        code, output = run_check(self.manifest, self.dll)
+
+        self.assertEqual(code, 2)
+        self.assertIn("could not read any DLL exports", output)
+
+    def test_dll_without_exports_is_a_usage_error(self):
+        # An empty export table can't prove there are no collisions, so it counts as unreadable.
+        self.dll.write_bytes(build_pe([]))
+        code, output = run_check(self.manifest, self.dll)
+
+        self.assertEqual(code, 2)
+        self.assertIn("could not read any DLL exports", output)
+
+    def test_reports_every_collision(self):
+        self.manifest.write_text('[[functions]]\nname = "GuestFunction"\n'
+                                 '[[functions]]\nname = "OtherFunction"\n')
+        self.dll.write_bytes(build_pe(["__imp__GuestFunction", "OtherFunction"]))
+        code, output = run_check(self.manifest, self.dll)
+
+        self.assertEqual(code, 1)
+        self.assertIn("GuestFunction:", output)
+        self.assertIn("OtherFunction:", output)
+
+    def test_commented_out_name_is_ignored(self):
+        self.manifest.write_text('[[functions]]\n# name = "GuestFunction"\n')
+        self.dll.write_bytes(build_pe(["__imp__GuestFunction"]))
+        code, _ = run_check(self.manifest, self.dll)
+
+        self.assertEqual(code, 0)
+
+    @unittest.expectedFailure
+    def test_finds_the_dll_the_build_installs(self):
+        # Known issue: without a DLL argument the tool looks in thirdparty/rexglue-sdk and
+        # ../rexglue-sdk-0.10.0-win-amd64 for rexruntimed.dll or rexruntimedd.dll. build.cmd
+        # installs the runtime to out/tooling/runtime-sdk/win-amd64/bin/rexruntime.dll instead,
+        # so the default run never finds a DLL and exits with a usage error.
+        root = self.manifest.parent
+        installed = root / "out/tooling/runtime-sdk/win-amd64/bin/rexruntime.dll"
+        installed.parent.mkdir(parents=True)
+        installed.write_bytes(build_pe(["__imp__NtClose"]))
+        with patch.object(collisions, "ROOT", root):
+            code, _ = run_check(self.manifest)
+
+        self.assertEqual(code, 0)
 
     def test_real_manifest_keeps_the_kernel_wait_names_free(self):
         # These names once hijacked the kernel imports and broke audio (see the README).

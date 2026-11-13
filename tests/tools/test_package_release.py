@@ -21,7 +21,7 @@ class PackageReleaseTests(unittest.TestCase):
         self.launcher = self.base / "launcher/Fable2Launcher.exe"
         for path, text in {
             self.root / "README.md": "readme",
-            self.root / "launcher/Fable2.Launcher/XenosTiling/LICENSE.txt": "xenos tiling licence",
+            self.root / "thirdparty/XenosTiling/LICENSE.txt": "xenos tiling licence",
             self.root / "config/fable2_config.toml": "repo config",
             self.launcher: "launcher",
             self.build / "fable_2.exe": "game",
@@ -74,6 +74,39 @@ class PackageReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "rexruntime.dll"):
             self.package()
         self.assertFalse((self.base / "dist").exists())
+
+    def test_missing_lua_scripts_fails(self):
+        # The game's own scripts under data/scripts/quests don't count: only the recomp's do.
+        (self.build / "data/scripts/recomp/F5.lua").unlink()
+
+        with self.assertRaisesRegex(SystemExit, "no Lua scripts"):
+            self.package()
+        self.assertFalse((self.base / "dist").exists())
+
+    def test_missing_symbols_fail(self):
+        # A release without its symbols can't be debugged later, so packaging stops.
+        (self.build / "fable_2.pdb").unlink()
+
+        with self.assertRaisesRegex(SystemExit, "fable_2.pdb"):
+            self.package()
+        self.assertFalse((self.base / "dist").exists())
+
+    def test_old_dist_files_are_removed(self):
+        # A zip left over from an earlier version must not end up next to the new release.
+        old_zip = self.base / "dist/Fable_2_recomp_v1.5.0_windows.zip"
+        old_zip.parent.mkdir()
+        old_zip.write_text("old release")
+        self.package()
+
+        self.assertFalse(old_zip.exists())
+
+    def test_packaging_leaves_the_build_folder_file_unstamped(self):
+        # Only the zip's copy of fable2_build.json gets the version. The build folder's copy
+        # stays as the build wrote it.
+        self.package()
+        build_info = (self.build / "fable2_build.json").read_text()
+
+        self.assertEqual(build_info, '{"profiles": ["goty"]}')
 
 
 if __name__ == "__main__":
