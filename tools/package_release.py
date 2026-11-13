@@ -23,11 +23,26 @@ def require(path):
     return path
 
 
+def font_files(root):
+    """Collect the bundled keycap font tree, laid out as CMake stages it next to
+    the exe at <exe>/assets/fonts/... (read at runtime by
+    src/gui/keycap_render.cpp). The OFL license ships alongside the .ttf, as the
+    Open Font License requires.
+    """
+    fonts = root / "assets/fonts"
+    if not fonts.is_dir():
+        raise SystemExit("package_release: missing assets/fonts (bundled keycap font)")
+    files = {p.relative_to(root).as_posix(): p for p in sorted(fonts.rglob("*")) if p.is_file()}
+    if not files:
+        raise SystemExit("package_release: assets/fonts is empty (missing bundled keycap font)")
+    return files
+
+
 def release_files(root, build, launcher):
     files = {name: require(build / name) for name in BUILD_FILES}
     files["Fable2Launcher.exe"] = require(launcher)
     files["README.md"] = require(root / "README.md")
-    files["licenses/XenosTiling-LICENSE.txt"] = require(root / "launcher/Fable2.Launcher/XenosTiling/LICENSE.txt")
+    files["licenses/XenosTiling-LICENSE.txt"] = require(root / "thirdparty/XenosTiling/LICENSE.txt")
     # From the repo: the build folder's copy may hold a developer's own settings.
     files["fable2_config.toml"] = require(root / "config/fable2_config.toml")
     # dir.manifest stays out: the real one comes from the disc, and the game lists these scripts itself.
@@ -36,6 +51,7 @@ def release_files(root, build, launcher):
         raise SystemExit("package_release: no Lua scripts in data/scripts/recomp")
     for script in scripts:
         files[f"data/scripts/recomp/{script.name}"] = script
+    files.update(font_files(root))
     return files
 
 
