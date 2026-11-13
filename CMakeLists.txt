@@ -78,6 +78,7 @@ set(FABLE2_SOURCES
     src/core/fable2_hooks.cpp
     src/core/fable2_address_scan.cpp
     src/menu/main_menu.cpp
+    src/gui/keycap_render.cpp
     ${HOTFUNC_SOURCES}
 )
 
@@ -94,11 +95,17 @@ set(FABLE2_HEADER_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core
     ${CMAKE_CURRENT_SOURCE_DIR}/src/diagnostics
     ${CMAKE_CURRENT_SOURCE_DIR}/src/input
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/menu)
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/menu
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/gui)
 target_include_directories(fable_2 PRIVATE ${FABLE2_HEADER_DIRS})
 if(TARGET fable_2_recomp)
     target_include_directories(fable_2_recomp PRIVATE ${FABLE2_HEADER_DIRS})
 endif()
+
+# stb_truetype (keycap text rendering, src/gui/keycap_render.cpp). The app's
+# gui headers are self-contained; stb is a thirdparty single-file library.
+target_include_directories(fable_2 PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb)
 
 # Stage the Xenos GPU emulation plugin next to the exe (rexglue picks the
 # per-configuration variant: rexgpu-xenosd.dll for Debug, rexgpu-xenos.dll
@@ -342,6 +349,21 @@ add_custom_command(TARGET fable_2 POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/StartWithoutAudio.cmd"
             "$<TARGET_FILE_DIR:fable_2>/StartWithoutAudio.cmd")
+
+# Stage the bundled keycap font (Google Sans, Open Font License) next to the
+# exe so the prompt keycaps render identically on every OS (no dependency on
+# host-installed fonts). OFL.txt ships alongside the .ttf as the Open Font
+# License requires. Loaded by src/gui/keycap_render.cpp (LoadFont).
+add_custom_command(TARGET fable_2 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:fable_2>/assets/fonts/Google Sans"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Google Sans/GoogleSans-VariableFont_GRAD,opsz,wght.ttf"
+            "$<TARGET_FILE_DIR:fable_2>/assets/fonts/Google Sans/GoogleSans-VariableFont_GRAD,opsz,wght.ttf"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Google Sans/OFL.txt"
+            "$<TARGET_FILE_DIR:fable_2>/assets/fonts/Google Sans/OFL.txt"
+    COMMENT "Staging bundled keycap font (Google Sans + OFL license) next to fable_2.exe")
 
 # --- Vulkan renderer: Stage 2 (source-built plugin, swappable at launch) --
 # The prebuilt plugin above (GPU_PLUGINS xenos) is D3D12-only. The Vulkan
