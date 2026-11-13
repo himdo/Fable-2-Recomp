@@ -126,6 +126,9 @@ struct State {
     int64_t release_ms = 0; // when the held button is let go (0 = none held)
     int moved = 0;          // Downs the save list answered (onDirtyHighlight)
     int64_t counted_press_ms = 0;  // the press last counted in `moved`
+    int menu_pos = 0;       // main menu: entries below the default (1 = Load Game)
+    int menu_dir = 0;       // main menu: the last press, +1 Down / -1 Up
+    int hl_at_press = 0;    // onDirtyHighlight bursts when it was pressed
   } boot;
   std::string wu_name;
   int64_t wu_after_ms = 0;  // the event must fire at or after this time
@@ -1778,16 +1781,32 @@ inline void BootStep(uint8_t* base) {
       // the Down press); a Down the menu missed is pressed again.
       // The menu ignores Up/Down for about 18-20 s after the title (its
       // camera move-in); earlier presses are dropped.
+      // A press can repeat (two moves): the moves are counted and an
+      // overshoot is walked back with Up before A.
       if (in_step < 16000) return;
-      if (b.tries > 0 && BootFired("onDirtyHighlight", b.press_ms)) {
-        if (now - fable2::uievents::LastFired("onDirtyHighlight") < 1500) return;
-        BootPress("A", base);
-        return next(3);
+      if (b.tries > 0) {
+        const int moves = fable2::uievents::Bursts("onDirtyHighlight") - b.hl_at_press;
+        if (moves > 0) {
+          if (now - fable2::uievents::LastFired("onDirtyHighlight") < 1500) return;
+          b.menu_pos += b.menu_dir * moves;
+          b.hl_at_press = fable2::uievents::Bursts("onDirtyHighlight");
+          if (b.menu_pos == 1) {
+            BootPress("A", base);
+            return next(3);
+          }
+          out("boot", "main menu moved " + std::to_string(moves) + ", now at " + std::to_string(b.menu_pos) + "; correcting");
+          if (++b.tries > 10) return BootFail("the main menu did not settle on Load Game");
+          b.menu_dir = b.menu_pos > 1 ? -1 : 1;
+          b.hl_at_press = fable2::uievents::Bursts("onDirtyHighlight");
+          BootPress(b.menu_dir < 0 ? "Up" : "Down", base);
+          return;
+        }
+        if (now - b.press_ms <= 3000) return;
       }
-      if (b.tries == 0 || now - b.press_ms > 3000) {
-        if (++b.tries > 10) return BootFail("the main menu did not take Down (no highlight moved)");
-        BootPress("Down", base);
-      }
+      if (++b.tries > 10) return BootFail("the main menu did not take Down (no highlight moved)");
+      if (b.menu_dir == 0) b.menu_dir = 1;
+      b.hl_at_press = fable2::uievents::Bursts("onDirtyHighlight");
+      BootPress(b.menu_dir < 0 ? "Up" : "Down", base);
       return;
     case 3:  // the save list
       if (!BootFired("LOAD_CARD_ACTIVE", b.step_ms - 1000)) {
