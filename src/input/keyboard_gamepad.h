@@ -474,7 +474,11 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     const int dy = photo_rep_[1].Fire(held(VK_DOWN), now) - photo_rep_[0].Fire(held(VK_UP), now);
     const int dx = photo_rep_[3].Fire(held(VK_RIGHT), now) - photo_rep_[2].Fire(held(VK_LEFT), now);
     if (!on || console_open_) return;
-    if (esc) pm::request_exit();
+    if (esc) {
+      // Esc goes back from the pose cards first.
+      if (pm::pose_grid_open().load() && pm::panel_visible().load()) pm::nav_back().fetch_add(1);
+      else pm::request_exit();
+    }
     if (shot) pm::screenshot_request().store(true);
     if (typing) return;
     const bool any = h || r || x || tab || enter || digit || dx || dy;

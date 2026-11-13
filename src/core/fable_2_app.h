@@ -516,6 +516,17 @@ class Fable2App : public rex::ReXApp {
     // this appends any file that is on disk but unlisted. Idempotent.
     fable2::manifestheal::EnsureComplete(game_data_root());
     fable2::console::set_root(game_data_root());
+    // Photo mode's outfits and pose cards run console lines (`outfit`, `pose`).
+    fable2::photomode::game_command() = [](const std::string& line) { fable2::console::enqueue_text(line); };
+    fable2::photomode::game_command_busy() = [] {
+      auto& c = fable2::console::S();
+      bool queued;
+      {
+        std::lock_guard<std::mutex> lock(c.qmu);
+        queued = !c.queue.empty();
+      }
+      return queued || c.lua_wait || !c.lua_pending.empty();
+    };
 
     // Resolve the host path the same way the SDK does (game:\ / d:\ ->
     // game_data_root). The SDK's path may use either slash direction
@@ -712,7 +723,10 @@ class Fable2App : public rex::ReXApp {
     std::string icon_log;
     for (const auto& root : roots) {
       icon_log.clear();
-      icons = gi::Load(root, icon_log);
+      // The pose cards' expression icons come from the same bank.
+      std::vector<std::string> pose_icons;
+      for (const auto& pose : fable2::photomode::kPoses) pose_icons.push_back(pose.icon);
+      icons = gi::Load(root, icon_log, pose_icons);
       if (icons > 0) break;
     }
     const int icons_added = gi::AddAllToAtlas(atlas);

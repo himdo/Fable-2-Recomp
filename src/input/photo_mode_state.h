@@ -115,7 +115,109 @@ struct Settings {
   // Time of day (0..24 h). Only applied while override_time is on.
   bool override_time = false;
   float time_hours = 12.0f;
+
+  // Hero (outfits and pose cards).
+  int outfit = 0;          // index into kOutfits (0 = as worn)
+  int pose = -1;           // last pose card played (index into kPoses), -1 none
+  float pose_hold = 1.5f;  // seconds the world runs after a pose / outfit before it freezes again
 };
+
+// --- Hero: outfits and pose cards ---------------------------------------------
+// Outfits are the game's own full outfits (Debug.SetHeroWearing<Name>Outfit,
+// the console's `outfit <key>`). Poses are the hero's expressions
+// (ExpressionPerformer.PerformExpression, the console's `pose <record>`), each
+// with the game's own expression icon from gui_textures.bnk.
+struct OutfitDef {
+  const char* label;
+  const char* key;  // console `outfit` name; nullptr = leave as worn
+};
+inline constexpr OutfitDef kOutfits[] = {
+    {"As Worn", nullptr},          {"Barbarian", "barbarian"},     {"Brawler", "brawler"},
+    {"Martial Arts", "martialarts"}, {"Pirate", "pirate"},         {"Swashbuckler", "swashbuckler"},
+    {"Pure Evil", "pureevil"},     {"Goth", "goth"},               {"Cross-Dresser", "crossdresser"},
+    {"Year Outfit", "year"},
+};
+inline constexpr int kOutfitCount = int(sizeof(kOutfits) / sizeof(kOutfits[0]));
+
+struct PoseDef {
+  const char* label;
+  const char* record;  // GDB expression record
+  const char* icon;    // gui_textures.bnk entry (lower case)
+};
+inline constexpr PoseDef kPoses[] = {
+    {"Heroic Pose", "ExpressionFlexLoop", "art\\gui\\expressions\\flirty\\heroic_pose.tex"},
+    {"Sexy Pose", "ExpressionSexyPose", "art\\gui\\expressions\\flirty\\icon_sexy_pose_m.tex"},
+    {"Victory Arm Pump", "ExpressionVictoryArmPump", "art\\gui\\expressions\\fun\\victory_arm_pump.tex"},
+    {"Dance", "ExpressionDance", "art\\gui\\expressions\\fun\\dance.tex"},
+    {"Laugh", "ExpressionLaugh", "art\\gui\\expressions\\fun\\laugh.tex"},
+    {"Sock Puppet", "ExpressionSockPuppet", "art\\gui\\expressions\\fun\\sock_puppet.tex"},
+    {"Hat, Moustache, Headband", "ExpressionHatMoustacheHeadband",
+     "art\\gui\\expressions\\fun\\hat_headband_moustache.tex"},
+    {"Thumbs Up", "ExpressionThumbsUp", "art\\gui\\expressions\\social\\thumbsup.tex"},
+    {"Thumbs Down", "ExpressionThumbsDown", "art\\gui\\expressions\\social\\thumbsdown.tex"},
+    {"Trophy", "ExpressionTrophy", "art\\gui\\expressions\\social\\trophy.tex"},
+    {"Wait", "ExpressionWait", "art\\gui\\expressions\\social\\wait.tex"},
+    {"Blow Kiss", "ExpressionBlowKiss", "art\\gui\\expressions\\flirty\\blow_kiss.tex"},
+    {"Kiss", "ExpressionKiss", "art\\gui\\expressions\\flirty\\kiss.tex"},
+    {"Pick-Up Line", "ExpressionPickUpLine", "art\\gui\\expressions\\flirty\\pick_up_line.tex"},
+    {"Whistle", "ExpressionWhistle", "art\\gui\\expressions\\flirty\\whistle.tex"},
+    {"Worship", "ExpressionWorship", "art\\gui\\expressions\\flirty\\worship.tex"},
+    {"Come Back to Mine", "ExpressionComeBackToMyPlace", "art\\gui\\expressions\\flirty\\come_back_to_mine.tex"},
+    {"Apologise", "ExpressionApologise", "art\\gui\\expressions\\friendly\\apologise.tex"},
+    {"Follow", "ExpressionFollow", "art\\gui\\expressions\\friendly\\follow.tex"},
+    {"Gift", "ExpressionGift", "art\\gui\\expressions\\friendly\\gift.tex"},
+    {"Bloodlust Roar", "ExpressionBloodlustRoar", "art\\gui\\expressions\\rude\\bloodlust_roar.tex"},
+    {"Threaten", "ExpressionThreaten", "art\\gui\\expressions\\scary\\icon_threaten.tex"},
+    {"Growl", "ExpressionGrowl", "art\\gui\\expressions\\scary\\growl.tex"},
+    {"Scary Laugh", "ExpressionScaryLaugh", "art\\gui\\expressions\\scary\\icon_scary_laugh.tex"},
+    {"Fake-Out", "ExpressionFakeout", "art\\gui\\expressions\\scary\\fakeout.tex"},
+    {"Slap", "ExpressionSlap", "art\\gui\\expressions\\scary\\slap.tex"},
+    {"Extort", "ExpressionExtort", "art\\gui\\expressions\\scary\\icon_extort.tex"},
+    {"Point and Laugh", "ExpressionPointAndLaugh", "art\\gui\\expressions\\rude\\point_and_laugh.tex"},
+    {"Insult", "ExpressionInsult", "art\\gui\\expressions\\rude\\insult.tex"},
+    {"Chicken", "ExpressionChicken", "art\\gui\\expressions\\rude\\chicken.tex"},
+    {"Vulgar Thrust", "ExpressionVulgarThrust", "art\\gui\\expressions\\rude\\vulgar_thrust.tex"},
+    {"Kiss My Ass", "ExpressionKissMyAss", "art\\gui\\expressions\\rude\\kiss_my_ass.tex"},
+    {"Play Dead", "ExpressionPlayDead", "art\\gui\\expressions\\rude\\play_dead.tex"},
+    {"Beg", "ExpressionBeg", "art\\gui\\expressions\\rude\\beg.tex"},
+    {"Belch", "ExpressionBelch", "art\\gui\\expressions\\rude\\belch.tex"},
+    {"Fart", "ExpressionFart", "art\\gui\\expressions\\rude\\fart.tex"},
+};
+inline constexpr int kPoseCount = int(sizeof(kPoses) / sizeof(kPoses[0]));
+inline constexpr int kPoseColumns = 4;
+inline constexpr int kPoseRows = 5;
+inline constexpr int kPosePage = kPoseColumns * kPoseRows;
+
+// Requests from the menu to the guest thread (index + 1; 0 = none).
+inline std::atomic<int>& pose_request() {
+  static std::atomic<int> v{0};
+  return v;
+}
+inline std::atomic<int>& outfit_request() {
+  static std::atomic<int> v{0};
+  return v;
+}
+// The pose card grid is open (B / Esc go back to the list instead of leaving).
+inline std::atomic<bool>& pose_grid_open() {
+  static std::atomic<bool> v{false};
+  return v;
+}
+inline std::atomic<int>& nav_back() {
+  static std::atomic<int> v{0};
+  return v;
+}
+// Runs one developer-console line in the game's Lua (set by the app to
+// fable2::console::enqueue_text, which runs it in the game's script update).
+inline std::function<void(const std::string&)>& game_command() {
+  static std::function<void(const std::string&)> f;
+  return f;
+}
+// True while a line handed to game_command() has not finished running (the
+// console's Lua pump answers from the world's script update).
+inline std::function<bool()>& game_command_busy() {
+  static std::function<bool()> f;
+  return f;
+}
 
 // Camera filters: colour grades run on the GPU over the finished frame (see
 // rex_set_swap_color_grade / color_grade_cs.hlsl), so they work on any scene

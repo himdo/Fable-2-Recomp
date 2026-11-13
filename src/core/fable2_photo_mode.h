@@ -130,6 +130,9 @@ struct State {
   uint16_t rebind_peak = 0;  // buttons held so far while recording a shortcut
   bool rebind_armed = false; // all buttons let go since recording started
   int64_t rebind_session = 0;  // pad_rebind_started_ms of the recording seen
+  int64_t thaw_until_ms = 0;   // world runs until then (a pose or outfit plays out)
+  int64_t thaw_hold_ms = 0;    // hold to count once the console has run the line
+  int64_t thaw_busy_since = 0; // when the world started waiting for the console
   Repeater rep_up, rep_down, rep_left, rep_right;  // D-pad menu navigation
   std::atomic<bool> suppress_pad{false};  // keep blanking until all released
 
@@ -567,7 +570,12 @@ inline void integrate(float dt) {
   // moves through the menu and LB / RB change page; the sticks and triggers
   // fly the camera.
   if (pressed(0x1000)) nav_activate().fetch_add(1);
-  if (pressed(0x2000) || pressed(0x0010)) request_exit();
+  // B goes back from the pose cards; otherwise B or Start leave photo mode.
+  if (pressed(0x2000)) {
+    if (pose_grid_open().load() && panel_visible().load()) nav_back().fetch_add(1);
+    else request_exit();
+  }
+  if (pressed(0x0010)) request_exit();
   if (pressed(0x4000)) reset_camera_request().store(true);
   if (pressed(0x8000) || pressed(0x0020)) panel_visible().store(!panel_visible().load());
   if (pressed(0x0100)) nav_tab().fetch_sub(1);
@@ -708,6 +716,12 @@ inline void enter(PPCContext& ctx, uint8_t* base) {
 inline void leave(PPCContext& ctx, uint8_t* base) {
   State& g = st();
   pad_rebinding().store(false);
+  pose_grid_open().store(false);
+  pose_request().store(0);
+  outfit_request().store(0);
+  g.thaw_until_ms = 0;
+  g.thaw_hold_ms = 0;
+  g.thaw_busy_since = 0;
   if (g.applied_hud >= 0) {
     g.applied_hud = -1;
     ctx.r3.u64 = g.saved_draw_gui;
@@ -942,8 +956,51 @@ inline void on_world_update(PPCContext& ctx, uint8_t* base) {
     }
   }
 
+  // Poses and outfits: hand the line to the game's Lua (developer console
+  // pump, which runs in the world's script update) and let the world run for
+  // the hold time so the expression plays and the clothes load, then freeze.
+  if (g.phase == Phase::kOn) {
+    auto run = [&](const std::string& line) {
+      if (game_command()) {
+        game_command()(line);
+        log_line(("hero: " + line).c_str());
+      } else {
+        log_line(("hero: no console to run " + line).c_str());
+      }
+    };
+    const int64_t hold_ms = int64_t(std::clamp(g.s.pose_hold, 0.2f, 6.0f) * 1000.0f);
+    if (const int o = outfit_request().exchange(0); o > 0 && o <= kOutfitCount && kOutfits[o - 1].key) {
+      run(std::string("outfit ") + kOutfits[o - 1].key);
+      // A little extra on top of the hold: the outfit's meshes and textures stream in.
+      g.thaw_hold_ms = std::max(g.thaw_hold_ms, hold_ms + 500);
+      g.thaw_until_ms = std::max(g.thaw_until_ms, now_ms() + g.thaw_hold_ms);
+      g.thaw_busy_since = now_ms();
+    }
+    if (const int p = pose_request().exchange(0); p > 0 && p <= kPoseCount) {
+      run(std::string("pose ") + kPoses[p - 1].record);
+      // The command waits a frame or two for the Lua pump before the pose starts.
+      g.thaw_hold_ms = std::max(g.thaw_hold_ms, hold_ms + 150);
+      g.thaw_until_ms = std::max(g.thaw_until_ms, now_ms() + g.thaw_hold_ms);
+      g.thaw_busy_since = now_ms();
+    }
+    // The hold counts from when the console has run the line (its Lua pump
+    // starts on the first command and needs the world running to answer);
+    // give up waiting after 20 s.
+    if (g.thaw_busy_since != 0) {
+      const bool busy = game_command_busy() && game_command_busy()();
+      if (busy && now_ms() - g.thaw_busy_since < 20000) {
+        g.thaw_until_ms = std::max(g.thaw_until_ms, now_ms() + g.thaw_hold_ms);
+      } else {
+        if (busy) log_line("hero: the console did not answer within 20 s");
+        g.thaw_busy_since = 0;
+        g.thaw_hold_ms = 0;
+      }
+    }
+  }
+  const bool thawing = now_ms() < g.thaw_until_ms;
+
   ++g.diag_world;
-  if (g.s.freeze_world && top) {
+  if (g.s.freeze_world && top && !thawing) {
     ++g.diag_frozen;
     update_cameras(ctx, base);
     if (tod_changed) rebuild_theme(ctx, base);

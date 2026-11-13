@@ -998,6 +998,33 @@ add("outfit", "outfit <name>|list  dress the hero in a debug outfit", function(W
   try("outfit " .. o, dbgf(OUTFITS[o]))
 end)
 
+-- The hero performs one expression (photo mode's pose cards use this).
+-- ExpressionPerformer.PerformExpression(hero, GDB.GetRecord(name)), as the game's
+-- scripts call it. An expression the hero has not learned yet is made available
+-- first (ExpressionPerformer.SetExpressionAsAvailable(hero, name, true)).
+add("pose", "pose <expression>  the hero performs an expression, e.g. pose ExpressionDance", function(W)
+  if not W[2] then return out("usage: pose <expression>  (e.g. pose ExpressionDance)") end
+  local hero = need_hero()
+  if not hero then return end
+  local name = W[2]
+  if not name:find("^Expression") then name = "Expression" .. name end
+  local EP = rawget(_G, "ExpressionPerformer")
+  if type(EP) ~= "table" or type(EP.PerformExpression) ~= "function" then
+    return out("pose: ExpressionPerformer is not available here")
+  end
+  local G = rawget(_G, "GDB")
+  local okr, rec = pcall(function() return G.GetRecord(name) end)
+  if not okr or rec == nil then return out("pose " .. name .. ": no such expression record") end
+  if type(EP.IsExpressionAvailable) == "function" and type(EP.SetExpressionAsAvailable) == "function" then
+    local oka, avail = pcall(EP.IsExpressionAvailable, hero, name)
+    if oka and avail == false then
+      pcall(EP.SetExpressionAsAvailable, hero, name, true)
+      out("pose " .. name .. ": made available")
+    end
+  end
+  try("pose " .. name, EP.PerformExpression, hero, rec)
+end)
+
 add("dye", "dye <clothing record> <dye record>  e.g. dye ObjectClothingCoatPoshM ObjectInventoryDyeClothingBasicBlue01", function(W)
   if not (W[2] and W[3]) then return out("usage: dye <clothing record> <dye record>") end
   -- Debug.SetHeroWornItemDye(clothing, true, dye), as the game's scripts call it

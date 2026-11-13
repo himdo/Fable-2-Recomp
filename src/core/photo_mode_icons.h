@@ -1,7 +1,8 @@
 // fable_2 - The game's own controller button icons for host-drawn overlays
 // (photo mode prompts), read straight from the user's game data at startup:
 // data/art/gui/gui_textures.bnk (pixels) + gui_texture_headers.bnk (sizes),
-// with data/art/localised/<lang>/gui/ checked first, the way the game does.
+// with data/art/localised/<lang>/gui/ checked first, the way the game does
+// (and the pristine <bank>.orig when the keyboard-prompt swap rewrote a bank).
 // Nothing from them is shipped, and a replaced (higher resolution) bank is
 // picked up as long as its textures use a format decoded here.
 //
@@ -14,8 +15,9 @@
 // Texture header (84 bytes): +16 u32 width, +20 height, +24 format, +28 mips.
 // Texture data is either the raw surface after a u32 byte count (format 2,
 // 32-bit ARGB) or a chunk table of {u32 type, offset, size} at +0 where type 7
-// is the raw surface (format 39, DXT5). Type 1 chunks use Lionhead's own image
-// codec and are skipped in favour of the next candidate name.
+// is the raw surface (format 39, DXT5). Other chunk types are Lionhead's own
+// image codec, decoded with src/gui/gui_tex_codec.h (the game's prompt-icon
+// decoder) into the format 2 layout.
 // Surfaces are Xbox 360 tiled when large enough to fill a tile, else linear;
 // DXT blocks are 16-bit byte-swapped.
 #pragma once
@@ -31,6 +33,8 @@
 
 #include <imgui.h>
 #include <zlib-ng.h>
+
+#include "../gui/gui_tex_codec.h"
 
 namespace fable2::gameicons {
 
@@ -206,8 +210,13 @@ inline bool Decode(const std::vector<uint8_t>& data, uint32_t w, uint32_t h, uin
   } else if (data.size() >= 12) {
     const uint32_t type = be32(data.data()), off = be32(&data[4]), size = be32(&data[8]);
     if (type != 7) {
-      why = "chunk type " + std::to_string(type) + " (game codec)";
-      return false;
+      // Lionhead's codec: decode to the format 2 layout (u32 byte count + tiled ARGB).
+      std::vector<uint8_t> argb;
+      if (!fable2::gui::DecodeCompressedIconToTile(data.data(), data.size(), int(w), int(h), argb)) {
+        why = "chunk type " + std::to_string(type) + " did not decode";
+        return false;
+      }
+      return Decode(argb, w, h, 2, img, why);
     }
     if (size_t(off) + size > data.size()) {
       why = "chunk out of range";
@@ -263,24 +272,72 @@ inline bool Decode(const std::vector<uint8_t>& data, uint32_t w, uint32_t h, uin
 
 }  // namespace detail
 
-// Load every icon from the game data under `root`. Returns how many loaded;
+// Extra images by bank entry name (lower case), e.g. the expression icons the
+// pose cards show. Filled by Load().
+struct Extra {
+  std::string name;
+  Image img;
+};
+inline std::vector<Extra>& extras() {
+  static std::vector<Extra> v;
+  return v;
+}
+
+namespace detail {
+struct BankPair {
+  Bank tex, hdr;
+};
+// Decode bank entry `name` (lower case) from the first bank that has it.
+inline bool LoadEntry(const std::vector<BankPair>& banks, const std::string& name, Image& img, std::string& why_all) {
+  std::vector<uint8_t> data, hdr;
+  for (const BankPair& b : banks) {
+    const auto* te = b.tex.Get(name);
+    const auto* he = b.hdr.Get(name);
+    if (!te || !he) continue;  // the localised bank only has a few entries
+    if (!b.hdr.Read(*he, hdr) || hdr.size() < 32 || !b.tex.Read(*te, data)) {
+      why_all += " " + name + ": read failed;";
+      continue;
+    }
+    std::string why;
+    if (Decode(data, be32(&hdr[16]), be32(&hdr[20]), be32(&hdr[24]), img, why)) {
+      img.loaded = true;
+      img.source = name;
+      return true;
+    }
+    why_all += " " + name + ": " + why + ";";
+  }
+  return false;
+}
+}  // namespace detail
+
+// Load every button icon, plus the `extra` entries (lower-case bank names),
+// from the game data under `root`. Returns how many button icons loaded;
 // `log` gets one line per icon that fell back or failed.
-inline int Load(const std::filesystem::path& root, std::string& log) {
-  using detail::Bank;
-  struct Pair { Bank tex, hdr; };
-  std::vector<Pair> banks;  // localised first
+inline int Load(const std::filesystem::path& root, std::string& log, const std::vector<std::string>& extra = {}) {
+  using detail::BankPair;
+  extras().clear();
+  std::vector<BankPair> banks;  // localised first
   for (const char* lang : {"en-uk", "en-us", "en"}) {
     const auto dir = root / "data" / "art" / "localised" / lang / "gui";
-    Pair p;
+    BankPair p;
     if (p.tex.Open(dir / "gui_textures.bnk") && p.hdr.Open(dir / "gui_texture_headers.bnk")) {
       banks.push_back(std::move(p));
       break;
     }
   }
   {
+    // The keyboard-prompt swap (src/gui/keyboard_prompts.h) rewrites these banks
+    // with keycaps in place of the controller art and keeps the pristine ones
+    // as <bank>.orig: read those when they exist, so the controller icons are
+    // always the game's own.
     const auto dir = root / "data" / "art" / "gui";
-    Pair p;
-    if (p.tex.Open(dir / "gui_textures.bnk") && p.hdr.Open(dir / "gui_texture_headers.bnk"))
+    auto pick = [&](const char* file) {
+      std::error_code ec;
+      const auto orig = dir / (std::string(file) + ".orig");
+      return std::filesystem::exists(orig, ec) ? orig : dir / file;
+    };
+    BankPair p;
+    if (p.tex.Open(pick("gui_textures.bnk")) && p.hdr.Open(pick("gui_texture_headers.bnk")))
       banks.push_back(std::move(p));
   }
   if (banks.empty()) {
@@ -295,64 +352,65 @@ inline int Load(const std::filesystem::path& root, std::string& log) {
       {"right", "right"},              {"start", "start"},             {"back", "back"},
       {"dpad", "dpad"}};
   int loaded = 0;
-  std::vector<uint8_t> data;
   for (int i = 0; i < kIconCount; ++i) {
     Image& img = icon(i);
     std::string why_all;
     for (int c = 0; c < 2 && !img.loaded; ++c) {
       if (!kCandidates[i][c]) continue;
       const std::string name = std::string("art\\gui\\controller\\") + (c ? "24x24\\" : "") + kCandidates[i][c] + ".tex";
-      for (const Pair& b : banks) {
-        const auto* te = b.tex.Get(name);
-        const auto* he = b.hdr.Get(name);
-        if (!te || !he) continue;
-        std::vector<uint8_t> hdr;
-        if (!b.hdr.Read(*he, hdr) || hdr.size() < 32 || !b.tex.Read(*te, data)) continue;
-        std::string why;
-        if (detail::Decode(data, detail::be32(&hdr[16]), detail::be32(&hdr[20]), detail::be32(&hdr[24]), img, why)) {
-          img.loaded = true;
-          img.source = name;
-          break;
-        }
-        why_all += " " + name + ": " + why + ";";
-      }
+      detail::LoadEntry(banks, name, img, why_all);
     }
     if (img.loaded) {
       ++loaded;
       if (!why_all.empty()) log += "\n  " + img.source + " used (" + why_all + ")";
     } else {
-      log += "\n  icon " + std::to_string(i) + " not loaded:" + why_all;
+      log += "\n  icon " + std::to_string(i) + " not loaded:" + (why_all.empty() ? std::string(" not in the bank") : why_all);
     }
   }
+  int extra_loaded = 0;
+  for (const std::string& name : extra) {
+    Extra e;
+    e.name = name;
+    std::string why_all;
+    if (detail::LoadEntry(banks, name, e.img, why_all)) {
+      ++extra_loaded;
+    } else {
+      log += "\n  " + name + " not loaded:" + (why_all.empty() ? std::string(" not in the bank") : why_all);
+    }
+    extras().push_back(std::move(e));
+  }
+  if (!extra.empty())
+    log += "\n  extra images: " + std::to_string(extra_loaded) + " of " + std::to_string(extra.size());
   return loaded;
 }
 
-// Put the loaded icons into ImGui's atlas (call from OnConfigureFonts, after
-// the fonts: rectangles are reserved first, then filled).
+// Put the loaded icons and extra images into ImGui's atlas (call from
+// OnConfigureFonts, after the fonts: rectangles are reserved first, then filled).
 inline int AddAllToAtlas(ImFontAtlas* atlas) {
   if (!atlas) return 0;
   if (!atlas->TexIsBuilt) atlas->Build();
-  for (int i = 0; i < kIconCount; ++i) {
-    Image& img = icon(i);
-    if (!img.loaded) continue;
-    img.rect_id = atlas->AddCustomRect(img.w, img.h, nullptr);
-    if (img.rect_id == ImFontAtlasRectId_Invalid) img.loaded = false;
+  std::vector<Image*> all;
+  for (int i = 0; i < kIconCount; ++i) all.push_back(&icon(i));
+  for (Extra& e : extras()) all.push_back(&e.img);
+  for (Image* img : all) {
+    if (!img->loaded) continue;
+    img->rect_id = atlas->AddCustomRect(img->w, img->h, nullptr);
+    if (img->rect_id == ImFontAtlasRectId_Invalid) img->loaded = false;
   }
   ImTextureData* tex = atlas->TexData;
   int added = 0;
-  for (int i = 0; i < kIconCount; ++i) {
-    Image& img = icon(i);
-    if (!img.loaded) continue;
+  for (Image* img : all) {
+    if (!img->loaded) continue;
     ImFontAtlasRect r;
-    if (!tex || !tex->Pixels || tex->BytesPerPixel != 4 || !atlas->GetCustomRect(img.rect_id, &r)) {
-      img.loaded = false;
+    if (!tex || !tex->Pixels || tex->BytesPerPixel != 4 || !atlas->GetCustomRect(img->rect_id, &r)) {
+      img->loaded = false;
       continue;
     }
-    for (int y = 0; y < img.h; ++y)
-      std::memcpy(tex->GetPixelsAt(r.x, r.y + y), &img.rgba[size_t(y) * img.w * 4], size_t(img.w) * 4);
-    img.atlas = atlas;
-    img.rgba.clear();
-    img.rgba.shrink_to_fit();
+    for (int y = 0; y < img->h; ++y)
+      std::memcpy(tex->GetPixelsAt(r.x, r.y + y), &img->rgba[size_t(y) * img->w * 4], size_t(img->w) * 4);
+    img->atlas = atlas;
+    img->rgba.clear();
+    img->rgba.shrink_to_fit();
     ++added;
   }
   return added;
@@ -360,13 +418,29 @@ inline int AddAllToAtlas(ImFontAtlas* atlas) {
 
 inline bool Ready(int i) { return i >= 0 && i < kIconCount && icon(i).loaded && icon(i).atlas; }
 
+inline void DrawImage(ImDrawList* dl, const Image& img, ImVec2 p0, float size, ImU32 col) {
+  ImFontAtlasRect r;
+  if (!img.atlas || !img.atlas->GetCustomRect(img.rect_id, &r)) return;
+  dl->AddImage(dl->_CmdHeader.TexRef, p0, ImVec2(p0.x + size, p0.y + size), r.uv0, r.uv1, col);
+}
+
 // Draw icon `i` filling the square [p0, p0 + size].
 inline void Draw(ImDrawList* dl, int i, ImVec2 p0, float size, ImU32 col = IM_COL32_WHITE) {
-  if (!Ready(i)) return;
-  const Image& img = icon(i);
-  ImFontAtlasRect r;
-  if (!img.atlas->GetCustomRect(img.rect_id, &r)) return;
-  dl->AddImage(dl->_CmdHeader.TexRef, p0, ImVec2(p0.x + size, p0.y + size), r.uv0, r.uv1, col);
+  if (Ready(i)) DrawImage(dl, icon(i), p0, size, col);
+}
+
+// Extra images: index by bank entry name (-1 if not requested at load).
+inline int FindExtra(const char* name) {
+  const auto& v = extras();
+  for (int i = 0; i < int(v.size()); ++i)
+    if (v[i].name == name) return i;
+  return -1;
+}
+inline bool ExtraReady(int i) {
+  return i >= 0 && i < int(extras().size()) && extras()[i].img.loaded && extras()[i].img.atlas;
+}
+inline void DrawExtra(ImDrawList* dl, int i, ImVec2 p0, float size, ImU32 col = IM_COL32_WHITE) {
+  if (ExtraReady(i)) DrawImage(dl, extras()[i].img, p0, size, col);
 }
 
 }  // namespace fable2::gameicons

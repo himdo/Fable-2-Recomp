@@ -296,6 +296,36 @@ inline std::vector<Page> BuildPages() {
     pages.push_back(std::move(p));
   }
 
+  // Hero -----------------------------------------------------------------------------
+  {
+    Page p{"Hero"};
+    p.items.push_back(Action("Pose", "Pick one of your hero's expressions from the cards. The world runs for a moment so the pose plays, then freezes again.",
+                             [](Settings&) { pose_grid_open().store(true); }));
+    Item replay = Action("Replay Pose", "Play the last pose again.", [](Settings& s) {
+      if (s.pose >= 0 && s.pose < kPoseCount) pose_request().store(s.pose + 1);
+    });
+    replay.visible = [](const Settings& s) { return s.pose >= 0; };
+    p.items.push_back(replay);
+    Item hold{"Pose Hold", "How long the world runs after a pose or outfit change before it freezes again. Longer catches later moments of the pose.", Kind::kSlider};
+    hold.get = [](const Settings& s) { return s.pose_hold; };
+    hold.set = [](Settings& s, float v) { s.pose_hold = v; };
+    hold.lo = 0.2f;
+    hold.hi = 6.0f;
+    hold.step = 0.1f;
+    hold.fmt = [](float v) { return Fmt("%.1f s", v); };
+    p.items.push_back(hold);
+    std::vector<std::string> outfits;
+    for (const auto& o : kOutfits) outfits.push_back(o.label);
+    p.items.push_back(Option(
+        "Outfit", "Dress your hero in one of the game's full outfits. It stays on after photo mode, like changing clothes in the game.",
+        std::move(outfits), [](const Settings& s) { return float(s.outfit); },
+        [](Settings& s, float v) {
+          s.outfit = std::clamp(int(std::lround(v)), 0, kOutfitCount - 1);
+          if (kOutfits[s.outfit].key) outfit_request().store(s.outfit + 1);
+        }));
+    pages.push_back(std::move(p));
+  }
+
   // Capture --------------------------------------------------------------------------
   {
     Page p{"Capture"};
@@ -388,6 +418,8 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
       nav_tab().store(0);
       nav_tab_direct().store(0);
       nav_activate().store(0);
+      nav_back().store(0);
+      pose_grid_open().store(false);
       opened_ms_ = now_ms();
     }
     was_on_ = on;
@@ -665,7 +697,111 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
   float BarX0() const { return X(kRight - kBar); }
   float BarX1() const { return X(kRight); }
 
+  // --- Pose cards -----------------------------------------------------------------------
+  // A page of kPoseColumns x kPoseRows cards (the game's expression icons) in
+  // place of the list; D-pad / arrows move, A / Enter plays the pose, LB / RB
+  // or the mouse wheel turn the page, B / Esc go back to the list.
+  int grid_cursor_ = 0;
+  static constexpr float kCardW = 104.0f;
+  static constexpr float kCardH = 84.0f;
+  static constexpr float kIcon = 64.0f;
+
+  menu::Box CardRect(int slot) const {
+    const int c = slot % kPoseColumns, r = slot / kPoseColumns;
+    const float x = X(kLeft - 14.0f + kCardW * c);
+    const float y = X(kListY + kCardH * r);
+    return menu::Box{ImVec2(x, y), ImVec2(x + X(kCardW - 8.0f), y + X(kCardH - 8.0f))};
+  }
+
+  void PlayPose(Settings& s, int index) {
+    if (index < 0 || index >= kPoseCount) return;
+    s.pose = index;
+    pose_request().store(index + 1);
+  }
+
+  void HandleGrid(ImGuiIO& io, Settings& s) {
+    nav_tab_direct().store(0);
+    grid_cursor_ = std::clamp(grid_cursor_, 0, kPoseCount - 1);
+    if (const int t = nav_tab().exchange(0); t != 0)
+      grid_cursor_ = std::clamp(grid_cursor_ + t * kPosePage, 0, kPoseCount - 1);
+    if (const int dy = nav_y().exchange(0); dy != 0) {
+      const int n = grid_cursor_ + dy * kPoseColumns;
+      if (n >= 0 && n < kPoseCount) grid_cursor_ = n;
+    }
+    if (const int dx = nav_x().exchange(0); dx != 0) grid_cursor_ = std::clamp(grid_cursor_ + dx, 0, kPoseCount - 1);
+    for (int a = nav_activate().exchange(0); a > 0; --a) PlayPose(s, grid_cursor_);
+    if (nav_back().exchange(0) > 0) {
+      pose_grid_open().store(false);
+      return;
+    }
+    const ImVec2 m = io.MousePos;
+    const bool moved = std::fabs(m.x - last_mouse_.x) + std::fabs(m.y - last_mouse_.y) > 0.5f;
+    last_mouse_ = m;
+    mouse_in_panel_ = m.x >= 0 && m.x < X(kRight + 60.0f) && m.y >= 0 && m.y < io.DisplaySize.y;
+    if (moved && mouse_in_panel_) prompts_pad().store(false, std::memory_order_relaxed);
+    if (mouse_in_panel_ && io.MouseWheel != 0.0f)
+      grid_cursor_ = std::clamp(grid_cursor_ + (io.MouseWheel > 0 ? -kPosePage : kPosePage), 0, kPoseCount - 1);
+    const int page = grid_cursor_ / kPosePage;
+    for (int slot = 0; slot < kPosePage; ++slot) {
+      const int index = page * kPosePage + slot;
+      if (index >= kPoseCount) break;
+      if (!CardRect(slot).Contains(m)) continue;
+      if (moved) grid_cursor_ = index;
+      if (io.MouseClicked[0]) {
+        grid_cursor_ = index;
+        PlayPose(s, index);
+      }
+      break;
+    }
+    if (io.MouseClicked[1]) pose_grid_open().store(false);  // right click: back
+  }
+
+  void DrawGrid(const Settings& s, float fade) {
+    const int page = grid_cursor_ / kPosePage;
+    const int pages = (kPoseCount + kPosePage - 1) / kPosePage;
+    for (int slot = 0; slot < kPosePage; ++slot) {
+      const int index = page * kPosePage + slot;
+      if (index >= kPoseCount) break;
+      const menu::Box r = CardRect(slot);
+      const bool cur = index == grid_cursor_;
+      const bool played = index == s.pose;
+      dl_->AddRectFilled(r.Min, r.Max, IM_COL32(18, 15, 10, int((cur ? 210 : 150) * fade)), X(6.0f), 0);
+      const ImU32 edge = cur ? menu::with_alpha(menu::kGold, fade)
+                             : played ? menu::with_alpha(menu::kGold, 0.55f * fade)
+                                      : menu::with_alpha(menu::kCreamDim, 0.25f * fade);
+      dl_->AddRect(r.Min, r.Max, edge, X(6.0f), 0, std::max(1.0f, X(cur ? 2.0f : 1.0f)));
+      const float icon = X(kIcon) * (cur ? 1.06f : 1.0f);
+      const ImVec2 c((r.Min.x + r.Max.x) * 0.5f, (r.Min.y + r.Max.y) * 0.5f);
+      const int img = gameicons::FindExtra(kPoses[index].icon);
+      if (gameicons::ExtraReady(img)) {
+        gameicons::DrawExtra(dl_, img, ImVec2(c.x - icon * 0.5f, c.y - icon * 0.5f), icon,
+                             menu::with_alpha(IM_COL32(255, 255, 255, 255), (cur || played ? 1.0f : 0.8f) * fade));
+      } else {
+        // No icon (game data missing or not decodable): the name instead.
+        TextWrapped(ImVec2(r.Min.x + X(6.0f), r.Min.y + X(8.0f)), kSmall, (r.Max.x - r.Min.x) - X(12.0f),
+                    menu::with_alpha(cur ? menu::kCream : menu::kCreamDim, fade), kPoses[index].label);
+      }
+      if (played) Diamond(ImVec2(r.Max.x - X(9.0f), r.Min.y + X(9.0f)), X(4.0f), menu::with_alpha(menu::kGold, fade));
+    }
+    // Name of the card under the cursor and the page dots.
+    const float y = X(kListY + kCardH * kPoseRows + 4.0f);
+    Rule(X(kLeft - 14.0f), X(kRight + 10.0f), y, 0.5f * fade);
+    Text(ImVec2(X(kLeft), y + X(10.0f)), kNormal, menu::with_alpha(menu::kCream, fade), kPoses[grid_cursor_].label);
+    if (pages > 1) {
+      for (int p = 0; p < pages; ++p) {
+        const float dx = X(kRight - 12.0f - 16.0f * (pages - 1 - p));
+        Diamond(ImVec2(dx, y + X(24.0f)), X(p == page ? 5.0f : 3.5f),
+                menu::with_alpha(p == page ? menu::kGold : menu::kCreamDim, fade));
+      }
+    }
+  }
+
   void HandleInput(ImGuiIO& io, Settings& s) {
+    if (pose_grid_open().load()) {
+      HandleGrid(io, s);
+      return;
+    }
+    nav_back().store(0);
     const Settings start = s;
     if (const int d = nav_tab_direct().exchange(0); d > 0 && d <= int(pages_.size())) SetPage(d - 1);
     if (const int t = nav_tab().exchange(0); t != 0) SetPage(page_ + t);
@@ -764,7 +900,8 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
                                  dark);
 
     // Title and rule.
-    Text(ImVec2(X(kLeft), X(kTitleY)), kLarge, menu::with_alpha(menu::kCream, fade), "Photo Mode");
+    Text(ImVec2(X(kLeft), X(kTitleY)), kLarge, menu::with_alpha(menu::kCream, fade),
+         pose_grid_open().load() ? "Poses" : "Photo Mode");
     Rule(X(kLeft - 14.0f), X(kRight + 10.0f), X(kTitleY + 40.0f), fade);
 
     // Pages: LB  Camera  Lens  Colour  World  Capture  RB
@@ -787,6 +924,11 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
       x += w + X(20.0f);
     }
     if (pad) Prompt(x - X(10.0f), ty - X(1.0f), "RB", nullptr);
+
+    if (pose_grid_open().load()) {
+      DrawGrid(s, fade);
+      return;
+    }
 
     // Lines.
     const auto vis = Visible(s);
@@ -873,7 +1015,10 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
         if (it.kind == menu::Kind::kAction) a = it.label;
         else if (it.kind != menu::Kind::kSlider) a = "Change";
       }
-      if (pad) {
+      if (pose_grid_open().load()) {
+        list = pad ? std::vector<P>{{"A", "Pose"}, {"Y", "Hide Menu"}, {"B", "Back"}}
+                   : std::vector<P>{{"Enter", "Pose"}, {"H", "Hide Menu"}, {"Esc", "Back"}};
+      } else if (pad) {
         list = {{"A", a}, {"X", "Reset Camera"}, {"Y", "Hide Menu"}, {"B", "Exit"}};
       } else {
         list.clear();
@@ -1019,6 +1164,9 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     FABLE2_PM_MERGE(tint)
     FABLE2_PM_MERGE(override_time)
     FABLE2_PM_MERGE(time_hours)
+    FABLE2_PM_MERGE(outfit)
+    FABLE2_PM_MERGE(pose)
+    FABLE2_PM_MERGE(pose_hold)
 #undef FABLE2_PM_MERGE
   }
 };
