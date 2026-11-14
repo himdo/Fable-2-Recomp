@@ -62,6 +62,39 @@ REXCVAR_DEFINE_INT32(mouse_look_scale, 256, "Input",
                      "mouse movement (larger = more sensitive). Default comes "
                      "from fable2_config.toml [input] mouse_look_scale.")
     .range(1, 4096);
+REXCVAR_DEFINE_BOOL(mouse_look_smoothing, true, "Input",
+                    "Turn the mouse into an even camera turn: report the mouse's "
+                    "velocity over one camera update and undo the game's stick "
+                    "deadzone and diagonal boost (src/input/mouse_stick.h). false = "
+                    "the previous per-poll mapping. Default comes from "
+                    "fable2_config.toml [input] mouse_look_smoothing.");
+REXCVAR_DEFINE_INT32(mouse_look_window_ms, 0, "Input",
+                     "Mouse-look velocity window in milliseconds; 0 = one camera "
+                     "update (67 ms, or 33 ms with high_tick_rate). Default comes "
+                     "from fable2_config.toml [input] mouse_look_window_ms.")
+    .range(0, 500);
+REXCVAR_DEFINE_BOOL(mouse_look_diag, false, "Input",
+                    "Write mouse-look diagnostics to fable2_mouse.log next to the "
+                    "exe: every input poll, camera updates from `f2 mouse trace`, "
+                    "and a per-second summary (see src/input/mouse_diag.h). "
+                    "Default comes from fable2_config.toml [input] mouse_look_diag.");
+// Direct mouse camera (src/input/mouse_direct.h, scripts/recomp/mouse_direct.lua).
+REXCVAR_DEFINE_STRING(mouse_look_mode, "direct", "Input",
+                      "How the mouse turns the camera: \"direct\" (the gameplay camera "
+                      "turns by a fixed angle per count, no top speed or coasting) or "
+                      "\"stick\" (the mouse drives the right stick). Default comes from "
+                      "fable2_config.toml [input] mouse_look_mode.");
+REXCVAR_DEFINE_DOUBLE(mouse_look_sens_x, 0.06, "Input",
+                      "Direct mouse camera: yaw degrees per count of mouse movement "
+                      "(times mouse_look_scale / 256 and the in-game camera sensitivity).");
+REXCVAR_DEFINE_DOUBLE(mouse_look_sens_y, 0.06, "Input",
+                      "Direct mouse camera: up/down sensitivity, as degrees per count "
+                      "(moves the camera height; times mouse_look_scale / 256).");
+REXCVAR_DEFINE_BOOL(mouse_look_invert_y, false, "Input",
+                    "Direct mouse camera: true = moving the mouse up makes the camera look down.");
+REXCVAR_DEFINE_DOUBLE(mouse_look_direct_smoothing, 0.0, "Input",
+                      "Direct mouse camera: share of the mouse movement held back at each "
+                      "camera update for the following ones (0 = none, up to 0.9).");
 
 // Key that toggles the debug menu (F4). While the menu is open the mouse lock
 // is released (free cursor); closing it re-locks. This key is excluded from

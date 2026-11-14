@@ -25,7 +25,7 @@ std::optional<size_t> RegisterFlag(FlagEntry) { return {}; }
 // This test never instantiates the driver, so a bare declaration suffices
 // and the symbol is never emitted.
 namespace fable2::f5lua {
-void poll_f5();
+void poll_f5(bool focused);
 }
 
 #include "src/input/keyboard_gamepad.h"

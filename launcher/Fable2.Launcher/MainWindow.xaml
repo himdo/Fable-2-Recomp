@@ -271,7 +271,7 @@
               <StackPanel>
                 <TextBlock Text="Mouse" Style="{StaticResource SectionTitle}" />
                 <TextBlock Text="Mouse look (camera)" FontWeight="SemiBold" />
-                <TextBlock Text="Map mouse movement to the guest right stick. Disable to keep the cursor free."
+                <TextBlock Text="Turn the camera with the mouse. Disable to keep the cursor free."
                            FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0"
                            TextWrapping="Wrap" />
                 <CheckBox x:Name="MouseLookCheck" IsChecked="True" Margin="0,10,0,0"
@@ -292,24 +292,16 @@
                            TextAlignment="Center" VerticalContentAlignment="Center"
                            LostFocus="MouseSensitivityBoxLostFocus" />
                 </Grid>
-                <Border Background="#264A2C2C" CornerRadius="8" Padding="14,10,14,10" Margin="0,16,0,0">
-                  <Grid>
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="*" />
-                      <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel>
-                      <TextBlock Text="Direct mouse look (camera)  (experimental)"
-                                 FontWeight="SemiBold" Foreground="#FFE06666" />
-                      <TextBlock Text="Aim the camera directly like a desktop FPS, orbiting the hero with native pitch limits, instead of mapping to the gamepad right stick. Only applies when mouse look is on. May feel wrong in some scenes."
-                                 FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,2,0,0"
-                                 TextWrapping="Wrap" />
-                    </StackPanel>
-                    <CheckBox x:Name="DirectMouseLookCheck" Grid.Column="1" IsChecked="False"
-                              VerticalAlignment="Top" Margin="10,0,0,0"
-                              Foreground="{StaticResource TextBrush}" />
-                  </Grid>
-                </Border>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Text="CAMERA MODE" Style="{StaticResource FieldLabel}" />
+                  <ComboBox x:Name="MouseLookModeCombo">
+                    <ComboBoxItem Tag="direct">Direct: a fixed turn per mouse movement</ComboBoxItem>
+                    <ComboBoxItem Tag="stick">Stick: the mouse acts as the right stick</ComboBoxItem>
+                  </ComboBox>
+                  <TextBlock Text="Direct has no top speed and stops when the mouse stops. Target lock and cutscenes still use the stick. Stick turns like a controller, with its top speed."
+                             FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,0"
+                             TextWrapping="Wrap" />
+                </StackPanel>
               </StackPanel>
             </Border>
           </StackPanel>
