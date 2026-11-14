@@ -911,6 +911,9 @@ inline void on_world_update_impl(PPCContext& ctx, uint8_t* base, bool force_run)
 // updates (every guest function entered, in order, to fable2_func_trace.log),
 // running each one even while photo mode has the world frozen.
 inline void on_world_update(PPCContext& ctx, uint8_t* base) {
+  // Work that must run on the world's thread between updates (the console's
+  // Lua pump install). It restores ctx itself.
+  if (world_thread_hook()) world_thread_hook()(ctx, base);
   if (trace_world_request().load() > 0) {
     const int left = trace_world_request().fetch_sub(1);
     char buf[64];
@@ -949,7 +952,12 @@ inline void on_world_update_impl(PPCContext& ctx, uint8_t* base, bool force_run)
     // kWarmupSettleMs first; a menu, loading screen or anything else on top
     // starts the wait again.
     if (cfg.photo_mode_enabled && game_command() && game_command_ready() && !game_command_ready()()) {
-      constexpr int64_t kWarmupSettleMs = 20000;
+      // FABLE2_PUMP_SETTLE_MS overrides the wait, for research (0 = the old
+      // warm-up: the first world update on top).
+      static const int64_t kWarmupSettleMs = [] {
+        const char* e = std::getenv("FABLE2_PUMP_SETTLE_MS");
+        return e && *e ? std::max<int64_t>(0, std::atoll(e)) : int64_t(20000);
+      }();
       static int64_t top_since = 0;   // 0: the world is not on top
       static int64_t last_check = 0;
       static int64_t last_try = 0;
@@ -969,7 +977,8 @@ inline void on_world_update_impl(PPCContext& ctx, uint8_t* base, bool force_run)
           last_try = t;
           ++tries;
           game_command()("pose relock");
-          log_line("starting the console's Lua pump for poses (world on top for 20 s)");
+          log_line(("starting the console's Lua pump for poses (world on top for " +
+                    std::to_string(kWarmupSettleMs) + " ms)").c_str());
         }
       }
     }

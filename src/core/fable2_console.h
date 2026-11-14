@@ -170,6 +170,9 @@ struct State {
   std::atomic<bool> pump_ready{false};
   bool pump_requested = false;
   Clock::time_point pump_req_time{};
+  // Set by start_pump(), cleared by service_world_thread() once it has run
+  // RunScript at the start of a world update, on the world's own thread.
+  std::atomic<bool> pump_install_wanted{false};
   std::string lua_pending;      // a Lua line held until the pump is ready
   uint64_t lua_seq = 0;
   std::atomic<uint64_t> lua_done{0};
@@ -680,6 +683,17 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
   if (name == "photo") {
     namespace pm = fable2::photomode;
     const std::string m = W.size() > 1 ? W[1] : "toggle";
+    // photo pose <n>: the pose request a pose card makes (1 = first card).
+    if (m == "pose") {
+      int64_t n = 0;
+      if (W.size() < 3 || !parse_i(W[2], n) || n < 1 || n > pm::kPoseCount) {
+        out("photo", "usage: photo pose <1-" + std::to_string(pm::kPoseCount) + ">", true);
+        return true;
+      }
+      pm::pose_request().store(int(n));
+      out("photo", std::string("pose ") + std::to_string(n) + " (" + pm::kPoses[n - 1].record + ") requested");
+      return true;
+    }
     const bool on = pm::want_active().load();
     if (m == "toggle" || (m == "on" && !on) || (m == "off" && on)) pm::request_toggle();
     out("photo", std::string("photo mode ") + (pm::want_active().load() ? "requested on" : "requested off"));
@@ -692,6 +706,12 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     if (W.size() > 1 && !parse_i(W[1], n)) n = 1;
     fable2::photomode::trace_world_request().store(int(std::clamp<int64_t>(n, 1, 120)));
     out("traceworld", "tracing the next " + std::to_string(std::clamp<int64_t>(n, 1, 120)) + " world update(s)");
+    return true;
+  }
+  // f5: what the F5 key does (runs the F5 Lua file on the next world update).
+  if (name == "f5") {
+    f5lua::g_f5_pending.store(true);
+    out("f5", "F5 Lua file requested (runs on the next world update)");
     return true;
   }
   if (name == "status") {
@@ -1580,11 +1600,54 @@ inline void write_state_file() {
 
 // Lua commands run inside the game's own script update (console_pump.lua), not
 // from this hook: calling RunScript per command from MainRenderLoop raced the
-// game's Lua and corrupted the VM. RunScript is used once, to install the pump.
-inline void start_pump(PPCContext& ctx, uint8_t* base) {
+// game's Lua and corrupted the VM. RunScript is used once, to install the pump,
+// and even that one call must not run here: MainRenderLoop runs on a different
+// host thread from the world update, and installing the pump while the world
+// was mid-update crashed it (guest null read in GrowBitArrayForString, under
+// GuildChest_ProcessItems, ~10 ms after the request). So start_pump() only asks;
+// service_world_thread() installs it at the start of the next world update.
+inline void start_pump(PPCContext& /*ctx*/, uint8_t* /*base*/) {
   State& s = S();
   s.pump_requested = true;
   s.pump_req_time = Clock::now();
+  s.pump_install_wanted.store(true);
+}
+
+// Research: FABLE2_RUNSCRIPT_STRESS=render|world runs RunScript on an empty
+// script (scripts/recomp/stress_noop.lua) every 3rd frame once the pump is up,
+// from the render thread (MainRenderLoop, where the pump used to be installed)
+// or from the world thread (where it is installed now), at most 1500 times.
+inline int stress_mode() {  // 0 off, 1 render, 2 world
+  static const int m = [] {
+    const char* e = std::getenv("FABLE2_RUNSCRIPT_STRESS");
+    if (!e) return 0;
+    const std::string v = e;
+    return v == "render" ? 1 : v == "world" ? 2 : 0;
+  }();
+  return m;
+}
+inline void stress_tick(int thread, PPCContext& ctx, uint8_t* base) {
+  if (stress_mode() != thread || !S().pump_ready.load()) return;
+  static int frame = 0, calls = 0;
+  if (calls >= 1500 || (++frame % 3) != 0) return;
+  const PPCContext saved = ctx;
+  try {
+    const std::string path = "scripts/recomp/stress_noop.lua";
+    f5lua::run_external(ctx, base, &path);
+  } catch (...) {
+  }
+  ctx = saved;
+  if (++calls % 100 == 0 || calls == 1)
+    out("stress", std::string(thread == 1 ? "render" : "world") + " thread RunScript #" + std::to_string(calls));
+}
+
+// Called at the start of every world update, on the world's thread, before the
+// game's own update (photo mode's GameWorldState_Update hook calls it).
+inline void service_world_thread(PPCContext& ctx, uint8_t* base) {
+  State& s = S();
+  stress_tick(2, ctx, base);
+  f5lua::poll_world(ctx, base);  // F5: run the external Lua file
+  if (!s.pump_install_wanted.exchange(false)) return;
   const PPCContext saved = ctx;
   try {
     const std::string path = "scripts/recomp/console_pump.lua";
@@ -1592,6 +1655,7 @@ inline void start_pump(PPCContext& ctx, uint8_t* base) {
   } catch (...) {
   }
   ctx = saved;
+  out("lua", "installing the command pump (world thread)");
 }
 
 // Hands one line to the pump: console_run.lua = `return <seq>, [==[line]==]`.
@@ -1809,8 +1873,10 @@ inline void BootStep(uint8_t* base) {
       BootPress(b.menu_dir < 0 ? "Up" : "Down", base);
       return;
     case 3:  // the save list
+      // With a single save, Load Game loads it at once: no list opens.
+      if (BootFired("FINISHED_TRANSITIONING_TO_GAME", b.step_ms)) return next(5);
       if (!BootFired("LOAD_CARD_ACTIVE", b.step_ms - 1000)) {
-        if (in_step > 10000) return BootFail("the save list did not open (LOAD_CARD_ACTIVE)");
+        if (in_step > 60000) return BootFail("neither the save list opened (LOAD_CARD_ACTIVE) nor a load finished");
         return;
       }
       if (now - fable2::uievents::LastFired("LOAD_CARD_ACTIVE") < 3000) return;
@@ -1858,6 +1924,7 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
   ++s.frames;
   if (s.step_frames) --s.step_frames;
   if (s.pad_frames && --s.pad_frames == 0) PadStore().Publish({});
+  stress_tick(1, ctx, base);
   poll_pause_key();
   if (s.frames == 1)
     f5lua::logline("[console] %s active, root=%s\n", FABLE2_CONSOLE_BUILD, s.root.string().c_str());

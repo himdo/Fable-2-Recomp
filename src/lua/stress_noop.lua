@@ -1,0 +1,2 @@
+-- Research only: an empty script for the console's RunScript stress test
+-- (FABLE2_RUNSCRIPT_STRESS=render|world, see fable2_console.h stress_tick).
