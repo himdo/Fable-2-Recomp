@@ -942,19 +942,34 @@ inline void on_world_update_impl(PPCContext& ctx, uint8_t* base, bool force_run)
     // changes nothing when no pose unlocked anything. A Lua line holds the
     // console's queue until the pump answers, so it is only sent while the
     // console is idle, and at most twice per run.
-    if (cfg.photo_mode_enabled && game_command() && game_command_ready() && !game_command_ready()() &&
-        !(game_command_busy() && game_command_busy()())) {
+    //
+    // Never right after a load: installing the pump (RunScript) the moment
+    // the world first comes back on top crashed some saves with a guest null
+    // read ~100 ms later. The world must have stayed on top for
+    // kWarmupSettleMs first; a menu, loading screen or anything else on top
+    // starts the wait again.
+    if (cfg.photo_mode_enabled && game_command() && game_command_ready() && !game_command_ready()()) {
+      constexpr int64_t kWarmupSettleMs = 20000;
+      static int64_t top_since = 0;   // 0: the world is not on top
+      static int64_t last_check = 0;
       static int64_t last_try = 0;
       static int tries = 0;
-      if (tries < 2 && now_ms() - last_try > 30000) {
-        last_try = now_ms();
-        ++tries;
+      const int64_t t = now_ms();
+      if (tries < 2 && t - last_check >= 250) {
+        last_check = t;
         const PPCContext saved_ctx = ctx;
         const bool top_now = world_is_top(ctx, base, self);
         ctx = saved_ctx;
-        if (top_now) {
+        if (!top_now) {
+          top_since = 0;
+        } else if (top_since == 0) {
+          top_since = t;
+        } else if (t - top_since >= kWarmupSettleMs && t - last_try > 30000 &&
+                   !(game_command_busy() && game_command_busy()())) {
+          last_try = t;
+          ++tries;
           game_command()("pose relock");
-          log_line("starting the console's Lua pump for poses");
+          log_line("starting the console's Lua pump for poses (world on top for 20 s)");
         }
       }
     }
