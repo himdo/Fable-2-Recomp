@@ -911,6 +911,9 @@ inline void on_world_update_impl(PPCContext& ctx, uint8_t* base, bool force_run)
 // updates (every guest function entered, in order, to fable2_func_trace.log),
 // running each one even while photo mode has the world frozen.
 inline void on_world_update(PPCContext& ctx, uint8_t* base) {
+  // Work that must run on the world's thread between updates (the console's
+  // Lua pump install). It restores ctx itself.
+  if (world_thread_hook()) world_thread_hook()(ctx, base);
   if (trace_world_request().load() > 0) {
     const int left = trace_world_request().fetch_sub(1);
     char buf[64];
@@ -942,19 +945,40 @@ inline void on_world_update_impl(PPCContext& ctx, uint8_t* base, bool force_run)
     // changes nothing when no pose unlocked anything. A Lua line holds the
     // console's queue until the pump answers, so it is only sent while the
     // console is idle, and at most twice per run.
-    if (cfg.photo_mode_enabled && game_command() && game_command_ready() && !game_command_ready()() &&
-        !(game_command_busy() && game_command_busy()())) {
+    //
+    // Never right after a load: installing the pump (RunScript) the moment
+    // the world first comes back on top crashed some saves with a guest null
+    // read ~100 ms later. The world must have stayed on top for
+    // kWarmupSettleMs first; a menu, loading screen or anything else on top
+    // starts the wait again.
+    if (cfg.photo_mode_enabled && game_command() && game_command_ready() && !game_command_ready()()) {
+      // FABLE2_PUMP_SETTLE_MS overrides the wait, for research (0 = the old
+      // warm-up: the first world update on top).
+      static const int64_t kWarmupSettleMs = [] {
+        const char* e = std::getenv("FABLE2_PUMP_SETTLE_MS");
+        return e && *e ? std::max<int64_t>(0, std::atoll(e)) : int64_t(20000);
+      }();
+      static int64_t top_since = 0;   // 0: the world is not on top
+      static int64_t last_check = 0;
       static int64_t last_try = 0;
       static int tries = 0;
-      if (tries < 2 && now_ms() - last_try > 30000) {
-        last_try = now_ms();
-        ++tries;
+      const int64_t t = now_ms();
+      if (tries < 2 && t - last_check >= 250) {
+        last_check = t;
         const PPCContext saved_ctx = ctx;
         const bool top_now = world_is_top(ctx, base, self);
         ctx = saved_ctx;
-        if (top_now) {
+        if (!top_now) {
+          top_since = 0;
+        } else if (top_since == 0) {
+          top_since = t;
+        } else if (t - top_since >= kWarmupSettleMs && t - last_try > 30000 &&
+                   !(game_command_busy() && game_command_busy()())) {
+          last_try = t;
+          ++tries;
           game_command()("pose relock");
-          log_line("starting the console's Lua pump for poses");
+          log_line(("starting the console's Lua pump for poses (world on top for " +
+                    std::to_string(kWarmupSettleMs) + " ms)").c_str());
         }
       }
     }
@@ -1025,7 +1049,10 @@ inline void on_world_update_impl(PPCContext& ctx, uint8_t* base, bool force_run)
 
   // Poses: hand the line to the game's Lua (developer console
   // pump, which runs in the world's script update) and let the world run for
-  // the hold time so the expression plays, then freeze.
+  // the hold time so the expression plays, then freeze. With the world frozen,
+  // `slow` puts everything but the hero at 5% speed (the Slow Time spell's
+  // hero time), so only the hero moves while the pose plays; leaving photo
+  // mode (`pose relock`) ends it.
   if (g.phase == Phase::kOn) {
     auto run = [&](const std::string& line) {
       if (game_command()) {
@@ -1037,7 +1064,7 @@ inline void on_world_update_impl(PPCContext& ctx, uint8_t* base, bool force_run)
     };
     const int64_t hold_ms = int64_t(std::clamp(g.s.pose_hold, 0.2f, 6.0f) * 1000.0f);
     if (const int p = pose_request().exchange(0); p > 0 && p <= kPoseCount) {
-      run(std::string("pose ") + kPoses[p - 1].record);
+      run(std::string("pose ") + kPoses[p - 1].record + (g.s.freeze_world ? " slow" : ""));
       g.posed = true;
       // The command waits a frame or two for the Lua pump before the pose starts.
       g.thaw_hold_ms = std::max(g.thaw_hold_ms, hold_ms + 150);

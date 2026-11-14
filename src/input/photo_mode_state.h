@@ -22,6 +22,8 @@
 #include <mutex>
 #include <string>
 
+struct PPCContext;
+
 namespace rex::ui {
 class Presenter;
 }
@@ -214,6 +216,16 @@ inline std::atomic<int>& nav_scrub() {
 // fable2::console::enqueue_text, which runs it in the game's script update).
 inline std::function<void(const std::string&)>& game_command() {
   static std::function<void(const std::string&)> f;
+  return f;
+}
+// Called at the start of every world update, on the world's own thread,
+// before the game's update runs (set by the app to the console's
+// service_world_thread). Guest calls that touch the game's script state
+// (RunScript) must run here: from MainRenderLoop, which runs on another host
+// thread, they raced the world update and crashed it (a guest null read in
+// GrowBitArrayForString under GuildChest_ProcessItems).
+inline std::function<void(PPCContext&, uint8_t*)>& world_thread_hook() {
+  static std::function<void(PPCContext&, uint8_t*)> f;
   return f;
 }
 // True while a line handed to game_command() has not finished running (the
