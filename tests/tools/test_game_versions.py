@@ -5,9 +5,9 @@ import importlib.util
 import io
 import json
 from pathlib import Path
-import tempfile
-import unittest
 from unittest.mock import patch
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("generator", ROOT / "tools/generate_game_versions.py")
@@ -34,106 +34,148 @@ def run_check(root):
         generator.main()
 
 
-class CatalogueTests(unittest.TestCase):
-    def setUp(self):
-        self.catalogue = json.loads((ROOT / "constants/game_versions.json").read_text())
+@pytest.fixture
+def catalogue():
+    """A fresh copy of the real catalogue, which each test may change."""
+    return json.loads((ROOT / "constants/game_versions.json").read_text())
 
-    def generate(self, catalogue):
-        with tempfile.TemporaryDirectory(prefix="fable2-catalogue-test-") as directory:
-            fixture = Path(directory)
-            (fixture / "constants").mkdir()
-            (fixture / "constants/game_versions.json").write_text(json.dumps(catalogue))
-            saved_root = generator.ROOT
-            try:
-                generator.ROOT = fixture
-                return generator.generate()
-            finally:
-                generator.ROOT = saved_root
 
-    def test_generated_files_match_catalogue(self):
-        for name, lines in self.generate(self.catalogue).items():
-            self.assertEqual((ROOT / "constants" / name).read_text(), "\n".join(lines) + "\n")
+@pytest.fixture
+def generate(tmp_path, monkeypatch):
+    """Return a function that generates the files for a catalogue, in a fake repo.
 
-    def test_extra_locale_is_generated_in_all_languages(self):
-        extra = copy.deepcopy(self.catalogue["versions"][0])
+    The real constants/ folder is never touched: ROOT points at tmp_path until the test ends.
+    """
+    (tmp_path / "constants").mkdir()
+    monkeypatch.setattr(generator, "ROOT", tmp_path)
+
+    def run(catalogue):
+        (tmp_path / "constants/game_versions.json").write_text(json.dumps(catalogue))
+        return generator.generate()
+
+    return run
+
+
+def describe_generate():
+    # --- Happy flow -------------------------------------------------------
+
+    def test_should_match_the_committed_generated_files(catalogue, generate):
+        generated = generate(catalogue)
+
+        expected = {name: "\n".join(lines) + "\n" for name, lines in generated.items()}
+        committed = {name: (ROOT / "constants" / name).read_text() for name in generated}
+        assert committed == expected
+
+    def test_should_write_an_extra_locale_into_every_language(catalogue, generate):
+        extra = copy.deepcopy(catalogue["versions"][0])
         extra.update(id="synthetic-locale", hash="a" * 64, name="Synthetic locale", language=12)
-        self.catalogue["versions"].append(extra)
-        for lines in self.generate(self.catalogue).values():
-            self.assertIn("synthetic-locale", "\n".join(lines))
+        catalogue["versions"].append(extra)
 
-    def test_invalid_or_duplicate_entries_are_rejected(self):
-        for change in ({"hash": "invalid"}, {"id": "../bad"}, {"language": 13},
-                       {"compatible": "true"}, {"requiredFiles": ["../gamefile"]},
-                       {"requiredFiles": "not-an-array"}):
-            with self.subTest(change=change):
-                catalogue = copy.deepcopy(self.catalogue)
-                catalogue["versions"][0].update(change)
-                with self.assertRaises(ValueError):
-                    self.generate(catalogue)
-        self.catalogue["versions"].append(copy.deepcopy(self.catalogue["versions"][0]))
-        with self.assertRaises(ValueError):
-            self.generate(self.catalogue)
+        generated = generate(catalogue)
 
-    @unittest.expectedFailure
-    def test_unknown_default_profile_is_rejected(self):
-        # Known issue: next() finds no version with that id and raises a bare StopIteration,
-        # so the error doesn't say what is wrong. Every other check raises a ValueError.
-        self.catalogue["defaultProfile"] = "no-such-profile"
+        missing_from = [name for name, lines in generated.items() if "synthetic-locale" not in "\n".join(lines)]
+        assert missing_from == []
 
-        with self.assertRaisesRegex(ValueError, "(?i)default"):
-            self.generate(self.catalogue)
-
-    def test_incompatible_default_profile_is_rejected(self):
-        self.catalogue["versions"][0]["compatible"] = False  # versions[0] is the default profile
-
-        with self.assertRaisesRegex(ValueError, "Default version must belong"):
-            self.generate(self.catalogue)
-
-    def test_default_profile_from_another_code_group_is_rejected(self):
-        self.catalogue["versions"][0]["codeGroup"] = "another-code-group"
-
-        with self.assertRaisesRegex(ValueError, "Default version must belong"):
-            self.generate(self.catalogue)
-
-    def test_incompatible_versions_stay_out_of_the_cmake_profiles(self):
+    def test_should_keep_incompatible_versions_out_of_the_cmake_profiles(catalogue, generate):
         # The C# and C++ files still list an incompatible version, so the launcher can name
         # it, but CMake must not build a profile for it.
         # Guard: a version from another code group would stay out anyway, and pass for the
         # wrong reason. The real incompatible versions are all in another code group.
-        self.assertEqual(self.catalogue["versions"][1]["codeGroup"], self.catalogue["codeGroup"])
-        self.catalogue["versions"][1]["compatible"] = False
-        incompatible_id = self.catalogue["versions"][1]["id"]
-        generated = self.generate(self.catalogue)
-        cmake = "\n".join(generated["game_versions.cmake"])
-        launcher = "\n".join(generated["GameVersions.cs"])
+        assert catalogue["versions"][1]["codeGroup"] == catalogue["codeGroup"]
+        catalogue["versions"][1]["compatible"] = False
+        incompatible_id = catalogue["versions"][1]["id"]
 
-        self.assertIn(f'"{incompatible_id}"', launcher)
-        self.assertNotIn(f'"{incompatible_id}"', cmake)
+        generated = generate(catalogue)
 
-    def test_compatible_versions_from_another_code_group_stay_out_of_the_cmake_profiles(self):
+        assert f'"{incompatible_id}"' in "\n".join(generated["GameVersions.cs"])
+        assert f'"{incompatible_id}"' not in "\n".join(generated["game_versions.cmake"])
+
+    def test_should_keep_versions_from_another_code_group_out_of_the_cmake_profiles(catalogue, generate):
         # Only versions that share the validated guest code can use the same build.
         # Guard: an incompatible version would stay out anyway, and pass for the wrong reason.
-        self.assertTrue(self.catalogue["versions"][1]["compatible"])
-        self.catalogue["versions"][1]["codeGroup"] = "another-code-group"
-        other_id = self.catalogue["versions"][1]["id"]
-        generated = self.generate(self.catalogue)
-        cmake = "\n".join(generated["game_versions.cmake"])
+        assert catalogue["versions"][1]["compatible"]
+        catalogue["versions"][1]["codeGroup"] = "another-code-group"
+        other_id = catalogue["versions"][1]["id"]
 
-        self.assertNotIn(f'"{other_id}"', cmake)
+        generated = generate(catalogue)
 
-    def test_check_passes_when_the_generated_files_are_current(self):
-        with tempfile.TemporaryDirectory(prefix="fable2-catalogue-test-") as directory:
-            root = make_root(directory, self.catalogue)
-            run_check(root)  # raises SystemExit if anything is stale
+        assert f'"{other_id}"' not in "\n".join(generated["game_versions.cmake"])
 
-    def test_check_reports_a_stale_generated_file(self):
-        with tempfile.TemporaryDirectory(prefix="fable2-catalogue-test-") as directory:
-            root = make_root(directory, self.catalogue)
-            (root / "constants/game_versions.h").write_text("// edited by hand\n", encoding="utf-8")
+    # --- Bad flow ---------------------------------------------------------
 
-            with self.assertRaisesRegex(SystemExit, "Stale constants: game_versions.h"):
-                run_check(root)
+    def test_should_reject_an_invalid_hash(catalogue, generate):
+        catalogue["versions"][0]["hash"] = "invalid"
+
+        with pytest.raises(ValueError):
+            generate(catalogue)
+
+    def test_should_reject_an_id_that_is_a_path(catalogue, generate):
+        catalogue["versions"][0]["id"] = "../bad"
+
+        with pytest.raises(ValueError):
+            generate(catalogue)
+
+    def test_should_reject_an_unknown_language(catalogue, generate):
+        catalogue["versions"][0]["language"] = 13
+
+        with pytest.raises(ValueError):
+            generate(catalogue)
+
+    def test_should_reject_compatible_written_as_text(catalogue, generate):
+        catalogue["versions"][0]["compatible"] = "true"
+
+        with pytest.raises(ValueError):
+            generate(catalogue)
+
+    def test_should_reject_a_required_file_outside_the_game_folder(catalogue, generate):
+        catalogue["versions"][0]["requiredFiles"] = ["../gamefile"]
+
+        with pytest.raises(ValueError):
+            generate(catalogue)
+
+    def test_should_reject_required_files_that_are_not_a_list(catalogue, generate):
+        catalogue["versions"][0]["requiredFiles"] = "not-an-array"
+
+        with pytest.raises(ValueError):
+            generate(catalogue)
+
+    def test_should_reject_a_duplicate_version(catalogue, generate):
+        catalogue["versions"].append(copy.deepcopy(catalogue["versions"][0]))
+
+        with pytest.raises(ValueError):
+            generate(catalogue)
+
+    def test_should_reject_an_incompatible_default_profile(catalogue, generate):
+        catalogue["versions"][0]["compatible"] = False  # versions[0] is the default profile
+
+        with pytest.raises(ValueError, match="Default version must belong"):
+            generate(catalogue)
+
+    def test_should_reject_a_default_profile_from_another_code_group(catalogue, generate):
+        catalogue["versions"][0]["codeGroup"] = "another-code-group"
+
+        with pytest.raises(ValueError, match="Default version must belong"):
+            generate(catalogue)
+
+    @pytest.mark.xfail(strict=True, reason="next() finds no version with that id and raises a bare "
+                       "StopIteration, so the error doesn't say what is wrong")
+    def test_should_reject_an_unknown_default_profile(catalogue, generate):
+        # Every other check raises a ValueError that names the problem.
+        catalogue["defaultProfile"] = "no-such-profile"
+
+        with pytest.raises(ValueError, match="(?i)default"):
+            generate(catalogue)
 
 
-if __name__ == "__main__":
-    unittest.main()
+def describe_check():
+    def test_should_pass_when_the_generated_files_are_current(catalogue, tmp_path):
+        root = make_root(tmp_path, catalogue)
+
+        run_check(root)  # raises SystemExit if anything is stale
+
+    def test_should_report_a_stale_generated_file(catalogue, tmp_path):
+        root = make_root(tmp_path, catalogue)
+        (root / "constants/game_versions.h").write_text("// edited by hand\n", encoding="utf-8")
+
+        with pytest.raises(SystemExit, match="Stale constants: game_versions.h"):
+            run_check(root)
