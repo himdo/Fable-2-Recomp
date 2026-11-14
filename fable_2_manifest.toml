@@ -41249,9 +41249,21 @@ name = "ProcessAndProcessAndProcess1011_82C50A10"
 [entrypoint.functions."0x82CA6AB0"]
 name = "ProcessAndProcessAndProcess1012_82CA6AB0"
 
-# Read the merged pad state (seven hundred and one hundred and one hundred and one hundred and thirteenth form). It takes a structure and checks its state, with no external sub-operations. This is the guest's XamInputGetState wrapper that reads the final merged pad state (all drivers OR-merged), called from the state probe hook. Part of the 0x822B2 process cluster. 11 lines. 0 callees. 10 callers.
+# The game's only XamInputGetState call: InputGetPadState(user, state) is
+# XamInputGetState(user, flags = 1, state) (mr r5,r4; li r4,1; b import).
+# Every guest pad read (hero, menus, front end) goes through it, so the
+# photo mode (src/core/fable2_photo_mode.h) and the state probe hook it to
+# see the merged pad state and, in photo mode, blank it for the game.
 [entrypoint.functions."0x822B2D60"]
-name = "ProcessAndProcessAndProcess1013_822B2D60"
+name = "InputGetPadState_822B2D60"
+
+# World game state update (vtable 0x8200249C slot 6). Does nothing unless
+# the world state is on top of the game-state stack (that is how the pause
+# menu freezes the world); otherwise updates the world, then the theme
+# (colour grading) and finally the cameras. Photo mode hooks it to run only
+# the camera part while the world is paused.
+[entrypoint.functions."0x821D43D8"]
+name = "GameWorldState_Update_821D43D8"
 
 # Process a structure (seven hundred and one hundred and one hundred and one hundred and fourteenth form). It takes a structure and checks its state, with no external sub-operations. Part of the 0x82204 process cluster. 127 lines. 0 callees. 6 callers (including ProcessAndProcessAndProcess874).
 [entrypoint.functions."0x82204638"]

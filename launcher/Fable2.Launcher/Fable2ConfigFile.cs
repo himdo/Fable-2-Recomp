@@ -41,6 +41,16 @@ public class Fable2ConfigValues
 
     // [perf]
     public int HotFuncYieldEvery { get; set; } = 1;  // 1 = original, 0 = never yield
+
+    // [photo_mode]
+    public bool PhotoModeEnabled { get; set; } = true;
+    public string PhotoModeToggleKey { get; set; } = "F6";
+    public string PhotoModeScreenshotKey { get; set; } = "F12";
+    public string PhotoModeGamepadToggle { get; set; } = "Guide";  // buttons joined by "+", or "Off"
+    public double PhotoModeMoveSpeed { get; set; } = 4.0;          // metres per second
+    public double PhotoModeMouseSensitivity { get; set; } = 0.0025; // radians per mouse pixel
+    public double PhotoModeMaxDistance { get; set; } = 0.0;        // metres, 0 = no limit
+    public string PhotoModeScreenshotFolder { get; set; } = "screenshots";
 }
 
 /// <summary>One host-key -> guest-input binding (a "Key:Button" pair).</summary>
@@ -52,7 +62,7 @@ public class KeybindEntry
 
 /// <summary>
 /// Reads and writes fable2_config.toml non-destructively: it only updates the
-/// managed keys (the [input] and [patches] values the launcher exposes),
+/// managed keys (the [input], [patches], [perf] and [photo_mode] values the launcher exposes),
 /// preserving every comment, unknown key and unknown section in the file.
 /// </summary>
 public static class Fable2ConfigFile
@@ -89,6 +99,13 @@ public static class Fable2ConfigFile
         "A","B","X","Y","LB","RB","LT","RT",
         "Up","Down","Left","Right","Pause","Select","L3","R3",
         "StickUp","StickDown","StickLeft","StickRight",
+    };
+
+    // Controller shortcuts offered for photo mode (any "A + B" combination of
+    // the names in src/input/photo_mode_state.h also works when typed in).
+    public static readonly string[] PhotoModeGamepadToggles =
+    {
+        "Guide", "L3 + R3", "Back + Start", "LB + RB", "Off",
     };
 
     /// <summary>Read the fable2_config.toml values. Missing file -> built-in defaults.</summary>
@@ -135,6 +152,16 @@ public static class Fable2ConfigFile
                 case "perf":
                     if (key == "hotfunc_yield_every") values.HotFuncYieldEvery = ParseInt(rawValue, values.HotFuncYieldEvery);
                     break;
+                case "photo_mode":
+                    if (key == "enabled") values.PhotoModeEnabled = ParseBool(rawValue, values.PhotoModeEnabled);
+                    else if (key == "toggle_key") values.PhotoModeToggleKey = Unquote(rawValue);
+                    else if (key == "screenshot_key") values.PhotoModeScreenshotKey = Unquote(rawValue);
+                    else if (key == "gamepad_toggle") values.PhotoModeGamepadToggle = ParseGamepadToggle(rawValue, values.PhotoModeGamepadToggle);
+                    else if (key == "move_speed") values.PhotoModeMoveSpeed = ParseDouble(rawValue, values.PhotoModeMoveSpeed);
+                    else if (key == "mouse_sensitivity") values.PhotoModeMouseSensitivity = ParseDouble(rawValue, values.PhotoModeMouseSensitivity);
+                    else if (key == "max_distance") values.PhotoModeMaxDistance = ParseDouble(rawValue, values.PhotoModeMaxDistance);
+                    else if (key == "screenshot_folder") values.PhotoModeScreenshotFolder = Unquote(rawValue);
+                    break;
             }
         }
         return values;
@@ -177,6 +204,14 @@ public static class Fable2ConfigFile
             ("patches", "realtime_texture_morphing", values.RealtimeTextureMorphing ? "true" : "false"),
             ("patches", "hero_dog_texture_readback", values.HeroDogTextureReadback ? "true" : "false"),
             ("perf", "hotfunc_yield_every", values.HotFuncYieldEvery.ToString(CultureInfo.InvariantCulture)),
+            ("photo_mode", "enabled", values.PhotoModeEnabled ? "true" : "false"),
+            ("photo_mode", "toggle_key", Quote(values.PhotoModeToggleKey)),
+            ("photo_mode", "screenshot_key", Quote(values.PhotoModeScreenshotKey)),
+            ("photo_mode", "gamepad_toggle", Quote(values.PhotoModeGamepadToggle)),
+            ("photo_mode", "move_speed", FormatDouble(values.PhotoModeMoveSpeed)),
+            ("photo_mode", "mouse_sensitivity", FormatDouble(values.PhotoModeMouseSensitivity)),
+            ("photo_mode", "max_distance", FormatDouble(values.PhotoModeMaxDistance)),
+            ("photo_mode", "screenshot_folder", Quote(values.PhotoModeScreenshotFolder)),
         };
 
         var updated = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -305,6 +340,30 @@ public static class Fable2ConfigFile
     {
         return int.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture,
             out int parsed) ? parsed : fallback;
+    }
+
+    private static double ParseDouble(string value, double fallback)
+    {
+        return double.TryParse(value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture,
+            out double parsed) && double.IsFinite(parsed) ? parsed : fallback;
+    }
+
+    // TOML floats need a decimal point or exponent ("4" would read back as an integer).
+    public static string FormatDouble(double value)
+    {
+        string text = value.ToString("R", CultureInfo.InvariantCulture);
+        return text.Contains('.') || text.Contains('E') || text.Contains('e') ? text : text + ".0";
+    }
+
+    // gamepad_toggle is a button combination; older files have a boolean
+    // (true = the default shortcut, false = off), as the game reads it.
+    private static string ParseGamepadToggle(string value, string fallback)
+    {
+        string trimmed = value.Trim();
+        if (trimmed.Equals("true", StringComparison.OrdinalIgnoreCase)) return "Guide";
+        if (trimmed.Equals("false", StringComparison.OrdinalIgnoreCase)) return "Off";
+        string text = Unquote(trimmed);
+        return string.IsNullOrWhiteSpace(text) ? fallback : text;
     }
 
     private static string Quote(string value)

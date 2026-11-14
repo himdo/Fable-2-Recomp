@@ -52,6 +52,8 @@
 #include "mouse_diag.h"
 #include "mouse_direct.h"
 #include "remote_input_state.h"
+#include "photo_mode_state.h"
+#include "fable2_ui_events.h"
 
 // The SDK's `~` console (ImGui overlay) logs through REXLOG_* and can register
 // commands with REXCVAR_DEFINE_COMMAND_ARGS (rex/cvar.h). Both are optional here
@@ -123,6 +125,23 @@ struct State {
   int64_t wf_value = 0;
   std::string wf_op = "==";
   Clock::time_point wf_deadline{};
+  // waitui: hold the queue until a Gameface UI event fires (fable2_ui_events.h).
+  bool waitui = false;
+  // boot: from the start-up screens into a save (run from poll(), see Boot()).
+  struct BootJob {
+    int step = -1;          // -1 = not running
+    bool slot = false;      // Load Game (slot) or Continue
+    int slot_n = 1;         // 1-based save slot
+    int tries = 0;          // presses at the current step
+    int64_t step_ms = 0;    // when the current step started
+    int64_t press_ms = 0;   // when the last button was pressed
+    int64_t release_ms = 0; // when the held button is let go (0 = none held)
+    int moved = 0;          // Downs the save list answered (onDirtyHighlight)
+    int64_t counted_press_ms = 0;  // the press last counted in `moved`
+  } boot;
+  std::string wu_name;
+  int64_t wu_after_ms = 0;  // the event must fire at or after this time
+  Clock::time_point wu_deadline{};
   // freeze / trace.
   struct Frozen {
     uint64_t value;
@@ -604,16 +623,84 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
   }
   if (name == "help") {
     out("help", "host commands: wait waitfor exec echo peek poke expect find <number> freeze unfreeze trace status cvars dumpmem "
-                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad mouse. "
+                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad mouse boot waitui photo traceworld. "
                 "Chain with ';'. Lua commands follow (their text appears in the log).");
     return false;  // Lua prints its own command list too
   }
   if (name == "hosthelp") {
     out("help",
         "host commands: wait waitfor exec echo peek poke expect find freeze unfreeze trace status cvars dumpmem "
-        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad mouse. "
+        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad mouse boot waitui photo traceworld. "
         "Everything else (warp, god, gold, giveall, ...) runs in Lua: type help. "
         "Separate commands with ';'. Addresses are hex guest addresses.");
+    return true;
+  }
+  // waitui <EVENT> [timeout]: hold the queue until that Gameface UI event fires
+  // (within the last 3 s counts, so a repeating event like the title's
+  // END_STARTED is caught at once). Default timeout 180 s.
+  if (name == "waitui") {
+    if (W.size() < 2) {
+      out("waitui", "usage: waitui <EVENT> [timeout]  e.g. waitui END_STARTED 120s", true);
+      return true;
+    }
+    Clock::time_point dl = Clock::now() + std::chrono::seconds(180);
+    if (W.size() > 2) {
+      bool is_fr = false;
+      uint64_t fr = 0;
+      if (!parse_duration(W[2], is_fr, fr, dl) || is_fr) {
+        out("waitui", "bad timeout '" + W[2] + "' (use e.g. 90s)", true);
+        return true;
+      }
+    }
+    s.waitui = true;
+    s.wu_name = W[1];
+    s.wu_after_ms = fable2::uievents::NowMs() - 3000;
+    s.wu_deadline = dl;
+    return true;
+  }
+  // boot continue | boot slot <n>: from the start-up screens into a save, with
+  // no window focus needed. Each button press waits for the game's answer (a
+  // Gameface UI event, fable2_ui_events.h) and is pressed again if none
+  // comes; see BootStep(). The queue waits until the game is in play.
+  // `continue` loads the top save of Load Game (the newest), the same as
+  // `boot slot 1`: the main menu's own first entry opens a dialog first.
+  if (name == "boot") {
+    std::string mode = W.size() > 1 ? W[1] : "continue";
+    for (auto& c : mode) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    int64_t n = 1;
+    if (mode == "slot") {
+      if (W.size() > 2 && (!parse_i(W[2], n) || n < 1 || n > 50)) {
+        out("boot", "usage: boot continue | boot slot <n>  (n from 1)", true);
+        return true;
+      }
+    } else if (mode != "continue") {
+      out("boot", "usage: boot continue | boot slot <n>  (n from 1)", true);
+      return true;
+    }
+    s.boot = State::BootJob{};
+    s.boot.step = 0;
+    s.boot.slot = true;  // continue = the top (newest) save in Load Game
+    s.boot.slot_n = static_cast<int>(n);
+    s.boot.step_ms = fable2::uievents::NowMs();
+    out("boot", "waiting for the title screen, then Load Game, slot " + std::to_string(n));
+    return true;
+  }
+  // Photo mode from the console (research sessions run without keys).
+  if (name == "photo") {
+    namespace pm = fable2::photomode;
+    const std::string m = W.size() > 1 ? W[1] : "toggle";
+    const bool on = pm::want_active().load();
+    if (m == "toggle" || (m == "on" && !on) || (m == "off" && on)) pm::request_toggle();
+    out("photo", std::string("photo mode ") + (pm::want_active().load() ? "requested on" : "requested off"));
+    return true;
+  }
+  // traceworld [n]: trace the next n world updates (default 1) to
+  // fable2_func_trace.log, even while photo mode has the world frozen.
+  if (name == "traceworld") {
+    int64_t n = 1;
+    if (W.size() > 1 && !parse_i(W[1], n)) n = 1;
+    fable2::photomode::trace_world_request().store(int(std::clamp<int64_t>(n, 1, 120)));
+    out("traceworld", "tracing the next " + std::to_string(std::clamp<int64_t>(n, 1, 120)) + " world update(s)");
     return true;
   }
   if (name == "status") {
@@ -1814,6 +1901,124 @@ inline void hold_paused(uint8_t* base, bool file_mode) {
 }
 
 // Called every frame from the MainRenderLoop hook, right after the F5 poll.
+// One step of a running `boot` (called every console frame). Steps:
+//   0 title: wait for END_LEGAL (the title takes a button after it), press A
+//   1 wait for END_STARTED (the title answered); press A again if not
+//   2 main menu: give it 8 s, then Continue (A) or Load Game (Down, A)
+//   3 slot: wait for LOAD_CARD_ACTIVE (the save list), Down x (n-1), A
+//   4 wait for the load to start (any event but END_STARTED) or play
+//     (FINISHED_TRANSITIONING_TO_GAME); press A again if nothing answers
+//   5 wait for FINISHED_TRANSITIONING_TO_GAME
+// Presses are held for a fixed 150 ms (long enough for the game's 30 Hz pad reads, short of the menus' hold-to-repeat), not a frame count: minimized, the
+// console runs far more frames per second than the game reads its pad, so a
+// 12-frame press can fall between two of the game's reads.
+inline void BootPress(const char* button, uint8_t* base) {
+  run_host_command(std::string("pad ") + button + " 100000", base);
+  // `pad` also holds the command queue for its frame count; boot releases
+  // the button by time and holds the queue itself, so drop that wait.
+  S().wait_frames = 0;
+  S().boot.press_ms = fable2::uievents::NowMs();
+  S().boot.release_ms = S().boot.press_ms + 150;
+}
+inline void BootFail(const std::string& why) {
+  S().boot.step = -1;
+  PadStore().Publish({});
+  S().pad_frames = 0;
+  out("boot", "gave up: " + why, true);
+}
+inline bool BootFired(const char* event, int64_t since) {
+  return fable2::uievents::LastFired(event) >= since;
+}
+inline void BootStep(uint8_t* base) {
+  State& s = S();
+  auto& b = s.boot;
+  if (b.step < 0) return;
+  const int64_t now = fable2::uievents::NowMs();
+  if (b.release_ms != 0) {
+    if (now < b.release_ms) return;  // a press is still held
+    PadStore().Publish({});
+    s.pad_frames = 0;
+    b.release_ms = 0;
+    return;
+  }
+  const int64_t in_step = now - b.step_ms;
+  auto next = [&](int step) {
+    b.step = step;
+    b.step_ms = now;
+    b.tries = 0;
+  };
+  switch (b.step) {
+    case 0:  // title
+      if (BootFired("FINISHED_TRANSITIONING_TO_GAME", b.step_ms - 3000)) return next(5);
+      if (BootFired("END_LEGAL", b.step_ms - 600000) && now - fable2::uievents::LastFired("END_LEGAL") >= 2000) {
+        BootPress("A", base);
+        return next(1);
+      }
+      if (in_step > 240000) return BootFail("the title screen did not appear (END_LEGAL)");
+      return;
+    case 1:  // title answered?
+      if (BootFired("END_STARTED", b.press_ms)) return next(2);
+      if (now - b.press_ms > 5000) {
+        if (++b.tries > 4) return BootFail("the title did not take A");
+        BootPress("A", base);
+      }
+      return;
+    case 2:  // main menu: Down to Load Game, confirmed, then A
+      // A on the main menu's default entry asks to quit the game, so A is
+      // only pressed once the highlight has moved (onDirtyHighlight after
+      // the Down press); a Down the menu missed is pressed again.
+      // The menu ignores Up/Down for about 18-20 s after the title (its
+      // camera move-in); earlier presses are dropped.
+      if (in_step < 16000) return;
+      if (b.tries > 0 && BootFired("onDirtyHighlight", b.press_ms)) {
+        if (now - fable2::uievents::LastFired("onDirtyHighlight") < 1500) return;
+        BootPress("A", base);
+        return next(3);
+      }
+      if (b.tries == 0 || now - b.press_ms > 3000) {
+        if (++b.tries > 10) return BootFail("the main menu did not take Down (no highlight moved)");
+        BootPress("Down", base);
+      }
+      return;
+    case 3:  // the save list
+      if (!BootFired("LOAD_CARD_ACTIVE", b.step_ms - 1000)) {
+        if (in_step > 10000) return BootFail("the save list did not open (LOAD_CARD_ACTIVE)");
+        return;
+      }
+      if (now - fable2::uievents::LastFired("LOAD_CARD_ACTIVE") < 3000) return;
+      // Slots below the first: the save list sends no UI event when its
+      // selection moves, so Down is pressed n-1 times, 1.5 s apart.
+      if (b.moved < b.slot_n - 1) {
+        if (b.tries > 0 && now - b.press_ms < 1500) return;
+        ++b.tries;
+        ++b.moved;
+        BootPress("Down", base);
+        return;
+      }
+      if (now - b.press_ms < 1500) return;
+      BootPress("A", base);
+      return next(4);
+    case 4: {  // the load starting
+      if (BootFired("FINISHED_TRANSITIONING_TO_GAME", b.press_ms)) return next(5);
+      // Any answer but the title's END_STARTED means the press was taken.
+      if (BootFired("onDirtyHighlight", b.press_ms) || BootFired("LOAD_CARD_SELECTED", b.press_ms)) return next(5);
+      if (now - b.press_ms > 4000) {
+        if (++b.tries > 4) return BootFail("the save did not start loading");
+        BootPress("A", base);
+      }
+      return;
+    }
+    case 5:  // loading
+      if (BootFired("FINISHED_TRANSITIONING_TO_GAME", b.step_ms - 1000)) {
+        b.step = -1;
+        out("boot", "in game");
+        return;
+      }
+      if (in_step > 240000) return BootFail("the game did not finish loading");
+      return;
+  }
+}
+
 inline void poll(PPCContext& ctx, uint8_t* base) {
   // Video letterboxing (fit-window) needs a per-frame tick; it does not
   // depend on the console being on.
@@ -1908,12 +2113,17 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
       std::lock_guard<std::mutex> lock(s.qmu);
       empty = s.queue.empty();
     }
-    if (empty && !s.waitfor && !s.wait_frames && !s.wait_time && !s.lua_wait && s.lua_pending.empty())
+    if (empty && !s.waitfor && !s.waitui && s.boot.step < 0 && !s.wait_frames && !s.wait_time && !s.lua_wait && s.lua_pending.empty())
       out("console", "IDLE");
   };
 
+  // A running `boot` presses its own buttons and holds the queue.
+  BootStep(base);
+
   // Pending waits hold the queue; otherwise run one command per frame.
-  if (!s.lua_pending.empty()) {
+  if (s.boot.step >= 0) {
+    // boot in progress (BootStep)
+  } else if (!s.lua_pending.empty()) {
     // Waiting for console_pump.lua to register (it needs a loaded game).
     if (s.pump_ready.load()) {
       const std::string l = s.lua_pending;
@@ -1938,6 +2148,20 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
     --s.wait_frames;
   } else if (s.wait_time) {
     if (Clock::now() >= s.wait_until) s.wait_time = false;
+  } else if (s.waitui) {
+    if (fable2::uievents::LastFired(s.wu_name) >= s.wu_after_ms) {
+      s.waitui = false;
+      out("waitui", "fired: " + s.wu_name);
+    } else if (Clock::now() >= s.wu_deadline) {
+      s.waitui = false;
+      // The rest of a `boot` sequence would press buttons on the wrong
+      // screen: drop what is queued.
+      {
+        std::lock_guard<std::mutex> lock(s.qmu);
+        s.queue.clear();
+      }
+      out("waitui", "timed out waiting for " + s.wu_name + "; queued commands dropped", true);
+    }
   } else if (s.waitfor) {
     uint64_t cur = 0;
     bool met = false;

@@ -264,18 +264,31 @@ Controls the fit-window module (`src/core/fable2_fit_window.h`), which renders a
 | `pad rstick` | `pad rstick <rx> <ry> [frames]` | Holds the right stick, which turns the camera (ry positive = look up). | console-v12. Mixes with the mouse like a real pad: the larger value wins per axis. |
 | `pad off` | `pad off` | Releases everything now. | |
 
-Example `console\autoexec.txt` that gets from boot to in-game with the last save (timings depend on the machine):
+To get from start-up into a save, use `boot` (below) rather than timed `pad` presses: fixed waits miss when the start-up screens take longer, and a press can land on the wrong menu (for example New Game).
+
+## Start-up and menus without window focus
+
+These run with the game window in the background or minimized. Once in play, though, a minimized window stops the game (its frame loop waits for frames the minimized window never presents): to run the game unseen, restore the window without activating it and move it off-screen instead (e.g. `ShowWindow(hwnd, SW_SHOWNOACTIVATE)` and `SetWindowPos` to x = -6000). A save can also open with a video, during which the world does not update; `[fit-window] video ended` in the log marks its end (A skips most). They wait on the game's own Gameface UI events (the same events the log shows as `[ui-layout] fireEvent: <NAME>`) instead of timers.
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `boot` | `boot slot <n>` / `boot continue` | From the start-up screens into a save: waits for the title, presses A, opens **Load Game** and picks save slot `n` (1 = the top slot), and waits until play starts. `boot continue` is `boot slot 1`. Prints `[boot] in game`, or `[boot] ERR gave up: <step>`. | The main menu ignores Up/Down for about 18-20 s after the title, so `boot` waits 16 s and presses Down until the highlight moves (`onDirtyHighlight`); it never presses A on the menu's default entry, which asks to quit. The save list sends no event when its selection moves, so slots below the first are reached with timed Downs. Presses are held 150 ms (not a frame count), so they register at any frame rate. The command queue waits until `boot` ends. Put `boot slot <n>` alone in `console\autoexec.txt` to load that slot on every start. The slot order is the game's Load Game list (not necessarily newest first). |
+| `waitui` | `waitui <EVENT> [timeout]` | Holds the queue until a Gameface UI event fires (one that fired in the last 3 s counts). Default timeout 180 s; on timeout the rest of the queue is dropped. | Events seen on the way in: `CAN_PRESS_A` and `END_LEGAL` (start-up screens; the title takes a button about 2 s after `END_LEGAL`), `END_STARTED` (the title took the press; it repeats every 2 s on the main menu), `onDirtyHighlight` (a menu highlight moved), `LOAD_CARD_ACTIVE` (the Load Game save list opened), `FINISHED_TRANSITIONING_TO_GAME` (play started). |
+
+Example `console\autoexec.txt`, from start-up to photo mode in the first save:
 
 ```
-wait 38s
-pad A
-wait 10s
-pad Down
-wait 2s
-pad A
-wait 6s
-pad A
+boot slot 1
+wait 5s
+photo on
 ```
+
+## Photo mode and research (console-v11)
+
+| Command | Usage | What it does | Notes |
+|---|---|---|---|
+| `photo` | `photo on` / `photo off` / `photo toggle` | Enters or leaves photo mode, like the toggle key or the controller shortcut. | Only works in play (not in menus or cutscenes); the log says `[photo-mode] entered`. |
+| `traceworld` | `traceworld [n]` | Traces the next `n` world updates (default 1, at most 120) to `fable2_func_trace.log` next to the exe: every guest function entered, in order, between `==== traceworld frame begin/end ====` lines. | Runs each traced update even while photo mode has the world frozen. Each line starts with a thread tag (`t<n> name x count`); the world thread is the one that writes the frame markers. |
 
 ## Mouse look (console-v12)
 
