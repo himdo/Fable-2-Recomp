@@ -382,6 +382,14 @@ try
         RealtimeTextureMorphing = true,
         HeroDogTextureReadback = false,
         HotFuncYieldEvery = 4,
+        PhotoModeEnabled = false,
+        PhotoModeToggleKey = "F7",
+        PhotoModeScreenshotKey = "P",
+        PhotoModeGamepadToggle = "Back + Start",
+        PhotoModeMoveSpeed = 8.0,
+        PhotoModeMouseSensitivity = 0.005,
+        PhotoModeMaxDistance = 25.0,
+        PhotoModeScreenshotFolder = @"D:\Photos\Fable 2",
     };
     Fable2ConfigFile.Write(advPath, advanced);
     string writtenAdv = File.ReadAllText(advPath);
@@ -397,6 +405,22 @@ try
     Require(!readBack.HigherHfTickRate, "higher_hf_tick_rate roundtrip failed");
     Require(readBack.HotFuncYieldEvery == 4, "hotfunc_yield_every roundtrip failed");
     Require(writtenAdv.Contains("[perf]"), "[perf] section was not written");
+    Require(writtenAdv.Contains("[photo_mode]"), "[photo_mode] section was not written");
+    Require(!readBack.PhotoModeEnabled, "photo_mode.enabled roundtrip failed");
+    Require(readBack.PhotoModeToggleKey == "F7", "photo_mode.toggle_key roundtrip failed");
+    Require(readBack.PhotoModeScreenshotKey == "P", "photo_mode.screenshot_key roundtrip failed");
+    Require(readBack.PhotoModeGamepadToggle == "Back + Start", "photo_mode.gamepad_toggle roundtrip failed");
+    Require(readBack.PhotoModeMoveSpeed == 8.0, "photo_mode.move_speed roundtrip failed");
+    Require(readBack.PhotoModeMouseSensitivity == 0.005, "photo_mode.mouse_sensitivity roundtrip failed");
+    Require(readBack.PhotoModeMaxDistance == 25.0, "photo_mode.max_distance roundtrip failed");
+    Require(readBack.PhotoModeScreenshotFolder == @"D:\Photos\Fable 2", "photo_mode.screenshot_folder roundtrip failed");
+    Require(writtenAdv.Contains("move_speed = 8.0"), "photo_mode.move_speed must stay a TOML float");
+    // Older files have gamepad_toggle as a boolean (true = Guide, false = off).
+    string legacyPath = Path.Combine(testDirectory, "legacy_photo.toml");
+    File.WriteAllText(legacyPath, "[photo_mode]\ngamepad_toggle = true\n");
+    Require(Fable2ConfigFile.Read(legacyPath).PhotoModeGamepadToggle == "Guide", "legacy gamepad_toggle = true");
+    File.WriteAllText(legacyPath, "[photo_mode]\ngamepad_toggle = false\n");
+    Require(Fable2ConfigFile.Read(legacyPath).PhotoModeGamepadToggle == "Off", "legacy gamepad_toggle = false");
     List<KeybindEntry> parsed = Fable2ConfigFile.ParseKeybinds(readBack.KeyboardGamepadMap);
     Require(parsed.Count == 4, "keybind parse count failed");
     Require(parsed[0].Key == "LMB" && parsed[0].Button == "X" && parsed[3].Key == "E" && parsed[3].Button == "A",

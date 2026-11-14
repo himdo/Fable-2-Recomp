@@ -677,6 +677,7 @@ public partial class MainWindow : Window
             MouseSensitivityBox.Text = _advanced.MouseLookScale.ToString(CultureInfo.InvariantCulture);
             HotFuncYieldSlider.Value = Math.Clamp(_advanced.HotFuncYieldEvery, 0, 16);
             HotFuncYieldBox.Text = _advanced.HotFuncYieldEvery.ToString(CultureInfo.InvariantCulture);
+            LoadPhotoMode();
             BuildKeybindRows(Fable2ConfigFile.ParseKeybinds(_advanced.KeyboardGamepadMap));
             BuildPatchRows();
         }
@@ -1080,6 +1081,57 @@ public partial class MainWindow : Window
         }
     }
 
+    // ---- Photo mode ([photo_mode] in fable2_config.toml) ----
+
+    private static void FillKeyCombo(ComboBox combo, string value)
+    {
+        if (combo.Items.Count == 0)
+            foreach (string name in Fable2ConfigFile.KeyNames)
+                if (!name.EndsWith("MB", StringComparison.Ordinal) && !name.StartsWith("XMB", StringComparison.Ordinal))
+                    combo.Items.Add(name);
+        // Keep a key the list does not have (hand-edited file) selectable.
+        if (!string.IsNullOrWhiteSpace(value) && !combo.Items.Contains(value)) combo.Items.Add(value);
+        combo.SelectedItem = value;
+    }
+
+    private void LoadPhotoMode()
+    {
+        PhotoModeEnabledCheck.IsChecked = _advanced.PhotoModeEnabled;
+        FillKeyCombo(PhotoModeToggleKeyCombo, _advanced.PhotoModeToggleKey);
+        FillKeyCombo(PhotoModeScreenshotKeyCombo, _advanced.PhotoModeScreenshotKey);
+        if (PhotoModeGamepadCombo.Items.Count == 0)
+            foreach (string combo in Fable2ConfigFile.PhotoModeGamepadToggles) PhotoModeGamepadCombo.Items.Add(combo);
+        PhotoModeGamepadCombo.Text = _advanced.PhotoModeGamepadToggle;
+        PhotoModeMoveSpeedBox.Text = Fable2ConfigFile.FormatDouble(_advanced.PhotoModeMoveSpeed);
+        PhotoModeMouseSensitivityBox.Text = Fable2ConfigFile.FormatDouble(_advanced.PhotoModeMouseSensitivity);
+        PhotoModeMaxDistanceBox.Text = Fable2ConfigFile.FormatDouble(_advanced.PhotoModeMaxDistance);
+        PhotoModeScreenshotFolderBox.Text = _advanced.PhotoModeScreenshotFolder;
+    }
+
+    private static double ReadDoubleBox(TextBox box, double fallback, double min, double max)
+    {
+        return double.TryParse(box.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double value)
+               && double.IsFinite(value)
+            ? Math.Clamp(value, min, max)
+            : fallback;
+    }
+
+    private void CollectPhotoMode()
+    {
+        _advanced.PhotoModeEnabled = PhotoModeEnabledCheck.IsChecked == true;
+        if (PhotoModeToggleKeyCombo.SelectedItem is string toggleKey) _advanced.PhotoModeToggleKey = toggleKey;
+        if (PhotoModeScreenshotKeyCombo.SelectedItem is string shotKey) _advanced.PhotoModeScreenshotKey = shotKey;
+        string pad = PhotoModeGamepadCombo.Text.Trim();
+        _advanced.PhotoModeGamepadToggle = pad.Length == 0 ? "Off" : pad;
+        _advanced.PhotoModeMoveSpeed = ReadDoubleBox(PhotoModeMoveSpeedBox, _advanced.PhotoModeMoveSpeed, 0.1, 1000.0);
+        _advanced.PhotoModeMouseSensitivity =
+            ReadDoubleBox(PhotoModeMouseSensitivityBox, _advanced.PhotoModeMouseSensitivity, 0.0001, 0.1);
+        _advanced.PhotoModeMaxDistance =
+            ReadDoubleBox(PhotoModeMaxDistanceBox, _advanced.PhotoModeMaxDistance, 0.0, 100000.0);
+        string folder = PhotoModeScreenshotFolderBox.Text.Trim();
+        _advanced.PhotoModeScreenshotFolder = folder.Length == 0 ? "screenshots" : folder;
+    }
+
     private void SaveAdvancedClicked(object sender, RoutedEventArgs e)
     {
         if (_executableDirectory is null)
@@ -1097,6 +1149,7 @@ public partial class MainWindow : Window
             ? Math.Clamp(yieldEvery, 0, 4096) : (int)HotFuncYieldSlider.Value;
         _advanced.KeyboardGamepadMap = CollectKeybinds();
         CollectPatches();
+        CollectPhotoMode();
 
         string path = AdvancedConfigPath();
         try

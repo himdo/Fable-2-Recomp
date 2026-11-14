@@ -92,7 +92,7 @@ Evidence (all memory-derived, no screenshots): the classifier (1 Hz) reads:
   this is what makes gameplay / cutscenes / pause / options report `?`.
 - **the A / B press** - rising A and B edges in the **final merged pad state**
   (all drivers OR-merged: remote + keyboard + physical). The guest's
-  `XamInputGetState` wrapper (`sub_822B2D60`) is hooked and the button flags
+  `XamInputGetState` wrapper (`InputGetPadState_822B2D60`) is hooked and the button flags
   (`X_INPUT_GAMEPAD_A = 0x1000`, `X_INPUT_GAMEPAD_B = 0x2000`) are read from the
   filled `X_INPUT_STATE` after each call. The prompt and the menu both render UI
   at the same rate, so a rising **A on the prompt** is the discrete event that
