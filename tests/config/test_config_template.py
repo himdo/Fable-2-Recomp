@@ -30,9 +30,34 @@ def engine_read_calls():
     return re.findall(pattern, engine_source())
 
 
+def manual_reads():
+    """Return (member, section, key) for settings read without a Read<...>() call.
+
+    photo_mode.gamepad_toggle is parsed from its toml node directly, because older
+    config files stored it as a boolean (true = the default shortcut, false = off)
+    and Read<std::string>() can't fall back to that.
+    """
+    pattern = r'\bphoto_table\.get\("(\w+)"\).*?values\.(\w+)\s*='
+    return [(member, "photo_mode", key)
+            for key, member in re.findall(pattern, engine_source(), re.S)]
+
+
 def engine_reads():
     """Return the (section, key) pairs the game reads."""
-    return {(section, key) for _, _, section, key in engine_read_calls()}
+    return ({(section, key) for _, _, section, key in engine_read_calls()}
+            | {(section, key) for _, section, key in manual_reads()})
+
+
+def member_for_reads():
+    """Map each read (section, key) to the Values member it is stored in.
+
+    A member is usually the key's own name, but a section prefixes its key names
+    when needed (photo_mode.toggle_key -> values.photo_mode_toggle_key).
+    """
+    members = {(section, key): member for member, _, section, key in engine_read_calls()}
+    for member, section, key in manual_reads():
+        members[(section, key)] = member
+    return members
 
 
 # The TOML value kinds each Read<type> accepts. Read<double> also takes whole numbers.
@@ -99,9 +124,10 @@ def describe_engine_config_reader():
     def test_should_read_every_staged_setting():
         """Fail if the game doesn't read a setting from the section it is staged in.
 
-        Each setting in config/fable2_config.toml needs its own Read<...>() call in
-        src/core/fable2_config.cpp. A missing call, a misspelled key or the wrong section
-        name gives no error: the game silently ignores the setting and uses its default.
+        Each setting in config/fable2_config.toml needs its own read in
+        src/core/fable2_config.cpp: a Read<...>() call, or a documented manual node read
+        (manual_reads()). A missing read, a misspelled key or the wrong section name
+        gives no error: the game silently ignores the setting and uses its default.
         """
         assert engine_reads() == set(staged_settings())
 
@@ -114,18 +140,22 @@ def describe_engine_config_reader():
         """
         header = (ROOT / "src/core/fable2_config.h").read_text(encoding="utf-8")
 
-        # C++ bools, ints and floats are valid JSON once the float suffix "f" is dropped.
-        literals = re.findall(r"^\s*(?:bool|int32_t|float)\s+(\w+)\s*=\s*([^;]+);", header, re.M)
+        # C++ bools, ints, floats and strings are valid JSON once the float suffix "f"
+        # is dropped.
+        literals = re.findall(
+            r"^\s*(?:bool|int32_t|float|std::string)\s+(\w+)\s*=\s*([^;]+);", header, re.M)
         defaults = {name: json.loads(value.removesuffix("f")) for name, value in literals}
         keybinds = re.search(r"kDefaultKeyboardGamepadMap =(.*?);", header, re.S).group(1)
         defaults["keyboard_gamepad_map"] = "".join(re.findall(r'"([^"]*)"', keybinds))
 
-        # Each Values member has the same name as the key it is read from.
+        # Each read's Values member holds the default for the key it is read from.
         # Only the mismatches, as {(section, key): (engine, staged)}, so every one is named.
+        members = member_for_reads()
         staged = staged_settings()
-        mismatches = {(section, key): (defaults.get(key), staged.get((section, key)))
+        mismatches = {(section, key): (defaults.get(members[(section, key)]),
+                                       staged.get((section, key)))
                       for section, key in engine_reads()
-                      if defaults.get(key) != staged.get((section, key))}
+                      if defaults.get(members[(section, key)]) != staged.get((section, key))}
 
         assert mismatches == {}
 
@@ -154,11 +184,14 @@ def describe_engine_config_reader():
         `values.terrain_tess_cpu = Read<bool>(..., "skinning_cpu", ...)` is easy to make.
         Every key would still be read, so the other tests pass, but the game would apply
         skinning_cpu's value to terrain_tess_cpu.
+
+        A member is the key's own name, or the section name prefixed to the key when the
+        section needs the qualifier (photo_mode.toggle_key -> photo_mode_toggle_key).
         """
         wrong_members = {
             (section, key): f"stored in values.{member}"
             for member, _, section, key in engine_read_calls()
-            if member != key
+            if member not in (key, f"{section}_{key}")
         }
 
         assert wrong_members == {}
