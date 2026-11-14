@@ -802,6 +802,13 @@ add("lua", "lua <code>  run Lua (also: type Lua directly)", function()
   else out("error: " .. tostring(r[2])) end
 end)
 
+add("mousetrace", "mousetrace [on|off]  camera trace into fable2_mouse.log (also: f2 mouse trace on|off)", function(W)
+  local f, err = loadfile("scripts/recomp/mouse_diag.lua")
+  if not f then return out("mouse_diag.lua not found: " .. tostring(err)) end
+  local ok, e = pcall(f, W[2])
+  if not ok then out("mousetrace error: " .. tostring(e)) end
+end)
+
 ---------------------------------------------------------------------------
 -- console-v6 commands (v7: argument shapes matched to the game's scripts). Where a shape is still a guess, try_shapes
 -- prints "[shape N]" for the argument list that worked; please send those.

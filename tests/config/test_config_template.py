@@ -24,10 +24,17 @@ def engine_source():
 def engine_read_calls():
     """Return (member, type, section, key) for each read line in fable2_config.cpp.
 
-    A read line looks like `values.member = Read<type>(table, "section", "key", ...)`.
+    A read line looks like `values.member = Read<type>(table, "section", "key", ...)`. A
+    setting that is checked before it is stored is read into a local instead, as in
+    `std::string mode = Read<type>(table, "section", "key", "kind", values.member)`; its
+    member is the one whose value it falls back to.
     """
-    pattern = r'values\.(\w+)\s*=[^;]*?Read<([\w:]+)>\(\s*[^,]+,\s*"(\w+)",\s*"(\w+)"'
-    return re.findall(pattern, engine_source())
+    direct = r'values\.(\w+)\s*=[^;]*?Read<([\w:]+)>\(\s*[^,]+,\s*"(\w+)",\s*"(\w+)"'
+    via_local = (r'[\w:]+\s+\w+\s*=\s*Read<([\w:]+)>\(\s*[^,]+,\s*"(\w+)",\s*"(\w+)",\s*"\w+",'
+                 r'\s*values\.(\w+)\s*\)')
+    checked_first = [(member, read_type, section, key)
+                     for read_type, section, key, member in re.findall(via_local, engine_source())]
+    return re.findall(direct, engine_source()) + checked_first
 
 
 def manual_reads():
@@ -87,11 +94,13 @@ def describe_config_template():
         for section in sections.values():
             staged.update(section)
 
-        # C# bool, int, double and string literals are valid JSON as written. The keybind map is
-        # a joined string constant.
-        values_class = re.search(r"public class Fable2ConfigValues\s*\{(.*?)\n\}", launcher, re.S).group(1)
-        literals = re.findall(r"public (?:bool|int|double|string) (\w+) \{ get; set; \} = ([^;]+);", values_class)
-        defaults = {name: json.loads(value) for name, value in literals if value != "DefaultKeyboardGamepadMap"}
+        # C# bools, ints, doubles and plain string literals are valid JSON as written. The keybind
+        # map is a joined string constant. Only Fable2ConfigValues holds settings.
+        values_body = re.search(r"class Fable2ConfigValues\b(.*?)\n(?:public )?(?:static )?class ",
+                                launcher, re.S).group(1)
+        literals = re.findall(r'public (?:bool|int|double|string) (\w+) \{ get; set; \} = '
+                              r'(true|false|-?\d+(?:\.\d+)?|"[^"\\]*");', values_body)
+        defaults = {name: json.loads(value) for name, value in literals}
         keybinds = re.search(r"DefaultKeyboardGamepadMap =(.*?);", launcher, re.S).group(1)
         defaults["KeyboardGamepadMap"] = "".join(re.findall(r'"([^"]*)"', keybinds))
 
@@ -140,10 +149,10 @@ def describe_engine_config_reader():
         """
         header = (ROOT / "src/core/fable2_config.h").read_text(encoding="utf-8")
 
-        # C++ bools, ints, floats and strings are valid JSON once the float suffix "f"
-        # is dropped.
-        literals = re.findall(
-            r"^\s*(?:bool|int32_t|float|std::string)\s+(\w+)\s*=\s*([^;]+);", header, re.M)
+        # C++ bools, numbers and plain strings are valid JSON once the float suffix "f" is
+        # dropped. Members set from a constant, such as the keybind map, are read below.
+        literals = re.findall(r'^\s*(?:bool|int32_t|float|double|std::string)\s+(\w+)\s*=\s*'
+                              r'("[^"\\]*"|-?[\d.]+f?|true|false);', header, re.M)
         defaults = {name: json.loads(value.removesuffix("f")) for name, value in literals}
         keybinds = re.search(r"kDefaultKeyboardGamepadMap =(.*?);", header, re.S).group(1)
         defaults["keyboard_gamepad_map"] = "".join(re.findall(r'"([^"]*)"', keybinds))
@@ -195,3 +204,71 @@ def describe_engine_config_reader():
         }
 
         assert wrong_members == {}
+
+
+def cvar_defaults():
+    """Return {cvar: default} for each bool, int, double and string cvar defined in src/main.cpp."""
+    source = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
+    defines = re.findall(r'REXCVAR_DEFINE_(?:BOOL|INT32|DOUBLE|STRING)\(\s*(\w+),\s*("[^"\\]*"|[^,]+),', source)
+    # C++ true/false, numbers and plain strings are valid JSON as written.
+    return {name: json.loads(value.strip()) for name, value in defines}
+
+
+def cvar_seeds():
+    """Return (cvar, member) for each cvar src/core/fable_2_app.h seeds from the config.
+
+    A seed line looks like `seed_cvar("mouse_look", cfg.mouse_look ? "true" : "false")`.
+    """
+    source = (ROOT / "src/core/fable_2_app.h").read_text(encoding="utf-8")
+    return re.findall(r'seed_cvar\("(\w+)",[^;]*?\bcfg\.(\w+)', source)
+
+
+# keyboard_gamepad_map's cvar defaults to "" on purpose: the map itself lives in the config.
+STRING_CVARS = {"keyboard_gamepad_map"}  # cvars whose default isn't compared
+
+
+def describe_cvar_defaults():
+    """The cvars in src/main.cpp that the game seeds from the config at startup.
+
+    Each cvar repeats its setting's default. It is used whenever the config doesn't set
+    the cvar (no config file yet, or a setting missing from it), so a stale default
+    silently changes how the game behaves.
+    """
+
+    def test_should_understand_every_seed_call():
+        """Fail if a seed_cvar() call from the config is written in a shape the regex misses."""
+        source = (ROOT / "src/core/fable_2_app.h").read_text(encoding="utf-8")
+        seeds_from_config = len(re.findall(r'seed_cvar\("\w+",[^;]*?\bcfg\.', source))
+
+        assert len(cvar_seeds()) == seeds_from_config
+
+    def test_should_find_a_default_for_every_seeded_cvar():
+        """Fail if a seeded cvar isn't defined in src/main.cpp in a shape cvar_defaults() reads, so it would go unchecked."""
+        seeded = {cvar for cvar, _ in cvar_seeds()}
+
+        assert seeded - STRING_CVARS - set(cvar_defaults()) == set()
+
+    def test_should_seed_each_cvar_from_the_setting_of_the_same_name():
+        wrong_members = {cvar: f"seeded from cfg.{member}" for cvar, member in cvar_seeds() if cvar != member}
+
+        assert wrong_members == {}
+
+    def test_should_seed_only_staged_settings():
+        staged_keys = {key for _, key in staged_settings()}
+
+        assert {cvar for cvar, _ in cvar_seeds()} - staged_keys == set()
+
+    def test_should_have_the_same_defaults_as_the_staged_config():
+        staged = {key: value for (_, key), value in staged_settings().items()}
+        defaults = cvar_defaults()
+
+        # Only the mismatches, as {cvar: (main.cpp, staged)}, so every one is named. Types are
+        # compared too, because Python treats True and 1 as equal.
+        mismatches = {
+            cvar: (defaults[cvar], staged.get(cvar))
+            for cvar, _ in cvar_seeds()
+            if cvar not in STRING_CVARS
+            and (defaults[cvar] != staged.get(cvar) or type(defaults[cvar]) is not type(staged.get(cvar)))
+        }
+
+        assert mismatches == {}

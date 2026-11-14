@@ -372,7 +372,7 @@ try
         KeyboardGamepadMap = "LMB:X,RMB:Y,Shift:A,E:A",
         MouseLook = true,
         MouseLookScale = 512,
-        DirectMouseLook = true,
+        MouseLookMode = "stick",
         UnlockWebsite = true,
         UnlockCe = false,
         SkipIntroVideos = true,
@@ -397,7 +397,9 @@ try
     var readBack = Fable2ConfigFile.Read(advPath);
     Require(readBack.MouseLook, "mouse look roundtrip failed");
     Require(readBack.MouseLookScale == 512, "mouse scale roundtrip failed");
-    Require(readBack.DirectMouseLook, "direct mouse look roundtrip failed");
+    Require(readBack.MouseLookMode == "stick", "mouse look mode roundtrip failed");
+    Require(writtenAdv.Contains("mouse_look_mode = \"stick\""), "mouse_look_mode is not a TOML string");
+    Require(!writtenAdv.Contains("direct_mouse_look"), "the old direct_mouse_look key was written");
     Require(!readBack.UnlockCe, "unlock_ce roundtrip failed");
     Require(readBack.SkipIntroVideos, "skip_intro_videos roundtrip failed");
     Require(readBack.DisableMotionBlur, "disable_motion_blur roundtrip failed");
@@ -439,6 +441,16 @@ try
         "unknown section/keys not preserved");
     Require(Fable2ConfigFile.Read(advPath).MouseLookScale == 1024, "mouse scale re-read failed");
     Require(File.Exists(advPath + ".launcher-backup"), "fable2_config backup missing");
+    // mouse_look_mode: unknown values fall back to "direct"; the old
+    // direct_mouse_look key isn't managed, so a save leaves its line alone.
+    string modePath = Path.Combine(testDirectory, "fable2_config_mode.toml");
+    File.WriteAllText(modePath, "config_version = 1\n[input]\nmouse_look_mode = 'fps'\ndirect_mouse_look = true\n");
+    var modeValues = Fable2ConfigFile.Read(modePath);
+    Require(modeValues.MouseLookMode == "direct", "unknown mouse_look_mode did not fall back to direct");
+    Fable2ConfigFile.Write(modePath, modeValues);
+    string modeContent = File.ReadAllText(modePath);
+    Require(modeContent.Contains("mouse_look_mode = \"direct\""), "mouse_look_mode was not rewritten");
+    Require(modeContent.Contains("direct_mouse_look = true"), "the old direct_mouse_look line was changed");
     Console.WriteLine("Advanced options (fable2_config.toml) roundtrip and preservation passed.");
 
     if (args.Length > 0)

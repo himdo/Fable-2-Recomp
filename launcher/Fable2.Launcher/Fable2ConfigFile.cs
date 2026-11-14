@@ -24,9 +24,10 @@ public class Fable2ConfigValues
     public string KeyboardGamepadMap { get; set; } = DefaultKeyboardGamepadMap;
     public bool MouseLook { get; set; } = true;
     public int MouseLookScale { get; set; } = 256;  // range 1..4096 (cvar constraint)
-    // Experimental: drive the camera directly (desktop-FPS orbit) instead of the
-    // legacy right-stick mapping. Only applies when MouseLook is on.
-    public bool DirectMouseLook { get; set; } = false;  // experimental
+    // How the mouse turns the camera: "direct" (a fixed angle per count, no top
+    // speed) or "stick" (the mouse drives the right stick, like a controller).
+    // The older direct_mouse_look key isn't managed; it's left as it is.
+    public string MouseLookMode { get; set; } = "direct";
 
     // [patches]
     public bool UnlockWebsite { get; set; } = true;
@@ -66,6 +67,10 @@ public class KeybindEntry
 /// </summary>
 public static class Fable2ConfigFile
 {
+    /// <summary>mouse_look_mode is "direct" or "stick"; anything else is "direct".</summary>
+    public static string NormalizeMouseLookMode(string? mode) =>
+        mode == "stick" ? "stick" : "direct";
+
     // Host key names understood by rex::ui::ParseVirtualKey (see
     // src/ui/keybinds.cpp) plus the mouse-button aliases from
     // src/input/keyboard_gamepad.h. Used to populate the key dropdowns.
@@ -132,7 +137,7 @@ public static class Fable2ConfigFile
                     if (key == "keyboard_gamepad_map") values.KeyboardGamepadMap = Unquote(rawValue);
                     else if (key == "mouse_look") values.MouseLook = ParseBool(rawValue, values.MouseLook);
                     else if (key == "mouse_look_scale") values.MouseLookScale = ParseInt(rawValue, values.MouseLookScale);
-                    else if (key == "direct_mouse_look") values.DirectMouseLook = ParseBool(rawValue, values.DirectMouseLook);
+                    else if (key == "mouse_look_mode") values.MouseLookMode = NormalizeMouseLookMode(Unquote(rawValue));
                     break;
                 case "patches":
                     if (key == "unlock_website") values.UnlockWebsite = ParseBool(rawValue, values.UnlockWebsite);
@@ -189,7 +194,7 @@ public static class Fable2ConfigFile
             ("input", "keyboard_gamepad_map", Quote(values.KeyboardGamepadMap)),
             ("input", "mouse_look", values.MouseLook ? "true" : "false"),
             ("input", "mouse_look_scale", values.MouseLookScale.ToString(CultureInfo.InvariantCulture)),
-            ("input", "direct_mouse_look", values.DirectMouseLook ? "true" : "false"),
+            ("input", "mouse_look_mode", Quote(NormalizeMouseLookMode(values.MouseLookMode))),
             ("patches", "unlock_website", values.UnlockWebsite ? "true" : "false"),
             ("patches", "unlock_ce", values.UnlockCe ? "true" : "false"),
             ("patches", "skip_intro_videos", values.SkipIntroVideos ? "true" : "false"),
