@@ -1,7 +1,6 @@
 using Fable2Launcher;
 using Fable2Launcher.Constants;
 using System.Security.Cryptography;
-using System.IO.Compression;
 using System.Text;
 using System.Xml.Linq;
 
@@ -39,8 +38,6 @@ try
     Require(roundTrip["resolution"] == "\"1080p\"", "roundtrip resolution failed");
     Require(roundTrip["custom_mod"] == "true", "roundtrip unknown setting failed");
     Console.WriteLine("Launcher configuration roundtrip passed.");
-
-
 
     foreach (string aa in new[] { "none", "fxaa", "fxaa_extreme" })
     {

@@ -4,9 +4,9 @@ import importlib.util
 import io
 from pathlib import Path
 import struct
-import tempfile
-import unittest
 from unittest.mock import patch
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location("normalizer", ROOT / "tools/repro/normalize_pe.py")
@@ -61,102 +61,110 @@ def run_main(*args):
     return 0, output.getvalue(), errors.getvalue()
 
 
-class NormalizePeTests(unittest.TestCase):
-    def setUp(self):
-        temp = tempfile.TemporaryDirectory(prefix="fable2-normalize-test-")
-        self.addCleanup(temp.cleanup)
-        self.path = Path(temp.name) / "fable_2.exe"
+@pytest.fixture
+def exe(tmp_path):
+    """Where a test writes its fake exe."""
+    return tmp_path / "fable_2.exe"
 
-    def normalize(self, data):
-        """Write `data` to the fake exe, normalize it and return the resulting bytes."""
-        self.path.write_bytes(data)
-        normalizer.normalize(str(self.path), normalizer.DEFAULT_STAMP, "fable_2.pdb", quiet=True)
-        return self.path.read_bytes()
 
-    def test_pins_the_pe_timestamp(self):
-        result = self.normalize(build_pe())
-        self.assertEqual(struct.unpack_from("<I", result, PE_STAMP_OFFSET)[0], normalizer.DEFAULT_STAMP)
+def normalize(exe, data):
+    """Write `data` to the fake exe, normalize it and return the resulting bytes."""
+    exe.write_bytes(data)
+    normalizer.normalize(str(exe), normalizer.DEFAULT_STAMP, "fable_2.pdb", quiet=True)
+    return exe.read_bytes()
 
-    def test_pins_the_debug_entry_timestamp(self):
-        result = self.normalize(build_pe())
-        self.assertEqual(struct.unpack_from("<I", result, DEBUG_STAMP_OFFSET)[0], normalizer.DEFAULT_STAMP)
 
-    def test_pins_the_pdb_guid(self):
-        result = self.normalize(build_pe())
-        self.assertEqual(result[GUID_OFFSET:GUID_OFFSET + 16], normalizer.DEFAULT_GUID)
+def describe_normalize():
+    # --- Happy flow -------------------------------------------------------
 
-    def test_two_builds_become_identical(self):
-        first = self.normalize(build_pe(stamp=1, guid=b"\x01" * 16, pdb_path=b"D:/builds/one/fable_2.pdb"))
-        second = self.normalize(build_pe(stamp=2, guid=b"\x02" * 16, pdb_path=b"C:/builds/two/fable_2.pdb"))
-        self.assertEqual(first, second)
+    def test_should_pin_the_pe_timestamp(exe):
+        result = normalize(exe, build_pe())
+        assert struct.unpack_from("<I", result, PE_STAMP_OFFSET)[0] == normalizer.DEFAULT_STAMP
 
-    def test_keeps_the_file_size(self):
+    def test_should_pin_the_debug_entry_timestamp(exe):
+        result = normalize(exe, build_pe())
+        assert struct.unpack_from("<I", result, DEBUG_STAMP_OFFSET)[0] == normalizer.DEFAULT_STAMP
+
+    def test_should_pin_the_pdb_guid(exe):
+        result = normalize(exe, build_pe())
+        assert result[GUID_OFFSET:GUID_OFFSET + 16] == normalizer.DEFAULT_GUID
+
+    def test_should_make_two_builds_identical(exe):
+        first = normalize(exe, build_pe(stamp=1, guid=b"\x01" * 16, pdb_path=b"D:/builds/one/fable_2.pdb"))
+        second = normalize(exe, build_pe(stamp=2, guid=b"\x02" * 16, pdb_path=b"C:/builds/two/fable_2.pdb"))
+        assert first == second
+
+    def test_should_keep_the_file_size(exe):
         data = build_pe()
-        self.assertEqual(len(self.normalize(data)), len(data))
+        assert len(normalize(exe, data)) == len(data)
 
-    def test_second_run_keeps_the_same_bytes(self):
-        first = self.normalize(build_pe())
-        self.assertEqual(self.normalize(first), first)
+    # --- Bad flow ---------------------------------------------------------
 
-    def test_skips_a_file_that_is_not_a_pe(self):
-        self.path.write_bytes(b"not a pe file")
+    def test_should_skip_a_file_that_is_not_a_pe(exe):
+        exe.write_bytes(b"not a pe file")
         with contextlib.redirect_stderr(io.StringIO()):
-            changed = normalizer.normalize(str(self.path), normalizer.DEFAULT_STAMP, "fable_2.pdb", quiet=True)
-        self.assertFalse(changed)
-        self.assertEqual(self.path.read_bytes(), b"not a pe file")
+            changed = normalizer.normalize(str(exe), normalizer.DEFAULT_STAMP, "fable_2.pdb", quiet=True)
+        assert not changed
+        assert exe.read_bytes() == b"not a pe file"
 
-    def test_skips_an_mz_file_without_a_pe_signature(self):
+    def test_should_skip_an_mz_file_without_a_pe_signature(exe):
         # An MZ header alone is also how an old DOS program starts.
         data = bytearray(build_pe())
         data[0x40:0x44] = b"NOPE"  # where the PE signature should be
-        self.path.write_bytes(data)
+        exe.write_bytes(data)
         errors = io.StringIO()
         with contextlib.redirect_stderr(errors):
-            changed = normalizer.normalize(str(self.path), normalizer.DEFAULT_STAMP, "fable_2.pdb", quiet=True)
+            changed = normalizer.normalize(str(exe), normalizer.DEFAULT_STAMP, "fable_2.pdb", quiet=True)
 
-        self.assertFalse(changed)
-        self.assertEqual(self.path.read_bytes(), data)
-        self.assertIn("no PE sig", errors.getvalue())  # not the earlier "not MZ" skip
+        assert not changed
+        assert exe.read_bytes() == data
+        assert "no PE sig" in errors.getvalue()  # not the earlier "not MZ" skip
 
-    def test_main_skips_a_missing_file(self):
+    # --- Edge cases -------------------------------------------------------
+
+    def test_should_keep_the_same_bytes_on_a_second_run(exe):
+        first = normalize(exe, build_pe())
+        assert normalize(exe, first) == first
+
+    # --- Known issues -----------------------------------------------------
+
+    # The tool treats the PDB path as UTF-16, but the field is UTF-8 with a single NUL.
+    # strict=True makes a fixed bug fail its test, so the marker gets removed then.
+
+    @pytest.mark.xfail(strict=True, reason="the tool treats the PDB path as UTF-16, but the field is UTF-8 with a single NUL")
+    def test_should_keep_the_pdb_path_readable_as_utf8(exe):
+        result = normalize(exe, build_pe())
+        path = result[PDB_PATH_OFFSET:].split(b"\0")[0]
+        assert path == b"fable_2.pdb"
+
+    @pytest.mark.xfail(strict=True, reason="the tool treats the PDB path as UTF-16, but the field is UTF-8 with a single NUL")
+    def test_should_leave_the_bytes_after_the_pdb_path_alone(exe):
+        after_path = b"\xAA" * 16
+        result = normalize(exe, build_pe(after_path=after_path))
+        assert result[-len(after_path):] == after_path
+
+    @pytest.mark.xfail(strict=True, reason="the new name doesn't fit a short path, so each run cuts it shorter")
+    def test_should_keep_the_same_bytes_on_a_second_run_with_a_short_path(exe):
+        # The new name doesn't fit, so each run cuts it shorter: fable_2. -> fable_2 -> fable_
+        first = normalize(exe, build_pe(pdb_path=SHORT_PDB_PATH))
+        assert normalize(exe, first) == first
+
+
+def describe_main():
+    def test_should_skip_a_missing_file(exe):
         # A missing file is skipped, not an error, so one command can name files that may not exist.
-        code, output, _ = run_main(str(self.path))
+        code, output, _ = run_main(str(exe))
 
-        self.assertEqual(code, 0)
-        self.assertIn("skip (not present)", output)
-        self.assertFalse(self.path.exists())
+        assert code == 0
+        assert "skip (not present)" in output
+        assert not exe.exists()
 
-    def test_main_exits_2_on_a_broken_pe(self):
+    def test_should_exit_with_2_on_a_broken_pe(exe):
         # The headers end right after the PE signature, so reading them fails.
         data = build_pe()[:0x60]
-        self.path.write_bytes(data)
-        code, _, errors = run_main(str(self.path))
+        exe.write_bytes(data)
+        code, _, errors = run_main(str(exe))
 
-        self.assertEqual(code, 2)
-        self.assertIn("ERROR", errors)
-        self.assertEqual(self.path.read_bytes(), data)
-
-    # Known bugs. The tool treats the PDB path as UTF-16, but the field is UTF-8 with a single NUL.
-    # Once a bug is fixed its test reports an unexpected success, so remove the marker then.
-
-    @unittest.expectedFailure
-    def test_pdb_path_stays_readable_as_utf8(self):
-        result = self.normalize(build_pe())
-        path = result[PDB_PATH_OFFSET:].split(b"\0")[0]
-        self.assertEqual(path, b"fable_2.pdb")
-
-    @unittest.expectedFailure
-    def test_bytes_after_the_pdb_path_are_untouched(self):
-        after_path = b"\xAA" * 16
-        result = self.normalize(build_pe(after_path=after_path))
-        self.assertEqual(result[-len(after_path):], after_path)
-
-    @unittest.expectedFailure
-    def test_second_run_keeps_the_same_bytes_with_a_short_path(self):
-        # The new name doesn't fit, so each run cuts it shorter: fable_2. -> fable_2 -> fable_
-        first = self.normalize(build_pe(pdb_path=SHORT_PDB_PATH))
-        self.assertEqual(self.normalize(first), first)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert code == 2
+        assert "ERROR" in errors
+        assert exe.read_bytes() == data
