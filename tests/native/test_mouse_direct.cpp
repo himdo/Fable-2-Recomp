@@ -398,9 +398,35 @@ static void TestInjectProfiles() {
   CHECK(!fable2::mousediag::ParseProfile("fast", parsed));
 }
 
+// The aim stick swap (src/input/mouse_aim.h) feeds with direct_mode = false
+// while aiming. That must drop what was kept but not forget the camera's last
+// report, so the direct route is back on the first poll after aiming (within
+// the timeout), and nothing moved while aiming turns the camera afterwards.
+static void TestAimPauseKeepsRoute() {
+  const int64_t timeout = 200000;
+  double dx = 0, dy = 0;
+  mdir::DirectState st;
+  st.Drain(true, 1000, 0.0, dx, dy);                // the camera is accepting
+  CHECK(st.Feed(true, 2000, timeout, 4, 0));        // kept for it
+  CHECK(!st.Feed(false, 3000, timeout, 50, 50));    // aiming: to the reticle
+  CHECK(!st.RouteDirect());
+  CHECK(!st.Feed(false, 50000, timeout, -20, 10));  // still aiming
+  CHECK(st.Feed(true, 150000, timeout, 3, 0));      // aim over, still within the timeout
+  st.Drain(true, 160000, 0.0, dx, dy);
+  CHECK(Near(dx, 3) && Near(dy, 0));                // neither the 4 nor the aim movement
+  // A long aim outlives the timeout: back on the stick until the camera
+  // reports again, then direct.
+  CHECK(!st.Feed(false, 170000, timeout, 5, 5));
+  CHECK(!st.Feed(true, 160000 + timeout + 1, timeout, 7, 0));
+  st.Drain(true, 400000, 0.0, dx, dy);
+  CHECK(dx == 0 && dy == 0);
+  CHECK(st.Feed(true, 401000, timeout, 2, 0));
+}
+
 int main() {
   TestToCamera();
   TestDirectState();
+  TestAimPauseKeepsRoute();
   TestTimeZero();
   TestRouteTimeout();
   TestBoot();

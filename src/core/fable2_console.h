@@ -49,8 +49,11 @@
 #include "fable2_f5_lua.h"
 #include "fable2_fit_window.h"
 #include "fable2_gui_lua.h"
+#include "fable2_config.h"  // high_tick_rate (aim timeout in `mouse` status)
+#include "mouse_aim.h"
 #include "mouse_diag.h"
 #include "mouse_direct.h"
+#include "mouse_stick.h"
 #include "remote_input_state.h"
 #include "photo_mode_state.h"
 #include "fable2_ui_events.h"
@@ -77,6 +80,12 @@ REXCVAR_DECLARE(double, mouse_look_sens_x);
 REXCVAR_DECLARE(double, mouse_look_sens_y);
 REXCVAR_DECLARE(bool, mouse_look_invert_y);
 REXCVAR_DECLARE(double, mouse_look_direct_smoothing);
+REXCVAR_DECLARE(std::string, mouse_aim_mode);
+REXCVAR_DECLARE(int32_t, mouse_aim_scale);
+REXCVAR_DECLARE(std::string, mouse_aim_input);
+REXCVAR_DECLARE(double, mouse_aim_sens);
+REXCVAR_DECLARE(double, mouse_aim_y_ratio);
+REXCVAR_DECLARE(bool, mouse_aim_invert_y);
 
 namespace fable2::console {
 
@@ -191,6 +200,13 @@ struct State {
   bool lua_wait = false;        // a dispatched line has not reported done yet
   Clock::time_point lua_deadline{};
   uint64_t pad_frames = 0;      // `pad` releases its buttons when this reaches 0
+  // `pad hold`: buttons and triggers kept held under every other `pad` input
+  // until `pad off`, without holding up the queue (so a test can aim with Y
+  // while `mouse inject` or `pad stick` runs).
+  fable2::remote::InputSnapshot pad_held;
+  // A `pad stick` is held: its release writes "padstick released" to
+  // fable2_mouse.log, so tools/mouse_stats.py can measure each stick run.
+  bool pad_stick_open = false;
   // pause: the game thread waits at the end of the console poll; see hold_paused.
   bool paused = false;
   uint64_t step_frames = 0;     // frames to run before pausing again ("step")
@@ -198,6 +214,37 @@ struct State {
 inline State& S() {
   static State s;
   return s;
+}
+
+// Publishes a console pad state with the `pad hold` buttons and triggers kept
+// on top. Releasing a timed `pad` input publishes {}, which leaves the hold.
+inline void PublishPad(fable2::remote::InputSnapshot snap) {
+  const auto& held = S().pad_held;
+  snap.buttons |= held.buttons;
+  snap.left_trigger = std::max(snap.left_trigger, held.left_trigger);
+  snap.right_trigger = std::max(snap.right_trigger, held.right_trigger);
+  PadStore().Publish(snap);
+}
+
+// Releases a timed `pad` input (the queue's countdown, `pad off`, `boot`); a
+// `pad stick` run notes its end in fable2_mouse.log.
+// Direct aim's up/down reticle units per count right now: the cvars and the
+// screen shape the game renders at (what the cursor hook uses).
+inline double AimVerticalSensNow() {
+  fable2::mouseaim::AimSens s;
+  s.x = REXCVAR_GET(mouse_aim_sens);
+  s.y_ratio = REXCVAR_GET(mouse_aim_y_ratio);
+  return fable2::mouseaim::VerticalSens(s, fable2::fitwindow::CurrentAspect());
+}
+
+inline void ReleasePad() {
+  State& s = S();
+  PublishPad({});
+  s.pad_frames = 0;
+  if (s.pad_stick_open) {
+    s.pad_stick_open = false;
+    fable2::mousediag::Diag::Get().Note("padstick released");
+  }
 }
 
 inline void set_root(const fs::path& p) { S().root = p; }
@@ -1133,21 +1180,54 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     // pad <A|B|X|Y|LB|RB|LT|RT|Up|Down|Left|Right|Start|Back|L3|R3>[+...] [frames]
     // pad stick <lx> <ly> [frames]  (-32768..32767, ly + = forward)  |  pad off
     // pad rstick <rx> <ry> [frames] (right stick: camera; ry + = look up)
+    // pad hold <button>[+...] | pad hold off  (held under the others until released; no wait)
     // Holds the input for frames (default 12: menus miss 6), then releases it. While held
     // the command queue waits, so "pad A; pad Down; pad A" are separate presses.
     static const std::pair<const char*, uint16_t> kBtn[] = {
         {"up", 0x0001}, {"down", 0x0002}, {"left", 0x0004}, {"right", 0x0008}, {"start", 0x0010},
         {"back", 0x0020}, {"l3", 0x0040}, {"r3", 0x0080}, {"lb", 0x0100}, {"rb", 0x0200},
         {"a", 0x1000}, {"b", 0x2000}, {"x", 0x4000}, {"y", 0x8000}};
-    if (W.size() < 2) return out("pad", "usage: pad <button>[+button] [frames] | pad stick <lx> <ly> [frames] | pad rstick <rx> <ry> [frames] | pad off", true), true;
+    if (W.size() < 2) return out("pad", "usage: pad <button>[+button] [frames] | pad stick <lx> <ly> [frames] | pad rstick <rx> <ry> [frames] | pad hold <button>[+button]|off | pad off", true), true;
+    // "a+lt" -> snap; returns the first unknown name, or "" when all parsed.
+    auto parse_buttons = [&](const std::string& list, fable2::remote::InputSnapshot& into) -> std::string {
+      std::stringstream ss(list);
+      std::string b;
+      while (std::getline(ss, b, '+')) {
+        bool found = false;
+        if (b == "lt") into.left_trigger = 255, found = true;
+        if (b == "rt") into.right_trigger = 255, found = true;
+        for (const auto& kv : kBtn)
+          if (b == kv.first) into.buttons |= kv.second, found = true;
+        if (!found) return b.empty() ? std::string("(empty)") : b;
+      }
+      return "";
+    };
     fable2::remote::InputSnapshot snap;
     size_t fi = 2;
     std::string what = W[1];
     for (auto& c : what) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     if (what == "off") {
-      PadStore().Publish({});
-      s.pad_frames = 0;
+      s.pad_held = {};
+      ReleasePad();
       return out("pad", "released"), true;
+    }
+    if (what == "hold") {
+      // pad hold <button>[+button] | pad hold off: keep buttons held under every
+      // other `pad` input until `pad hold off` or `pad off`. Doesn't wait.
+      std::string list = W.size() > 2 ? W[2] : "";
+      for (auto& c : list) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if (list.empty()) return out("pad", "usage: pad hold <button>[+button] | pad hold off", true), true;
+      fable2::remote::InputSnapshot held;
+      if (list != "off") {
+        const std::string bad = parse_buttons(list, held);
+        if (!bad.empty()) return out("pad", "unknown input '" + bad + "'", true), true;
+      }
+      s.pad_held = {};
+      s.pad_held.buttons = held.buttons;
+      s.pad_held.left_trigger = held.left_trigger;
+      s.pad_held.right_trigger = held.right_trigger;
+      PublishPad({});
+      return out("pad", list == "off" ? "hold released" : "holding " + list + " (pad off releases)"), true;
     }
     if (what == "stick") {
       int64_t lx = 0, ly = 0;
@@ -1162,24 +1242,25 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
       snap.stk_ry = static_cast<int32_t>(std::clamp<int64_t>(ry, -32768, 32767));
       fi = 4;
     } else {
-      std::stringstream ss(what);
-      std::string b;
-      while (std::getline(ss, b, '+')) {
-        bool found = false;
-        if (b == "lt") snap.left_trigger = 255, found = true;
-        if (b == "rt") snap.right_trigger = 255, found = true;
-        for (const auto& kv : kBtn)
-          if (b == kv.first) snap.buttons |= kv.second, found = true;
-        if (!found) return out("pad", "unknown input '" + b + "'", true), true;
-      }
+      const std::string bad = parse_buttons(what, snap);
+      if (!bad.empty()) return out("pad", "unknown input '" + bad + "'", true), true;
     }
     uint64_t frames = 12;
     if (W.size() > fi && (!parse_u(W[fi], frames) || frames == 0 || frames > 100000))
       return out("pad", "bad frame count", true), true;
-    PadStore().Publish(snap);
+    if (s.pad_stick_open) ReleasePad();  // a stick run still open ends here
+    PublishPad(snap);
     s.pad_frames = frames;
     s.wait_frames = frames + 2;  // hold, then a short gap before the next command
     s.wait_time = false;
+    if (what == "stick") {
+      // A run for tools/mouse_stats.py, ended by "padstick released" (ReleasePad).
+      const int32_t stick_lx = snap.stk_lx;
+      const int32_t stick_ly = snap.stk_ly;
+      fable2::mousediag::Diag::Get().Note("padstick lx=" + std::to_string(stick_lx) + " ly=" +
+                                          std::to_string(stick_ly) + " frames=" + std::to_string(frames));
+      s.pad_stick_open = true;
+    }
     return true;
   }
   if (name == "mouse") {
@@ -1200,6 +1281,20 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     //                              (even), speeding up (ramp) or as a flick
     //                              (speeds up then slows down); ignores focus
     // mouse stop                   cancel an inject
+    // mouse aim off|rmb|detect|both
+    //                              aim stick swap: when the mouse drives the
+    //                              left stick (the ranged aim reticle) and WASD
+    //                              stops moving it (cvar mouse_aim_mode;
+    //                              src/input/mouse_aim.h)
+    // mouse aiminput direct|stick  direct: the movement is added straight to the
+    //                              game's aim cursor; stick: the mouse drives the
+    //                              left stick (cvar mouse_aim_input)
+    // mouse aimsens <x> [ratio]    direct aim: sideways reticle units per count
+    //                              (mouse_aim_sens, default 0.0007); up/down
+    //                              follows the screen shape, times ratio
+    //                              (mouse_aim_y_ratio, default 1 = same speed)
+    // mouse aiminvert on|off       direct aim: invert up/down (mouse_aim_invert_y)
+    // mouse aimscale <1..4096>     stick aim sensitivity (mouse_aim_scale, 256 = 1x)
     // See src/input/mouse_diag.h and tools/mouse_stats.py.
     namespace md = fable2::mousediag;
     std::string sub = W.size() > 1 ? W[1] : "status";
@@ -1221,6 +1316,20 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
                        " starts=" + std::to_string(mdir::BootState().Tries()) +
                        " route=" + (mdir::State().RouteDirect() ? "direct" : "stick") +
                        " camera_updates=" + std::to_string(mdir::State().Drains()));
+      {
+        namespace ma = fable2::mouseaim;
+        const int64_t tick = fable2::mousestick::DefaultWindowUs(fable2::config::Get().high_tick_rate);
+        const int64_t last = ma::State().LastTickUs();
+        out("mouse", std::string("aim=") + ma::AimSwapModeName(ma::ModeOrDefault(flag("mouse_aim_mode"))) +
+                         " input=" + ma::AimInputName(ma::AimInputOrDefault(flag("mouse_aim_input"))) +
+                         " sens=" + flag("mouse_aim_sens") + " y_ratio=" + flag("mouse_aim_y_ratio") +
+                         " (up/down " + std::to_string(AimVerticalSensNow()) + " at aspect " +
+                         std::to_string(ma::AimAspect(fable2::fitwindow::CurrentAspect())) + ")" +
+                         " invert_y=" + flag("mouse_aim_invert_y") +
+                         " stick_scale=" + flag("mouse_aim_scale") +
+                         " aim_detected=" + (ma::State().Detected(now, ma::AimTimeoutUs(tick)) ? "yes" : "no") +
+                         " aim_tick_age_ms=" + (last ? std::to_string((now - last) / 1000) : std::string("never")));
+      }
       out("mouse", "mouse_look=" + flag("mouse_look") + " scale=" + flag("mouse_look_scale") +
                        " smoothing=" + flag("mouse_look_smoothing") +
                        " window_ms=" + flag("mouse_look_window_ms") + " (0 = one camera update)" +
@@ -1324,6 +1433,68 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
                        std::to_string(ms) + " ms (" + md::ProfileName(profile) + ")");
       return true;
     }
+    if (sub == "aim") {
+      namespace ma = fable2::mouseaim;
+      ma::AimSwapMode m{};
+      if (W.size() < 3 || !ma::ParseAimSwapMode(W[2], m))
+        return out("mouse", "usage: mouse aim off|rmb|detect|both", true), true;
+      const std::string name = ma::AimSwapModeName(m);
+      rex::cvar::SetFlagByName("mouse_aim_mode", name);
+      md::Diag::Get().Note("aim " + name);
+      const char* what = m == ma::AimSwapMode::kOff      ? "off: the mouse never moves the aim reticle"
+                         : m == ma::AimSwapMode::kRmb    ? "rmb: the mouse moves the aim reticle while the aim button is held"
+                         : m == ma::AimSwapMode::kDetect ? "detect: the mouse moves the aim reticle while the game is aiming"
+                                                         : "both: the mouse moves the aim reticle while the aim button is "
+                                                           "held and the game is aiming";
+      out("mouse", std::string("aim ") + what);
+      return true;
+    }
+    if (sub == "aiminput") {
+      namespace ma = fable2::mouseaim;
+      ma::AimInput in{};
+      if (W.size() < 3 || !ma::ParseAimInput(W[2], in))
+        return out("mouse", "usage: mouse aiminput direct|stick", true), true;
+      const std::string name = ma::AimInputName(in);
+      rex::cvar::SetFlagByName("mouse_aim_input", name);
+      md::Diag::Get().Note("aiminput " + name);
+      out("mouse", in == ma::AimInput::kDirect
+                       ? "aim input direct: the mouse moves the reticle straight (mouse aimsens)"
+                       : "aim input stick: the mouse drives the left stick (mouse aimscale)");
+      return true;
+    }
+    if (sub == "aimsens") {
+      // mouse aimsens <sideways> [up/down ratio]: up/down per count is
+      // sideways x the game's aspect x the ratio (mouseaim::VerticalSens), so
+      // the default ratio 1 moves the reticle equally fast both ways on screen.
+      double x = 0, ratio = 1.0;
+      if (W.size() < 3 || !parse_f(W[2], x) || x < 0.000001 || x > 1 ||
+          (W.size() > 3 && (!parse_f(W[3], ratio) || ratio < 0.1 || ratio > 10)))
+        return out("mouse", "usage: mouse aimsens <sideways> [up/down ratio]  (sideways reticle units per "
+                            "count, default 0.0007; ratio 0.1..10, 1 = same speed on screen)", true), true;
+      rex::cvar::SetFlagByName("mouse_aim_sens", std::to_string(x));
+      if (W.size() > 3) rex::cvar::SetFlagByName("mouse_aim_y_ratio", std::to_string(ratio));
+      md::Diag::Get().Note("aimsens x=" + flag("mouse_aim_sens") + " y_ratio=" + flag("mouse_aim_y_ratio"));
+      out("mouse", "aim sens " + flag("mouse_aim_sens") + " sideways, up/down ratio " + flag("mouse_aim_y_ratio") +
+                       " (up/down " + std::to_string(AimVerticalSensNow()) + " per count at this screen shape)");
+      return true;
+    }
+    if (sub == "aiminvert") {
+      bool on = false;
+      if (!on_off(on)) return out("mouse", "usage: mouse aiminvert on|off", true), true;
+      rex::cvar::SetFlagByName("mouse_aim_invert_y", on ? "true" : "false");
+      md::Diag::Get().Note(std::string("aiminvert ") + (on ? "on" : "off"));
+      out("mouse", std::string("aim invert_y ") + (on ? "on" : "off"));
+      return true;
+    }
+    if (sub == "aimscale") {
+      uint64_t v = 0;
+      if (W.size() < 3 || !parse_u(W[2], v) || v < 1 || v > 4096)
+        return out("mouse", "usage: mouse aimscale <1..4096>  (256 = 1x)", true), true;
+      rex::cvar::SetFlagByName("mouse_aim_scale", std::to_string(v));
+      md::Diag::Get().Note("aim_scale " + flag("mouse_aim_scale"));
+      out("mouse", "aim scale " + flag("mouse_aim_scale"));
+      return true;
+    }
     if (sub == "stop") {
       md::Injector::Get().Stop();
       md::Diag::Get().Note("inject stopped");
@@ -1332,7 +1503,9 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     }
     out("mouse", "usage: mouse [status] | mouse mode direct|stick | mouse sens <x> [y] | mouse invert on|off | "
                  "mouse smooth <0..0.9> | mouse smoothing on|off | mouse diag on|off | mouse trace on|off | "
-                 "mouse inject <dx> <dy> [ms] [even|ramp|flick] | mouse stop", true);
+                 "mouse inject <dx> <dy> [ms] [even|ramp|flick] | mouse stop | "
+                 "mouse aim off|rmb|detect|both | mouse aiminput direct|stick | mouse aimsens <x> [ratio] | "
+                 "mouse aiminvert on|off | mouse aimscale <1..4096>", true);
     return true;
   }
   if (name == "step") {
@@ -1989,8 +2162,7 @@ inline void BootPress(const char* button, uint8_t* base) {
 }
 inline void BootFail(const std::string& why) {
   S().boot.step = -1;
-  PadStore().Publish({});
-  S().pad_frames = 0;
+  ReleasePad();
   out("boot", "gave up: " + why, true);
 }
 inline bool BootFired(const char* event, int64_t since) {
@@ -2003,8 +2175,7 @@ inline void BootStep(uint8_t* base) {
   const int64_t now = fable2::uievents::NowMs();
   if (b.release_ms != 0) {
     if (now < b.release_ms) return;  // a press is still held
-    PadStore().Publish({});
-    s.pad_frames = 0;
+    ReleasePad();
     b.release_ms = 0;
     return;
   }
@@ -2116,7 +2287,7 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
   if (s.root.empty()) return;
   ++s.frames;
   if (s.step_frames) --s.step_frames;
-  if (s.pad_frames && --s.pad_frames == 0) PadStore().Publish({});
+  if (s.pad_frames && --s.pad_frames == 0) ReleasePad();
   stress_tick(1, ctx, base);
   poll_pause_key();
   if (s.frames == 1)

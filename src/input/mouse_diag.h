@@ -75,6 +75,10 @@ struct PollRecord {
   bool looking = false;            // focus + mouse_look + debug menu closed
   bool smoothing = false;          // mouse_look_smoothing (velocity window path)
   bool direct = false;             // movement kept for the direct mouse camera
+  bool aim = false;                // aim stick swap: the mouse drives the left stick
+  int32_t lx = 0, ly = 0;          // left stick reported to the game
+  float cur_x = 0, cur_y = 0;      // aim reticle after the game's last cursor update
+  uint64_t aim_ticks = 0;          // cursor updates so far (src/input/mouse_aim.h)
 };
 
 // Running sums for one reporting window (one second for S lines, or the time
@@ -152,14 +156,15 @@ class Diag {
     }
     if (!log) return;
     EnsureWriterLocked();
-    char buf[240];
+    char buf[320];
     std::snprintf(buf, sizeof buf,
                   "P t=%lld tid=%llx gap=%lld dx=%d dy=%d inj=%d,%d rx=%d ry=%d clamp=%d look=%d "
-                  "sm=%d w=%d,%d dir=%d\n",
+                  "sm=%d w=%d,%d dir=%d aim=%d lx=%d ly=%d cur=%.5g,%.5g atk=%llu\n",
                   static_cast<long long>(t), static_cast<unsigned long long>(tid & 0xffffff),
                   static_cast<long long>(gap), r.dx, r.dy, r.inj_dx, r.inj_dy, r.rx, r.ry,
                   r.clamped ? 1 : 0, r.looking ? 1 : 0, r.smoothing ? 1 : 0, r.win_x, r.win_y,
-                  r.direct ? 1 : 0);
+                  r.direct ? 1 : 0, r.aim ? 1 : 0, r.lx, r.ly, static_cast<double>(r.cur_x),
+                  static_cast<double>(r.cur_y), static_cast<unsigned long long>(r.aim_ticks));
     AppendLocked(buf);
   }
 

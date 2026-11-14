@@ -95,6 +95,33 @@ REXCVAR_DEFINE_BOOL(mouse_look_invert_y, false, "Input",
 REXCVAR_DEFINE_DOUBLE(mouse_look_direct_smoothing, 0.0, "Input",
                       "Direct mouse camera: share of the mouse movement held back at each "
                       "camera update for the following ones (0 = none, up to 0.9).");
+// Mouse aiming (src/input/mouse_aim.h). Console only for now (`f2 mouse aim`,
+// `aiminput`, `aimsens`, `aimscale`); no fable2_config.toml key yet.
+REXCVAR_DEFINE_STRING(mouse_aim_mode, "both", "Input",
+                      "When the mouse moves the ranged aim reticle instead of the camera: "
+                      "\"off\", \"rmb\" (aim button held), \"detect\" (the game is aiming) "
+                      "or \"both\" (held and aiming).")
+    .allowed({"off", "rmb", "detect", "both"});
+REXCVAR_DEFINE_STRING(mouse_aim_input, "direct", "Input",
+                      "How the mouse moves the aim reticle: \"direct\" (added straight to the "
+                      "game's aim cursor: no top speed, deadzone or stick smoothing) or "
+                      "\"stick\" (drives the left stick, through the game's stick handling).")
+    .allowed({"direct", "stick"});
+REXCVAR_DEFINE_DOUBLE(mouse_aim_sens, 0.0007, "Input",
+                      "Direct aim: sideways reticle movement per count of mouse movement "
+                      "(the game's aim box is about -0.8..0.8). Up/down follows the screen "
+                      "shape (see mouse_aim_y_ratio).")
+    .range(0.000001, 1.0);
+REXCVAR_DEFINE_DOUBLE(mouse_aim_y_ratio, 1.0, "Input",
+                      "Direct aim: up/down speed on screen against sideways (1 = the same). "
+                      "Up/down per count = mouse_aim_sens x the game's aspect ratio x this.")
+    .range(0.1, 10.0);
+REXCVAR_DEFINE_BOOL(mouse_aim_invert_y, false, "Input",
+                    "Direct aim: true = moving the mouse up moves the reticle down.");
+REXCVAR_DEFINE_INT32(mouse_aim_scale, 256, "Input",
+                     "Stick aim (mouse_aim_input = \"stick\"): sensitivity while the mouse "
+                     "drives the left stick (same units as mouse_look_scale; larger = faster).")
+    .range(1, 4096);
 
 // Key that toggles the debug menu (F4). While the menu is open the mouse lock
 // is released (free cursor); closing it re-locks. This key is excluded from

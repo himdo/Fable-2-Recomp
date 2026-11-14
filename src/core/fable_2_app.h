@@ -175,6 +175,9 @@ class Fable2App : public rex::ReXApp {
     });
     // Render at the window's aspect ratio (src/core/fable2_fit_window.h).
     fable2::fitwindow::Install(runtime()->memory(), window());
+    // Direct mouse aim's up/down sensitivity follows that aspect
+    // (src/input/mouse_aim.h).
+    fable2::mouseaim::AspectSource().store(&fable2::fitwindow::CurrentAspect);
     // Hero/dog black-texture fix (see plans/hero-dog-texture-readback.md).
     // Approach + guest base 0x12704000 credit just-harry's Unofficial Xenia
     // femtofork for Fable II. readback_resolve_force_addresses is defined in the
