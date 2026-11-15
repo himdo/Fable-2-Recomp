@@ -120,19 +120,44 @@ NaN or infinite setting, and the inject speed profiles), and the version
 catalogue in each build profile.
 Test executables go under `out/tests`.
 
-A native test has no expected-failure marker like pytest's, so a confirmed bug
-is checked with `KNOWN_BUG(condition, reason)` instead of `CHECK`. It prints
-`KNOWN BUG` with the reason while the bug is there, and fails once the bug is
-fixed, as a reminder to turn it into a `CHECK`.
+They use [Catch2](https://github.com/catchorg/Catch2) v3, from the SDK's own
+`thirdparty/catch2`, and read like the Python specs:
+
+```cpp
+TEST_CASE("DirectState", "[mouse][direct]") {
+  mdir::DirectState st;  // runs again, fresh, for each SECTION
+
+  SECTION("drops kept movement on Clear") {
+    ...
+    CHECK(dx == 0);
+  }
+}
+```
+
+- Each `TEST_CASE` covers one function or type, and each `SECTION` in it is
+  one behaviour, named as a sentence. Catch2 runs the test case once per
+  section, so the setup above the sections is fresh each time.
+- The run prints each test case with its sections marked `ok` or `FAIL`, like
+  pytest-spec (`native/catch_spec.cpp`). Catch2 then prints each failed check
+  with its values, such as `dx == 0` with expansion `3.0 == 0`, and a summary.
+- Write one comparison per `CHECK`: Catch2 can't show the values of `a && b`.
+  Use `CHECK_THAT(x, WithinAbs(want, tolerance))` for floating point.
+- A confirmed bug gets a `TEST_CASE` tagged `[!shouldfail]` that checks the
+  correct behaviour, the native form of pytest's strict xfail. It's marked
+  `known bug` while it fails, and the run fails once the bug is fixed, as a
+  reminder to remove the tag.
+- To run one test case or section, pass its name or tag to the executable, for
+  example `out\tests\runtime-unit-tests\mouse-direct.exe "DirectState"` or
+  `mouse.exe "[stick]"`. `-?` lists the options.
 
 The runner uses `thirdparty/rexglue-sdk` by default, and an optional first
 argument selects a different SDK source folder. The tests need the SDK's source
-and headers, unpatched, plus three of its own submodules (fmt, simde and spdlog).
-If they're missing, fetch only those, as CI does:
+and headers, unpatched, plus four of its own submodules (fmt, simde, spdlog and
+Catch2). If they're missing, fetch only those, as CI does:
 
 ```sh
 git submodule update --init --depth 1 thirdparty/rexglue-sdk
-git -C thirdparty/rexglue-sdk submodule update --init --depth 1 thirdparty/fmt thirdparty/simde thirdparty/spdlog
+git -C thirdparty/rexglue-sdk submodule update --init --depth 1 thirdparty/fmt thirdparty/simde thirdparty/spdlog thirdparty/catch2
 ```
 
 Clang must be on `PATH` (for example `C:\Program Files\LLVM\bin`). A Visual
@@ -160,7 +185,7 @@ these files.
 
 ```cmd
 dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release -- <game folder>
-out\tests\runtime-unit-tests\xex-goty-compatible.exe <path to default.xex>
+out\tests\runtime-unit-tests\xex-goty-compatible.exe --xex <path to default.xex>
 ```
 
 Run `tests\run_native_tests.cmd` first to build the second one.
