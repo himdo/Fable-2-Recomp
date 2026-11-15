@@ -138,6 +138,21 @@ git -C thirdparty/rexglue-sdk submodule update --init --depth 1 thirdparty/fmt t
 Clang must be on `PATH` (for example `C:\Program Files\LLVM\bin`). A Visual
 Studio developer shell isn't needed.
 
+To see how much of the project's own code (`src/`, `constants/`) the native
+tests run, as CI does, set `FABLE2_COVERAGE=1`:
+
+```cmd
+set FABLE2_COVERAGE=1
+tests\run_native_tests.cmd
+```
+
+The tests are then built with clang's source coverage into
+`out\tests\runtime-unit-tests-coverage`, and the script prints line, function
+and branch coverage per file. It also writes an HTML report with each line's
+count to `coverage-html\index.html` in that folder; CI shows the printed report
+only. A file shows up only when a test includes it, so a header no test touches
+isn't listed at 0%.
+
 ## Optional: checking your own game files
 
 You can point these tests at your own files for local checks. Never commit

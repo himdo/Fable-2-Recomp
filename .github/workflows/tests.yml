@@ -40,8 +40,10 @@ jobs:
           git submodule update --init --depth 1 thirdparty/rexglue-sdk
           git -C thirdparty/rexglue-sdk submodule update --init --depth 1 \
             thirdparty/fmt thirdparty/simde thirdparty/spdlog
-      - name: Native tests
+      - name: Native tests (with coverage)
         shell: cmd
+        env:
+          FABLE2_COVERAGE: "1"
         run: |
           set "PATH=C:\Program Files\LLVM\bin;%PATH%"
           clang++ --version
