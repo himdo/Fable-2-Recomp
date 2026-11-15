@@ -14,6 +14,7 @@
 
 #include "fable_2_app.h"
 #include "fps_meter.h"
+#include "fable2_morph_release_defer.h"
 #include "fable2_text_probe.h"
 #include "fable2_glyph_probe.h"
 #include "fable2_hotfuncs.h"
