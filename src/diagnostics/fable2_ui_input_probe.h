@@ -679,6 +679,7 @@ inline bool dump_hop_on() {
     const char* v = std::getenv("FABLE2_UIR_IN_HOP");
     return v != nullptr && v[0] == '1';
   }();
+  return on;
 #endif
 }
 
