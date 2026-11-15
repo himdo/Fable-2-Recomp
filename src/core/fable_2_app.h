@@ -34,7 +34,7 @@
 #include "fable2_fit_window.h"
 #include "fable2_keycap_swap.h"
 #include "fable2_patches.h"
-#include "keyboard_prompts.h"
+#include "prompt_textures.h"
 // #include "fable2_deadbeef_overlay.h"
 // 30fps-cap instrumentation (writes fps_probe.log next to the exe). Disabled
 // now that the cap is lifted via REX_VSYNC=0 (see tools/fable2-uncapped.cmd).
@@ -153,17 +153,11 @@ class Fable2App : public rex::ReXApp {
       return system;  // C++14 unique_ptr<Derived> -> unique_ptr<Base>
     };
 
-    // Generate the keyboard keycap prompt textures (src/gui/keyboard_prompts.h)
-    // so the real-time prompt swap (src/core/fable2_keycap_swap.h) can show
-    // keycaps while the active input is keyboard/mouse and the original Xbox
-    // icons while a pad is in use. Runs here (OnPreSetup) because it needs both
-    // the config (loaded in OnPostInitLogging) and game_data_root (set in
-    // OnConfigurePaths), and it must run BEFORE OnPostLoadXexImage where the
-    // keycap swap module reads the sidecar. No sidecar is written (no-op) when
-    // there are no bound keys and no mouse look, so a normal launch is unchanged.
-    fable2::gui::GenerateSidecar(game_data_root(),
-                                 fable2::config::Get().keyboard_gamepad_map,
-                                 fable2::config::Get().mouse_look, "");
+    // Keyboard keycap prompts (src/gui/prompt_textures.h). Needs the config and
+    // game_data_root, and must rewrite the GUI banks before the game reads them.
+    fable2::keycap::Instance().SetTextures(fable2::gui::BuildPromptTextures(
+        game_data_root(), fable2::config::Get().keyboard_gamepad_map,
+        fable2::config::Get().mouse_look));
   }
 
   void OnPostSetup() override {
@@ -505,11 +499,7 @@ class Fable2App : public rex::ReXApp {
     // Lets the direct-mouse-look hook (src/core/fable2_hooks.cpp) translate the
     // camera object's guest address to a host pointer.
     fable2::mouselook::set_memory(runtime()->memory());
-    // Real-time keycap prompt swap (src/core/fable2_keycap_swap.h). No-op unless
-    // the launcher wrote a keyboard-prompt sidecar; the prompt variant then
-    // follows the active input device (keyboard/mouse -> keycaps, pad ->
-    // controller icons).
-    fable2::keycap::Instance().Init(runtime()->memory(), game_data_root());
+    fable2::keycap::Instance().Init(runtime()->memory());
   }
 
   // Startup integrity check: this build was recompiled against a specific

@@ -1,4 +1,4 @@
-// Exports original and edited PNGs for every texture modified by GenerateSidecar.
+// Exports original and edited PNGs for every texture the keycap prompts change.
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -11,9 +11,7 @@
 #include <malloc.h>
 #include <zlib-ng.h>
 
-#include "keycap_render.h"
-#include "keyboard_prompts.h"
-#include "xenos_tiling.h"
+#include "prompt_textures.h"
 
 namespace rex::filesystem {
 std::filesystem::path GetExecutableFolder() { return std::filesystem::current_path(); }
@@ -96,182 +94,51 @@ static std::string LeafName(const std::string& name) {
   return leaf;
 }
 
-static std::string SafeName(const std::string& name) {
-  std::string s;
-  for (char c : name)
-    s += (c == '\\' || c == '/' || c == ':') ? '_' : c;
-  return s;
+// "<parent folder>_<leaf>", so the 64x64 and 32x32 icon tiers don't collide.
+static std::string OutputName(const std::string& name) {
+  std::string parent = name.substr(0, name.find_last_of("\\/"));
+  parent = parent.substr(parent.find_last_of("\\/") + 1);
+  return parent + "_" + LeafName(name);
 }
 
-// Read u32 big-endian from header metadata.
-static int HdrU32(const uint8_t* p, int off) {
-  return (p[off] << 24) | (p[off+1] << 16) | (p[off+2] << 8) | p[off+3];
+static std::vector<uint8_t> ReadFile(const char* path) {
+  std::ifstream f(path, std::ios::binary);
+  return {std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>()};
 }
 
 int main() {
   const std::string outDir = "tools/texture_export/out";
   std::filesystem::create_directories(outDir);
-  fprintf(stderr, "output dir: %s/\n", outDir.c_str());
 
-  std::vector<uint8_t> tx, hx;
-  {
-    std::ifstream f("data/art/gui/gui_textures.bnk", std::ios::binary);
-    if (!f) { fprintf(stderr, "cannot open texture bank\n"); return 1; }
-    f.seekg(0, std::ios::end); tx.resize(size_t(f.tellg()));
-    f.seekg(0, std::ios::beg); f.read((char*)tx.data(), (std::streamsize)tx.size());
+  const auto tx = ReadFile("data/art/gui/gui_textures.bnk");
+  const auto hx = ReadFile("data/art/gui/gui_texture_headers.bnk");
+  GuiTextureBank bank, headers;
+  if (!bank.Parse(tx.data(), tx.size()) || !headers.Parse(hx.data(), hx.size())) {
+    fprintf(stderr, "cannot read the GUI banks under data/art/gui\n");
+    return 1;
   }
-  {
-    std::ifstream f("data/art/gui/gui_texture_headers.bnk", std::ios::binary);
-    if (!f) { fprintf(stderr, "cannot open header bank\n"); return 1; }
-    f.seekg(0, std::ios::end); hx.resize(size_t(f.tellg()));
-    f.seekg(0, std::ios::beg); f.read((char*)hx.data(), (std::streamsize)hx.size());
-  }
-  GuiTextureBank bank, hdrBank;
-  if (!bank.Parse(tx.data(), tx.size())) { fprintf(stderr, "tex parse failed\n"); return 1; }
-  if (!hdrBank.Parse(hx.data(), hx.size())) { fprintf(stderr, "hdr parse failed\n"); return 1; }
-  fprintf(stderr, "bank: %zu entries, headers: %zu entries\n", bank.entries().size(), hdrBank.entries().size());
 
-  std::unordered_map<std::string, std::string> labels;
-  auto addLabel = [&labels](const char* key, const char* val) { labels[Ci(key)] = val; };
-  addLabel("a", "E"); addLabel("b", "B"); addLabel("x", "LMB"); addLabel("y", "RMB");
-  addLabel("lb", "Z"); addLabel("rb", "Tab"); addLabel("lt", "Q"); addLabel("rt", "R");
-  addLabel("pause", "Esc"); addLabel("select", "M");
-  addLabel("stickup", "W"); addLabel("stickdown", "S");
-  addLabel("stickleft", "A"); addLabel("stickright", "D");
-  addLabel("up", "Up"); addLabel("down", "Down");
-  addLabel("left", "Left"); addLabel("right", "Right");
-
-  // Helper: decode a texture entry to a 0x00A2 tile using header bank for format/size.
-  auto DecodeToTile = [&](const auto& e, const std::string& name) -> std::vector<uint8_t> {
-    auto hit = hdrBank.entries().find(Ci(name));
-    if (hit == hdrBank.entries().end() || hit->second.length < 24) return {};
-    const uint8_t* md = hdrBank.Payload(hit->second);
-    int w = HdrU32(md, 16);
-    int h = HdrU32(md, 20);
-    int format = HdrU32(md, 12);
-    if (w <= 0 || h <= 0) return {};
-    int a2 = 4 + w * h * 4;
-    std::vector<uint8_t> tile;
-    if (format == 0xA2) {
-      if (e.length != (unsigned)a2) return {};
-      tile.assign(bank.Payload(e), bank.Payload(e) + e.length);
-    } else {
-      if (!DecodeCompressedIconToTile(bank.Payload(e), e.length, w, h, tile) ||
-          (int)tile.size() != a2)
-        return {};
-    }
-    return tile;
-  };
-
+  // The default key map, as in config/fable2_config.toml.
+  const auto labels = ResolveLabels(
+      "LMB:X,RMB:Y,MMB:B,Shift:A,E:A,Q:LT,Tab:RB,R:RT,Z:LB,B:B,W:StickUp,S:StickDown,"
+      "A:StickLeft,D:StickRight,Escape:Pause,M:Select,Up:Up,Down:Down,Left:Left,Right:Right",
+      "");
   int count = 0;
-
-  // === 1. Controller icons (32x32 and 64x64) ===
-  fprintf(stderr, "controller icons:\n");
-  for (auto& [key, entry] : bank.entries()) {
-    auto labelOpt = IconLabel(entry.name, labels, /*mouseLook=*/true);
-    if (!labelOpt) continue;
-    auto hit = hdrBank.entries().find(Ci(entry.name));
-    if (hit == hdrBank.entries().end() || hit->second.length < 24) continue;
-    const uint8_t* md = hdrBank.Payload(hit->second);
-    int w = HdrU32(md, 16);
-    int h = HdrU32(md, 20);
-    int format = HdrU32(md, 12);
-    if ((w != 32 && w != 64) || h != w) continue;
-    int a2 = 4 + w * h * 4;
-
-    std::vector<uint8_t> original;
-    if (format == 0xA2) {
-      if (entry.length != (unsigned)a2) continue;
-      original.assign(bank.Payload(entry), bank.Payload(entry) + entry.length);
-    } else {
-      if (!DecodeCompressedIconToTile(bank.Payload(entry), entry.length, w, h, original) ||
-          (int)original.size() != a2)
-        continue;
+  for (const auto& [name, keycaps] : PlanKeycaps(bank, headers, labels, /*mouse_look=*/true)) {
+    const auto& entry = bank.entries().at(name);
+    const auto h = ReadHeader(headers, name);
+    const auto images = DrawPromptImages(bank.Payload(entry), size_t(entry.length), *h, keycaps);
+    if (!images) {
+      fprintf(stderr, "  %s: decode failed\n", entry.name.c_str());
+      continue;
     }
-    auto keycap = RenderKeycap(*labelOpt, w);
-    if ((int)keycap.size() != a2) continue;
-
-    // Use parent-dir + leaf to disambiguate 24x24 vs main tier.
-    std::string subdir;
-    {
-      auto bs1 = entry.name.rfind('\\');
-      if (bs1 != std::string::npos && bs1 > 0) {
-        auto bs2 = entry.name.rfind('\\', bs1 - 1);
-        if (bs2 != std::string::npos && bs1 - bs2 - 1 > 0)
-          subdir = entry.name.substr(bs2 + 1, bs1 - bs2 - 1);
-      }
-    }
-    std::string base = (subdir.empty() ? "" : subdir + "_") + LeafName(entry.name);
-
-    WritePng(outDir + "/" + base + "_original.png", w, h, DeTile(original.data(), w, h).data());
-    WritePng(outDir + "/" + base + "_edited.png", w, h, DeTile(keycap.data(), w, h).data());
+    const std::string base = outDir + "/" + OutputName(entry.name);
+    WritePng(base + "_original.png", h->width, h->height,
+             DeTile(images->rgba[0].data(), h->width, h->height).data());
+    WritePng(base + "_edited.png", h->width, h->height,
+             DeTile(images->rgba[1].data(), h->width, h->height).data());
     count += 2;
   }
-
-  // === 2. abyx.tex (256x256) ===
-  fprintf(stderr, "abyx.tex:\n");
-  {
-    std::string bs(1, '\\');
-    const std::string abyxName = "art" + bs + "gui" + bs + "persistant" + bs + "abyx.tex";
-    auto at = bank.entries().find(Ci(abyxName));
-    if (at == bank.entries().end()) {
-      fprintf(stderr, "  abyx not found\n");
-    } else {
-      auto tile = DecodeToTile(at->second, abyxName);
-      if (tile.empty()) {
-        fprintf(stderr, "  abyx decode failed\n");
-      } else {
-        const int w = 256, h = 256;
-        WritePng(outDir + "/abyx_original.png", w, h, DeTile(tile.data(), w, h).data());
-        std::vector<uint8_t> kb = tile;
-        const char* btnKeys[] = {"a", "b", "y", "x"};
-        for (int i = 0; i < 4; ++i) {
-          auto it = labels.find(btnKeys[i]);
-          if (it == labels.end()) continue;
-          auto keycap = RenderKeycapInset(it->second, 10, 4, -3);
-          ReplaceKeycapRegion(kb, keycap, w, h, i * 64, 0);
-          ReplaceKeycapRegion(kb, keycap, w, h, i * 64, 64);
-        }
-        WritePng(outDir + "/abyx_edited.png", w, h, DeTile(kb.data(), w, h).data());
-        count += 2;
-      }
-    }
-  }
-
-  // === 3. frames_elements.tex (512x512) ===
-  fprintf(stderr, "frames_elements.tex:\n");
-  {
-    std::string bs(1, '\\');
-    const std::string frameName = "art" + bs + "gui" + bs + "frames" + bs + "frames_elements.tex";
-    auto at = bank.entries().find(Ci(frameName));
-    if (at == bank.entries().end()) {
-      fprintf(stderr, "  frames_elements not found\n");
-    } else {
-      auto tile = DecodeToTile(at->second, frameName);
-      if (tile.empty()) {
-        fprintf(stderr, "  frames_elements decode failed\n");
-      } else {
-        const int w = 512, h = 512;
-        WritePng(outDir + "/frames_elements_original.png", w, h, DeTile(tile.data(), w, h).data());
-        std::vector<uint8_t> kb = tile;
-        struct KSpec { const char* key; int x, y; };
-        const KSpec kspecs[] = { {"b", 46, 193}, {"a", 13, 372} };
-        // 46 wide, 46+16 tall (8px taller on top and bottom), centered on the
-        // original 46-tall region.
-        const int kW = 46, kH = 62;
-        for (auto& ks : kspecs) {
-          auto it = labels.find(ks.key);
-          if (it == labels.end()) continue;
-          auto kcap = RenderKeycapLinear(it->second, kW, kH);
-          const int top = ks.y - (kH - 46) / 2;  // shift up so it stays centered
-          CompositeLinearRegion(kb, kcap.data(), kW, kH, w, h, ks.x, top);
-        }
-        WritePng(outDir + "/frames_elements_edited.png", w, h, DeTile(kb.data(), w, h).data());
-        count += 2;
-      }
-    }
-  }
-
-  fprintf(stderr, "\ndone: %d PNGs written to %s/\n", count, outDir.c_str());
+  fprintf(stderr, "done: %d PNGs written to %s/\n", count, outDir.c_str());
   return 0;
 }

@@ -1,7 +1,8 @@
 # Texture Export Tool
 
 Exports original and edited PNG images for every GUI texture modified by the
-keycap swap feature (`GenerateSidecar` in `src/gui/keyboard_prompts.h`).
+keycap prompts (`PlanKeycaps` and `DrawPromptImages` in `src/gui/prompt_textures.h`),
+using the default key map.
 
 ## What It Does
 
@@ -17,9 +18,9 @@ Textures exported:
 | `abyx.tex` | 256×256 | A/B/Y/X face buttons (top + second row) |
 | `frames_elements.tex` | 512×512 | B keycap at (46,193), A keycap at (13,372) |
 
-Output naming: `<name>_original.png` and `<name>_edited.png` per texture.
-Controller icons use `<subdir>_<leaf>_original.png` to disambiguate the 64×64
-(`Controller_`) and 32×32 (`24x24_`) tiers.
+Output naming: `<folder>_<leaf>_original.png` and `<folder>_<leaf>_edited.png`
+per texture, e.g. `Controller_icon_button_a`, `24x24_leftbutton` or
+`frames_frames_elements`, so the 64×64 and 32×32 icon tiers don't collide.
 
 ## Prerequisites
 

@@ -326,10 +326,9 @@ inline int Load(const std::filesystem::path& root, std::string& log, const std::
     }
   }
   {
-    // The keyboard-prompt swap (src/gui/keyboard_prompts.h) rewrites these banks
-    // with keycaps in place of the controller art and keeps the pristine ones
-    // as <bank>.orig: read those when they exist, so the controller icons are
-    // always the game's own.
+    // The keyboard-prompt swap (src/gui/prompt_textures.h) rewrites these banks
+    // and keeps the pristine ones as <bank>.orig: read those when they exist,
+    // so the controller icons are always the game's own.
     const auto dir = root / "data" / "art" / "gui";
     auto pick = [&](const char* file) {
       std::error_code ec;

@@ -26,6 +26,9 @@ clang++ -std=c++23 -I"%SDK%\include" -I"%SDK%\thirdparty\fmt\include" -I"%SDK%\t
 rem Direct mouse camera (accumulator, route, Lua return values) and inject profiles.
 clang++ -std=c++23 -I"%SDK%\include" -I"%SDK%\thirdparty\fmt\include" -I"%SDK%\thirdparty\simde" -I"%SDK%\thirdparty\spdlog\include" -I"%ROOT%" -I"%ROOT%\src\input" "%~dp0native\test_mouse_direct.cpp" -o "%OUT%\mouse-direct.exe" || exit /b 1
 "%OUT%\mouse-direct.exe" || exit /b 1
+rem Keycap prompt textures (memory scan, raw BC3 path, labels).
+clang++ -std=c++23 -I"%ROOT%\src" "%~dp0native\test_keycap_textures.cpp" -o "%OUT%\keycap-textures.exe" || exit /b 1
+"%OUT%\keycap-textures.exe" || exit /b 1
 for %%P in (goty-compatible goty-us-eu goty-german) do (
   clang++ -std=c++23 -DFABLE2_BUILD_PROFILE=\"%%P\" "%~dp0native\test_xex_verify.cpp" -o "%OUT%\xex-%%P.exe" || exit /b 1
   "%OUT%\xex-%%P.exe" || exit /b 1
