@@ -48,20 +48,23 @@ elif [ -x "$LOCAL_LLVM/lib/llvm-20/bin/clang++" ]; then
     CC="$LOCAL_LLVM/lib/llvm-20/bin/clang" CXX="$LOCAL_LLVM/lib/llvm-20/bin/clang++"
     export LD_LIBRARY_PATH="$LOCAL_LLVM/lib/x86_64-linux-gnu:$LOCAL_LLVM/lib/llvm-20/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 else
-    echo "Error: clang 20 not found. Install it (apt install clang-20 lld-20)." >&2
+    echo "Error: clang not found. Install clang 20 and lld" \
+         "(Debian/Ubuntu: apt install clang-20 lld-20;" \
+         "Fedora: dnf install clang20 lld20; Arch: pacman -S clang lld)." >&2
     exit 1
 fi
 if ! command -v ninja >/dev/null; then
     if [ -x "$ROOT/out/tooling/bin/ninja" ]; then
         export PATH="$ROOT/out/tooling/bin:$PATH"
     else
-        echo "Error: ninja not found. Install it (apt install ninja-build)." >&2
+        echo "Error: ninja not found. Install it (Debian/Ubuntu/Fedora:" \
+             "ninja-build; Arch: ninja)." >&2
         exit 1
     fi
 fi
 
 # Optional locally unpacked -dev packages (for machines without root access;
-# the normal route is: apt install libx11-xcb-dev libxss-dev).
+# the normal route is installing the X11 xcb and XScrnSaver dev packages).
 LOCAL_PC="$ROOT/out/tooling/sysdeps/usr/lib/x86_64-linux-gnu/pkgconfig"
 if [ -d "$LOCAL_PC" ]; then
     export PKG_CONFIG_PATH="$LOCAL_PC${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
@@ -73,23 +76,18 @@ if [ ! -f "$ROOT/default.xex" ]; then
     exit 1
 fi
 
-# Pinned SDK source + its dependencies (no-op once fetched).
+# Pinned SDK source + its dependencies. The Linux fixes live in the SDK fork
+# itself (himdo/rexglue-sdk), so the tree is used as pinned; the prepare step
+# only fetches the SDK's submodules and is a quick no-op once they are there.
 SDKSRC="$ROOT/thirdparty/rexglue-sdk"
 if [ ! -f "$SDKSRC/CMakeLists.txt" ]; then
     git submodule update --init thirdparty/rexglue-sdk
 fi
-# Linux build fixes for the SDK fork (thirdparty/rexglue-sdk-linux.patch) go on
-# top of the prepared tree. prepare_runtime_sdk.py only accepts an unmodified
-# tree, so it runs before the patch and is skipped once the patch is in.
-LINUX_PATCH="$ROOT/thirdparty/rexglue-sdk-linux.patch"
-if ! git -C "$SDKSRC" apply --reverse --check "$LINUX_PATCH" 2>/dev/null; then
-    python3 "$ROOT/tools/prepare_runtime_sdk.py" "$SDKSRC"
-    git -C "$SDKSRC" apply "$LINUX_PATCH"
-fi
+python3 "$ROOT/tools/prepare_runtime_sdk.py" "$SDKSRC"
 
 # SDL3 treats the X11 screensaver extension as required when X11 is enabled;
-# it only inhibits the screensaver, so build without it when libxss-dev is
-# not installed instead of failing the configure.
+# it only inhibits the screensaver, so build without it when the XScrnSaver
+# headers are not installed instead of failing the configure.
 SDL_ARGS=()
 if [ ! -f /usr/include/X11/extensions/scrnsaver.h ]; then
     SDL_ARGS+=(-DSDL_X11_XSCRNSAVER=OFF)
