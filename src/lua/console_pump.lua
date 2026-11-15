@@ -1,63 +1,52 @@
--- console_pump.lua (console-v9): runs f2 Lua commands inside the game's own
--- script update, at a safe point on the script thread.
+-- console_pump.lua: readies the developer console's Lua commands. The host runs
+-- it with RunScript, on the world thread, before the first command (and again
+-- after a save is loaded, since a load clears the Lua globals).
 --
--- Calling CScriptManager::RunScript from the host's MainRenderLoop hook for
--- every command raced the game's own Lua and corrupted the VM (crashes within
--- seconds of long or repeated commands). Instead the host runs this file once;
--- it registers a per-frame script with the GeneralScriptManager (the same way
--- F5.lua registers its menu). Every few frames it loads console_run.lua, which
--- the host rewrites as `return <seq>, [==[<command line>]==]`, and when <seq> is
--- new it runs console_cmds.lua with that line and reports "__f2 done <seq>".
--- The host's cprint hook reads the "__f2 ..." markers.
+-- It used to register a per-frame script with the GeneralScriptManager that
+-- polled for commands. Don't do that again: the GeneralScriptManager writes its
+-- running scripts into save games (GetSaveTable), and that script carried
+-- `_G = _G` and `__index = _G`, so every save written while it ran held the
+-- whole global table. Loading such a save restored the script beside a newly
+-- installed one (each command then ran twice), and the game crashed inside its
+-- script engine soon after: null reads, aborts in the error handler, a stack
+-- overflow walking the tables (2026-11-14/15). Now each command is a
+-- RunScript of console_step.lua, and nothing stays in the script list.
+--
+-- Clean up those scripts when an older save brings them back: this console's
+-- pump and the F5 menu (F5.lua) are the only scripts that carry an `_G` field.
+-- Ending one means giving it an update that finishes; the GeneralScriptManager
+-- then drops it from the list (and from the next save).
 
-local RUN = "scripts/recomp/console_run.lua"
-local CMDS = "scripts/recomp/console_cmds.lua"
-
-local function current()
-  local f = loadfile(RUN)
-  if not f then return nil end
-  local ok, seq, line = pcall(f)
-  if ok and type(seq) == "number" then return seq, line end
-  return nil
-end
-
-local st = rawget(_G, "__f2_pump")
-if st then
-  pcall(cprint, "[console] __f2 ready")
-  return
-end
-st = { last = current() or -1 }
-rawset(_G, "__f2_pump", st)
-
-local function step()
-  local seq, line = current()
-  if seq == nil or seq == st.last then return end
-  st.last = seq
-  local cmds = loadfile(CMDS)
-  if cmds then
-    local ok, err = pcall(cmds, line)
-    if not ok then pcall(cprint, "[console] error: " .. tostring(err)) end
-  else
-    pcall(cprint, "[console] console_cmds.lua not found")
+local function retire_old_scripts()
+  -- Not rawget: the game provides GeneralScriptManager through _G's
+  -- metatable, so a raw lookup finds nothing.
+  local gsm = GeneralScriptManager
+  if type(gsm) ~= "table" then return 0 end
+  local removed = 0
+  local node = rawget(gsm, "CurrentlyRunningScripts")
+  local guard = 0
+  while type(node) == "table" and node.value ~= nil and guard < 1000 do
+    guard = guard + 1
+    local s = node.value
+    if type(s) == "table" and rawget(s, "_G") ~= nil and rawget(s, "_Name") == nil and
+        rawget(s, "QuestName") == nil then
+      rawset(s, "Update", function() end)
+      rawset(s, "co_update", coroutine.create(function() end))
+      rawset(s, "_G", nil)
+      rawset(s, "__index", nil)
+      removed = removed + 1
+    end
+    node = node.next
   end
-  pcall(cprint, "[console] __f2 done " .. seq)
+  return removed
 end
 
--- Persistent per-frame body, driven as a coroutine by the GeneralScriptManager.
--- Nothing in console_cmds.lua yields, so each command runs inside pcall.
-local function update()
-  local n = 0
-  while true do
-    n = n + 1
-    if n % 2 == 0 then pcall(step) end
-    coroutine.yield()
-  end
+local ok, n = pcall(retire_old_scripts)
+if ok and n > 0 then
+  pcall(cprint, "[console] retired " .. n .. " old console/F5 script(s) restored from the save")
+elseif not ok then
+  pcall(cprint, "[console] could not check for old console scripts: " .. tostring(n))
 end
-
-local pump = {}
-setmetatable(pump, pump)
-pump.__index = _G
-pump._G = _G
-pump.Update = update
-GeneralScriptManager.AddScript(pump)
+-- console_step.lua skips a sequence number it has already run; start fresh.
+rawset(_G, "__f2_last", nil)
 pcall(cprint, "[console] __f2 ready")
