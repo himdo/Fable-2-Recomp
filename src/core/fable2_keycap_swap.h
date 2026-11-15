@@ -29,7 +29,9 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -47,6 +49,8 @@
 #include <rex/ui/keybinds.h>
 #include <rex/ui/virtual_key.h>
 
+#include "../gui/gui_tex_codec.h"
+
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -63,8 +67,9 @@ inline constexpr uint32_t kSidecarMagic = 0x4D50424Bu;
 // Sidecar version 2 carries both the original (full-RGBA) and keyboard (keycap)
 // payloads per entry, so the swap module does not need to read the bank for the
 // original (the compressed icons are served from a rebuilt .keycap/ bank, and the
-// original's decoded pixels are not in the on-disk bank).
-inline constexpr uint32_t kSidecarVersion = 2;
+// original's decoded pixels are not in the on-disk bank). Version 3 adds each
+// entry's width, nonzero for raw BC3 entries.
+inline constexpr uint32_t kSidecarVersion = 3;
 
 // One affected bank entry (a controller icon texture).
 struct Entry {
@@ -73,6 +78,11 @@ struct Entry {
   uint32_t size = 0;  // Entry length in bytes.
   std::vector<uint8_t> original;  // Original entry payload (from the bank file).
   std::vector<uint8_t> keyboard;  // Keyboard-variant entry payload (same size).
+  // Each variant as it sits in guest memory once loaded: the payload after its
+  // 4-byte size prefix for full RGBA, the tiled blocks for raw BC3.
+  std::vector<uint8_t> live_original;
+  std::vector<uint8_t> live_keyboard;
+  bool raw_bc3 = false;
   // Recorded by the post-read hook: guest virtual address where this entry
   // was last read (diagnostic only; the live pixels are located by scan).
   uint32_t guest_address = 0;
@@ -232,6 +242,8 @@ class KeycapSwap {
       std::memcpy(&abs_offset, raw.data() + off, 8);
       off += 8;
       uint32_t size = rd_u32(off);
+      if (off + 4 > raw.size()) return false;
+      uint32_t width = rd_u32(off);
       if (off + 2u * size > raw.size()) return false;
       Entry e;
       e.bank_path = bank_path;
@@ -241,6 +253,14 @@ class KeycapSwap {
       off += size;
       e.keyboard.assign(raw.begin() + off, raw.begin() + off + size);
       off += size;
+      e.raw_bc3 = width != 0 && fable2::gui::IsRawBc3Body(e.original);
+      if (e.raw_bc3) {
+        e.live_original = fable2::gui::RawBc3LiveSurface(e.original, int(width));
+        e.live_keyboard = fable2::gui::RawBc3LiveSurface(e.keyboard, int(width));
+      } else if (size > 4) {
+        e.live_original.assign(e.original.begin() + 4, e.original.end());
+        e.live_keyboard.assign(e.keyboard.begin() + 4, e.keyboard.end());
+      }
       entries_.push_back(std::move(e));
     }
     // Parallel to entries_: true once a scan confirmed the icon has no live GPU
@@ -248,6 +268,8 @@ class KeycapSwap {
     // rescanning all 512 MB. Cleared when the bank is (re)read. Atomic because
     // the background scan thread and the post-read hook (guest thread) touch it.
     scan_stale_ = std::make_unique<std::atomic<bool>[]>(entries_.size());
+    served_mode_ = std::make_unique<std::atomic<int>[]>(entries_.size());
+    for (size_t i = 0; i < entries_.size(); ++i) served_mode_[i].store(-1);
     return true;
   }
 
@@ -302,6 +324,7 @@ class KeycapSwap {
       const uint64_t ov_len = std::min(entry_end, read_end) - ov_start;
       const uint8_t* src = (mode_ != 0) ? entry.keyboard.data() : entry.original.data();
       std::memcpy(host_buffer + (ov_start - read_start), src + (ov_start - entry_start), ov_len);
+      served_mode_[i].store(mode_);
       if (byte_offset <= entry_start) {
         entry.guest_address = guest_address + uint32_t(entry_start - byte_offset);
         if (!entry.guest_address_valid) {
@@ -317,35 +340,41 @@ class KeycapSwap {
     }
   }
 
-  // Scans the pre-committed 512MB guest main memory (physical RAM) for full matches
-  // of `needle`, recording guest addresses of the form 0xA0000000 + phys_offset (the
-  // vA0000000 physical view, so LookupHeap routes them to the physical heap and the
-  // GPU page-keyed texture cache). Returns the number of matches (up to cap).
-  int FindMatchesInPhysical(const uint8_t* needle, size_t nlen, uint32_t* out, int cap) {
-    int count = 0;
-    if (nlen == 0) return 0;
-    uint8_t* base = memory_->physical_membase();
-    const uint64_t total = 0x20000000ull;  // 512MB guest RAM
-    size_t k = 0;
-    while (k < nlen && needle[k] == 0) k++;
-    if (k >= nlen) return 0;  // all-zero needle: nothing to match
-    const uint8_t key = needle[k];
-    const uint8_t* limit_start = base + (total - nlen);
-    const uint8_t* q = base;
-    while (q <= limit_start) {
-      const uint8_t* hit = static_cast<const uint8_t*>(std::memchr(q, key, limit_start + 1 - q));
-      if (!hit) break;
-      const uint8_t* cand = hit - k;
-      if (cand >= base && std::memcmp(cand, needle, nlen) == 0) {
-        const uint64_t off = static_cast<uint64_t>(cand - base);
-        if (count < cap) out[count] = 0xA0000000u + static_cast<uint32_t>(off);
-        count++;
-        q = cand + nlen;
-      } else {
-        q = hit + 1;
+  // One texture variant to look for in a scan, and where it was found.
+  struct Needle {
+    size_t entry = 0;
+    int order = 0;
+    std::vector<uint8_t> bytes;
+    size_t key = 0;  // offset of an 8-byte window that isn't one repeated byte
+    int found = 0;
+    uint32_t addrs[4] = {0, 0, 0, 0};
+  };
+
+  // Scans the 512MB guest main memory (physical RAM) once for all needles,
+  // recording guest addresses of the form 0xA0000000 + phys_offset (the
+  // vA0000000 physical view, so LookupHeap routes them to the physical heap and
+  // the GPU page-keyed texture cache). Xenos texture bases are 4KB aligned, so
+  // only page starts are tried.
+  void FindAllInPhysical(std::vector<Needle>& needles) {
+    const uint8_t* base = memory_->physical_membase();
+    const uint64_t total = 0x20000000ull;
+    for (auto& n : needles) {
+      n.key = 0;
+      for (size_t k = 0; k + 8 <= n.bytes.size(); ++k) {
+        if (std::memcmp(n.bytes.data() + k, n.bytes.data() + k + 1, 7) != 0) {
+          n.key = k;
+          break;
+        }
       }
     }
-    return count;
+    for (uint64_t off = 0; off < total; off += 0x1000) {
+      for (auto& n : needles) {
+        if (n.found >= 4 || off + n.bytes.size() > total) continue;
+        if (std::memcmp(base + off + n.key, n.bytes.data() + n.key, 8) != 0) continue;
+        if (std::memcmp(base + off, n.bytes.data(), n.bytes.size()) == 0)
+          n.addrs[n.found++] = 0xA0000000u + static_cast<uint32_t>(off);
+      }
+    }
   }
 
   // Copies `px` into `out`, optionally swapping the R and B bytes of every pixel
@@ -381,13 +410,16 @@ class KeycapSwap {
   void ApplyModeChange(int old_mode, int new_mode) {
     Log(std::string("Keycap mode: ") + (old_mode == 0 ? "controller" : "keyboard") + " -> " +
         (new_mode == 0 ? "controller" : "keyboard"));
+    const auto started = std::chrono::steady_clock::now();
     int patched_total = 0;
+    std::vector<Needle> needles;
+    std::vector<size_t> scanned;
     for (size_t i = 0; i < entries_.size(); ++i) {
       auto& e = entries_[i];
-      if (e.size <= 4) continue;
-      const size_t px_len = e.size - 4;  // skip the 4-byte pixel_byte_count prefix
-      const uint8_t* cur = (old_mode != 0) ? e.keyboard.data() + 4 : e.original.data() + 4;
-      const uint8_t* nxt = (new_mode != 0) ? e.keyboard.data() + 4 : e.original.data() + 4;
+      if (e.live_original.empty() || e.live_keyboard.size() != e.live_original.size()) continue;
+      const size_t px_len = e.live_original.size();
+      const uint8_t* cur = (old_mode != 0) ? e.live_keyboard.data() : e.live_original.data();
+      const uint8_t* nxt = (new_mode != 0) ? e.live_keyboard.data() : e.live_original.data();
 
       // Skip icons confirmed to have no live GPU surface (not on screen). The
       // bank re-read hook clears this flag, so a newly-shown icon is scanned on
@@ -418,44 +450,55 @@ class KeycapSwap {
         }
       }
 
-      // Slow path: scan physical RAM for the current pixels, patch every copy,
-      // and (re)build the cache so the next switch takes the fast path.
-      int found = 0;
-      uint32_t addrs[4];
-      for (int order = 0; order < 2 && found == 0; ++order) {
-        std::vector<uint8_t> needle;
-        BuildPixels(cur, px_len, order, needle);
-        found = FindMatchesInPhysical(needle.data(), needle.size(), addrs, 4);
-        if (found > 0) {
-          for (int j = 0; j < found && j < 4; ++j) {
-            const uint64_t phys_off = static_cast<uint64_t>(addrs[j]) - 0xA0000000ull;
-            uint8_t* live = memory_->physical_membase() + phys_off;
-            if (j == 0) {
-              Log("  entry[" + std::to_string(i) + "] live=" + HexDump(live, 16) +
-                  " expected=" + HexDump(cur, 16) +
-                  (std::memcmp(live, needle.data(), 16) == 0 ? " match=yes" : " match=NO") +
-                  " (scanned)");
-            }
-            PatchBuffer(e, addrs[j], order, nxt, px_len);
-            patched_total++;
-            if (j == 0) Log("    -> patched @" + HexAddr(addrs[j]) + " order=" +
-                            std::to_string(order) + " (found " + std::to_string(found) + " copies)");
-          }
-          // Rebuild the cache from this scan.
-          e.cached_count = found > 4 ? 4 : found;
-          for (int j = 0; j < e.cached_count; ++j) e.cached_addrs[j] = addrs[j];
-          e.cached_order = order;
-          scan_stale_[i].store(false);
-        }
+      // Slow path: queue the current pixels for the shared scan below.
+      const int orders = e.raw_bc3 ? 1 : 2;  // the R<->B swap only applies to RGBA
+      for (int order = 0; order < orders; ++order) {
+        Needle n;
+        n.entry = i;
+        n.order = order;
+        BuildPixels(cur, px_len, order, n.bytes);
+        if (std::all_of(n.bytes.begin(), n.bytes.end(), [](uint8_t b) { return b == 0; }))
+          continue;  // all zero: would match any blank page
+        needles.push_back(std::move(n));
       }
-      if (found == 0) {
+      scanned.push_back(i);
+    }
+
+    // One pass over physical RAM for every queued texture, then patch each copy
+    // found and (re)build the cache so the next switch takes the fast path.
+    FindAllInPhysical(needles);
+    for (size_t i : scanned) {
+      auto& e = entries_[i];
+      const size_t px_len = e.live_original.size();
+      const uint8_t* cur = (old_mode != 0) ? e.live_keyboard.data() : e.live_original.data();
+      const uint8_t* nxt = (new_mode != 0) ? e.live_keyboard.data() : e.live_original.data();
+      const Needle* hit = nullptr;
+      for (const auto& n : needles)
+        if (n.entry == i && n.found > 0 && (!hit || n.order < hit->order)) hit = &n;
+      if (hit) {
+        Log("  entry[" + std::to_string(i) + "] found " + std::to_string(hit->found) +
+            " copies, first @" + HexAddr(hit->addrs[0]) + " order=" + std::to_string(hit->order));
+        for (int j = 0; j < hit->found; ++j) {
+          PatchBuffer(e, hit->addrs[j], hit->order, nxt, px_len);
+          patched_total++;
+          e.cached_addrs[j] = hit->addrs[j];
+        }
+        e.cached_count = hit->found;
+        e.cached_order = hit->order;
+        scan_stale_[i].store(false);
+      } else {
         e.cached_count = 0;
-        scan_stale_[i].store(true);
+        // A bank read during this switch already served the new variant, so the
+        // texture may well be on screen; the next switch must look for it.
+        if (served_mode_[i].load() != new_mode) scan_stale_[i].store(true);
         Log("  entry[" + std::to_string(i) + "] NOT FOUND in physical RAM (first16=" +
             HexDump(cur, 16) + ")");
       }
     }
-    Log("Keycap mode done: patched " + std::to_string(patched_total) + " buffer(s)");
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - started).count();
+    Log("Keycap mode done: patched " + std::to_string(patched_total) + " buffer(s) in " +
+        std::to_string(ms) + " ms");
   }
 
   static std::string HexAddr(uint32_t a) {
@@ -480,6 +523,8 @@ class KeycapSwap {
   rex::memory::Memory* memory_ = nullptr;
   std::vector<Entry> entries_;
   std::unique_ptr<std::atomic<bool>[]> scan_stale_;  // parallel to entries_, see above
+  // Parallel to entries_: the mode whose variant the last bank read served (-1: none).
+  std::unique_ptr<std::atomic<int>[]> served_mode_;
   bool enabled_ = false;
   int mode_ = 0;  // 0 = controller (Xbox 360), 1 = keyboard/mouse.
   // True while a background scan is sweeping physical RAM, so a rapid second

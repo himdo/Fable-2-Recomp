@@ -478,8 +478,15 @@ inline bool GenerateSidecar(const std::filesystem::path& game_data_root, const s
   auto labels = ResolveLabels(map, reservedKey);
   if (labels.empty() && !mouseLook) return false;
 
-  std::vector<uint8_t> textures = ReadAllBytes(game_data_root / kTextures);
-  std::vector<uint8_t> headers = ReadAllBytes(game_data_root / kHeaders);
+  // Always start from the pristine banks, so a bank an older build rewrote is
+  // rebuilt with the current layout.
+  auto source = [&](const std::string& bank) {
+    std::error_code ec;
+    const auto orig = game_data_root / (bank + ".orig");
+    return std::filesystem::exists(orig, ec) ? orig : game_data_root / bank;
+  };
+  std::vector<uint8_t> textures = ReadAllBytes(source(kTextures));
+  std::vector<uint8_t> headers = ReadAllBytes(source(kHeaders));
   if (textures.empty() || headers.empty()) return false;
   GuiTextureBank textureBank, headerBank;
   if (!textureBank.Parse(textures.data(), textures.size())) return false;
@@ -499,12 +506,14 @@ inline bool GenerateSidecar(const std::filesystem::path& game_data_root, const s
     uint32_t size = 0;
     std::vector<uint8_t> original;  // full-RGBA (0x00A2) original pixels
     std::vector<uint8_t> keyboard;  // full-RGBA (0x00A2) keycap pixels
+    uint32_t width = 0;  // nonzero: original/keyboard are raw BC3 bodies of this width
   };
   std::vector<SidecarEntry> sidecar;
   // Texture-bank replacements: compressed icons -> decoded full-RGBA payload.
   std::unordered_map<std::string, std::vector<uint8_t>> texture_replacements;
   // Header-bank updates: name -> new full-RGBA pixel_byte_count.
   std::unordered_map<std::string, uint32_t> header_updates;
+  std::unordered_set<std::string> raw_bc3;
   std::unordered_map<std::string, std::vector<uint8_t>> rendered;
   for (const auto& [key, entry] : textureBank.entries()) {
     auto labelOpt = IconLabel(entry.name, labels, mouseLook);
@@ -659,15 +668,16 @@ inline bool GenerateSidecar(const std::filesystem::path& game_data_root, const s
         if (w == 512 && h == 512) {
           struct KeycapSpec { const char* key; int x, y; };
           const KeycapSpec specs[] = { {"b", 46, 193}, {"a", 13, 372} };
-          std::vector<uint8_t> original;
-          if (format == 0xA2) {
-            if (at->second.length == a2_size)
-              original.assign(textureBank.Payload(at->second),
-                              textureBank.Payload(at->second) + at->second.length);
-          } else if (DecodeCompressedIconToTile(textureBank.Payload(at->second),
-                                                 at->second.length, w, h, original) &&
-                     int(original.size()) == a2_size) {
-            // ok
+          // Kept as BC3: at full RGBA (1 MB) the pause menu's selection
+          // medallion, drawn from this atlas, no longer shows.
+          std::vector<uint8_t> original, bc3;
+          if (format != 0xA2 &&
+              (!DecodeCompressedIconToTile(textureBank.Payload(at->second), at->second.length, w, h,
+                                           original) ||
+               int(original.size()) != a2_size ||
+               !DecodeCompressedToBc3(textureBank.Payload(at->second), at->second.length, w, h,
+                                      bc3))) {
+            original.clear();
           }
           if (!original.empty()) {
             std::vector<uint8_t> keyboard = original;
@@ -683,12 +693,30 @@ inline bool GenerateSidecar(const std::filesystem::path& game_data_root, const s
               if (spec.x < 0 || top < 0 || spec.x + kW > w || top + kH > h) continue;
               CompositeLinearRegion(keyboard, keycap.data(), kW, kH, w, h, spec.x, top);
             }
-            if (format != 0xA2) {
-              texture_replacements[Ci(frameName)] = original;
-              header_updates[Ci(frameName)] = uint32_t(a2_size);
+            // Re-encode only the blocks the keycaps touched; the rest stay the
+            // game's own blocks.
+            std::vector<uint8_t> keyboard_bc3 = bc3;
+            for (int by = 0; by < h / 4; ++by) {
+              for (int bx = 0; bx < w / 4; ++bx) {
+                uint8_t px[64];
+                bool changed = false;
+                for (int i = 0; i < 16; ++i) {
+                  const int off = 4 + XenosTiledOffset(bx * 4 + i % 4, by * 4 + i / 4, w);
+                  std::memcpy(px + i * 4, keyboard.data() + off, 4);
+                  changed |= std::memcmp(px + i * 4, original.data() + off, 4) != 0;
+                }
+                if (changed)
+                  EncodeBc3Block(px, keyboard_bc3.data() + (size_t(by) * (w / 4) + bx) * 16);
+              }
             }
+            std::vector<uint8_t> original_body = BuildRawBc3Body(bc3);
+            std::vector<uint8_t> keyboard_body = BuildRawBc3Body(keyboard_bc3);
+            texture_replacements[Ci(frameName)] = original_body;
+            header_updates[Ci(frameName)] = uint32_t(original_body.size());
+            raw_bc3.insert(Ci(frameName));
             sidecar.push_back({kTextures, Ci(frameName), uint64_t(at->second.offset),
-                               uint32_t(a2_size), std::move(original), std::move(keyboard)});
+                               uint32_t(original_body.size()), std::move(original_body),
+                               std::move(keyboard_body), uint32_t(w)});
           }
         }
       }
@@ -709,7 +737,7 @@ inline bool GenerateSidecar(const std::filesystem::path& game_data_root, const s
   if (!texture_replacements.empty()) {
     std::vector<uint8_t> rebuilt_textures, rebuilt_headers;
     if (RebuildBank(textures, texture_replacements, rebuilt_textures, new_offsets) &&
-        RebuildHeaderBank(headers, header_updates, rebuilt_headers)) {
+        RebuildHeaderBank(headers, header_updates, rebuilt_headers, raw_bc3)) {
       // Keep a one-time backup of the pristine banks, then overwrite them.
       const auto tex_path = game_data_root / kTextures;
       const auto hdr_path = game_data_root / kHeaders;
@@ -720,8 +748,10 @@ inline bool GenerateSidecar(const std::filesystem::path& game_data_root, const s
         std::filesystem::copy(tex_path, tex_orig, std::filesystem::copy_options::overwrite_existing, ec);
       if (!std::filesystem::exists(hdr_orig, ec))
         std::filesystem::copy(hdr_path, hdr_orig, std::filesystem::copy_options::overwrite_existing, ec);
-      if (WriteAllBytes(tex_path, rebuilt_textures) &&
-          WriteAllBytes(hdr_path, rebuilt_headers))
+      auto write_if_changed = [](const std::filesystem::path& path, const std::vector<uint8_t>& bytes) {
+        return ReadAllBytes(path) == bytes || WriteAllBytes(path, bytes);
+      };
+      if (write_if_changed(tex_path, rebuilt_textures) && write_if_changed(hdr_path, rebuilt_headers))
         rebuilt = true;
     }
   }
@@ -739,13 +769,13 @@ inline bool GenerateSidecar(const std::filesystem::path& game_data_root, const s
   }
   if (out_entries.empty()) return false;
 
-  // Little-endian sidecar (version 2): magic "KBPM" (u32), version (u32 = 2),
+  // Little-endian sidecar (version 3): magic "KBPM" (u32), version (u32 = 3),
   // entry_count (u32), then per entry: bank_path_len (u32), bank_path (utf8),
-  // abs_offset (u64), size (u32), original (size), keyboard (size). Read by
-  // src/core/fable2_keycap_swap.h.
+  // abs_offset (u64), size (u32), width (u32, 0 for full RGBA), original (size),
+  // keyboard (size). Read by src/core/fable2_keycap_swap.h.
   auto write_le = [](std::FILE* f, const void* p, size_t n) { std::fwrite(p, 1, n, f); };
   const uint32_t magic = 0x4D50424Bu;
-  const uint32_t version = 2;
+  const uint32_t version = 3;
   const uint32_t count = uint32_t(out_entries.size());
   std::FILE* f = std::fopen((game_data_root / "keyboard_prompts.bin").string().c_str(), "wb");
   if (!f) return false;
@@ -759,6 +789,7 @@ inline bool GenerateSidecar(const std::filesystem::path& game_data_root, const s
     write_le(f, e.bank_path.data(), name_len);
     write_le(f, &e.offset, 8);
     write_le(f, &e.size, 4);
+    write_le(f, &e.width, 4);
     write_le(f, e.original.data(), e.original.size());
     write_le(f, e.keyboard.data(), e.keyboard.size());
   }
