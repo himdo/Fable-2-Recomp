@@ -47,6 +47,8 @@
 #include <rex/ui/keybinds.h>
 #include <rex/ui/virtual_key.h>
 
+#include "../gui/gui_tex_codec.h"
+
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -63,8 +65,9 @@ inline constexpr uint32_t kSidecarMagic = 0x4D50424Bu;
 // Sidecar version 2 carries both the original (full-RGBA) and keyboard (keycap)
 // payloads per entry, so the swap module does not need to read the bank for the
 // original (the compressed icons are served from a rebuilt .keycap/ bank, and the
-// original's decoded pixels are not in the on-disk bank).
-inline constexpr uint32_t kSidecarVersion = 2;
+// original's decoded pixels are not in the on-disk bank). Version 3 adds each
+// entry's width, nonzero for raw BC3 entries.
+inline constexpr uint32_t kSidecarVersion = 3;
 
 // One affected bank entry (a controller icon texture).
 struct Entry {
@@ -73,6 +76,11 @@ struct Entry {
   uint32_t size = 0;  // Entry length in bytes.
   std::vector<uint8_t> original;  // Original entry payload (from the bank file).
   std::vector<uint8_t> keyboard;  // Keyboard-variant entry payload (same size).
+  // Each variant as it sits in guest memory once loaded: the payload after its
+  // 4-byte size prefix for full RGBA, the tiled blocks for raw BC3.
+  std::vector<uint8_t> live_original;
+  std::vector<uint8_t> live_keyboard;
+  bool raw_bc3 = false;
   // Recorded by the post-read hook: guest virtual address where this entry
   // was last read (diagnostic only; the live pixels are located by scan).
   uint32_t guest_address = 0;
@@ -232,6 +240,8 @@ class KeycapSwap {
       std::memcpy(&abs_offset, raw.data() + off, 8);
       off += 8;
       uint32_t size = rd_u32(off);
+      if (off + 4 > raw.size()) return false;
+      uint32_t width = rd_u32(off);
       if (off + 2u * size > raw.size()) return false;
       Entry e;
       e.bank_path = bank_path;
@@ -241,6 +251,14 @@ class KeycapSwap {
       off += size;
       e.keyboard.assign(raw.begin() + off, raw.begin() + off + size);
       off += size;
+      e.raw_bc3 = width != 0 && fable2::gui::IsRawBc3Body(e.original);
+      if (e.raw_bc3) {
+        e.live_original = fable2::gui::RawBc3LiveSurface(e.original, int(width));
+        e.live_keyboard = fable2::gui::RawBc3LiveSurface(e.keyboard, int(width));
+      } else if (size > 4) {
+        e.live_original.assign(e.original.begin() + 4, e.original.end());
+        e.live_keyboard.assign(e.keyboard.begin() + 4, e.keyboard.end());
+      }
       entries_.push_back(std::move(e));
     }
     // Parallel to entries_: true once a scan confirmed the icon has no live GPU
@@ -248,6 +266,8 @@ class KeycapSwap {
     // rescanning all 512 MB. Cleared when the bank is (re)read. Atomic because
     // the background scan thread and the post-read hook (guest thread) touch it.
     scan_stale_ = std::make_unique<std::atomic<bool>[]>(entries_.size());
+    served_mode_ = std::make_unique<std::atomic<int>[]>(entries_.size());
+    for (size_t i = 0; i < entries_.size(); ++i) served_mode_[i].store(-1);
     return true;
   }
 
@@ -302,6 +322,7 @@ class KeycapSwap {
       const uint64_t ov_len = std::min(entry_end, read_end) - ov_start;
       const uint8_t* src = (mode_ != 0) ? entry.keyboard.data() : entry.original.data();
       std::memcpy(host_buffer + (ov_start - read_start), src + (ov_start - entry_start), ov_len);
+      served_mode_[i].store(mode_);
       if (byte_offset <= entry_start) {
         entry.guest_address = guest_address + uint32_t(entry_start - byte_offset);
         if (!entry.guest_address_valid) {
@@ -384,10 +405,10 @@ class KeycapSwap {
     int patched_total = 0;
     for (size_t i = 0; i < entries_.size(); ++i) {
       auto& e = entries_[i];
-      if (e.size <= 4) continue;
-      const size_t px_len = e.size - 4;  // skip the 4-byte pixel_byte_count prefix
-      const uint8_t* cur = (old_mode != 0) ? e.keyboard.data() + 4 : e.original.data() + 4;
-      const uint8_t* nxt = (new_mode != 0) ? e.keyboard.data() + 4 : e.original.data() + 4;
+      if (e.live_original.empty() || e.live_keyboard.size() != e.live_original.size()) continue;
+      const size_t px_len = e.live_original.size();
+      const uint8_t* cur = (old_mode != 0) ? e.live_keyboard.data() : e.live_original.data();
+      const uint8_t* nxt = (new_mode != 0) ? e.live_keyboard.data() : e.live_original.data();
 
       // Skip icons confirmed to have no live GPU surface (not on screen). The
       // bank re-read hook clears this flag, so a newly-shown icon is scanned on
@@ -422,7 +443,8 @@ class KeycapSwap {
       // and (re)build the cache so the next switch takes the fast path.
       int found = 0;
       uint32_t addrs[4];
-      for (int order = 0; order < 2 && found == 0; ++order) {
+      const int orders = e.raw_bc3 ? 1 : 2;  // the R<->B swap only applies to RGBA
+      for (int order = 0; order < orders && found == 0; ++order) {
         std::vector<uint8_t> needle;
         BuildPixels(cur, px_len, order, needle);
         found = FindMatchesInPhysical(needle.data(), needle.size(), addrs, 4);
@@ -450,7 +472,9 @@ class KeycapSwap {
       }
       if (found == 0) {
         e.cached_count = 0;
-        scan_stale_[i].store(true);
+        // A bank read during this switch already served the new variant, so the
+        // texture may well be on screen; the next switch must look for it.
+        if (served_mode_[i].load() != new_mode) scan_stale_[i].store(true);
         Log("  entry[" + std::to_string(i) + "] NOT FOUND in physical RAM (first16=" +
             HexDump(cur, 16) + ")");
       }
@@ -480,6 +504,8 @@ class KeycapSwap {
   rex::memory::Memory* memory_ = nullptr;
   std::vector<Entry> entries_;
   std::unique_ptr<std::atomic<bool>[]> scan_stale_;  // parallel to entries_, see above
+  // Parallel to entries_: the mode whose variant the last bank read served (-1: none).
+  std::unique_ptr<std::atomic<int>[]> served_mode_;
   bool enabled_ = false;
   int mode_ = 0;  // 0 = controller (Xbox 360), 1 = keyboard/mouse.
   // True while a background scan is sweeping physical RAM, so a rapid second
