@@ -31,7 +31,7 @@ them up to print one line per test.
 | Version check | `python tools/generate_game_versions.py --check` | Python | Yes |
 | Python tests | `python -m pytest` | Python 3.11+ and `tests/requirements.txt` | Yes |
 | Launcher tests | `dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release` | .NET 8 SDK | Yes |
-| Native tests | `tests\run_native_tests.cmd` | Windows, a VS x64 developer shell, Clang and the patched SDK source | No |
+| Native tests | `tests\run_native_tests.cmd` | Windows, Clang with the Visual Studio C++ tools installed, and the SDK submodule | Yes |
 
 CI runs on Windows.
 
@@ -126,8 +126,17 @@ is checked with `KNOWN_BUG(condition, reason)` instead of `CHECK`. It prints
 fixed, as a reminder to turn it into a `CHECK`.
 
 The runner uses `thirdparty/rexglue-sdk` by default, and an optional first
-argument selects a different SDK source folder. If that folder is empty, run
-`git submodule update --init thirdparty/rexglue-sdk` first.
+argument selects a different SDK source folder. The tests need the SDK's source
+and headers, unpatched, plus three of its own submodules (fmt, simde and spdlog).
+If they're missing, fetch only those, as CI does:
+
+```sh
+git submodule update --init --depth 1 thirdparty/rexglue-sdk
+git -C thirdparty/rexglue-sdk submodule update --init --depth 1 thirdparty/fmt thirdparty/simde thirdparty/spdlog
+```
+
+Clang must be on `PATH` (for example `C:\Program Files\LLVM\bin`). A Visual
+Studio developer shell isn't needed.
 
 ## Optional: checking your own game files
 
