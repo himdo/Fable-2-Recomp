@@ -391,6 +391,11 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
         c.x = rc.left + rc.right / 2;
         c.y = rc.top + rc.bottom / 2;
         if (ClientToScreen(hwnd, &c)) {
+          // The window moving or resizing (it does at startup) shifts the
+          // centre under a still cursor; that isn't mouse movement.
+          if (c.x != centre_x_ || c.y != centre_y_) mouse_centered_ = false;
+          centre_x_ = c.x;
+          centre_y_ = c.y;
           if (mouse_centered_) {
             // This poll's cursor displacement in screen pixels. dx>0 = right,
             // dy>0 = down.
@@ -649,6 +654,7 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
   std::string cached_text_;
   uint32_t packet_number_ = 0;
   bool mouse_centered_ = false;  // set once the cursor is first pinned
+  int32_t centre_x_ = 0, centre_y_ = 0;  // window centre the cursor was last pinned to
   bool cursor_hidden_ = false;   // set while the SDK window cursor is hidden
   bool console_open_ = false;    // debug menu open -> mouse lock released
   bool unlock_down_prev_ = false;  // prev-poll state of the unlock key
