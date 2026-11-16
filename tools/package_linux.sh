@@ -34,7 +34,7 @@ cp "$BUILD/fable_2" "$BUILD/librexruntime.so" "$BUILD/librexgpu-xenos.so" \
 # Pristine defaults, not the build tree's copy (a test run may have edited it).
 cp "$ROOT/config/fable2_config.toml" "$PKG/"
 cp "$ROOT/README.md" "$ROOT/Linux.md" "$PKG/"
-cp "$ROOT/launcher/Fable2.Launcher/XenosTiling/LICENSE.txt" "$PKG/licenses/XenosTiling-LICENSE.txt"
+cp "$ROOT/thirdparty/XenosTiling/LICENSE.txt" "$PKG/licenses/XenosTiling-LICENSE.txt"
 cp "$ROOT/assets/app-icon.png" "$PKG/" 2>/dev/null || true
 cp "$ROOT"/src/lua/*.lua "$PKG/extras/scripts/recomp/"
 sed "s/@FABLE2_NEED_GLIBC@/$NEED_GLIBC/" "$ROOT/tools/linux/Fable2.sh" > "$PKG/Fable2.sh"
