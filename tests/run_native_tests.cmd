@@ -43,6 +43,9 @@ clang++ -std=c++23 %COV% -I"%SDK%\include" -I"%SDK%\thirdparty\fmt\include" -I"%
 rem Keycap prompt textures (memory scan, raw BC3 path, labels).
 clang++ -std=c++23 %COV% -I"%ROOT%\src" "%~dp0native\test_keycap_textures.cpp" -o "%OUT%\keycap-textures.exe" || exit /b 1
 "%OUT%\keycap-textures.exe" || exit /b 1
+rem GUI bank files on disk: a write replaces a file in full or leaves it alone.
+clang++ -std=c++23 %COV% -I"%ROOT%\src" "%~dp0native\test_bank_file.cpp" -o "%OUT%\bank-file.exe" || exit /b 1
+"%OUT%\bank-file.exe" || exit /b 1
 rem The RunScript gate: host scripts only run inside the world-update service.
 clang++ -std=c++23 -I"%ROOT%" "%~dp0native\test_world_thread.cpp" -o "%OUT%\world-thread.exe" || exit /b 1
 "%OUT%\world-thread.exe" || exit /b 1
