@@ -308,6 +308,14 @@ inline std::atomic<bool>& active_flag() {
   return v;
 }
 inline bool active() { return active_flag().load(std::memory_order_acquire); }
+// Called on the world thread right after photo mode has started, so the panel
+// can register itself for drawing (see PhotoModeDialog: it stays unregistered
+// while photo mode is off, because any registered dialog makes the window
+// repaint at the display refresh rate).
+inline std::atomic<void (*)()>& entered_hook() {
+  static std::atomic<void (*)()> v{nullptr};
+  return v;
+}
 // When the last toggle was asked for (steady-clock ms). The guest drops an
 // "enter" request it could not serve quickly (e.g. pressed in a menu), so photo
 // mode never pops up later on its own.
