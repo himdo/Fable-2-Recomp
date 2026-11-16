@@ -346,14 +346,14 @@ refresh_gpu_memory_each_frame = false
 # back to back with no work in between, it sleeps this long per yield
 # instead. The game's frame limiter, which busy-waits for the rest of every
 # frame, sleeps the same amount between polls. 0 = never sleep (original
-# behaviour). Leave commented out to use the platform default.
+# behaviour). -1 = the platform default: 0 (off) on Windows, 100 elsewhere.
 # On Windows (10 version 1803 and later) the sleep uses a high-resolution
 # timer whose shortest sleep is about 500 microseconds, so smaller values
 # behave like 500 there and the frame limiter can wake up to ~0.5 ms late;
 # that is why it is off by default on Windows. On older Windows it has no
 # effect.
-# Default: 0 on Windows, 100 elsewhere
-# idle_yield_sleep_us = 100
+# Default: -1
+idle_yield_sleep_us = -1
 
 [photo_mode]
 # Photo mode: freeze the world, fly a free camera and take screenshots, with a

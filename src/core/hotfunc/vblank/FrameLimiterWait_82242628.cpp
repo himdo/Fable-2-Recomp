@@ -240,7 +240,7 @@ extern "C" void FrameLimiterWait_82242628(PPCContext& __restrict ctx, uint8_t* b
     // the guest state untouched and delays the wake-up by at most one sleep.
     // 0 (the Windows default) keeps the short PAUSE spin.
     if (ctx.cr6.lt != 0) {
-      const int32_t sleep_us = fable2::config::Get().idle_yield_sleep_us;
+      const int32_t sleep_us = fable2::config::IdleYieldSleepUs();
       if (sleep_us > 0) {
         if (!fable2::hotfunc::IdleSleepMicros(sleep_us)) {
           SpinPause();  // no short sleep on this host (pre-1803 Windows)
