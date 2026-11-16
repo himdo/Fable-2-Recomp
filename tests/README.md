@@ -48,6 +48,8 @@ Checks that the generated files in `constants/` match
 | File | What it checks |
 |---|---|
 | `config/test_config_template.py` | The template in `src/core/fable2_config.cpp`, the launcher's default settings, and the game's own config reader and defaults all match `config/fable2_config.toml`. Each staged value is the kind the game accepts, and each setting is stored under its own name. Each cvar the game seeds from the config is seeded from the setting of the same name, and its default in `src/main.cpp` matches the staged value |
+| `core/test_world_thread_runscript.py` | Every host RunScript (`f5lua::run_external`) is reached only from `console::service_world_thread`, which runs at the start of a world update on the world's own thread. That function is wired only to photo mode's world-update hook, inside the scope the runtime gate checks, and the MainRenderLoop hook `console::poll` starts no script. RunScript from any other thread corrupts the game's script engine (the 1.6 alt-tab crash, #189). Reads the C++ source and prints the call chain that breaks the rule |
+| `lua/test_recomp_scripts.py` | No recomp Lua script registers itself with the game's GeneralScriptManager, which writes its running scripts into save games, except the F5 menu, which ends itself when the menu closes. Only the F5 menu and the console's save cleanup touch the GeneralScriptManager |
 | `tools/repro/test_add_version_resource.py` | The release step that adds version info to a DLL writes the given company, product and version, keeps the existing manifest, moves the sections after `.rsrc` without changing them, and names the version after the file. It leaves a DLL alone when it has no resources, already has version info, or has no room to grow. Two known issues are marked as expected failures |
 | `tools/repro/test_clean_pe.py` | The release build's post-build step trims `rexruntime.dll` to what the game and the GPU plugin import plus the `rex::` API, keeps each name pointing at its own function, and pins every timestamp. It reports a broken DLL and carries on, skips a runtime without exports, leaves other DLLs' exports alone, and changes nothing on a second run |
 | `tools/repro/test_gen_def.py` | The `.def` generator keeps what every consumer imports from the runtime plus the `rex::` API, in sorted order. It drops imports the runtime doesn't export, skips missing consumers, and honors `--tag` |
@@ -116,8 +118,9 @@ keyboard and mouse map parsing, mouse look (stick mapping, the velocity window
 and the diagnostics' inject and summary maths), the direct mouse camera (turn
 per count, when the mouse goes to the camera or the stick, the retries that
 start `mouse_direct.lua`, the numbers it returns to Lua, the fallback for a
-NaN or infinite setting, and the inject speed profiles), and the version
-catalogue in each build profile.
+NaN or infinite setting, and the inject speed profiles), the RunScript gate
+(scripts only run inside the world-update service, per thread; see
+`src/core/world_thread.h`), and the version catalogue in each build profile.
 Test executables go under `out/tests`.
 
 They use [Catch2](https://github.com/catchorg/Catch2) v3, from the SDK's own

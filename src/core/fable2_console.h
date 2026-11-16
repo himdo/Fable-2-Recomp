@@ -41,6 +41,7 @@
 #include <fstream>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -1810,6 +1811,9 @@ inline void stress_tick(int thread, PPCContext& ctx, uint8_t* base) {
   if (stress_mode() != thread || !S().pump_ready.load()) return;
   static int frame = 0, calls = 0;
   if (calls >= 1500 || (++frame % 3) != 0) return;
+  // The render-thread run is the race itself, on purpose (world_thread.h).
+  std::optional<fable2::worldthread::ResearchOffServiceScope> research;
+  if (thread == 1) research.emplace();
   const PPCContext saved = ctx;
   try {
     const std::string path = "scripts/recomp/stress_noop.lua";

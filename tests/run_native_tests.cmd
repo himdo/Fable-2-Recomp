@@ -64,6 +64,9 @@ rem Direct mouse camera (accumulator, route, Lua return values) and inject profi
 rem Keycap prompt textures (memory scan, raw BC3 path, labels).
 %CXX% -I"%ROOT%\src" "%~dp0native\test_keycap_textures.cpp" %CATCH_MAIN% -o "%OUT%\keycap-textures.exe" || exit /b 1
 "%OUT%\keycap-textures.exe" %RUN% || exit /b 1
+rem The RunScript gate: host scripts only run inside the world-update service.
+%CXX% -I"%ROOT%" "%~dp0native\test_world_thread.cpp" %CATCH_MAIN% -o "%OUT%\world-thread.exe" || exit /b 1
+"%OUT%\world-thread.exe" %RUN% || exit /b 1
 rem The version check, once per build profile. It has its own main (--xex).
 for %%P in (goty-compatible goty-us-eu goty-german) do (
   %CXX% -DFABLE2_BUILD_PROFILE=\"%%P\" "%~dp0native\test_xex_verify.cpp" %CATCH_OBJS% -o "%OUT%\xex-%%P.exe" || exit /b 1
