@@ -17,7 +17,22 @@ now live in shared SDK code and are used by the Vulkan renderer too:
 | Wait for async pipelines | SDK cvar `async_pipeline_wait` | Draws wait for their pipeline instead of drawing with an invisible placeholder (missing objects, stale textures) |
 | Dog fur depth bias | `[patches] dog_fur_depth_bias` | Stops the dog's fur Z-fighting |
 | Relative constant clamp | SDK cvar `spirv_clamp_relative_float_constants` | Keeps the trail effect from reading out of bounds (an AMD GPU hang on D3D12) |
-| Hero/dog texture fallback | `[patches] vulkan_texture_morph_fallback` | On Vulkan, uses the texture readback mode, because realtime morphing renders the hero and dog black there |
+| Realtime skin morphing | `[patches] realtime_texture_morphing` | Builds morphed skin textures on the GPU. Enabled by default on Vulkan. |
+
+The Steam Deck test confirmed that realtime skin morphing restores the hero's
+eyes and face. Existing installs that still have the old fallback enabled can
+update these keys under `[patches]` in `fable2_config.toml`:
+
+```toml
+realtime_texture_morphing = true
+hero_dog_texture_readback = false
+vulkan_texture_morph_fallback = false
+```
+
+The Vulkan SDK baseline also fixes the texture fetch result exponent and waits
+for the relevant GPU submission before reading a delayed resolve buffer.
+The sparkle trail can still flicker on Vulkan. The baseline uses normal depth
+testing and keeps `depth_float24_convert_in_pixel_shader` disabled by default.
 
 On top of that, Linux gets:
 

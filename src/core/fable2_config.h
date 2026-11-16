@@ -194,9 +194,9 @@ struct Values {
   // Superseded by realtime_texture_morphing (only takes effect with that off).
   bool hero_dog_texture_readback = false;
   // [patches] vulkan_texture_morph_fallback: while the Vulkan renderer is in
-  // use, ApplyVulkanRendererOverrides() swaps realtime_texture_morphing (black
-  // hero/dog on Vulkan) for hero_dog_texture_readback.
-  bool vulkan_texture_morph_fallback = true;
+  // use, ApplyVulkanRendererOverrides() can swap realtime texture morphing
+  // for baked textures with CPU readback as an opt-in compatibility mode.
+  bool vulkan_texture_morph_fallback = false;
   // Give the dog's shell-fur layers (pixel shader 014F8A02DB7B19CA) a small
   // extra depth bias so they don't Z-fight with the body and with each other.
   // The fur relies on exact depth ties in the Xbox 360's 24-bit float depth

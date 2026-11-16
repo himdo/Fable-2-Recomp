@@ -201,14 +201,11 @@ realtime_texture_morphing = true
 # Default: false
 hero_dog_texture_readback = false
 
-# Vulkan Texture Morph Fallback: on the Vulkan renderer (always on Linux, and
-# on Windows with --gpu_plugin=xenos-vulkan) realtime_texture_morphing still
-# renders the hero and the dog black, so while Vulkan is in use this switches
-# to the original baked mode with hero_dog_texture_readback instead (only that
-# one texture is read back, at load and when the hero's looks change). Has no
-# effect on D3D12. false = use the two settings above as written.
-# Default: true
-vulkan_texture_morph_fallback = true
+# Vulkan Texture Morph Fallback: true uses baked textures with targeted CPU
+# readback if realtime morphing was requested. This is an opt-in compatibility
+# mode for Vulkan. By default, use the realtime and readback settings above.
+# Default: false
+vulkan_texture_morph_fallback = false
 
 # Dog Fur Depth Bias: the dog's fur is drawn as 15 thin layers over its body
 # that rely on exact depth ties in the Xbox 360's 24-bit depth buffer. The PC's
