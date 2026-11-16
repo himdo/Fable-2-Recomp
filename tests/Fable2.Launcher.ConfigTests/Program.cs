@@ -320,6 +320,12 @@ try
     Require(launchPlan.Executable == Path.Combine(Path.GetFullPath(buildFolder), "fable_2.exe"), "launch plan does not run the build folder's fable_2.exe");
     Require(launchPlan.WorkingDirectory == Path.GetFullPath(buildFolder), "launch plan does not start in the build folder");
     Require(launchPlan.GameRoot == Path.GetFullPath(gameFolder), "launch plan does not point at the game folder");
+    Require(launchPlan.Arguments.SequenceEqual(new[] { "--game_data_root=" + Path.GetFullPath(gameFolder) }),
+        "launch plan does not tell the game where a separate game folder is");
+    Require(GameLaunchPlanner.Create(buildFolder, buildFolder, defaultEdition).Arguments.Count == 0,
+        "launch plan passes a game folder although the game files are next to fable_2.exe");
+    Require(GameLaunchPlanner.Create(buildFolder, buildFolder + Path.DirectorySeparatorChar, defaultEdition).Arguments.Count == 0,
+        "a trailing separator made the launch plan treat the build folder as a separate game folder");
 
     // It has a profile, so only the Supported flag can stop it.
     var unsupportedGame = new GameCompatibility("Title update detected", "This title update is not supported.", false, GameVersions.DefaultProfile);
