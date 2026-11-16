@@ -11,6 +11,10 @@
 // Every patch hook is gated on a toggle in fable2_config.toml ([patches]),
 // consulted on each call, so a patch can be A/B'd without a rebuild.
 
+#include <bit>
+#include <cmath>
+#include <cstring>
+
 #include <rex/ppc/context.h>  // PPCRegister (union with u64/s64/u32/... views)
 #include <rex/logging/macros.h>
 
@@ -19,6 +23,7 @@
 #include <fmt/format.h>
 
 #include "fable2_config.h"
+#include "fable2_patches.h"  // fable2::patches::GuestBase
 #include "mouse_look.h"  // fable2::mouselook (shared host/guest mouse-delta state)
 #include "photo_mode_state.h"  // fable2::photomode::active (photo mode owns the camera)
 
@@ -553,4 +558,121 @@ void fable2_hook_realtime_texture_morphing(PPCRegister& r9) {
     REXSYS_INFO("[texture-morph] building hero/dog textures in realtime (GPU) mode");
   }
   r9.u64 = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Interpolation ([patches] interpolation). Two places where the game shows
+// LF-tick state without blending it to the render time.
+// ---------------------------------------------------------------------------
+namespace {
+
+bool InterpolationEnabled() {
+  static const bool enabled = [] {
+    const bool on = fable2::config::Get().interpolation;
+    if (on) {
+      REXSYS_INFO("[interpolation] on: GUI updates every HF tick, cloth "
+                  "colliders blended between poses");
+    }
+    return on;
+  }();
+  return enabled;
+}
+
+uint8_t* GuestMem(uint32_t addr) {
+  return fable2::patches::GuestBase() + addr + (addr >= 0xE0000000u ? 0x1000u : 0u);
+}
+
+uint32_t LoadU32(uint32_t addr) {
+  uint32_t v;
+  std::memcpy(&v, GuestMem(addr), 4);
+  return __builtin_bswap32(v);
+}
+
+float LoadF32(uint32_t addr) { return std::bit_cast<float>(LoadU32(addr)); }
+
+}  // namespace
+
+// GUI every HF tick. sub_82278C90 (run on every HF tick from ProcessGameFrame)
+// calls the front-end object's vtable[2] (sub_82286B40: GUI manager update,
+// subtitles, HUD) only when an LF boundary was crossed (r29) or a query says
+// so; the check starts with `clrlwi r10,r29,24` at 0x82278D1C. That update
+// measures its own elapsed time from the wall clock (sub_822B6D70), so running
+// it every HF tick does not speed anything up; it only updates text twice as
+// often (30 Hz instead of 15 Hz, or 60 Hz with higher_hf_tick_rate).
+// Returning true jumps to the call at 0x82278D40.
+bool fable2_hook_gui_every_tick() { return InterpolationEnabled(); }
+
+// Cloth colliders blended to the render time. sub_82A895C0 builds the cloth's
+// collision shapes from the driving character's skeleton. Its four loops read
+// a bone straight from the CURRENT pose (*(inst+512)+16, 48-byte bones: quat,
+// translation, scale) right after `add r11,r11,r9`, while the skin it collides
+// with is drawn blended between the previous pose (*(inst+516)) and the
+// current one with the alpha at *(inst+176)+16 (sub_8222E300, using
+// sub_8222E5D0). So the colliders run up to one LF tick ahead of the drawn
+// body and jump on every LF tick. Here r11 is pointed at the same bone blended
+// the way sub_8222E5D0 + sub_8222E300 blend it (quaternion sign-corrected
+// lerp, then normalized; translation and scale lerped).
+//
+// Bounds: a pose's bone count is at pose+8 (sub_8222E300 checks it against the
+// skeleton before blending). The hook blends only when both poses have the
+// same count and the bone index is below it, so it never reads past the end of
+// the previous pose's bones; otherwise the game's own read is left alone.
+//
+// Scratch: the blended bone is written 256 bytes below the stack pointer. At
+// all four sites the only uses of r11 that follow are four loads (r11+0, +8,
+// +16, +32: `ld`, `ld`, `lvx128`, `lvx128`) with no store and no call in
+// between; the next instruction after them is `bl 0x8222e6c0`, which may
+// reuse that stack area only after the loads have run.
+void fable2_hook_cloth_collider_bone(PPCRegister& r1, PPCRegister& r11,
+                                     PPCRegister& r30) {
+  constexpr uint32_t kBoneBytes = 48;
+  if (!InterpolationEnabled()) return;
+  if (fable2::patches::GuestBase() == nullptr) return;
+  const uint32_t inst = r30.u32;
+  const uint32_t cur_pose = LoadU32(inst + 512);
+  const uint32_t prev_pose = LoadU32(inst + 516);
+  const uint32_t interp = LoadU32(inst + 176);
+  if (cur_pose == 0 || prev_pose == 0 || interp == 0 || prev_pose == cur_pose) {
+    return;
+  }
+  const uint32_t cur_count = LoadU32(cur_pose + 8);
+  const uint32_t prev_count = LoadU32(prev_pose + 8);
+  if (cur_count == 0 || cur_count != prev_count) return;
+  const uint32_t cur_bones = LoadU32(cur_pose + 16);
+  const uint32_t prev_bones = LoadU32(prev_pose + 16);
+  if (cur_bones == 0 || prev_bones == 0) return;
+  const uint32_t cur = r11.u32;
+  const uint32_t offset = cur - cur_bones;  // wraps if cur < cur_bones
+  if (offset % kBoneBytes != 0 || offset / kBoneBytes >= cur_count) return;
+  const float alpha = LoadF32(interp + 16);
+  if (!(alpha >= 0.0f && alpha < 1.0f)) return;  // 1 = current pose (or NaN)
+
+  // A bone is 12 contiguous big-endian floats; guest memory is mapped
+  // linearly, so each bone is read and written through one host pointer.
+  uint32_t raw_a[12], raw_b[12];
+  std::memcpy(raw_a, GuestMem(prev_bones + offset), sizeof(raw_a));
+  std::memcpy(raw_b, GuestMem(cur), sizeof(raw_b));
+  float a[12], b[12];
+  for (int i = 0; i < 12; ++i) {
+    a[i] = std::bit_cast<float>(__builtin_bswap32(raw_a[i]));
+    b[i] = std::bit_cast<float>(__builtin_bswap32(raw_b[i]));
+  }
+  const float dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+  const float sign = dot < 0.0f ? -1.0f : 1.0f;
+  float out[12];
+  for (int i = 0; i < 4; ++i) out[i] = a[i] + (sign * b[i] - a[i]) * alpha;
+  for (int i = 4; i < 12; ++i) out[i] = a[i] + (b[i] - a[i]) * alpha;
+  const float len_sq =
+      out[0] * out[0] + out[1] * out[1] + out[2] * out[2] + out[3] * out[3];
+  if (len_sq > 1e-12f) {
+    const float inv_len = 1.0f / std::sqrt(len_sq);
+    for (int i = 0; i < 4; ++i) out[i] *= inv_len;
+  }
+  const uint32_t scratch = (r1.u32 - 256) & ~15u;
+  uint32_t raw_out[12];
+  for (int i = 0; i < 12; ++i) {
+    raw_out[i] = __builtin_bswap32(std::bit_cast<uint32_t>(out[i]));
+  }
+  std::memcpy(GuestMem(scratch), raw_out, sizeof(raw_out));
+  r11.u64 = scratch;
 }

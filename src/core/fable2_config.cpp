@@ -252,6 +252,17 @@ high_tick_rate = false
 # Default: false
 higher_hf_tick_rate = false
 
+# Interpolation (smoothing): text and cloth follow the game's HF tick instead
+# of its slower LF tick (15 Hz in the original). Subtitles and HUD text update
+# on every HF tick (30 Hz, or 60 Hz with higher_hf_tick_rate; their timers
+# already use real time, so speed is unchanged), and the bodies that push cloth
+# around are blended between the last two animation poses at the moment being
+# drawn, the way the game already draws characters. The log shows
+# "[interpolation]".
+# false = text and cloth colliders update on LF ticks only (original).
+# Default: true
+interpolation = true
+
 # Disable Motion Blur (mid-asm hook fable2_hook_disable_motion_blur): the
 # camera's full-screen motion blur amount (what scripts set via Camera.SetBlur)
 # is zeroed on its way to the renderer each frame. The camera's own value is
@@ -574,6 +585,9 @@ bool Load(const std::filesystem::path& path) {
     values.higher_hf_tick_rate =
         Read<bool>(patches_table, "patches", "higher_hf_tick_rate", "boolean",
                    values.higher_hf_tick_rate);
+    values.interpolation =
+        Read<bool>(patches_table, "patches", "interpolation", "boolean",
+                   values.interpolation);
     values.disable_motion_blur =
         Read<bool>(patches_table, "patches", "disable_motion_blur", "boolean",
                    values.disable_motion_blur);

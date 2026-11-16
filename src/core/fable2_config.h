@@ -189,6 +189,11 @@ struct Values {
   // Rate" by Ultra; data write in src/core/fable2_patches.cpp + hook
   // fable2_hook_high_hf_tick_rate_skip_store). Requires high_tick_rate.
   bool higher_hf_tick_rate = false;
+  // [patches] interpolation: update the GUI (subtitles, HUD text) on every HF
+  // tick instead of every LF tick, and blend cloth colliders between the last
+  // two animation poses at the render time (hooks fable2_hook_gui_every_tick
+  // and fable2_hook_cloth_collider_bone). false = original.
+  bool interpolation = true;
   // [patches] disable_motion_blur: zero the full-screen motion blur amount the
   // camera passes to the renderer (hook fable2_hook_disable_motion_blur in
   // src/core/fable2_hooks.cpp). false = original.

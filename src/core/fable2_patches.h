@@ -65,4 +65,10 @@ const std::vector<Patch>& Patches();
 // ops applied (out-of-range ops are skipped with an error log).
 size_t ApplyAll(rex::memory::Memory* memory, const rex::PPCImageInfo& image);
 
+// Host base of the guest arena, as recompiled code addresses it (base +
+// address, plus 0x1000 at 0xE0000000 and up). Recorded by ApplyAll, which runs
+// before the game starts; null before that. For mid-asm hooks, which get
+// registers but not the base.
+uint8_t* GuestBase();
+
 }  // namespace fable2::patches
