@@ -29,6 +29,9 @@ clang++ -std=c++23 -I"%SDK%\include" -I"%SDK%\thirdparty\fmt\include" -I"%SDK%\t
 rem Keycap prompt textures (memory scan, raw BC3 path, labels).
 clang++ -std=c++23 -I"%ROOT%\src" "%~dp0native\test_keycap_textures.cpp" -o "%OUT%\keycap-textures.exe" || exit /b 1
 "%OUT%\keycap-textures.exe" || exit /b 1
+rem The RunScript gate: host scripts only run inside the world-update service.
+clang++ -std=c++23 -I"%ROOT%" "%~dp0native\test_world_thread.cpp" -o "%OUT%\world-thread.exe" || exit /b 1
+"%OUT%\world-thread.exe" || exit /b 1
 for %%P in (goty-compatible goty-us-eu goty-german) do (
   clang++ -std=c++23 -DFABLE2_BUILD_PROFILE=\"%%P\" "%~dp0native\test_xex_verify.cpp" -o "%OUT%\xex-%%P.exe" || exit /b 1
   "%OUT%\xex-%%P.exe" || exit /b 1
