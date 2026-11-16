@@ -526,5 +526,42 @@
         </Border>
       </Grid>
     </Border>
+
+    <!-- In-place upgrade: asks first, then shows the download and the installation,
+         and ends with either a restart or the reason nothing was changed. -->
+    <Border x:Name="UpdateOverlay" Grid.Row="0" Grid.RowSpan="3" Background="#F5070C0E"
+            Visibility="Collapsed">
+      <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="560" Margin="44,36">
+        <TextBlock x:Name="UpdateTitleText" Text="Update" FontFamily="Georgia" FontSize="30"
+                   FontWeight="Bold" Foreground="#FFFFD888" HorizontalAlignment="Center" />
+        <TextBlock x:Name="UpdatePhaseText" FontSize="14" Foreground="#FFC69A46" Margin="0,8,0,0"
+                   HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
+
+        <StackPanel x:Name="UpdateProgressPanel" Margin="0,28,0,0" Visibility="Collapsed">
+          <ProgressBar x:Name="UpdateProgressBar" Height="16" Minimum="0" Maximum="100"
+                       Foreground="#FF3FBF7F" Background="#1FFFFFFF" BorderBrush="#44FFFFFF"
+                       BorderThickness="1" />
+          <Grid Margin="0,10,0,0">
+            <TextBlock x:Name="UpdatePercentText" Text="0%" FontSize="22" FontWeight="SemiBold"
+                       Foreground="#FFB9D6C7" HorizontalAlignment="Left" />
+            <TextBlock x:Name="UpdateBytesText" FontSize="13"
+                       Foreground="{StaticResource MutedTextBrush}" HorizontalAlignment="Right"
+                       VerticalAlignment="Bottom" />
+          </Grid>
+        </StackPanel>
+
+        <TextBlock x:Name="UpdateDetailText" FontSize="14" Foreground="#FFD0D8D2" Margin="0,24,0,0"
+                   TextAlignment="Center" TextWrapping="Wrap" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,30,0,0">
+          <Button x:Name="UpdateStartButton" Content="Update now" Click="UpdateStartClicked"
+                  Style="{StaticResource PrimaryButton}" />
+          <Button x:Name="UpdatePageButton" Content="Release notes" Click="UpdatePageClicked"
+                  Style="{StaticResource SecondaryButton}" Margin="12,0,0,0" />
+          <Button x:Name="UpdateCloseButton" Content="Not now" Click="UpdateCloseClicked"
+                  Style="{StaticResource SecondaryButton}" Margin="12,0,0,0" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
   </Grid>
 </Window>
