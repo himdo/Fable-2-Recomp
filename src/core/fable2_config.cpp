@@ -13,9 +13,12 @@
 #include "fable2_config.h"
 
 #include <array>
+#include <cctype>
 #include <format>
 #include <fstream>
 #include <type_traits>
+#include <iterator>
+#include <string_view>
 
 #include <rex/logging/macros.h>
 #include <rex/system.h>
@@ -26,6 +29,7 @@ namespace fable2::config {
 namespace {
 
 Values g_values;
+std::filesystem::path g_path;  // file Load() read (for SavePhotoModeGamepadToggle)
 
 // Kept in sync with config/fable2_config.toml (staged next to the exe by the
 // build); this copy is what a first launch writes out.
@@ -76,15 +80,59 @@ keyboard_gamepad_map = "LMB:X,RMB:Y,MMB:B,Shift:A,E:A,Q:LT,Tab:RB,R:RT,Z:LB,B:B,
 # Default: true
 mouse_look = true
 
-# Launcher-only option: generate keyboard/mouse prompt images from the
-# startup bindings. Launch through Fable2Launcher.exe to use this option.
-keyboard_prompt_images = false
-
 # Mouse-look sensitivity slider (1..4096; 256 = 1x). Shared by BOTH look modes:
-# for the legacy right-stick mapping it sets the stick units per pixel; for
-# direct mouse look it multiplies mouse_look_yaw_sens / mouse_look_pitch_sens.
+# for the right-stick mapping it sets the stick units per pixel; for the direct
+# mode it multiplies mouse_look_sens_x / mouse_look_sens_y.
 # Larger = more sensitive. Default: 256
 mouse_look_scale = 256
+
+# Even mouse look: the stick reports the mouse's speed over one camera update
+# (so no movement is lost between input checks), and the game's 30% stick
+# deadzone and diagonal boost are undone (so slow movement turns the camera
+# slowly instead of not at all, and diagonals aren't faster). The top turn
+# speed is unchanged. false = the previous mapping, one input check at a time.
+# Default: true
+mouse_look_smoothing = true
+
+# Length of that speed window in milliseconds. 0 = one camera update (67 ms,
+# or 33 ms with high_tick_rate). Longer is smoother but adds delay.
+# Default: 0
+mouse_look_window_ms = 0
+
+# Mouse-look diagnostics: write fable2_mouse.log next to the exe (every input
+# poll, camera updates from `f2 mouse trace on`, and a per-second summary).
+# For measuring mouse stutter; leave off for normal play. `f2 mouse diag on`
+# turns it on without a restart.
+# Default: false
+mouse_look_diag = false
+
+# How the mouse turns the camera. "direct": the gameplay camera turns by a
+# fixed angle per count of mouse movement, with no top speed and no coasting
+# after the mouse stops (target lock, cutscenes and other cameras still get the
+# mouse as the right stick). "stick": the mouse always drives the right stick,
+# like a controller (see mouse_look_smoothing).
+# Default: "direct"
+mouse_look_mode = "direct"
+
+# Direct mode: degrees of camera turn per count of mouse movement, sideways (x)
+# and up/down (y). Multiplied by mouse_look_scale / 256 and by the in-game
+# camera sensitivity. 0.06 is about 96 degrees per inch of hand movement on a
+# 1600 DPI mouse; for the same feel, halve it at 3200 DPI and double it at 800.
+# Up/down moves the camera height, which the game limits and slowly brings
+# back to the middle, as it does with the stick.
+# Default: 0.06
+mouse_look_sens_x = 0.06
+mouse_look_sens_y = 0.06
+
+# Direct mode: true = moving the mouse up makes the camera look down.
+# Default: false
+mouse_look_invert_y = false
+
+# Direct mode: share of the mouse movement held back at each camera update and
+# delivered over the following ones (0 = none, up to 0.9). Smoother, but the
+# camera then keeps turning briefly after the mouse stops.
+# Default: 0.0
+mouse_look_direct_smoothing = 0.0
 
 # Direct mouse-to-camera look: apply mouse movement straight to the active
 # camera's orientation (desktop-FPS style, no stick rate cap) instead of
@@ -272,6 +320,17 @@ skinning_cpu = true
 # Default: true
 faster_render_targets = true
 
+# GPU Frame Sync (SDK cvar gpu_sync_at_frame_start): at the start of each frame,
+# wait until the GPU has finished the previous one. Fixes flicker (blue distant
+# trees, the dog's texture, sun lighting) when the GPU falls behind, mostly at
+# higher internal resolutions. Costs a few FPS where the GPU is the limit.
+# false = let the GPU run up to three frames behind. On Linux (Vulkan) it stays
+# off: there it would make the CPU wait for the GPU at every frame start, and
+# the Steam Deck is limited by both. Leave commented out for the platform
+# default.
+# Default: true on Windows, false elsewhere
+# gpu_frame_sync = true
+
 [perf]
 # NtYieldExecution batching for the hot-function overrides (see
 # src/core/hotfunc/hotfunc_yield.h): every Nth guest yield does the real
@@ -315,6 +374,51 @@ refresh_gpu_memory_each_frame = false
 # game thread's time in busy areas. Same algorithm and results, only faster.
 # false = the original recompiled code. Default: true
 native_lua_gc = true
+
+[photo_mode]
+# Photo mode: freeze the world, fly a free camera and take screenshots, with a
+# settings panel for field of view, roll, depth of field, vignette, colour
+# grading and time of day. Toggle it in game with toggle_key, or with the
+# controller shortcut in gamepad_toggle (the Guide button by default).
+# false = photo mode is off and its keys do nothing.
+# Default: true
+enabled = true
+
+# Keyboard key that turns photo mode on and off (a Windows key name, e.g. F6,
+# F7, P). Escape also leaves photo mode.
+# Default: "F6"
+toggle_key = "F6"
+
+# Keyboard key that saves a screenshot while photo mode is on.
+# Default: "F12"
+screenshot_key = "F12"
+
+# Controller shortcut that enters and leaves photo mode: button names joined
+# with "+" (Guide, A, B, X, Y, LB, RB, Start, Back, L3, R3, Up, Down, Left,
+# Right), e.g. "Guide", "L3 + R3" or "Back + Start"; "Off" for none. It can
+# also be changed in photo mode (Capture > Controller Shortcut).
+# Default: "Guide"
+gamepad_toggle = "Guide"
+
+# Free-camera flying speed in metres per second (Shift = 4x, Ctrl = 1/4x).
+# The panel can change it live.
+# Default: 4.0
+move_speed = 4.0
+
+# Look speed for the mouse (hold the right mouse button and drag), in radians
+# per mouse pixel.
+# Default: 0.0025
+mouse_sensitivity = 0.0025
+
+# How far (metres) the free camera may fly from where photo mode started.
+# 0 = no limit.
+# Default: 0.0
+max_distance = 0.0
+
+# Folder for screenshots, relative to fable_2.exe (or an absolute path). Files
+# are named Fable2_YYYYMMDD_HHMMSS.png.
+# Default: "screenshots"
+screenshot_folder = "screenshots"
 )TOML_EOF";
 
 std::string_view TypeName(toml::node_type t) {
@@ -377,8 +481,8 @@ bool Load(const std::filesystem::path& path) {
 
   // Warn about unknown top-level sections (usually a typo or a file written
   // for a newer build).
-  static constexpr std::array<std::string_view, 4> kKnownSections = {
-      "general", "input", "patches", "perf"};
+  static constexpr std::array<std::string_view, 5> kKnownSections = {
+      "general", "input", "patches", "perf", "photo_mode"};
   for (const auto& [key, value] : root) {
     const bool known =
         std::ranges::find(kKnownSections, key.str()) != kKnownSections.end();
@@ -408,6 +512,30 @@ bool Load(const std::filesystem::path& path) {
     values.mouse_look_scale = static_cast<int32_t>(Read<int64_t>(
         input_table, "input", "mouse_look_scale", "integer",
         values.mouse_look_scale));
+    values.mouse_look_smoothing =
+        Read<bool>(input_table, "input", "mouse_look_smoothing", "boolean",
+                   values.mouse_look_smoothing);
+    values.mouse_look_window_ms = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "mouse_look_window_ms", "integer",
+        values.mouse_look_window_ms));
+    values.mouse_look_diag =
+        Read<bool>(input_table, "input", "mouse_look_diag", "boolean",
+                   values.mouse_look_diag);
+    {
+      std::string mode = Read<std::string>(input_table, "input", "mouse_look_mode", "string",
+                                           values.mouse_look_mode);
+      for (auto& c : mode) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if (mode == "direct" || mode == "stick") values.mouse_look_mode = mode;
+    }
+    values.mouse_look_sens_x = Read<double>(input_table, "input", "mouse_look_sens_x", "number",
+                                            values.mouse_look_sens_x);
+    values.mouse_look_sens_y = Read<double>(input_table, "input", "mouse_look_sens_y", "number",
+                                            values.mouse_look_sens_y);
+    values.mouse_look_invert_y = Read<bool>(input_table, "input", "mouse_look_invert_y", "boolean",
+                                            values.mouse_look_invert_y);
+    values.mouse_look_direct_smoothing =
+        Read<double>(input_table, "input", "mouse_look_direct_smoothing", "number",
+                     values.mouse_look_direct_smoothing);
     values.direct_mouse_look =
         Read<bool>(input_table, "input", "direct_mouse_look", "boolean",
                    values.direct_mouse_look);
@@ -502,6 +630,9 @@ bool Load(const std::filesystem::path& path) {
     values.skinning_cpu =
         Read<bool>(patches_table, "patches", "skinning_cpu", "boolean",
                    values.skinning_cpu);
+    values.gpu_frame_sync =
+        Read<bool>(patches_table, "patches", "gpu_frame_sync", "boolean",
+                   values.gpu_frame_sync);
     values.faster_render_targets =
         Read<bool>(patches_table, "patches", "faster_render_targets", "boolean",
                    values.faster_render_targets);
@@ -524,8 +655,46 @@ bool Load(const std::filesystem::path& path) {
     values.native_lua_gc = Read<bool>(perf_table, "perf", "native_lua_gc", "boolean",
                                       values.native_lua_gc);
   }
+  const toml::path photo_path{"photo_mode"};
+  const auto photo = root[photo_path];
+  if (photo.is_table()) {
+    const toml::table& photo_table = *photo.as_table();
+    values.photo_mode_enabled = Read<bool>(photo_table, "photo_mode", "enabled",
+                                           "boolean", values.photo_mode_enabled);
+    values.photo_mode_toggle_key =
+        Read<std::string>(photo_table, "photo_mode", "toggle_key", "string",
+                          values.photo_mode_toggle_key);
+    values.photo_mode_screenshot_key =
+        Read<std::string>(photo_table, "photo_mode", "screenshot_key", "string",
+                          values.photo_mode_screenshot_key);
+    // gamepad_toggle: a button combo string; older files have a boolean
+    // (true = the default shortcut, false = off).
+    if (const auto node = photo_table.get("gamepad_toggle")) {
+      if (const auto b = node->value<bool>()) {
+        values.photo_mode_gamepad_toggle = *b ? "Guide" : "Off";
+      } else if (const auto str = node->value<std::string>()) {
+        values.photo_mode_gamepad_toggle = *str;
+      } else {
+        REXSYS_WARN("[fable2-config] photo_mode.gamepad_toggle should be a string like \"Guide\"; using {}",
+                    values.photo_mode_gamepad_toggle);
+      }
+    }
+    values.photo_mode_move_speed = static_cast<float>(
+        Read<double>(photo_table, "photo_mode", "move_speed", "number",
+                     values.photo_mode_move_speed));
+    values.photo_mode_mouse_sensitivity = static_cast<float>(
+        Read<double>(photo_table, "photo_mode", "mouse_sensitivity", "number",
+                     values.photo_mode_mouse_sensitivity));
+    values.photo_mode_max_distance = static_cast<float>(
+        Read<double>(photo_table, "photo_mode", "max_distance", "number",
+                     values.photo_mode_max_distance));
+    values.photo_mode_screenshot_folder =
+        Read<std::string>(photo_table, "photo_mode", "screenshot_folder", "string",
+                          values.photo_mode_screenshot_folder);
+  }
 
   g_values = values;
+  g_path = path;
   REXSYS_INFO("[fable2-config] loaded {} (config_version={})", path.string(),
               values.config_version);
   return true;
@@ -542,6 +711,54 @@ void ApplyVulkanRendererOverrides() {
   REXSYS_INFO(
       "[fable2-config] Vulkan texture morph fallback enabled: using baked textures "
       "with targeted CPU readback");
+}
+
+bool SavePhotoModeGamepadToggle(const std::string& combo) {
+  g_values.photo_mode_gamepad_toggle = combo;
+  if (g_path.empty()) return false;
+  std::string text;
+  {
+    std::ifstream in(g_path, std::ios::binary);
+    if (!in) return false;
+    text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+  }
+  const std::string line = "gamepad_toggle = \"" + combo + "\"";
+  const std::string eol = text.find("\r\n") != std::string::npos ? "\r\n" : "\n";
+  // Find the [photo_mode] section and, inside it, the gamepad_toggle line.
+  size_t sec = text.find("\n[photo_mode]");
+  if (sec == std::string::npos && text.rfind("[photo_mode]", 0) == 0) sec = 0;
+  if (sec == std::string::npos) {
+    if (!text.empty() && text.back() != '\n') text += eol;
+    text += eol + "[photo_mode]" + eol + line + eol;
+  } else {
+    const size_t body = text.find('\n', sec + 1);
+    size_t end = body == std::string::npos ? text.size() : text.find("\n[", body);
+    if (end == std::string::npos) end = text.size();
+    size_t pos = body == std::string::npos ? std::string::npos : body + 1;
+    bool replaced = false;
+    while (pos != std::string::npos && pos < end) {
+      size_t le = text.find('\n', pos);
+      if (le == std::string::npos) le = text.size();
+      const std::string_view l(text.data() + pos, le - pos);
+      const size_t k = l.find_first_not_of(" \t");
+      if (k != std::string_view::npos && l.substr(k).rfind("gamepad_toggle", 0) == 0) {
+        const size_t cut = (le > pos && text[le - 1] == '\r') ? le - 1 : le;
+        text.replace(pos, cut - pos, line);
+        replaced = true;
+        break;
+      }
+      pos = le + 1;
+    }
+    if (!replaced) {
+      const size_t at = body == std::string::npos ? text.size() : body + 1;
+      text.insert(at, line + eol);
+    }
+  }
+  std::ofstream out(g_path, std::ios::binary | std::ios::trunc);
+  if (!out) return false;
+  out << text;
+  REXSYS_INFO("[fable2-config] photo_mode.gamepad_toggle = \"{}\" saved to {}", combo, g_path.string());
+  return bool(out);
 }
 
 const char* DefaultTemplate() { return kTemplate; }

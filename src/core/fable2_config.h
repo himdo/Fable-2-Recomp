@@ -41,9 +41,24 @@ struct Values {
   // mouse_look_scale); the cvar keeps its compiled default as a fallback so
   // an empty/missing config can never wedge input.
   bool mouse_look = true;
-  // Shared mouse-look sensitivity slider (1..4096, 256 = 1x): legacy stick
-  // units-per-pixel, and a multiplier on mouse_look_*_sens for direct look.
+  // Shared mouse-look sensitivity slider (1..4096, 256 = 1x): stick units per
+  // pixel, and a multiplier on mouse_look_sens_x/_y for the direct mode.
   int32_t mouse_look_scale = 256;  // range 1..4096 (cvar constraint)
+  // Even mouse-look turning (src/input/mouse_stick.h): velocity over one camera
+  // update, game deadzone and diagonal boost undone. Seeds the cvars of the
+  // same names; false = the previous per-poll mapping.
+  bool mouse_look_smoothing = true;
+  int32_t mouse_look_window_ms = 0;  // 0 = one camera update; range 0..500
+  // Mouse-look diagnostics to fable2_mouse.log (src/input/mouse_diag.h).
+  // Seeds the mouse_look_diag cvar; `f2 mouse diag on|off` changes it live.
+  bool mouse_look_diag = false;
+  // Direct mouse camera (src/input/mouse_direct.h). Seed the cvars of the same
+  // names; `f2 mouse mode|sens|invert|smooth` change them live.
+  std::string mouse_look_mode = "direct";  // "direct" or "stick"
+  double mouse_look_sens_x = 0.06;          // degrees per count
+  double mouse_look_sens_y = 0.06;
+  bool mouse_look_invert_y = false;
+  double mouse_look_direct_smoothing = 0.0;  // 0..0.9
   // Direct mouse-to-camera look (see src/input/mouse_look.h). EXPERIMENTAL.
   // When true, mouse movement bypasses the synthetic pad's right stick and is
   // applied directly to the active camera's orientation by
@@ -210,6 +225,12 @@ struct Values {
   bool skinning_cpu = true;
   // [patches] faster_render_targets: Narrower EDRAM transfers (SDK cvars execute_unclipped_draw_vs_on_cpu, skip_depth_clear_transfers).
   bool faster_render_targets = true;
+  // [patches] gpu_frame_sync: Keep the GPU at most one frame behind (SDK cvar gpu_sync_at_frame_start).
+#ifdef _WIN32
+  bool gpu_frame_sync = true;
+#else
+  bool gpu_frame_sync = false;
+#endif
   // [perf] - hot-function override tuning.
   // hotfunc_yield_every: NtYieldExecution batching factor for the hotfunc
   // overrides (see src/core/hotfunc/hotfunc_yield.h). Every Nth call does
@@ -242,6 +263,17 @@ struct Values {
   // [perf] native_lua_gc: native Lua GC routines
   // (src/core/hotfunc/luagc/NativeLuaGC.cpp); false = recompiled originals.
   bool native_lua_gc = true;
+  // [photo_mode] (src/core/fable2_photo_mode.h): free camera + settings panel.
+  bool photo_mode_enabled = true;
+  std::string photo_mode_toggle_key = "F6";
+  std::string photo_mode_screenshot_key = "F12";
+  // Controller shortcut that toggles photo mode: buttons joined by "+"
+  // ("Guide", "L3 + R3", "Back + Start"), "Off" for none. true = Guide.
+  std::string photo_mode_gamepad_toggle = "Guide";
+  float photo_mode_move_speed = 4.0f;     // metres per second
+  float photo_mode_mouse_sensitivity = 0.0025f;  // radians per mouse pixel
+  float photo_mode_max_distance = 0.0f;   // 0 = no limit
+  std::string photo_mode_screenshot_folder = "screenshots";
 };
 
 // Load the config from `path`.
@@ -259,6 +291,9 @@ const Values& Get();
 // Called once the GPU backend is known to be Vulkan, before the GPU plugin's
 // cvars are seeded: applies vulkan_texture_morph_fallback.
 void ApplyVulkanRendererOverrides();
+// Change [photo_mode] gamepad_toggle in memory and in the file Load() read
+// (only that line is rewritten; comments and the rest are kept).
+bool SavePhotoModeGamepadToggle(const std::string& combo);
 
 // The default template written when the file is missing. Must match
 // config/fable2_config.toml in the repo (staged next to the exe by the build).

@@ -142,8 +142,8 @@ extern "C" void MainRenderLoop_82B9CD68(PPCContext& ctx, uint8_t* base) {
       }
     }
   }
-  // F5 (host) -> run the external Lua file (per-frame, responsive).
-  fable2::f5lua::poll_mainloop(ctx, base);
+  // F5 (run the external Lua file) is not handled here: it runs on the world
+  // thread (fable2::f5lua::poll_world, from console::service_world_thread).
   fable2::console::poll(ctx, base);
   // Main-menu mod item: keep the relabeled row's string cache fresh.
   fable2::modmenu::on_frame(base);

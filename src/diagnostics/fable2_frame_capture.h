@@ -149,8 +149,13 @@ inline bool WritePngRgb(const std::string& utf8_path, int w, int h,
     if (len > 65535u) len = 65535u;
     const bool last = (off + len == filt.size());
     idat.push_back(last ? 1 : 0);  // BFINAL | (BTYPE=00 << 1)
-    PutBE16(idat, static_cast<uint16_t>(len));
-    PutBE16(idat, static_cast<uint16_t>(~len));
+    // Stored-block LEN / NLEN are little-endian (RFC 1951 3.2.4); only the
+    // zlib header and the Adler-32 are big-endian.
+    const uint16_t len16 = static_cast<uint16_t>(len);
+    idat.push_back(static_cast<uint8_t>(len16));
+    idat.push_back(static_cast<uint8_t>(len16 >> 8));
+    idat.push_back(static_cast<uint8_t>(~len16));
+    idat.push_back(static_cast<uint8_t>(static_cast<uint16_t>(~len16) >> 8));
     idat.insert(idat.end(), filt.data() + off, filt.data() + off + len);
     off += len;
   }

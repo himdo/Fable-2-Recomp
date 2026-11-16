@@ -1,4 +1,4 @@
-// fable_2 - developer commands, console-v11.
+// fable_2 - developer commands, console-v12.
 //
 // Typed in the SDK's `~` console as   f2 <command>   for example
 //   f2 warp 1 2 3        f2 god on        f2 warp save a; wait 60; warp a
@@ -21,7 +21,8 @@
 // Host commands: wait, waitfor, exec, echo, peek, poke, expect, find <number>,
 // freeze, unfreeze, trace, status, hosthelp, cvars, dumpmem; v6 adds cvar,
 // history, again, repeat, every, autoexec, peekf, pokef, freezef, peekstr,
-// findstr, findf, fill, scan; v11 adds widescreen (ws), pause and step. Addresses are Xbox 360 guest
+// findstr, findf, fill, scan; v11 adds widescreen (ws), pause and step; v12 adds mouse
+// (diag, trace, inject) and pad rstick. Addresses are Xbox 360 guest
 // virtual addresses (hex, with or without 0x); values are big-endian as in the game.
 
 #pragma once
@@ -40,6 +41,7 @@
 #include <fstream>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -48,7 +50,11 @@
 #include "fable2_f5_lua.h"
 #include "fable2_fit_window.h"
 #include "fable2_gui_lua.h"
+#include "mouse_diag.h"
+#include "mouse_direct.h"
 #include "remote_input_state.h"
+#include "photo_mode_state.h"
+#include "fable2_ui_events.h"
 
 // The SDK's `~` console (ImGui overlay) logs through REXLOG_* and can register
 // commands with REXCVAR_DEFINE_COMMAND_ARGS (rex/cvar.h). Both are optional here
@@ -58,11 +64,20 @@
 #define FABLE2_CONSOLE_HAVE_REXLOG 1
 #endif
 
-#define FABLE2_CONSOLE_BUILD "console-v11"
+#define FABLE2_CONSOLE_BUILD "console-v12"
 
 REXCVAR_DEFINE_BOOL(console_enabled, true, "Input",
                     "Developer command file transport (console\\in.txt / out.txt / state.txt "
                     "next to the game data). On by default; false or FABLE2_CONSOLE=0 turns it off.");
+
+// Mouse look settings, defined in main.cpp (see src/input/mouse_direct.h).
+REXCVAR_DECLARE(bool, mouse_look);
+REXCVAR_DECLARE(int32_t, mouse_look_scale);
+REXCVAR_DECLARE(std::string, mouse_look_mode);
+REXCVAR_DECLARE(double, mouse_look_sens_x);
+REXCVAR_DECLARE(double, mouse_look_sens_y);
+REXCVAR_DECLARE(bool, mouse_look_invert_y);
+REXCVAR_DECLARE(double, mouse_look_direct_smoothing);
 
 namespace fable2::console {
 
@@ -111,6 +126,26 @@ struct State {
   int64_t wf_value = 0;
   std::string wf_op = "==";
   Clock::time_point wf_deadline{};
+  // waitui: hold the queue until a Gameface UI event fires (fable2_ui_events.h).
+  bool waitui = false;
+  // boot: from the start-up screens into a save (run from poll(), see Boot()).
+  struct BootJob {
+    int step = -1;          // -1 = not running
+    bool slot = false;      // Load Game (slot) or Continue
+    int slot_n = 1;         // 1-based save slot
+    int tries = 0;          // presses at the current step
+    int64_t step_ms = 0;    // when the current step started
+    int64_t press_ms = 0;   // when the last button was pressed
+    int64_t release_ms = 0; // when the held button is let go (0 = none held)
+    int moved = 0;          // Downs the save list answered (onDirtyHighlight)
+    int64_t counted_press_ms = 0;  // the press last counted in `moved`
+    int menu_pos = 0;       // main menu: entries below the default (1 = Load Game)
+    int menu_dir = 0;       // main menu: the last press, +1 Down / -1 Up
+    int hl_at_press = 0;    // onDirtyHighlight bursts when it was pressed
+  } boot;
+  std::string wu_name;
+  int64_t wu_after_ms = 0;  // the event must fire at or after this time
+  Clock::time_point wu_deadline{};
   // freeze / trace.
   struct Frozen {
     uint64_t value;
@@ -143,11 +178,18 @@ struct State {
   bool scan_float = false;
   bool scan_active = false;
   bool autoexec_done = false;
-  // Lua command pump (console_pump.lua): the game runs it inside its own
-  // script update; the cprint hook sets pump_ready / lua_done from its markers.
+  // Lua commands: console_pump.lua readies them (and retires old console
+  // scripts restored from a save), console_step.lua runs one. Both are run
+  // with RunScript by service_world_thread(), on the world's own thread; the
+  // cprint hook sets pump_ready / lua_done from their markers.
   std::atomic<bool> pump_ready{false};
   bool pump_requested = false;
   Clock::time_point pump_req_time{};
+  // Set by start_pump() (and right after each load), cleared by
+  // service_world_thread() once it has run console_pump.lua.
+  std::atomic<bool> pump_install_wanted{false};
+  // Set by dispatch_lua(), cleared once console_step.lua has been run.
+  std::atomic<bool> step_wanted{false};
   std::string lua_pending;      // a Lua line held until the pump is ready
   uint64_t lua_seq = 0;
   std::atomic<uint64_t> lua_done{0};
@@ -592,16 +634,101 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
   }
   if (name == "help") {
     out("help", "host commands: wait waitfor exec echo peek poke expect find <number> freeze unfreeze trace status cvars dumpmem "
-                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad. "
+                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad mouse boot waitui photo traceworld. "
                 "Chain with ';'. Lua commands follow (their text appears in the log).");
     return false;  // Lua prints its own command list too
   }
   if (name == "hosthelp") {
     out("help",
         "host commands: wait waitfor exec echo peek poke expect find freeze unfreeze trace status cvars dumpmem "
-        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad. "
+        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad mouse boot waitui photo traceworld. "
         "Everything else (warp, god, gold, giveall, ...) runs in Lua: type help. "
         "Separate commands with ';'. Addresses are hex guest addresses.");
+    return true;
+  }
+  // waitui <EVENT> [timeout]: hold the queue until that Gameface UI event fires
+  // (within the last 3 s counts, so a repeating event like the title's
+  // END_STARTED is caught at once). Default timeout 180 s.
+  if (name == "waitui") {
+    if (W.size() < 2) {
+      out("waitui", "usage: waitui <EVENT> [timeout]  e.g. waitui END_STARTED 120s", true);
+      return true;
+    }
+    Clock::time_point dl = Clock::now() + std::chrono::seconds(180);
+    if (W.size() > 2) {
+      bool is_fr = false;
+      uint64_t fr = 0;
+      if (!parse_duration(W[2], is_fr, fr, dl) || is_fr) {
+        out("waitui", "bad timeout '" + W[2] + "' (use e.g. 90s)", true);
+        return true;
+      }
+    }
+    s.waitui = true;
+    s.wu_name = W[1];
+    s.wu_after_ms = fable2::uievents::NowMs() - 3000;
+    s.wu_deadline = dl;
+    return true;
+  }
+  // boot continue | boot slot <n>: from the start-up screens into a save, with
+  // no window focus needed. Each button press waits for the game's answer (a
+  // Gameface UI event, fable2_ui_events.h) and is pressed again if none
+  // comes; see BootStep(). The queue waits until the game is in play.
+  // `continue` loads the top save of Load Game (the newest), the same as
+  // `boot slot 1`: the main menu's own first entry opens a dialog first.
+  if (name == "boot") {
+    std::string mode = W.size() > 1 ? W[1] : "continue";
+    for (auto& c : mode) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    int64_t n = 1;
+    if (mode == "slot") {
+      if (W.size() > 2 && (!parse_i(W[2], n) || n < 1 || n > 50)) {
+        out("boot", "usage: boot continue | boot slot <n>  (n from 1)", true);
+        return true;
+      }
+    } else if (mode != "continue") {
+      out("boot", "usage: boot continue | boot slot <n>  (n from 1)", true);
+      return true;
+    }
+    s.boot = State::BootJob{};
+    s.boot.step = 0;
+    s.boot.slot = true;  // continue = the top (newest) save in Load Game
+    s.boot.slot_n = static_cast<int>(n);
+    s.boot.step_ms = fable2::uievents::NowMs();
+    out("boot", "waiting for the title screen, then Load Game, slot " + std::to_string(n));
+    return true;
+  }
+  // Photo mode from the console (research sessions run without keys).
+  if (name == "photo") {
+    namespace pm = fable2::photomode;
+    const std::string m = W.size() > 1 ? W[1] : "toggle";
+    // photo pose <n>: the pose request a pose card makes (1 = first card).
+    if (m == "pose") {
+      int64_t n = 0;
+      if (W.size() < 3 || !parse_i(W[2], n) || n < 1 || n > pm::kPoseCount) {
+        out("photo", "usage: photo pose <1-" + std::to_string(pm::kPoseCount) + ">", true);
+        return true;
+      }
+      pm::pose_request().store(int(n));
+      out("photo", std::string("pose ") + std::to_string(n) + " (" + pm::kPoses[n - 1].record + ") requested");
+      return true;
+    }
+    const bool on = pm::want_active().load();
+    if (m == "toggle" || (m == "on" && !on) || (m == "off" && on)) pm::request_toggle();
+    out("photo", std::string("photo mode ") + (pm::want_active().load() ? "requested on" : "requested off"));
+    return true;
+  }
+  // traceworld [n]: trace the next n world updates (default 1) to
+  // fable2_func_trace.log, even while photo mode has the world frozen.
+  if (name == "traceworld") {
+    int64_t n = 1;
+    if (W.size() > 1 && !parse_i(W[1], n)) n = 1;
+    fable2::photomode::trace_world_request().store(int(std::clamp<int64_t>(n, 1, 120)));
+    out("traceworld", "tracing the next " + std::to_string(std::clamp<int64_t>(n, 1, 120)) + " world update(s)");
+    return true;
+  }
+  // f5: what the F5 key does (runs the F5 Lua file on the next world update).
+  if (name == "f5") {
+    f5lua::g_f5_pending.store(true);
+    out("f5", "F5 Lua file requested (runs on the next world update)");
     return true;
   }
   if (name == "status") {
@@ -1010,13 +1137,14 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
   if (name == "pad") {
     // pad <A|B|X|Y|LB|RB|LT|RT|Up|Down|Left|Right|Start|Back|L3|R3>[+...] [frames]
     // pad stick <lx> <ly> [frames]  (-32768..32767, ly + = forward)  |  pad off
+    // pad rstick <rx> <ry> [frames] (right stick: camera; ry + = look up)
     // Holds the input for frames (default 12: menus miss 6), then releases it. While held
     // the command queue waits, so "pad A; pad Down; pad A" are separate presses.
     static const std::pair<const char*, uint16_t> kBtn[] = {
         {"up", 0x0001}, {"down", 0x0002}, {"left", 0x0004}, {"right", 0x0008}, {"start", 0x0010},
         {"back", 0x0020}, {"l3", 0x0040}, {"r3", 0x0080}, {"lb", 0x0100}, {"rb", 0x0200},
         {"a", 0x1000}, {"b", 0x2000}, {"x", 0x4000}, {"y", 0x8000}};
-    if (W.size() < 2) return out("pad", "usage: pad <button>[+button] [frames] | pad stick <lx> <ly> [frames] | pad off", true), true;
+    if (W.size() < 2) return out("pad", "usage: pad <button>[+button] [frames] | pad stick <lx> <ly> [frames] | pad rstick <rx> <ry> [frames] | pad off", true), true;
     fable2::remote::InputSnapshot snap;
     size_t fi = 2;
     std::string what = W[1];
@@ -1031,6 +1159,12 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
       if (W.size() < 4 || !parse_i(W[2], lx) || !parse_i(W[3], ly)) return out("pad", "usage: pad stick <lx> <ly> [frames]", true), true;
       snap.stk_lx = static_cast<int32_t>(std::clamp<int64_t>(lx, -32768, 32767));
       snap.stk_ly = static_cast<int32_t>(std::clamp<int64_t>(ly, -32768, 32767));
+      fi = 4;
+    } else if (what == "rstick") {
+      int64_t rx = 0, ry = 0;
+      if (W.size() < 4 || !parse_i(W[2], rx) || !parse_i(W[3], ry)) return out("pad", "usage: pad rstick <rx> <ry> [frames]", true), true;
+      snap.stk_rx = static_cast<int32_t>(std::clamp<int64_t>(rx, -32768, 32767));
+      snap.stk_ry = static_cast<int32_t>(std::clamp<int64_t>(ry, -32768, 32767));
       fi = 4;
     } else {
       std::stringstream ss(what);
@@ -1051,6 +1185,159 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     s.pad_frames = frames;
     s.wait_frames = frames + 2;  // hold, then a short gap before the next command
     s.wait_time = false;
+    return true;
+  }
+  if (name == "mouse") {
+    // mouse                        settings, rates since the last `mouse`, last poll
+    // mouse smoothing on|off       velocity window + deadzone compensation
+    //                              (cvar mouse_look_smoothing; off = old mapping)
+    // mouse diag on|off            fable2_mouse.log (cvar mouse_look_diag)
+    // mouse trace on|off           Lua camera trace into the log (needs a loaded save)
+    // mouse mode direct|stick      direct mouse camera, or the right stick
+    //                              (cvar mouse_look_mode; src/input/mouse_direct.h)
+    // mouse sens <x> [y]           direct mode: degrees per count (mouse_look_sens_x/_y)
+    // mouse invert on|off          direct mode: invert up/down (mouse_look_invert_y)
+    // mouse smooth <0..0.9>        direct mode: share of the movement held back
+    //                              for later camera updates (mouse_look_direct_smoothing)
+    // mouse inject <dx> <dy> [ms] [even|ramp|flick]
+    //                              move dx, dy pixels in total over ms (default
+    //                              1000), as if by hand: at a constant speed
+    //                              (even), speeding up (ramp) or as a flick
+    //                              (speeds up then slows down); ignores focus
+    // mouse stop                   cancel an inject
+    // See src/input/mouse_diag.h and tools/mouse_stats.py.
+    namespace md = fable2::mousediag;
+    std::string sub = W.size() > 1 ? W[1] : "status";
+    for (auto& c : sub) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    auto flag = [](const char* cvar) { return rex::cvar::GetFlagByName(cvar); };
+    auto on_off = [&](bool& v) {
+      if (W.size() < 3) return false;
+      if (W[2] == "on" || W[2] == "1" || W[2] == "true") return v = true, true;
+      if (W[2] == "off" || W[2] == "0" || W[2] == "false") return v = false, true;
+      return false;
+    };
+    if (sub == "status") {
+      namespace mdir = fable2::mousedirect;
+      const int64_t now = md::NowUs();
+      out("mouse", "mode=" + flag("mouse_look_mode") + " sens=" + flag("mouse_look_sens_x") + "," +
+                       flag("mouse_look_sens_y") + " invert_y=" + flag("mouse_look_invert_y") +
+                       " direct_smoothing=" + flag("mouse_look_direct_smoothing") +
+                       " | direct: lua=" + (mdir::BootState().IsAlive(now) ? "running" : "not running") +
+                       " starts=" + std::to_string(mdir::BootState().Tries()) +
+                       " route=" + (mdir::State().RouteDirect() ? "direct" : "stick") +
+                       " camera_updates=" + std::to_string(mdir::State().Drains()));
+      out("mouse", "mouse_look=" + flag("mouse_look") + " scale=" + flag("mouse_look_scale") +
+                       " smoothing=" + flag("mouse_look_smoothing") +
+                       " window_ms=" + flag("mouse_look_window_ms") + " (0 = one camera update)" +
+                       " diag=" + flag("mouse_look_diag") +
+                       " inject=" + (md::Injector::Get().Active() ? "running" : "idle"));
+      out("mouse", md::Diag::Get().StatusAndReset());
+      return true;
+    }
+    if (sub == "smoothing") {
+      bool on = false;
+      if (!on_off(on)) return out("mouse", "usage: mouse smoothing on|off", true), true;
+      rex::cvar::SetFlagByName("mouse_look_smoothing", on ? "true" : "false");
+      md::Diag::Get().Note(std::string("smoothing ") + (on ? "on" : "off"));
+      out("mouse", std::string("smoothing ") + (on ? "on" : "off (previous per-poll mapping)"));
+      return true;
+    }
+    if (sub == "mode") {
+      std::string m = W.size() > 2 ? W[2] : "";
+      for (auto& c : m) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if (m != "direct" && m != "stick") return out("mouse", "usage: mouse mode direct|stick", true), true;
+      rex::cvar::SetFlagByName("mouse_look_mode", m);
+      md::Diag::Get().Note("mode " + m);
+      out("mouse", m == "direct" ? "mode direct: the gameplay camera takes the mouse directly "
+                                   "(lock-on, cutscenes and other cameras still use the stick)"
+                                 : "mode stick: the mouse drives the right stick");
+      return true;
+    }
+    if (sub == "sens") {
+      double x = 0, y = 0;
+      if (W.size() < 3 || !parse_f(W[2], x) || x <= 0 || x > 10 ||
+          (W.size() > 3 && (!parse_f(W[3], y) || y <= 0 || y > 10)))
+        return out("mouse", "usage: mouse sens <x> [y]  (degrees per count, default 0.06)", true), true;
+      if (W.size() <= 3) y = x;
+      rex::cvar::SetFlagByName("mouse_look_sens_x", std::to_string(x));
+      rex::cvar::SetFlagByName("mouse_look_sens_y", std::to_string(y));
+      md::Diag::Get().Note("sens x=" + flag("mouse_look_sens_x") + " y=" + flag("mouse_look_sens_y"));
+      out("mouse", "sens " + flag("mouse_look_sens_x") + "," + flag("mouse_look_sens_y"));
+      return true;
+    }
+    if (sub == "invert") {
+      bool on = false;
+      if (!on_off(on)) return out("mouse", "usage: mouse invert on|off", true), true;
+      rex::cvar::SetFlagByName("mouse_look_invert_y", on ? "true" : "false");
+      md::Diag::Get().Note(std::string("invert_y ") + (on ? "on" : "off"));
+      out("mouse", std::string("invert_y ") + (on ? "on" : "off"));
+      return true;
+    }
+    if (sub == "smooth") {
+      double v = 0;
+      if (W.size() < 3 || !parse_f(W[2], v) || v < 0 || v > 0.9)
+        return out("mouse", "usage: mouse smooth <0..0.9>  (0 = off)", true), true;
+      rex::cvar::SetFlagByName("mouse_look_direct_smoothing", std::to_string(v));
+      md::Diag::Get().Note("direct_smoothing " + flag("mouse_look_direct_smoothing"));
+      out("mouse", "direct smoothing " + flag("mouse_look_direct_smoothing"));
+      return true;
+    }
+    if (sub == "diag") {
+      bool on = false;
+      if (!on_off(on)) return out("mouse", "usage: mouse diag on|off", true), true;
+      rex::cvar::SetFlagByName("mouse_look_diag", on ? "true" : "false");
+      if (on) {
+        md::Diag::Get().Start();
+        md::Diag::Get().Note("diag on");
+      }
+      out("mouse", std::string("diag ") + (on ? "on: fable2_mouse.log next to the exe" : "off"));
+      return true;
+    }
+    if (sub == "trace") {
+      bool on = false;
+      if (!on_off(on)) return out("mouse", "usage: mouse trace on|off", true), true;
+      if (on) {
+        // The trace only writes to the log, so turn the log on with it.
+        rex::cvar::SetFlagByName("mouse_look_diag", "true");
+        md::Diag::Get().Start();
+      }
+      md::Diag::Get().Note(std::string("trace ") + (on ? "on" : "off"));
+      // Runs in Lua next frame (scripts/recomp/console_cmds.lua -> mouse_diag.lua).
+      enqueue_text(std::string("mousetrace ") + (on ? "on" : "off"), true);
+      out("mouse", std::string("trace ") + (on ? "on" : "off") + " sent to Lua (needs a loaded save)");
+      return true;
+    }
+    if (sub == "inject") {
+      int64_t dx = 0, dy = 0;
+      uint64_t ms = 1000;
+      md::InjectProfile profile = md::InjectProfile::kEven;
+      if (W.size() < 4 || !parse_i(W[2], dx) || !parse_i(W[3], dy) ||
+          (W.size() > 4 && (!parse_u(W[4], ms) || ms == 0 || ms > 600000)) ||
+          (W.size() > 5 && !md::ParseProfile(W[5], profile)))
+        return out("mouse", "usage: mouse inject <dx> <dy> [ms] [even|ramp|flick]  (total pixels, spread over ms; default 1000)", true), true;
+      dx = std::clamp<int64_t>(dx, -1000000, 1000000);
+      dy = std::clamp<int64_t>(dy, -1000000, 1000000);
+      md::Injector::Get().Start(static_cast<int32_t>(dx), static_cast<int32_t>(dy), static_cast<int64_t>(ms),
+                                profile);
+      md::Diag::Get().Note("inject dx=" + std::to_string(dx) + " dy=" + std::to_string(dy) +
+                           " ms=" + std::to_string(ms) + " profile=" + md::ProfileName(profile));
+      // Hold the queue until the movement is done, so "mouse inject ...; mouse" reads the result.
+      s.wait_until = Clock::now() + std::chrono::milliseconds(ms + 100);
+      s.wait_time = true;
+      s.wait_frames = 0;
+      out("mouse", "inject " + std::to_string(dx) + "," + std::to_string(dy) + " px over " +
+                       std::to_string(ms) + " ms (" + md::ProfileName(profile) + ")");
+      return true;
+    }
+    if (sub == "stop") {
+      md::Injector::Get().Stop();
+      md::Diag::Get().Note("inject stopped");
+      out("mouse", "inject stopped");
+      return true;
+    }
+    out("mouse", "usage: mouse [status] | mouse mode direct|stick | mouse sens <x> [y] | mouse invert on|off | "
+                 "mouse smooth <0..0.9> | mouse smoothing on|off | mouse diag on|off | mouse trace on|off | "
+                 "mouse inject <dx> <dy> [ms] [even|ramp|flick] | mouse stop", true);
     return true;
   }
   if (name == "step") {
@@ -1488,23 +1775,114 @@ inline void write_state_file() {
   fs::rename(tmp, s.root / "console" / "state.txt", ec);
 }
 
-// Lua commands run inside the game's own script update (console_pump.lua), not
-// from this hook: calling RunScript per command from MainRenderLoop raced the
-// game's Lua and corrupted the VM. RunScript is used once, to install the pump.
-inline void start_pump(PPCContext& ctx, uint8_t* base) {
+// Lua commands never run from the MainRenderLoop hook: it runs on a different
+// host thread from the world update, and RunScript there raced the world update
+// and crashed it (guest null read in GrowBitArrayForString, under
+// GuildChest_ProcessItems, ~10 ms after the call). start_pump() and
+// dispatch_lua() only ask; service_world_thread() runs the scripts at the start
+// of the next world update.
+//
+// There is no per-frame "pump" script any more: the GeneralScriptManager writes
+// its running scripts into save games, and the old pump (with `_G = _G`) made
+// every save carry the whole global table; loading such a save restored it and
+// the game's script engine crashed soon after (2026-11-15). See
+// console_pump.lua.
+inline void start_pump(PPCContext& /*ctx*/, uint8_t* /*base*/) {
   State& s = S();
   s.pump_requested = true;
   s.pump_req_time = Clock::now();
+  s.pump_install_wanted.store(true);
+}
+
+// Research: FABLE2_RUNSCRIPT_STRESS=render|world runs RunScript on an empty
+// script (scripts/recomp/stress_noop.lua) every 3rd frame once the pump is up,
+// from the render thread (MainRenderLoop, where the pump used to be installed)
+// or from the world thread (where it is installed now), at most 1500 times.
+inline int stress_mode() {  // 0 off, 1 render, 2 world
+  static const int m = [] {
+    const char* e = std::getenv("FABLE2_RUNSCRIPT_STRESS");
+    if (!e) return 0;
+    const std::string v = e;
+    return v == "render" ? 1 : v == "world" ? 2 : 0;
+  }();
+  return m;
+}
+inline void stress_tick(int thread, PPCContext& ctx, uint8_t* base) {
+  if (stress_mode() != thread || !S().pump_ready.load()) return;
+  static int frame = 0, calls = 0;
+  if (calls >= 1500 || (++frame % 3) != 0) return;
+  // The render-thread run is the race itself, on purpose (world_thread.h).
+  std::optional<fable2::worldthread::ResearchOffServiceScope> research;
+  if (thread == 1) research.emplace();
   const PPCContext saved = ctx;
   try {
-    const std::string path = "scripts/recomp/console_pump.lua";
+    const std::string path = "scripts/recomp/stress_noop.lua";
     f5lua::run_external(ctx, base, &path);
+  } catch (...) {
+  }
+  ctx = saved;
+  if (++calls % 100 == 0 || calls == 1)
+    out("stress", std::string(thread == 1 ? "render" : "world") + " thread RunScript #" + std::to_string(calls));
+}
+
+inline void poll_mouse_direct(PPCContext& ctx, uint8_t* base);
+
+inline void run_world_script(PPCContext& ctx, uint8_t* base, const char* path) {
+  const PPCContext saved = ctx;
+  try {
+    const std::string p = path;
+    f5lua::run_external(ctx, base, &p);
   } catch (...) {
   }
   ctx = saved;
 }
 
-// Hands one line to the pump: console_run.lua = `return <seq>, [==[line]==]`.
+// Called at the start of every world update, on the world's thread, before the
+// game's own update (photo mode's GameWorldState_Update hook calls it). Every
+// RunScript the host makes goes through here.
+inline void service_world_thread(PPCContext& ctx, uint8_t* base) {
+  State& s = S();
+  stress_tick(2, ctx, base);
+  f5lua::poll_world(ctx, base);  // F5: run the external Lua file
+  poll_mouse_direct(ctx, base);  // direct mouse camera: start mouse_direct.lua
+
+  // Right after each load, run console_pump.lua: it retires console
+  // and F5 scripts that an older save brought back (see console_pump.lua).
+  // This runs whether or not the console is used.
+  static int64_t last_load_seen = 0;
+  static int64_t cleanup_due = 0;
+  const int64_t loaded = fable2::uievents::LastFired("FINISHED_TRANSITIONING_TO_GAME");
+  if (loaded > last_load_seen) {
+    last_load_seen = loaded;
+    cleanup_due = fable2::uievents::NowMs() + 250;  // soon: a restored script is already running
+  }
+  if (cleanup_due != 0 && fable2::uievents::NowMs() >= cleanup_due) {
+    cleanup_due = 0;
+    s.pump_install_wanted.store(true);
+  }
+
+  if (s.pump_install_wanted.exchange(false)) {
+    run_world_script(ctx, base, "scripts/recomp/console_pump.lua");
+    out("lua", "readying Lua commands (world thread)");
+  }
+  if (s.step_wanted.exchange(false)) run_world_script(ctx, base, "scripts/recomp/console_step.lua");
+}
+
+// Direct mouse camera (src/input/mouse_direct.h): start
+// scripts/recomp/mouse_direct.lua, which wraps the gameplay camera and asks the
+// host for the mouse movement once per camera update. RunScript only works
+// with a save loaded, so this retries with a growing pause while the mouse is
+// being moved without reaching the camera (Boot in mouse_direct.h). Runs
+// whether or not the console is on, from service_world_thread(): like every
+// RunScript, it must run on the world's thread, not from MainRenderLoop.
+inline void poll_mouse_direct(PPCContext& ctx, uint8_t* base) {
+  if (!REXCVAR_GET(mouse_look) || REXCVAR_GET(mouse_look_mode) == "stick") return;
+  if (!fable2::mousedirect::BootState().ShouldTry(fable2::mousediag::NowUs())) return;
+  fable2::mousediag::Diag::Get().Note("direct starting mouse_direct.lua");
+  run_world_script(ctx, base, "scripts/recomp/mouse_direct.lua");
+}
+
+// Hands one line to console_step.lua: console_run.lua = `return <seq>, [==[line]==]`.
 inline void dispatch_lua(const std::string& line) {
   State& s = S();
   // The game's Lua numbers are 4-byte floats (exact integers only up to 2^24),
@@ -1527,6 +1905,7 @@ inline void dispatch_lua(const std::string& line) {
   }
   s.lua_wait = true;
   s.lua_deadline = Clock::now() + std::chrono::seconds(30);
+  s.step_wanted.store(true);  // console_step.lua runs it on the next world update
 }
 
 inline void run_lua_line(const std::string& line, PPCContext& ctx, uint8_t* base) {
@@ -1627,10 +2006,147 @@ inline void hold_paused(uint8_t* base, bool file_mode) {
 }
 
 // Called every frame from the MainRenderLoop hook, right after the F5 poll.
+// One step of a running `boot` (called every console frame). Steps:
+//   0 title: wait for END_LEGAL (the title takes a button after it), press A
+//   1 wait for END_STARTED (the title answered); press A again if not
+//   2 main menu: give it 8 s, then Continue (A) or Load Game (Down, A)
+//   3 slot: wait for LOAD_CARD_ACTIVE (the save list), Down x (n-1), A
+//   4 wait for the load to start (any event but END_STARTED) or play
+//     (FINISHED_TRANSITIONING_TO_GAME); press A again if nothing answers
+//   5 wait for FINISHED_TRANSITIONING_TO_GAME
+// Presses are held for a fixed 150 ms (long enough for the game's 30 Hz pad reads, short of the menus' hold-to-repeat), not a frame count: minimized, the
+// console runs far more frames per second than the game reads its pad, so a
+// 12-frame press can fall between two of the game's reads.
+inline void BootPress(const char* button, uint8_t* base) {
+  run_host_command(std::string("pad ") + button + " 100000", base);
+  // `pad` also holds the command queue for its frame count; boot releases
+  // the button by time and holds the queue itself, so drop that wait.
+  S().wait_frames = 0;
+  S().boot.press_ms = fable2::uievents::NowMs();
+  S().boot.release_ms = S().boot.press_ms + 150;
+}
+inline void BootFail(const std::string& why) {
+  S().boot.step = -1;
+  PadStore().Publish({});
+  S().pad_frames = 0;
+  out("boot", "gave up: " + why, true);
+}
+inline bool BootFired(const char* event, int64_t since) {
+  return fable2::uievents::LastFired(event) >= since;
+}
+inline void BootStep(uint8_t* base) {
+  State& s = S();
+  auto& b = s.boot;
+  if (b.step < 0) return;
+  const int64_t now = fable2::uievents::NowMs();
+  if (b.release_ms != 0) {
+    if (now < b.release_ms) return;  // a press is still held
+    PadStore().Publish({});
+    s.pad_frames = 0;
+    b.release_ms = 0;
+    return;
+  }
+  const int64_t in_step = now - b.step_ms;
+  auto next = [&](int step) {
+    b.step = step;
+    b.step_ms = now;
+    b.tries = 0;
+  };
+  switch (b.step) {
+    case 0:  // title
+      if (BootFired("FINISHED_TRANSITIONING_TO_GAME", b.step_ms - 3000)) return next(5);
+      if (BootFired("END_LEGAL", b.step_ms - 600000) && now - fable2::uievents::LastFired("END_LEGAL") >= 2000) {
+        BootPress("A", base);
+        return next(1);
+      }
+      if (in_step > 240000) return BootFail("the title screen did not appear (END_LEGAL)");
+      return;
+    case 1:  // title answered?
+      if (BootFired("END_STARTED", b.press_ms)) return next(2);
+      if (now - b.press_ms > 5000) {
+        if (++b.tries > 4) return BootFail("the title did not take A");
+        BootPress("A", base);
+      }
+      return;
+    case 2:  // main menu: Down to Load Game, confirmed, then A
+      // A on the main menu's default entry asks to quit the game, so A is
+      // only pressed once the highlight has moved (onDirtyHighlight after
+      // the Down press); a Down the menu missed is pressed again.
+      // The menu ignores Up/Down for about 18-20 s after the title (its
+      // camera move-in); earlier presses are dropped.
+      // A press can repeat (two moves): the moves are counted and an
+      // overshoot is walked back with Up before A.
+      if (in_step < 16000) return;
+      if (b.tries > 0) {
+        const int moves = fable2::uievents::Bursts("onDirtyHighlight") - b.hl_at_press;
+        if (moves > 0) {
+          if (now - fable2::uievents::LastFired("onDirtyHighlight") < 1500) return;
+          b.menu_pos += b.menu_dir * moves;
+          b.hl_at_press = fable2::uievents::Bursts("onDirtyHighlight");
+          if (b.menu_pos == 1) {
+            BootPress("A", base);
+            return next(3);
+          }
+          out("boot", "main menu moved " + std::to_string(moves) + ", now at " + std::to_string(b.menu_pos) + "; correcting");
+          if (++b.tries > 10) return BootFail("the main menu did not settle on Load Game");
+          b.menu_dir = b.menu_pos > 1 ? -1 : 1;
+          b.hl_at_press = fable2::uievents::Bursts("onDirtyHighlight");
+          BootPress(b.menu_dir < 0 ? "Up" : "Down", base);
+          return;
+        }
+        if (now - b.press_ms <= 3000) return;
+      }
+      if (++b.tries > 10) return BootFail("the main menu did not take Down (no highlight moved)");
+      if (b.menu_dir == 0) b.menu_dir = 1;
+      b.hl_at_press = fable2::uievents::Bursts("onDirtyHighlight");
+      BootPress(b.menu_dir < 0 ? "Up" : "Down", base);
+      return;
+    case 3:  // the save list
+      // With a single save, Load Game loads it at once: no list opens.
+      if (BootFired("FINISHED_TRANSITIONING_TO_GAME", b.step_ms)) return next(5);
+      if (!BootFired("LOAD_CARD_ACTIVE", b.step_ms - 1000)) {
+        if (in_step > 60000) return BootFail("neither the save list opened (LOAD_CARD_ACTIVE) nor a load finished");
+        return;
+      }
+      if (now - fable2::uievents::LastFired("LOAD_CARD_ACTIVE") < 3000) return;
+      // Slots below the first: the save list sends no UI event when its
+      // selection moves, so Down is pressed n-1 times, 1.5 s apart.
+      if (b.moved < b.slot_n - 1) {
+        if (b.tries > 0 && now - b.press_ms < 1500) return;
+        ++b.tries;
+        ++b.moved;
+        BootPress("Down", base);
+        return;
+      }
+      if (now - b.press_ms < 1500) return;
+      BootPress("A", base);
+      return next(4);
+    case 4: {  // the load starting
+      if (BootFired("FINISHED_TRANSITIONING_TO_GAME", b.press_ms)) return next(5);
+      // Any answer but the title's END_STARTED means the press was taken.
+      if (BootFired("onDirtyHighlight", b.press_ms) || BootFired("LOAD_CARD_SELECTED", b.press_ms)) return next(5);
+      if (now - b.press_ms > 4000) {
+        if (++b.tries > 4) return BootFail("the save did not start loading");
+        BootPress("A", base);
+      }
+      return;
+    }
+    case 5:  // loading
+      if (BootFired("FINISHED_TRANSITIONING_TO_GAME", b.step_ms - 1000)) {
+        b.step = -1;
+        out("boot", "in game");
+        return;
+      }
+      if (in_step > 240000) return BootFail("the game did not finish loading");
+      return;
+  }
+}
+
 inline void poll(PPCContext& ctx, uint8_t* base) {
   // Video letterboxing (fit-window) needs a per-frame tick; it does not
   // depend on the console being on.
   fable2::fitwindow::ui::TickVideo();
+  // (The direct mouse camera is started from service_world_thread().)
   State& s = S();
   const bool file_mode = enabled();
   if (!file_mode && !s.active.load(std::memory_order_relaxed)) return;
@@ -1638,6 +2154,7 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
   ++s.frames;
   if (s.step_frames) --s.step_frames;
   if (s.pad_frames && --s.pad_frames == 0) PadStore().Publish({});
+  stress_tick(1, ctx, base);
   poll_pause_key();
   if (s.frames == 1)
     f5lua::logline("[console] %s active, root=%s\n", FABLE2_CONSOLE_BUILD, s.root.string().c_str());
@@ -1719,19 +2236,24 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
       std::lock_guard<std::mutex> lock(s.qmu);
       empty = s.queue.empty();
     }
-    if (empty && !s.waitfor && !s.wait_frames && !s.wait_time && !s.lua_wait && s.lua_pending.empty())
+    if (empty && !s.waitfor && !s.waitui && s.boot.step < 0 && !s.wait_frames && !s.wait_time && !s.lua_wait && s.lua_pending.empty())
       out("console", "IDLE");
   };
 
+  // A running `boot` presses its own buttons and holds the queue.
+  BootStep(base);
+
   // Pending waits hold the queue; otherwise run one command per frame.
-  if (!s.lua_pending.empty()) {
-    // Waiting for console_pump.lua to register (it needs a loaded game).
+  if (s.boot.step >= 0) {
+    // boot in progress (BootStep)
+  } else if (!s.lua_pending.empty()) {
+    // Waiting for console_pump.lua to report ready (it needs a loaded game).
     if (s.pump_ready.load()) {
       const std::string l = s.lua_pending;
       s.lua_pending.clear();
       dispatch_lua(l);
     } else if (Clock::now() - s.pump_req_time > std::chrono::seconds(20)) {
-      out("lua", "the Lua command pump did not start (load a save first); dropped: " + s.lua_pending, true);
+      out("lua", "Lua commands are not ready (load a save first); dropped: " + s.lua_pending, true);
       s.lua_pending.clear();
       s.pump_requested = false;  // retry on the next Lua command
       idle_if_empty();
@@ -1742,13 +2264,27 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
       idle_if_empty();
     } else if (Clock::now() >= s.lua_deadline) {
       s.lua_wait = false;
-      out("lua", "no reply from the Lua command pump within 30 s", true);
+      out("lua", "no reply from the Lua command within 30 s", true);
       idle_if_empty();
     }
   } else if (s.wait_frames > 0) {
     --s.wait_frames;
   } else if (s.wait_time) {
     if (Clock::now() >= s.wait_until) s.wait_time = false;
+  } else if (s.waitui) {
+    if (fable2::uievents::LastFired(s.wu_name) >= s.wu_after_ms) {
+      s.waitui = false;
+      out("waitui", "fired: " + s.wu_name);
+    } else if (Clock::now() >= s.wu_deadline) {
+      s.waitui = false;
+      // The rest of a `boot` sequence would press buttons on the wrong
+      // screen: drop what is queued.
+      {
+        std::lock_guard<std::mutex> lock(s.qmu);
+        s.queue.clear();
+      }
+      out("waitui", "timed out waiting for " + s.wu_name + "; queued commands dropped", true);
+    }
   } else if (s.waitfor) {
     uint64_t cur = 0;
     bool met = false;
@@ -1807,43 +2343,115 @@ extern "C" void sub_82A19CD8(PPCContext& ctx, uint8_t* base) {
     const char* e = std::getenv("FABLE2_CPRINT_HOOK");
     return !(e && *e == '0');
   }();
-  if (hook_on && (s.active.load(std::memory_order_relaxed) || fable2::console::enabled())) {
-    if (L && ta::rdable2(base, L, 0x10)) {
-      const uint32_t top = ta::load_be(base, L + 8), bot = ta::load_be(base, L + 0xC);
-      if (bot && top > bot && top - bot <= 8 * 16 && ta::rdable2(base, bot, top - bot)) {
-        const uint32_t tt = ta::load_be(base, bot + 4);
-        const uint32_t ts = ta::load_be(base, bot);
-        if (tt == 4 && ta::rdable2(base, ts, 16)) {
-          uint32_t len = ta::load_be(base, ts + 12);
-          if (len > 64000) len = 64000;
-          if (ta::rdable2(base, ts + 16, len)) {
-            std::string text(reinterpret_cast<const char*>(ta::host_addr(base, ts + 16)), len);
-            static const std::string kTag = "[console] ";
-            if (text.rfind(kTag, 0) == 0) {
-              const std::string body = text.substr(kTag.size());
-              if (body == "__f2 ready") {
-                s.pump_ready.store(true);
-                ctx.r3.u64 = 0;
-                return;
-              }
-              if (body.rfind("__f2 done ", 0) == 0) {
-                s.lua_done.store(std::strtoull(body.c_str() + 10, nullptr, 10));
-                ctx.r3.u64 = 0;
-                return;
-              }
-              std::istringstream is(body);
-              std::string ln;
-              while (std::getline(is, ln)) fable2::console::out("lua", ln);
-              // Handled here: the release cprint copies into a fixed-size guest
-              // stack buffer, and long console output overran it (exit
-              // 0xC0000409 / garbage reads). A Lua C function returns its result
-              // count in r3; cprint returns none.
-              ctx.r3.u64 = 0;
-              return;
-            }
-          }
+  static const std::string kTag = "[console] ";
+  static const std::string kDiag = "[f2diag] ";  // scripts/recomp/mouse_diag.lua
+  static const std::string kMouse = "[f2mouse] ";  // scripts/recomp/mouse_direct.lua
+
+  // Copies the first argument into `text` when it is a string starting with
+  // `tag`. The prefix is compared in guest memory first, so the game's own
+  // prints are not copied.
+  auto tagged_arg = [&](const std::string& tag, std::string& text) -> bool {
+    if (!L || !ta::rdable2(base, L, 0x10)) return false;
+    const uint32_t top = ta::load_be(base, L + 8), bot = ta::load_be(base, L + 0xC);
+    if (!bot || top <= bot || top - bot > 8 * 16 || !ta::rdable2(base, bot, top - bot)) return false;
+    const uint32_t tt = ta::load_be(base, bot + 4);
+    const uint32_t ts = ta::load_be(base, bot);
+    if (tt != 4 || !ta::rdable2(base, ts, 16)) return false;
+    uint32_t len = ta::load_be(base, ts + 12);
+    if (len > 64000) len = 64000;
+    if (len < tag.size() || !ta::rdable2(base, ts + 16, len)) return false;
+    const char* p = reinterpret_cast<const char*>(ta::host_addr(base, ts + 16));
+    if (std::memcmp(p, tag.data(), tag.size()) != 0) return false;
+    text.assign(p, len);
+    return true;
+  };
+
+  if (hook_on) {
+    std::string text;
+    // Direct mouse camera (src/input/mouse_direct.h). Once per camera update
+    // mouse_direct.lua calls cprint("[f2mouse] 1") (or "0" when the camera
+    // can't be turned) and gets back two numbers: the yaw in degrees and the
+    // height change. "old" returns 1 while a keeper from an early version is
+    // alive (restored from a save game), so the script leaves the camera to it.
+    // "boot" and "note ..." are for the log; "hb" comes only from such a keeper.
+    if (tagged_arg(kMouse, text)) {
+      namespace mdir = fable2::mousedirect;
+      const int64_t now = fable2::mousediag::NowUs();
+      const std::string arg = text.substr(kMouse.size());
+      mdir::BootState().Alive(now);
+      uint64_t results = 0;
+      // Pushes numbers as the C function's results (above its arguments, count
+      // in r3). Lua guarantees a C function 20 free slots below stack_last
+      // (L+0x1C), so two always fit; checked anyway.
+      auto push = [&](const float* v, int n) {
+        const uint32_t top = ta::load_be(base, L + 8);
+        const uint32_t last = ta::load_be(base, L + 0x1C);
+        const uint32_t size = 8u * static_cast<uint32_t>(n);
+        if (top && top + size <= last && ta::wr2(base, top, size)) {
+          uint8_t bytes[16];
+          mdir::EncodeNumbers(v, n, bytes);
+          std::memcpy(reinterpret_cast<void*>(ta::host_addr(base, top)), bytes, size);
+          fable2::console::write_be(base, L + 8, 4, top + size);
+          results = static_cast<uint64_t>(n);
         }
+      };
+      if (arg == "1" || arg == "0") {
+        double dx = 0.0, dy = 0.0;
+        mdir::State().Drain(arg == "1", now, REXCVAR_GET(mouse_look_direct_smoothing), dx, dy);
+        mdir::Settings st;
+        st.sens_x_deg = REXCVAR_GET(mouse_look_sens_x);
+        st.sens_y_deg = REXCVAR_GET(mouse_look_sens_y);
+        st.scale = REXCVAR_GET(mouse_look_scale);
+        st.invert_y = REXCVAR_GET(mouse_look_invert_y);
+        const mdir::CameraDelta d = mdir::ToCamera(dx, dy, st);
+        const float v[2] = {static_cast<float>(d.yaw), static_cast<float>(d.height)};
+        push(v, 2);
+      } else if (arg == "old") {
+        const float v[1] = {mdir::BootState().OldKeeperAlive(now) ? 1.0f : 0.0f};
+        push(v, 1);
+      } else if (arg == "boot") {
+        mdir::BootState().Booted();
+        fable2::mousediag::Diag::Get().Note("direct mouse_direct.lua running");
+      } else if (arg == "hb" || arg == "note camera wrapped") {
+        // Only a keeper from an early version sends these (see OldKeeperSeen).
+        mdir::BootState().OldKeeperSeen(now);
+        if (mdir::BootState().FirstHeartbeat())
+          fable2::mousediag::Diag::Get().Note("direct an early version's keeper is running (from a save game)");
+      } else if (arg.rfind("note ", 0) == 0) {
+        fable2::mousediag::Diag::Get().Note("direct " + arg.substr(5));
       }
+      ctx.r3.u64 = results;
+      return;
+    }
+    // Mouse-look camera trace: to fable2_mouse.log, whether or not the
+    // console is on (src/input/mouse_diag.h).
+    if (tagged_arg(kDiag, text)) {
+      fable2::mousediag::Diag::Get().OnLuaLine(std::string_view(text).substr(kDiag.size()));
+      ctx.r3.u64 = 0;  // a Lua C function returns its result count in r3
+      return;
+    }
+    if ((s.active.load(std::memory_order_relaxed) || fable2::console::enabled()) &&
+        tagged_arg(kTag, text)) {
+      const std::string body = text.substr(kTag.size());
+      if (body == "__f2 ready") {
+        s.pump_ready.store(true);
+        ctx.r3.u64 = 0;
+        return;
+      }
+      if (body.rfind("__f2 done ", 0) == 0) {
+        s.lua_done.store(std::strtoull(body.c_str() + 10, nullptr, 10));
+        ctx.r3.u64 = 0;
+        return;
+      }
+      std::istringstream is(body);
+      std::string ln;
+      while (std::getline(is, ln)) fable2::console::out("lua", ln);
+      // Handled here: the release cprint copies into a fixed-size guest
+      // stack buffer, and long console output overran it (exit
+      // 0xC0000409 / garbage reads). A Lua C function returns its result
+      // count in r3; cprint returns none.
+      ctx.r3.u64 = 0;
+      return;
     }
   }
   __imp__sub_82A19CD8(ctx, base);

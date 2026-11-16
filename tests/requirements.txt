@@ -1,0 +1,5 @@
+pytest==9.2.0
+pytest-cov==7.1.0
+pytest-describe==3.2.0
+pytest-spec==6.1.0
+pefile==2024.8.26

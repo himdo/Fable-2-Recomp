@@ -802,6 +802,13 @@ add("lua", "lua <code>  run Lua (also: type Lua directly)", function()
   else out("error: " .. tostring(r[2])) end
 end)
 
+add("mousetrace", "mousetrace [on|off]  camera trace into fable2_mouse.log (also: f2 mouse trace on|off)", function(W)
+  local f, err = loadfile("scripts/recomp/mouse_diag.lua")
+  if not f then return out("mouse_diag.lua not found: " .. tostring(err)) end
+  local ok, e = pcall(f, W[2])
+  if not ok then out("mousetrace error: " .. tostring(e)) end
+end)
+
 ---------------------------------------------------------------------------
 -- console-v6 commands (v7: argument shapes matched to the game's scripts). Where a shape is still a guess, try_shapes
 -- prints "[shape N]" for the argument list that worked; please send those.
@@ -996,6 +1003,60 @@ add("outfit", "outfit <name>|list  dress the hero in a debug outfit", function(W
   end
   if not OUTFITS[o] then return out("unknown outfit (outfit list)") end
   try("outfit " .. o, dbgf(OUTFITS[o]))
+end)
+
+-- The hero performs one expression (photo mode's pose cards use this).
+-- ExpressionPerformer.PerformExpression(hero, GDB.GetRecord(name)), as the game's
+-- scripts call it. An expression the hero has not learned yet is made available
+-- first (ExpressionPerformer.SetExpressionAsAvailable(hero, name, true)).
+-- `pose relock` makes the expressions it had to make available unavailable
+-- again (photo mode runs it when it closes), so nothing stays unlocked.
+-- `pose <expression> slow`: everything but the hero runs at this speed (the
+-- Slow Time spell's Debug.SetHeroSlowTime: the world slows, the hero's own
+-- time is sped up to match). It takes a number; below about 0.02 the hero's
+-- physics blow up (0.01 threw the hero off the map after a walk).
+local POSE_SLOW = 0.05
+add("pose", "pose <expression> [slow]|relock  the hero performs an expression (slow: the rest of the world at 5% speed until relock), e.g. pose ExpressionDance", function(W)
+  if not W[2] then return out("usage: pose <expression> [slow]|relock  (e.g. pose ExpressionDance)") end
+  local hero = need_hero()
+  if not hero then return end
+  local EPr = rawget(_G, "ExpressionPerformer")
+  if W[2]:lower() == "relock" then
+    local n = 0
+    for name in pairs(C.pose_unlocked or {}) do
+      if type(EPr) == "table" and pcall(EPr.SetExpressionAsAvailable, hero, name, false) then n = n + 1 end
+    end
+    C.pose_unlocked = nil
+    local slow = ""
+    if C.pose_slow then
+      pcall(dbgf("SetHeroSlowTime"), 1)  -- 1 ends the slow time
+      C.pose_slow = nil
+      slow = ", world speed back to normal"
+    end
+    return out("pose: locked " .. n .. " expressions again" .. slow)
+  end
+  if W[3] and W[3]:lower() == "slow" and not C.pose_slow then
+    if pcall(dbgf("SetHeroSlowTime"), POSE_SLOW) then C.pose_slow = true end
+  end
+  local name = W[2]
+  if not name:find("^Expression") then name = "Expression" .. name end
+  local EP = rawget(_G, "ExpressionPerformer")
+  if type(EP) ~= "table" or type(EP.PerformExpression) ~= "function" then
+    return out("pose: ExpressionPerformer is not available here")
+  end
+  local G = rawget(_G, "GDB")
+  local okr, rec = pcall(function() return G.GetRecord(name) end)
+  if not okr or rec == nil then return out("pose " .. name .. ": no such expression record") end
+  if type(EP.IsExpressionAvailable) == "function" and type(EP.SetExpressionAsAvailable) == "function" then
+    local oka, avail = pcall(EP.IsExpressionAvailable, hero, name)
+    if oka and avail == false then
+      pcall(EP.SetExpressionAsAvailable, hero, name, true)
+      C.pose_unlocked = C.pose_unlocked or {}
+      C.pose_unlocked[name] = true
+      out("pose " .. name .. ": made available for now")
+    end
+  end
+  try("pose " .. name, EP.PerformExpression, hero, rec)
 end)
 
 add("dye", "dye <clothing record> <dye record>  e.g. dye ObjectClothingCoatPoshM ObjectInventoryDyeClothingBasicBlue01", function(W)

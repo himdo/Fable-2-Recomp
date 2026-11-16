@@ -9,7 +9,7 @@ black. One controller (or the second pad navigating only) was fine.
 
 The recompiled guest processes input events **per user slot**. Its input
 manager polls `XamInputGetState` for all 4 slots
-(trampoline `ProcessAndProcessAndProcess1013_822B2D60`), and the front-end
+(trampoline `InputGetPadState_822B2D60`), and the front-end
 menu (`FrontMenu_PollEventQueue` → `FrontMenu_InputEvent` →
 `FrontMenu_PressBitDispatch`) dispatches a press for *whichever slot
 pressed it*.

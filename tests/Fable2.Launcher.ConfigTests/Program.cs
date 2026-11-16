@@ -1,7 +1,6 @@
 using Fable2Launcher;
 using Fable2Launcher.Constants;
 using System.Security.Cryptography;
-using System.IO.Compression;
 using System.Text;
 using System.Xml.Linq;
 
@@ -39,41 +38,6 @@ try
     Require(roundTrip["resolution"] == "\"1080p\"", "roundtrip resolution failed");
     Require(roundTrip["custom_mod"] == "true", "roundtrip unknown setting failed");
     Console.WriteLine("Launcher configuration roundtrip passed.");
-
-    // Two names share one payload. Redirecting one must leave the other
-    // intact even when the new payload has the same length.
-    byte[] archive = new byte[516];
-    GuiTextureBank.WriteInt(archive, 0, 512);
-    GuiTextureBank.WriteInt(archive, 4, 3);
-    archive[512] = 42;
-    using var directory = new MemoryStream();
-    directory.Write(new byte[] { 0, 0, 0, 2 });
-    foreach (byte name in "AB"u8)
-        directory.Write(new byte[] { 0, 0, 0, 2, name, 0, 0, 0, 0, 0, 0, 0, 0, 4 });
-    using (var compressed = new MemoryStream())
-    {
-        using (var writer = new ZLibStream(compressed, CompressionLevel.Optimal, leaveOpen: true))
-            writer.Write(directory.ToArray());
-        byte[] wrapped = compressed.ToArray();
-        // Real disc banks omit the checksum trailer.
-        GuiTextureBank.WriteInt(archive, 9, wrapped.Length - 4);
-        GuiTextureBank.WriteInt(archive, 13, (int)directory.Length);
-        wrapped.AsSpan(0, wrapped.Length - 4).CopyTo(archive.AsSpan(17));
-    }
-    var bank = new GuiTextureBank(archive);
-    bank.Replace(bank.Entries["A"], new byte[] { 123, 0, 0, 0 });
-    string bankPath = Path.Combine(testDirectory, "synthetic.bnk");
-    bank.Write(bankPath);
-    var patchedBank = new GuiTextureBank(File.ReadAllBytes(bankPath));
-    Require(patchedBank.Payload(patchedBank.Entries["A"])[0] == 123, "redirected image did not roundtrip");
-    Require(patchedBank.Payload(patchedBank.Entries["B"])[0] == 42, "aliased texture changed");
-    GuiTextureBank.WriteInt(archive, 9, archive.Length);
-    bool rejected = false;
-    try { _ = new GuiTextureBank(archive); }
-    catch (InvalidDataException) { rejected = true; }
-    Require(rejected, "malformed texture directory was accepted");
-    Console.WriteLine("GUI texture directory read, aliased replacement, and malformed input passed.");
-
 
     foreach (string aa in new[] { "none", "fxaa", "fxaa_extreme" })
     {
@@ -341,6 +305,43 @@ try
         GameCompatibilityInspector.Classify(malformedProbe.Hash, p => HasFile(malformedProbe, p), p => HasDirectory(malformedProbe, p))), "malformed descriptor accepted");
     Console.WriteLine("Catalogue-driven allow/deny, marker, extra-locale and native-profile tests passed.");
 
+    // Launch plan: separate build and game folders, so a swapped path can't pass.
+    string planRoot = Path.Combine(testDirectory, "launch-plan");
+    string buildFolder = Path.Combine(planRoot, "build");
+    string gameFolder = Path.Combine(planRoot, "game");
+    string emptyBuildFolder = Path.Combine(planRoot, "empty-build");
+    Directory.CreateDirectory(buildFolder);
+    Directory.CreateDirectory(gameFolder);
+    Directory.CreateDirectory(emptyBuildFolder);
+    File.WriteAllText(Path.Combine(buildFolder, "fable_2.exe"), "synthetic fixture, not an executable");
+    var defaultEdition = new GameCompatibility("Default edition detected", "Supported.", true, GameVersions.DefaultProfile);
+
+    GameLaunchPlan launchPlan = GameLaunchPlanner.Create(buildFolder, gameFolder, defaultEdition);
+    Require(launchPlan.Executable == Path.Combine(Path.GetFullPath(buildFolder), "fable_2.exe"), "launch plan does not run the build folder's fable_2.exe");
+    Require(launchPlan.WorkingDirectory == Path.GetFullPath(buildFolder), "launch plan does not start in the build folder");
+    Require(launchPlan.GameRoot == Path.GetFullPath(gameFolder), "launch plan does not point at the game folder");
+
+    // It has a profile, so only the Supported flag can stop it.
+    var unsupportedGame = new GameCompatibility("Title update detected", "This title update is not supported.", false, GameVersions.DefaultProfile);
+    RequireThrowsMessage(() => GameLaunchPlanner.Create(buildFolder, gameFolder, unsupportedGame),
+        "This title update is not supported.", "unsupported game was launched, or its reason was not shown");
+    var supportedWithoutProfile = new GameCompatibility("Odd build detected", "No profile for this build.", true);
+    RequireThrowsMessage(() => GameLaunchPlanner.Create(buildFolder, gameFolder, supportedWithoutProfile),
+        "No profile for this build.", "game without a profile was launched, or its reason was not shown");
+    RequireThrowsMessage(() => GameLaunchPlanner.Create(emptyBuildFolder, gameFolder, defaultEdition),
+        "fable_2.exe was not found", "missing fable_2.exe was not reported");
+
+    // Inspect: the check the launcher runs on the selected game folder.
+    GameCompatibility emptyFolder = GameCompatibilityInspector.Inspect(gameFolder);
+    Require(emptyFolder.Label == "Content missing" && !emptyFolder.Supported, "game folder without default.xex was not reported");
+    byte[] fakeXex = Encoding.UTF8.GetBytes("not a real default.xex");
+    File.WriteAllBytes(Path.Combine(gameFolder, "default.xex"), fakeXex);
+    string fakeXexHash = Convert.ToHexString(SHA256.HashData(fakeXex)).ToLowerInvariant();
+    GameCompatibility unknownXex = GameCompatibilityInspector.Inspect(gameFolder);
+    Require(unknownXex.Label == "Unknown XEX build" && !unknownXex.Supported, "unknown default.xex was not reported");
+    Require(unknownXex.Message.Contains(fakeXexHash, StringComparison.Ordinal), "unknown default.xex message does not show its SHA-256");
+    Console.WriteLine("Launch plan paths and refusals, and the game folder check passed.");
+
     // UpdateChecker: only a newer release from this repo counts as an update.
     static string ReleaseJson(string tag, string page = "https://github.com/himdo/Fable-2-Recomp/releases/tag/x") =>
         System.Text.Json.JsonSerializer.Serialize(new { tag_name = tag, html_url = page });
@@ -371,7 +372,7 @@ try
         KeyboardGamepadMap = "LMB:X,RMB:Y,Shift:A,E:A",
         MouseLook = true,
         MouseLookScale = 512,
-        DirectMouseLook = true,
+        MouseLookMode = "stick",
         UnlockWebsite = true,
         UnlockCe = false,
         SkipIntroVideos = true,
@@ -381,6 +382,14 @@ try
         RealtimeTextureMorphing = true,
         HeroDogTextureReadback = false,
         HotFuncYieldEvery = 4,
+        PhotoModeEnabled = false,
+        PhotoModeToggleKey = "F7",
+        PhotoModeScreenshotKey = "P",
+        PhotoModeGamepadToggle = "Back + Start",
+        PhotoModeMoveSpeed = 8.0,
+        PhotoModeMouseSensitivity = 0.005,
+        PhotoModeMaxDistance = 25.0,
+        PhotoModeScreenshotFolder = @"D:\Photos\Fable 2",
     };
     Fable2ConfigFile.Write(advPath, advanced);
     string writtenAdv = File.ReadAllText(advPath);
@@ -388,7 +397,9 @@ try
     var readBack = Fable2ConfigFile.Read(advPath);
     Require(readBack.MouseLook, "mouse look roundtrip failed");
     Require(readBack.MouseLookScale == 512, "mouse scale roundtrip failed");
-    Require(readBack.DirectMouseLook, "direct mouse look roundtrip failed");
+    Require(readBack.MouseLookMode == "stick", "mouse look mode roundtrip failed");
+    Require(writtenAdv.Contains("mouse_look_mode = \"stick\""), "mouse_look_mode is not a TOML string");
+    Require(!writtenAdv.Contains("direct_mouse_look"), "the old direct_mouse_look key was written");
     Require(!readBack.UnlockCe, "unlock_ce roundtrip failed");
     Require(readBack.SkipIntroVideos, "skip_intro_videos roundtrip failed");
     Require(readBack.DisableMotionBlur, "disable_motion_blur roundtrip failed");
@@ -396,6 +407,22 @@ try
     Require(!readBack.HigherHfTickRate, "higher_hf_tick_rate roundtrip failed");
     Require(readBack.HotFuncYieldEvery == 4, "hotfunc_yield_every roundtrip failed");
     Require(writtenAdv.Contains("[perf]"), "[perf] section was not written");
+    Require(writtenAdv.Contains("[photo_mode]"), "[photo_mode] section was not written");
+    Require(!readBack.PhotoModeEnabled, "photo_mode.enabled roundtrip failed");
+    Require(readBack.PhotoModeToggleKey == "F7", "photo_mode.toggle_key roundtrip failed");
+    Require(readBack.PhotoModeScreenshotKey == "P", "photo_mode.screenshot_key roundtrip failed");
+    Require(readBack.PhotoModeGamepadToggle == "Back + Start", "photo_mode.gamepad_toggle roundtrip failed");
+    Require(readBack.PhotoModeMoveSpeed == 8.0, "photo_mode.move_speed roundtrip failed");
+    Require(readBack.PhotoModeMouseSensitivity == 0.005, "photo_mode.mouse_sensitivity roundtrip failed");
+    Require(readBack.PhotoModeMaxDistance == 25.0, "photo_mode.max_distance roundtrip failed");
+    Require(readBack.PhotoModeScreenshotFolder == @"D:\Photos\Fable 2", "photo_mode.screenshot_folder roundtrip failed");
+    Require(writtenAdv.Contains("move_speed = 8.0"), "photo_mode.move_speed must stay a TOML float");
+    // Older files have gamepad_toggle as a boolean (true = Guide, false = off).
+    string legacyPath = Path.Combine(testDirectory, "legacy_photo.toml");
+    File.WriteAllText(legacyPath, "[photo_mode]\ngamepad_toggle = true\n");
+    Require(Fable2ConfigFile.Read(legacyPath).PhotoModeGamepadToggle == "Guide", "legacy gamepad_toggle = true");
+    File.WriteAllText(legacyPath, "[photo_mode]\ngamepad_toggle = false\n");
+    Require(Fable2ConfigFile.Read(legacyPath).PhotoModeGamepadToggle == "Off", "legacy gamepad_toggle = false");
     List<KeybindEntry> parsed = Fable2ConfigFile.ParseKeybinds(readBack.KeyboardGamepadMap);
     Require(parsed.Count == 4, "keybind parse count failed");
     Require(parsed[0].Key == "LMB" && parsed[0].Button == "X" && parsed[3].Key == "E" && parsed[3].Button == "A",
@@ -414,6 +441,16 @@ try
         "unknown section/keys not preserved");
     Require(Fable2ConfigFile.Read(advPath).MouseLookScale == 1024, "mouse scale re-read failed");
     Require(File.Exists(advPath + ".launcher-backup"), "fable2_config backup missing");
+    // mouse_look_mode: unknown values fall back to "direct"; the old
+    // direct_mouse_look key isn't managed, so a save leaves its line alone.
+    string modePath = Path.Combine(testDirectory, "fable2_config_mode.toml");
+    File.WriteAllText(modePath, "config_version = 1\n[input]\nmouse_look_mode = 'fps'\ndirect_mouse_look = true\n");
+    var modeValues = Fable2ConfigFile.Read(modePath);
+    Require(modeValues.MouseLookMode == "direct", "unknown mouse_look_mode did not fall back to direct");
+    Fable2ConfigFile.Write(modePath, modeValues);
+    string modeContent = File.ReadAllText(modePath);
+    Require(modeContent.Contains("mouse_look_mode = \"direct\""), "mouse_look_mode was not rewritten");
+    Require(modeContent.Contains("direct_mouse_look = true"), "the old direct_mouse_look line was changed");
     Console.WriteLine("Advanced options (fable2_config.toml) roundtrip and preservation passed.");
 
     if (args.Length > 0)
@@ -438,6 +475,19 @@ static void RequireThrows(Action action, string message)
 {
     try { action(); }
     catch { return; }
+    throw new InvalidOperationException(message);
+}
+
+// Like RequireThrows, but the error must also say `expected`, so a different
+// failure (a crash, say) can't pass in its place.
+static void RequireThrowsMessage(Action action, string expected, string message)
+{
+    try { action(); }
+    catch (InvalidOperationException ex)
+    {
+        if (ex.Message.Contains(expected, StringComparison.Ordinal)) return;
+        throw new InvalidOperationException(message + " (got: " + ex.Message + ")");
+    }
     throw new InvalidOperationException(message);
 }
 

@@ -33,6 +33,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <string>
@@ -48,8 +49,13 @@
 #include <rex/ui/keybinds.h>
 
 #include "fable2_config.h"  // direct_mouse_look toggle
+#include "../core/fable2_keycap_swap.h"  // real-time keycap prompt swap
+#include "mouse_diag.h"     // fable2_mouse.log + `f2 mouse inject` movement
+#include "mouse_direct.h"   // direct mouse camera (mouse_look_mode = "direct")
 #include "mouse_look.h"     // fable2::mouselook (accumulates the mouse delta)
 #include "host_input.h"     // fable2::hostinput (non-Windows key/mouse state)
+#include "mouse_stick.h"    // velocity window + deadzone compensation
+#include "photo_mode_state.h"  // fable2::photomode (hotkeys, RMB-drag look)
 
 #ifdef _WIN32
 #include <windows.h>
@@ -59,6 +65,9 @@
 REXCVAR_DECLARE(std::string, keyboard_gamepad_map);
 REXCVAR_DECLARE(bool, mouse_look);
 REXCVAR_DECLARE(int32_t, mouse_look_scale);
+REXCVAR_DECLARE(bool, mouse_look_smoothing);
+REXCVAR_DECLARE(int32_t, mouse_look_window_ms);
+REXCVAR_DECLARE(std::string, mouse_look_mode);
 REXCVAR_DECLARE(std::string, mouse_unlock_key);
 
 namespace fable2 {
@@ -85,6 +94,18 @@ inline int32_t ClampStick(int32_t v) {
   if (v > kStickMax) return kStickMax;
   if (v < -kStickMax) return -kStickMax;
   return v;
+}
+
+// Mouse displacement since the last poll (screen pixels, y down) -> right
+// stick. Fable 2 inverts Y, so mouse-up (dy < 0) maps to +ry (look up).
+// Returns true when an axis hit full deflection, i.e. some of the movement
+// was lost to the stick's range.
+inline bool MouseToStick(int32_t dx, int32_t dy, int32_t scale, int32_t& rx, int32_t& ry) {
+  const int64_t x = static_cast<int64_t>(dx) * scale;
+  const int64_t y = -static_cast<int64_t>(dy) * scale;
+  rx = static_cast<int32_t>(std::clamp<int64_t>(x, -kStickMax, kStickMax));
+  ry = static_cast<int32_t>(std::clamp<int64_t>(y, -kStickMax, kStickMax));
+  return rx != x || ry != y;
 }
 
 // One host-key -> guest-input binding. Exactly one of button/trigger/axis
@@ -272,6 +293,12 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     // open (F5 is a host-level developer command, not gamepad input).
     fable2::f5lua::poll_f5(focused);
 
+    // Real-time keycap prompt swap: the prompt variant follows guest user 0's
+    // most recent input device (keyboard/mouse -> keycaps, pad -> controller
+    // icons). No-op unless the launcher wrote a keyboard-prompt sidecar (see
+    // src/core/fable2_keycap_swap.h).
+    fable2::keycap::Instance().UpdateFromActiveDevice();
+
     // Debug-console toggle key (default F4). Pressing it opens/closes the menu;
     // while the menu is open we release the mouse lock (free cursor for the
     // menu) and re-engage it when the menu closes. It's excluded from the
@@ -285,8 +312,15 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
       unlock_down_prev_ = unlock_down;
     }
 
+    // Photo mode (src/core/fable2_photo_mode.h): hotkeys here; while it is on,
+    // the keyboard map is not fed to the game and the mouse only looks while
+    // the right button is held (the cursor is free for the settings panel).
+    fable2::photomode::window_focused().store(focused, std::memory_order_relaxed);
+    PollPhotoModeKeys(focused);
+    const bool photo = fable2::photomode::active();
+
     // While the debug menu is open, clicks and typing belong to the menu.
-    if (focused && !console_open_) {
+    if (focused && !console_open_ && !photo) {
       for (const auto& m : bindings_) {
         if (has_unlock_key && m.vk == unlock_vk) continue;  // not gamepad input
         if ((GetAsyncKeyState(m.vk) & 0x8000) == 0) continue;  // not held
@@ -315,6 +349,20 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     // cursor is free while the menu is open. Fable 2 inverts Y, so mouse-up
     // (dy<0) maps to +ry (look up).
     bool looking = focused && REXCVAR_GET(mouse_look) && !console_open_;
+    if (photo) {
+      // Start a look drag only when the right button goes down over the game
+      // (not over the panel); keep it until the button is released.
+      const bool rmb = focused && (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+      if (rmb && !photo_rmb_prev_ &&
+          !fable2::photomode::ui_wants_mouse().load(std::memory_order_relaxed))
+        photo_dragging_ = true;
+      if (!rmb) photo_dragging_ = false;
+      photo_rmb_prev_ = rmb;
+      looking = photo_dragging_ && !console_open_;
+    } else {
+      photo_dragging_ = false;
+      photo_rmb_prev_ = false;
+    }
 
     // Hide/restore the cursor via the SDK Window. This is a thread-safe
     // "desired state" that the UI thread applies, so it actually takes effect
@@ -328,6 +376,14 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
       cursor_hidden_ = false;
     }
 
+    // This poll's cursor displacement in screen pixels (dx>0 = right,
+    // dy>0 = down). The direct-mouse-look path that fed
+    // fable2_hook_direct_mouse_look stays disabled: the mouse always drives
+    // the synthetic pad's right stick, so the game's own stick code moves the
+    // camera.
+    int32_t cur_dx = 0;
+    int32_t cur_dy = 0;
+    bool cursor_read = false;
     if (looking) {
       RECT rc;
       POINT p;
@@ -336,28 +392,27 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
         c.x = rc.left + rc.right / 2;
         c.y = rc.top + rc.bottom / 2;
         if (ClientToScreen(hwnd, &c)) {
+          // The window moving or resizing (it does at startup) shifts the
+          // centre under a still cursor; that isn't mouse movement.
+          if (c.x != centre_x_ || c.y != centre_y_) mouse_centered_ = false;
+          centre_x_ = c.x;
+          centre_y_ = c.y;
           if (mouse_centered_) {
             // This poll's cursor displacement in screen pixels. dx>0 = right,
             // dy>0 = down.
             const int32_t dx = p.x - c.x;
             const int32_t dy = p.y - c.y;
-            // Direct-mouse-look separation DISABLED: the mouse always drives
-            // the synthetic pad's right stick (the native path) so the game's
-            // own stick pipeline produces the look 1:1 with a real right stick.
-            // The raw-displacement path that fed fable2_hook_direct_mouse_look
-            // is commented out below (preserved for reference).
-            // if (fable2::config::Get().direct_mouse_look) {
-            //   // Direct mouse look: hand the raw displacement to the camera
-            //   // hook (fable2_hook_direct_mouse_look) and leave the pad's right
-            //   // stick neutral, so the mouse no longer drives the joystick.
-            //   fable2::mouselook::add_delta(dx, dy);
-            // } else {
-              // Map the displacement onto the right stick. Fable 2
-              // inverts Y, so mouse-up (dy<0) maps to +ry (look up).
-              const int32_t scale = REXCVAR_GET(mouse_look_scale);
-              rx = input_detail::ClampStick(dx * scale);
-              ry = input_detail::ClampStick(-dy * scale);
-            // }
+            if (photo) {
+              // Photo mode: the free camera takes the raw displacement; the
+              // direct and stick paths below see no movement, so the pad
+              // stick stays neutral.
+              fable2::photomode::look_dx().fetch_add(dx, std::memory_order_relaxed);
+              fable2::photomode::look_dy().fetch_add(dy, std::memory_order_relaxed);
+            } else {
+              cur_dx = dx;
+              cur_dy = dy;
+              cursor_read = true;
+            }
           }
           SetCursorPos(c.x, c.y);  // recenter: consume this frame's movement
           mouse_centered_ = true;
@@ -366,6 +421,89 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     } else {
       mouse_centered_ = false;  // re-prime on (re)focus to avoid a jump
     }
+
+    // `f2 mouse inject` movement is added on top. It ignores focus so tests
+    // can be driven from console\in.txt, but still respects mouse_look.
+    int32_t inj_dx = 0;
+    int32_t inj_dy = 0;
+    fable2::mousediag::TakeInjected(inj_dx, inj_dy);
+    const bool injecting = (inj_dx != 0 || inj_dy != 0) && REXCVAR_GET(mouse_look) && !console_open_;
+    if (!injecting) inj_dx = inj_dy = 0;
+    // A running inject counts as active even between its deliveries.
+    const bool inject_live = REXCVAR_GET(mouse_look) && !console_open_ &&
+                             (injecting || fable2::mousediag::Injector::Get().Active());
+
+    // Direct mouse camera (src/input/mouse_direct.h): while the gameplay camera
+    // takes the mouse directly, keep the movement for it and leave the stick
+    // centred. Otherwise (stick mode, lock-on, cutscenes, menus, other
+    // cameras) the mouse drives the stick below, and nothing is kept.
+    const bool direct_mode = DirectMode();
+    const bool routed_direct = fable2::mousedirect::State().Feed(
+        direct_mode && (looking || inject_live), fable2::mousediag::NowUs(),
+        fable2::mousedirect::RouteTimeoutUs(
+            fable2::mousestick::DefaultWindowUs(fable2::config::Get().high_tick_rate)),
+        cur_dx + inj_dx, cur_dy + inj_dy);
+    // Moving the mouse in direct mode without the camera taking it: if the Lua
+    // side isn't running, that's when the host (re)starts it.
+    if (direct_mode && !routed_direct && (looking || inject_live) &&
+        (cur_dx | cur_dy | inj_dx | inj_dy) != 0)
+      fable2::mousedirect::BootState().Wanted(fable2::mousediag::NowUs());
+    if (routed_direct != routed_direct_prev_) {
+      routed_direct_prev_ = routed_direct;
+      fable2::mousediag::Diag::Get().Note(routed_direct ? "route direct" : "route stick");
+    }
+
+    bool clamped = false;
+    int32_t win_x = 0;
+    int32_t win_y = 0;
+    const bool smoothing = REXCVAR_GET(mouse_look_smoothing);
+    if (routed_direct) {
+      // The camera gets this movement directly; start the stick path fresh
+      // when the mouse comes back to it.
+      window_.Clear();
+      last_poll_us_ = 0;
+    } else if (smoothing) {
+      // Report the velocity over the last camera update, with the game's
+      // deadzone and diagonal boost undone (src/input/mouse_stick.h).
+      namespace ms = fable2::mousestick;
+      const int64_t now = fable2::mousediag::NowUs();
+      const int64_t since = last_poll_us_ ? last_poll_us_ : now;
+      last_poll_us_ = now;
+      if (cursor_read || injecting) window_.Add(since, now, cur_dx + inj_dx, cur_dy + inj_dy);
+      // Discard movement while mouse look is inactive, so resuming doesn't snap.
+      if (!looking && !inject_live) window_.Clear();
+      const int64_t window_us = WindowUs();
+      double sum_x = 0.0;
+      double sum_y = 0.0;
+      window_.Sum(now, window_us, sum_x, sum_y);
+      win_x = static_cast<int32_t>(std::lround(sum_x));
+      win_y = static_cast<int32_t>(std::lround(sum_y));
+      double cx = 0.0;
+      double cy = 0.0;
+      ms::WindowToControl(sum_x, sum_y, window_us / 1e6, REXCVAR_GET(mouse_look_scale), cx, cy);
+      clamped = ms::StickForControl(cx, cy, rx, ry);
+    } else if (cursor_read || injecting) {
+      // Previous behaviour: this poll's movement straight onto the stick.
+      window_.Clear();
+      last_poll_us_ = 0;
+      clamped = input_detail::MouseToStick(cur_dx + inj_dx, cur_dy + inj_dy,
+                                           REXCVAR_GET(mouse_look_scale), rx, ry);
+    }
+
+    fable2::mousediag::PollRecord rec;
+    rec.win_x = win_x;
+    rec.win_y = win_y;
+    rec.smoothing = smoothing;
+    rec.dx = cur_dx;
+    rec.dy = cur_dy;
+    rec.inj_dx = inj_dx;
+    rec.inj_dy = inj_dy;
+    rec.rx = rx;
+    rec.ry = ry;
+    rec.clamped = clamped;
+    rec.looking = looking;
+    rec.direct = routed_direct;
+    fable2::mousediag::Diag::Get().OnPoll(rec);
 #else
     // Same behaviour as the Windows path above, from the SDK window's own
     // input events (src/input/host_input.h) instead of global key polling and
@@ -459,6 +597,81 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
   }
 
  private:
+#ifdef _WIN32
+  // Photo mode hotkeys (edge-triggered). The toggle and screenshot keys come
+  // from fable2_config.toml [photo_mode]; the rest only act while it is on.
+  void PollPhotoModeKeys(bool focused) {
+    namespace pm = fable2::photomode;
+    const auto& cfg = fable2::config::Get();
+    if (!cfg.photo_mode_enabled) return;
+    if (cfg.photo_mode_toggle_key != photo_toggle_name_) {
+      photo_toggle_name_ = cfg.photo_mode_toggle_key;
+      photo_toggle_vk_ = static_cast<uint16_t>(rex::ui::ParseVirtualKey(photo_toggle_name_));
+    }
+    if (cfg.photo_mode_screenshot_key != photo_shot_name_) {
+      photo_shot_name_ = cfg.photo_mode_screenshot_key;
+      photo_shot_vk_ = static_cast<uint16_t>(rex::ui::ParseVirtualKey(photo_shot_name_));
+    }
+    const bool on = pm::active();
+    const bool typing = pm::ui_wants_keyboard().load(std::memory_order_relaxed);
+    auto edge = [&](uint16_t vk) {
+      if (vk == 0 || vk >= 256) return false;
+      const bool down = focused && (GetAsyncKeyState(vk) & 0x8000) != 0;
+      const bool hit = down && !photo_keys_prev_[vk];
+      photo_keys_prev_[vk] = down;
+      return hit;
+    };
+    if (edge(photo_toggle_vk_) && !console_open_) pm::request_toggle();
+    const bool shot = edge(photo_shot_vk_);
+    const bool esc = edge(VK_ESCAPE);
+    const bool h = edge('H');
+    const bool r = edge('R');
+    const bool x = edge('X');
+    const bool tab = edge(VK_TAB);
+    const bool enter = edge(VK_RETURN);
+    int digit = 0;
+    for (int d = 1; d <= 9; ++d)
+      if (edge(static_cast<uint16_t>('0' + d))) digit = d;
+    // Arrow keys move through the menu (with auto-repeat).
+    const int64_t now = pm::now_ms();
+    auto held = [&](int vk) { return focused && (GetAsyncKeyState(vk) & 0x8000) != 0; };
+    const int dy = photo_rep_[1].Fire(held(VK_DOWN), now) - photo_rep_[0].Fire(held(VK_UP), now);
+    const int dx = photo_rep_[3].Fire(held(VK_RIGHT), now) - photo_rep_[2].Fire(held(VK_LEFT), now);
+    // [ and ] scrub the pose hold while the pose cards are open.
+    const int scrub = photo_rep_[5].Fire(held(VK_OEM_6), now) - photo_rep_[4].Fire(held(VK_OEM_4), now);
+    if (!on || console_open_) return;
+    if (esc) {
+      // Esc goes back from the pose cards first.
+      if (pm::pose_grid_open().load() && pm::panel_visible().load()) pm::nav_back().fetch_add(1);
+      else pm::request_exit();
+    }
+    if (shot) pm::screenshot_request().store(true);
+    if (typing) return;
+    const bool any = h || r || x || tab || enter || digit || dx || dy || scrub;
+    if (any) pm::prompts_pad().store(false, std::memory_order_relaxed);
+    if (h) pm::panel_visible().store(!pm::panel_visible().load());
+    if (r) pm::reset_camera_request().store(true);
+    if (x) {
+      std::lock_guard<std::mutex> lock(pm::settings_mutex());
+      pm::settings_unlocked().roll_deg = 0.0f;
+    }
+    if (tab) pm::nav_tab().fetch_add((GetAsyncKeyState(VK_SHIFT) & 0x8000) ? -1 : 1);
+    if (digit) pm::nav_tab_direct().store(digit);
+    if (enter) pm::nav_activate().fetch_add(1);
+    if (dy) pm::nav_y().fetch_add(dy);
+    if (dx) pm::nav_x().fetch_add(dx);
+    if (scrub && pm::pose_grid_open().load()) pm::nav_scrub().fetch_add(scrub);
+  }
+  fable2::photomode::Repeater photo_rep_[6];  // up, down, left, right, [, ]
+  std::string photo_toggle_name_;
+  std::string photo_shot_name_;
+  uint16_t photo_toggle_vk_ = 0;
+  uint16_t photo_shot_vk_ = 0;
+  bool photo_keys_prev_[256] = {};
+  bool photo_dragging_ = false;  // RMB look drag in progress (photo mode)
+  bool photo_rmb_prev_ = false;
+#endif
+
   // Re-parse the cvar only when its text changed (cheap for a short string),
   // so the mapping is hot-reloadable from the console without a rebuild.
   void RefreshBindings() {
@@ -474,10 +687,31 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
   // connected silently shadows this driver -- the guest only sees the real
   // pad and this driver is never polled (dead keyboard, no mouse lock).
   static constexpr DeviceId kDeviceId{1ull << 60};
+
+  // Velocity window length: mouse_look_window_ms, or one camera update when
+  // it's 0 (the camera script runs on the LF tick: 15 Hz, 30 with
+  // high_tick_rate).
+  // mouse_look_mode = "direct" (the default): the gameplay camera takes the
+  // mouse directly when it can; "stick": always the right stick.
+  static bool DirectMode() {
+    const std::string mode = REXCVAR_GET(mouse_look_mode);
+    return mode != "stick";
+  }
+
+  static int64_t WindowUs() {
+    const int32_t ms = REXCVAR_GET(mouse_look_window_ms);
+    if (ms > 0) return static_cast<int64_t>(ms) * 1000;
+    return fable2::mousestick::DefaultWindowUs(fable2::config::Get().high_tick_rate);
+  }
+
+  fable2::mousestick::VelocityWindow window_;
+  int64_t last_poll_us_ = 0;  // previous poll (smoothing path), for movement intervals
+  bool routed_direct_prev_ = false;  // route of the previous poll, for log notes
   std::vector<input_detail::Mapping> bindings_;
   std::string cached_text_;
   uint32_t packet_number_ = 0;
   bool mouse_centered_ = false;  // set once the cursor is first pinned
+  int32_t centre_x_ = 0, centre_y_ = 0;  // window centre the cursor was last pinned to
   bool cursor_hidden_ = false;   // set while the SDK window cursor is hidden
   bool console_open_ = false;    // debug menu open -> mouse lock released
   bool unlock_down_prev_ = false;  // prev-poll state of the unlock key

@@ -188,21 +188,33 @@ Remap at launch without recompiling, e.g.
 fable_2.exe --keyboard_gamepad_map "E:A,B:B,Space:L3,Enter:Start"
 ```
 
-### Mouse look (right stick)
+### Mouse look
 
-Mouse movement is mapped to the guest **right stick** for camera control. The
-movement since the previous poll is converted into stick deflection, so you
-**sweep the mouse to look and stop to stop**. Two cvars control it:
+The mouse turns the camera in one of two modes:
+
+- **`direct` (default):** the gameplay camera turns by a fixed angle per count
+  of mouse movement, with no top speed and no coasting after the mouse stops.
+  Up/down moves the camera height, like the stick, within the same limit.
+  Target lock, cutscenes and other cameras still get the mouse as the right
+  stick.
+- **`stick`:** the mouse always drives the guest **right stick**, like a
+  controller, with the stick's top speed.
 
 | Argument | Effect |
 |---|---|
 | `--mouse_look <bool>` | Enable/disable mouse look (default `true`) |
-| `--mouse_look_scale <n>` | Sensitivity: right-stick units per pixel of mouse movement (default `256`; larger = more sensitive) |
+| `--mouse_look_mode <direct\|stick>` | How the mouse turns the camera (default `direct`) |
+| `--mouse_look_scale <n>` | Overall sensitivity, the launcher's slider (default `256` = 1×; larger = more sensitive) |
+| `--mouse_look_sens_x <deg>` / `--mouse_look_sens_y <deg>` | Direct mode: degrees per count (default `0.06`, before `mouse_look_scale`) |
+| `--mouse_look_invert_y <bool>` | Direct mode: invert up/down (default `false`) |
+| `--mouse_look_smoothing <bool>` | Stick mode: smooth the stick over a camera update (default `true`) |
 
-The defaults come from `[input] mouse_look` / `[input] mouse_look_scale` in
-`fable2_config.toml` (edit there to change them permanently), the command
-line overrides per launch, and both cvars are hot-reloadable from the in-game
-console, so you can dial in the sensitivity live. Example: `fable_2.exe
+The defaults come from the `[input]` section of `fable2_config.toml` (edit
+there to change them permanently; the launcher's Advanced Options set the mode
+and `mouse_look_scale`), the command line overrides per launch, and the cvars
+are hot-reloadable from the in-game console. `f2 mouse` shows the current
+settings, and `f2 mouse mode|sens|invert` change them live (see
+`docs/console/CONSOLE-COMMANDS.md`, "Mouse look"). Example: `fable_2.exe
 --mouse_look_scale 512` for a more sensitive camera.
 
 All cvars above are hot-reloadable, so they can also be changed from the in-game console.

@@ -215,6 +215,7 @@ struct ThreadState {
   const char* lastPtr = nullptr;  // original name pointer of the in-flight run
   uint64_t run = 0;    // how many times in a row (0 = no run in flight)
   std::string buf;     // finished runs, waiting to be written
+  std::string tag;     // "t<n> " thread tag that starts every log line
   std::mutex m;        // guards counts (the summary sweeper snapshots it)
   std::unordered_map<std::string, uint64_t> counts;
   std::atomic<bool> dead{false};
@@ -264,6 +265,8 @@ inline ThreadState& state() {
   static thread_local ThreadState* ts = [] {
     auto* t = new ThreadState;  // leaked on purpose
     t->counts.reserve(1024);
+    // Lines carry a short thread tag, so interleaved threads can be told apart.
+    t->tag = "t" + std::to_string(std::hash<std::thread::id>{}(std::this_thread::get_id()) % 100000) + " ";
     // Register so the sweeper can snapshot this thread's counters. Stays in
     // the registry after exit (dead flag set by Unreg's destructor).
     std::lock_guard<std::mutex> l(registry_lock());
@@ -297,6 +300,7 @@ inline void commit_run(ThreadState& ts, bool want_summary, bool want_log) {
       it->second += ts.run;
   }
   if (want_log) {
+    ts.buf.append(ts.tag);
     ts.buf.append(ts.last);
     if (ts.run > 1) {
       ts.buf.append(" x ");

@@ -1,4 +1,4 @@
-The launcher code in this folder (XenosTiling.cs) uses the ReXGlue/Xenia Xenos 2D texture address calculation to generate keyboard prompt images. This licence covers that code only.
+This program uses the following file xenos_tiling.h which uses the ReXGlue/Xenia Xenos 2D texture address calculation to generate keyboard prompt images. This licence covers that code only.
 
 Copyright (c) 2026, Tom Clay <tomc@tctechstuff.com>
 

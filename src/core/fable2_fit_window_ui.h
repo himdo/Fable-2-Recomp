@@ -32,6 +32,7 @@
 
 #pragma once
 
+#include "fable2_ui_events.h"
 #include <rex/cvar.h>
 #include <rex/logging.h>
 #include <rex/ppc/context.h>
@@ -778,6 +779,7 @@ inline std::atomic<int64_t> g_menu_ms{0};  // last "[fitwin-menu]" report
 inline void OnGamefaceMessage(uint32_t level, uint32_t text) {
   std::string message;
   if (!detail::ReadGuestString(text, message) || message.empty()) return;
+  fable2::uievents::OnMessage(message);  // for the console's waitui / boot
   if (message.rfind("[fitwin-menu]", 0) == 0) {
     g_menu_ms.store(std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now().time_since_epoch())
