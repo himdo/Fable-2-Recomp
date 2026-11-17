@@ -711,7 +711,8 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     // by 1x, the pause menu's right page and cover by 1.2x. The page and its
     // cover go where the game's are, so only one cover shows.
     {
-      const float extra = std::max(0.0f, 360.0f * (W / std::max(H, 1.0f)) - 640.0f);
+      // The picture's aspect (a forced one is pillarboxed in the window).
+      const float extra = std::max(0.0f, 360.0f * fitwindow::UiAspect() - 640.0f);
       const bool main_menu = from_main_menu().load(std::memory_order_relaxed);
       shift_ = REXCVAR_GET(fit_window_hud_to_edges) ? X(extra * (main_menu ? 1.0f : 1.2f)) : 0.0f;
     }

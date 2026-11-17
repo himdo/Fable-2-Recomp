@@ -45,7 +45,7 @@ describes the selected setting and says when a change takes effect.
 | Setting | Key | Values |
 |---|---|---|
 | Fit to Window | `fit_to_window` | On: render at the window's shape and fill it. Off: the original 16:9 picture with black bars |
-| Aspect Ratio | `aspect_ratio` | Match Window (`"auto"`), 4:3, 16:10, 16:9, 21:9, 32:9; the file also takes any `"w:h"` or number between 4:3 and 4:1 |
+| Aspect Ratio | `aspect_ratio` | Match Window (`"auto"`), 4:3, 16:10, 16:9, 21:9, 32:9; the file also takes any `"w:h"` or number between 4:3 and 4:1. A ratio other than the window's gets black bars: `present_letterbox` on and the guest video mode (`video_mode_width/height`) set to that shape, which the presenter fits into the window (`fitwindow::detail::ApplyBars`) |
 | HUD at the Edges | `hud_to_edges` | the HUD at the edges of a wide picture, from the next screen that opens |
 | 16:9 Loading Screens | `native_16x9_screens` | loading screens and the saving banner kept 16:9 (recommended: On, shown as *On (Recommended)*) |
 | Draw Distance | `[patches] view_distance_multiplier` | 1.00x to 10.00x: how far objects, buildings, villagers and creatures are drawn before they pop out |

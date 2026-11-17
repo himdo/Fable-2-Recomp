@@ -19,7 +19,10 @@
 //
 // The presenter then has to stretch the frame to the whole window instead of
 // keeping the 16:9 video mode shape, so this also sets present_letterbox =
-// false and present_safe_area_x/y = 100 (in memory only).
+// false and present_safe_area_x/y = 100 (in memory only). A forced aspect
+// (`[display] aspect_ratio`, `ws aspect`) that differs from the window's
+// gets bars instead: present_letterbox = true and a video mode of that shape
+// (ApplyBars).
 //
 // The aspect is written at startup and again whenever the window is resized.
 // Turn it off with `fit_game_to_window = false` in fable_2.toml. The developer
@@ -43,6 +46,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <cstdlib>
 #include <string>
 #include <string_view>
@@ -121,6 +125,38 @@ inline void RestorePresenterCvar(std::string_view name) {
   }
 }
 
+// A forced aspect that differs from the window's: the presenter letterboxes
+// (or pillarboxes) the picture to that shape instead of stretching it. It
+// takes the shape from the guest video mode, so that is set to a size of
+// the forced aspect inside what the game already sees (720 high for shapes
+// narrower than 16:9, 1280 wide for wider ones, never under 480 high).
+// 0 fills the window again: no bars, the default video mode.
+inline void ApplyBars(float aspect) {
+  if (aspect <= 0.0f) {
+    SetPresenterCvar("present_letterbox", "false");
+    for (const char* name : {"video_mode_width", "video_mode_height"}) {
+      if (rex::cvar::HasNonDefaultValue(name)) RestorePresenterCvar(name);
+    }
+    return;
+  }
+  float w = 1280.0f, h = 720.0f;
+  if (aspect >= 16.0f / 9.0f) {
+    h = std::max(480.0f, 1280.0f / aspect);
+    w = h * aspect;
+  } else {
+    w = 720.0f * aspect;
+  }
+  const std::string ws = std::to_string(int(std::lround(w)));
+  const std::string hs = std::to_string(int(std::lround(h)));
+  if (rex::cvar::GetFlagByName("video_mode_width") == ws && rex::cvar::GetFlagByName("video_mode_height") == hs &&
+      rex::cvar::GetFlagByName("present_letterbox") == "true")
+    return;
+  rex::cvar::SetFlagByName("video_mode_width", ws);
+  rex::cvar::SetFlagByName("video_mode_height", hs);
+  if (rex::cvar::GetFlagByName("present_letterbox") != "true") rex::cvar::SetFlagByName("present_letterbox", "true");
+  REXSYS_INFO("[fit-window] aspect {:.4f} forced: bars around a {}x{} picture shape", aspect, ws, hs);
+}
+
 }  // namespace detail
 
 // The aspect currently written, or 0 before the first window size is known.
@@ -144,8 +180,9 @@ inline void ApplySize(uint32_t width, uint32_t height) {
   if (!REXCVAR_GET(fit_game_to_window)) return;
 
   const float forced = detail::g_forced_aspect.load();
-  float aspect = std::clamp(forced > 0.0f ? forced : float(width) / float(height),
-                            kMinAspect, kMaxAspect);
+  const float window_aspect = float(width) / float(height);
+  float aspect = std::clamp(forced > 0.0f ? forced : window_aspect, kMinAspect, kMaxAspect);
+  detail::ApplyBars(forced > 0.0f && std::fabs(aspect - window_aspect) > 0.01f ? aspect : 0.0f);
   float reference = aspect * 0.75f;
   // A 16:9 window gets the game's own constants back bit for bit.
   if (std::fabs(aspect - kOriginalAspect) < 0.005f) {
@@ -332,6 +369,7 @@ inline bool SetEnabled(bool on) {
     detail::Store(detail::g_reference.load(), kOriginalReference);
   }
   detail::g_last_aspect.store(0.0f);
+  detail::ApplyBars(0.0f);  // the default video mode back
   detail::RestorePresenterCvar("present_letterbox");
   detail::RestorePresenterCvar("present_safe_area_x");
   detail::RestorePresenterCvar("present_safe_area_y");

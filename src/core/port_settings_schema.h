@@ -259,8 +259,8 @@ inline const std::vector<Setting>& Settings() {
                        true)
                     .Live([](const Value& v) { fitwindow::SetEnabled(v.b); }));
     s.push_back(Choice(kDisplay, "display", "aspect_ratio", "Aspect Ratio",
-                       "The shape of the picture. Match Window follows the window; a ratio keeps that shape "
-                       "whatever the window size. Needs Fit to Window.",
+                       "The shape of the picture. Match Window fills the window; a ratio keeps that shape "
+                       "with black bars around it, whatever the window size. Needs Fit to Window.",
                        Str("auto"),
                        {{Str("auto"), "Match Window"}, {Str("4:3"), "4:3"}, {Str("16:10"), "16:10"},
                         {Str("16:9"), "16:9"}, {Str("21:9"), "21:9"}, {Str("32:9"), "32:9"}})
