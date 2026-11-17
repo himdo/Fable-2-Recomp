@@ -63,9 +63,10 @@ HF fraction. Two things were not, and this option fixes them:
   `fable2_hook_cloth_collider_bone` (four sites, after `add r11,r11,r9`)
   points each read at the same bone blended the way the renderer blends it
   (sign-corrected quaternion lerp, normalized; translation and scale lerped).
-  - It blends only when the previous and current pose have the same bone
-    count (pose+8, the count `sub_8222E300` checks) and the bone index is
-    below it, so it never reads past the previous pose's bones.
+  - It blends only when the previous and current pose share the skeleton id
+    (pose+8, which `sub_8222E300` checks) and bone count (pose+12) and the
+    bone index is below the count, so it never reads past the previous
+    pose's bones.
   - The blended bone goes 256 bytes below the guest stack pointer. At all
     four sites r11 is used only by the next four loads (+0, +8, +16, +32),
     with no store or call in between, so nothing overwrites it first.

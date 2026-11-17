@@ -613,10 +613,12 @@ bool fable2_hook_gui_every_tick() { return InterpolationEnabled(); }
 // the way sub_8222E5D0 + sub_8222E300 blend it (quaternion sign-corrected
 // lerp, then normalized; translation and scale lerped).
 //
-// Bounds: a pose's bone count is at pose+8 (sub_8222E300 checks it against the
-// skeleton before blending). The hook blends only when both poses have the
-// same count and the bone index is below it, so it never reads past the end of
-// the previous pose's bones; otherwise the game's own read is left alone.
+// Bounds: a pose holds its skeleton id at pose+8 (sub_8222E300 checks it
+// against the skeleton's +20 before blending) and its bone count at pose+12
+// (160 for the hero, same as the skeleton's +36). The hook blends only when
+// both poses share the skeleton id and count and the bone index is below the
+// count, so it never reads past the end of the previous pose's bones;
+// otherwise the game's own read is left alone.
 //
 // Scratch: the blended bone is written 256 bytes below the stack pointer. At
 // all four sites the only uses of r11 that follow are four loads (r11+0, +8,
@@ -635,9 +637,14 @@ void fable2_hook_cloth_collider_bone(PPCRegister& r1, PPCRegister& r11,
   if (cur_pose == 0 || prev_pose == 0 || interp == 0 || prev_pose == cur_pose) {
     return;
   }
-  const uint32_t cur_count = LoadU32(cur_pose + 8);
-  const uint32_t prev_count = LoadU32(prev_pose + 8);
-  if (cur_count == 0 || cur_count != prev_count) return;
+  // Same skeleton (pose+8, the id sub_8222E300 checks against the
+  // skeleton's +20) and same bone count (pose+12).
+  const uint32_t cur_count = LoadU32(cur_pose + 12);
+  const uint32_t prev_count = LoadU32(prev_pose + 12);
+  if (LoadU32(cur_pose + 8) != LoadU32(prev_pose + 8) || cur_count == 0 ||
+      cur_count != prev_count) {
+    return;
+  }
   const uint32_t cur_bones = LoadU32(cur_pose + 16);
   const uint32_t prev_bones = LoadU32(prev_pose + 16);
   if (cur_bones == 0 || prev_bones == 0) return;
