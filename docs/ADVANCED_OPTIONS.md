@@ -7,18 +7,14 @@ on the **Advanced Options** page. It opens from:
 - the pause (Start) menu: **Options > Advanced**, after the game's own Game,
   Video, Controls and Audio.
 
-The page looks like the game's own options pages (Game, Video, Audio): a
-sheet of the book's framed parchment on the right, the menu stepping back on
-the left, the tab's title over the gold ornament, each setting's name with its
-value under it between copper arrows, sliders on the game's slider track, and
-the prompts at the bottom right. It uses the game's typeface, parchment,
-ornament, slider and button art (read from `gui_textures.bnk`), never ImGui
-windows.
+The page is drawn like the game's own menus: the game's GUI typeface, cream
+text with a gold highlight and gold rules, the game's Options icon and
+controller button art, over a dark fade. Never ImGui windows.
 
 ## Using it
 
 The page has five tabs: **Display**, **Frame Rate**, **Mouse**, **Fixes** and
-**Photo Mode**, four settings in view at a time. The text under the list
+**Photo Mode**. The text under the list
 describes the selected setting and says when a change takes effect.
 
 **Display** starts with the window fitting the game already does
@@ -29,7 +25,7 @@ describes the selected setting and says when a change takes effect.
 | Fit to Window | `fit_to_window` | On: render at the window's shape and fill it. Off: the original 16:9 picture with black bars |
 | Aspect Ratio | `aspect_ratio` | Match Window (`"auto"`), 4:3, 16:10, 16:9, 21:9, 32:9; the file also takes any `"w:h"` or number between 4:3 and 4:1 |
 | HUD at the Edges | `hud_to_edges` | the HUD at the edges of a wide picture, from the next screen that opens |
-| 16:9 Loading Screens | `native_16x9_screens` | loading screens and the saving banner kept 16:9 |
+| 16:9 Loading Screens | `native_16x9_screens` | loading screens and the saving banner kept 16:9 (recommended: On, shown as *On (Recommended)*) |
 
 All four apply at once. At startup `fit_to_window`, `hud_to_edges` and
 `native_16x9_screens` seed the cvars `fit_game_to_window`,
@@ -54,14 +50,24 @@ until it is released, so it does not also close the Options menu.
 
 ## When a change takes effect
 
-- **At once**: the value goes to the cvar or the setting the game reads every
-  frame (window fit and aspect ratio, motion blur, GPU frame sync, faster render targets, GPU memory
-  refresh, thread yielding, everything on the Mouse tab, photo mode on/off,
-  its controller shortcut and camera speed).
+Every setting applies while the game runs; none needs a restart.
+
+- **At once**: the value goes to the cvar, the guest memory or the setting
+  the game reads every frame: window fit and aspect ratio, motion blur, faster
+  render targets, the dog fur fix and the skin texture readback (both are
+  GPU cvars read per draw), High Tick Rate and Higher Physics Rate (the tick
+  doubles are rewritten in guest memory and their hooks follow the setting),
+  GPU frame sync, terrain detail and skinning on the CPU (with the fast
+  memexport readback kept in step), GPU memory refresh, thread yielding,
+  everything on the Mouse tab, and all of photo mode (the keys switch through
+  atomics the input poll reads).
+- **Real-Time Skin Textures**: used from the next skin texture the game builds
+  (changing clothes, loading a save).
 - **When a save is loaded**: website and Collector's Edition items.
-- **After a restart**: marked *restart* next to the name. Once changed it
-  reads *restart to apply*, and the page lists those settings above the
-  prompts.
+- **When the game starts**: Skip Intro Videos (the videos only play then).
+
+A setting can still be declared `.Restart()` in the schema; the page then
+marks it and lists it under the description once changed.
 
 If `fable_2.toml`, a `REX_*` environment variable or the command line sets
 the same cvar, that source still wins at the next start; the description says
@@ -90,14 +96,15 @@ tab it belongs to:
 s.push_back(Choice(kFrameRate, "perf", "frame_rate", "Frame Rate",
                    "The highest frame rate the game runs at.",
                    Int(30), {{Int(30), "30 FPS"}, {Int(60), "60 FPS"}, {Int(120), "120 FPS"}})
-                .Restart());
+                .Live([](const Value& v) { /* apply it */ }));
 ```
 
 - `Toggle` (bool), `Choice` (a list of values) or `Slider` (int or float
   range with a step and a format).
 - The default is used when the key is missing from the file; keep it equal
   to the template in `src/core/fable2_config.cpp`.
-- `.Restart()`, `.NextLoad(fn)` or `.Live(fn)` / `.LiveCvars({...})`: `Field(&Values::x)`
+- `.Live(fn)` / `.LiveCvars({...})`, `.NextLoad(fn)`, `.AtStart(fn)` or
+  `.Restart()`: `Field(&Values::x)`
   writes a bool or number field of `fable2::config::Values`; `LiveCvars` sets
   cvars (and can update a field too). String fields are never written while
   the game runs, since other threads read them.
@@ -142,11 +149,7 @@ would open the game's own Game page, nothing worse.
 **Input.** `InputGetPadState_822B2D60` (every guest pad read) is captured for
 the page and blanked while it is open (`src/core/port_settings_pad.h`).
 Choosing an item only raises a flag; the page is drawn on the UI thread
-(`src/core/port_settings_dialog.h`). Its art (`papera`, `paperb`, `motifs`,
-`sliderframe` from `art\gui\frames\`) is loaded with photo mode's button icons
-(`src/core/photo_mode_icons.h`); if a texture is missing the page draws a
-plain stand-in. The runtime exports no rotated-image draw call, so the copper
-arrows are drawn as shapes in the art's colours.
+(`src/core/port_settings_dialog.h`).
 
 The log shows `[recomp-settings] row added to OptionsMenu`,
 `[advanced-options] opened`, each change

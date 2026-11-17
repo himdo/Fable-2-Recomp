@@ -6,14 +6,11 @@
 // from src/core/port_settings_schema.h on pages (Display, Frame Rate, Mouse,
 // Fixes, Photo Mode) and lets the player change them.
 //
-// Drawn like the game's own options pages (Game, Video, Audio), not as a
-// desktop window: a sheet of the book's framed parchment on the right with the
-// menu stepping back on the left, the tab's title over the gold ornament,
-// each setting's name centred with its value between copper arrows, a lighter
-// band on the selected value, and the prompts at the bottom right, name
-// first. The game's own typeface (src/core/photo_mode_font.h), art and button
-// icons (src/core/photo_mode_icons.h, kArtNames below), all straight into
-// ImGui's foreground draw list, with no ImGui windows or widgets.
+// Drawn like the game's own menus, not as a desktop window: the game's GUI
+// typeface (src/core/photo_mode_font.h), cream text with a gold highlight
+// and gold rules, the game's Options icon and controller button art
+// (src/core/photo_mode_icons.h), all straight into ImGui's foreground draw
+// list, with no ImGui windows or widgets.
 //
 // Controls, as in the game's menus:
 //   controller  D-pad / left stick: move and change, A: change, Y: default,
@@ -61,14 +58,8 @@
 
 namespace fable2::portsettings {
 
-// The game's own art the page is drawn with (gui_textures.bnk, loaded by
-// Fable2App with the photo mode icons): the framed parchment (top and bottom
-// halves), and the ornament and slider pieces.
-inline constexpr const char* kArtPaperTop = "art\\gui\\frames\\papera.tex";
-inline constexpr const char* kArtPaperBottom = "art\\gui\\frames\\paperb.tex";
-inline constexpr const char* kArtMotifs = "art\\gui\\frames\\motifs.tex";
-inline constexpr const char* kArtSlider = "art\\gui\\frames\\sliderframe.tex";
-inline constexpr const char* kArtNames[] = {kArtPaperTop, kArtPaperBottom, kArtMotifs, kArtSlider};
+// The game's Options icon (gui_textures.bnk), requested by Fable2App.
+inline constexpr const char* kOptionsIcon = "art\\gui\\wheelicons\\icon_options.tex";
 
 namespace detail {
 
@@ -151,8 +142,8 @@ inline int ChoiceIndex(const Setting& s, const Value& v) {
   return -1;
 }
 
-// The value's text on the right of its line.
-inline std::string ValueText(const Setting& s, const Value& v) {
+// The value's text on the right of its line, without the recommendation.
+inline std::string PlainValueText(const Setting& s, const Value& v) {
   switch (s.control) {
     case Control::kToggle: return (v.b != s.inverted) ? "On" : "Off";
     case Control::kChoice: {
@@ -163,6 +154,14 @@ inline std::string ValueText(const Setting& s, const Value& v) {
     case Control::kSlider: return s.format ? s.format(v.Number()) : CvarText(v);
   }
   return {};
+}
+
+// The value's text on the right of its line: "On (Recommended)" for the
+// recommended value.
+inline std::string ValueText(const Setting& s, const Value& v) {
+  std::string t = PlainValueText(s, v);
+  if (s.has_recommended && v == s.recommended) t += " (Recommended)";
+  return t;
 }
 
 }  // namespace detail
@@ -221,7 +220,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
   // Drawing.
   ImDrawList* dl_ = nullptr;
   float k_ = 1.0f;   // pixels per 720p unit
-  float cx_ = 0.0f;  // screen centre, in pixels
+  float ox_ = 0.0f;  // left edge of the page, in pixels
 
   std::vector<int> Rows() const {
     std::vector<int> r;
@@ -290,7 +289,10 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     values_[i] = v;
     if (s.live && s.when != When::kRestart) s.live(v);
     REXSYS_INFO("[advanced-options] {}.{} = {}{}", s.section, s.key, detail::Literal(v),
-                s.when == When::kRestart ? " (after a restart)" : s.when == When::kNextLoad ? " (next save load)" : "");
+                s.when == When::kRestart    ? " (after a restart)"
+                : s.when == When::kNextLoad ? " (next save load)"
+                : s.when == When::kAtStart  ? " (next start)"
+                                            : "");
   }
 
   void Step(int i, int dir) {
@@ -409,14 +411,11 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     last_mouse_ = m;
     if (moved || io.MouseClicked[0] || io.MouseWheel != 0.0f) pad_prompts_ = false;
     if (io.MouseClicked[0]) {
-      if (TitleArrow(false).Contains(m)) {
-        SetPage(page_ - 1);
-        return;
-      }
-      if (TitleArrow(true).Contains(m)) {
-        SetPage(page_ + 1);
-        return;
-      }
+      for (int p = 0; p < kPageCount; ++p)
+        if (TabBox(p).Contains(m)) {
+          SetPage(p);
+          return;
+        }
     }
     if (!io.MouseDown[0]) drag_row_ = -1;
     const int shown = VisibleRows();
@@ -428,9 +427,11 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
       if (io.MouseClicked[0]) {
         sel_ = r;
         if (s.control == Control::kSlider) {
-          if (m.x >= BarX0(r - scroll_) - X(10) && m.x <= BarX1(r - scroll_) + X(10)) drag_row_ = r;
+          if (m.x >= BarX0() - X(10)) drag_row_ = r;
+        } else if (s.control == Control::kChoice && m.x < ValueRight() - X(70)) {
+          Step(rows[r], -1);
         } else {
-          Step(rows[r], m.x < PageCX() ? -1 : 1);  // the left / right arrow side
+          Step(rows[r], 1);
         }
       }
       if (io.MouseWheel != 0.0f) {
@@ -441,8 +442,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     }
     if (drag_row_ >= 0 && drag_row_ < int(rows.size())) {
       const Setting& s = list_[rows[drag_row_]];
-      const int vis = drag_row_ - scroll_;
-      const float t = std::clamp((m.x - BarX0(vis)) / (BarX1(vis) - BarX0(vis)), 0.0f, 1.0f);
+      const float t = std::clamp((m.x - BarX0()) / (BarX1() - BarX0()), 0.0f, 1.0f);
       const double v = s.lo + (s.hi - s.lo) * t;
       Set(rows[drag_row_], s.def.type == Type::kInt ? Int(int64_t(std::llround(v))) : Float(v));
     }
@@ -451,120 +451,77 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     if (sel_ >= scroll_ + shown) scroll_ = sel_ - shown + 1;
   }
 
-  // --- Layout ------------------------------------------------------------------------
-  // The page is a sheet of the book's parchment on the right-hand side, laid
-  // out like the game's own options pages (Game, Video, Audio): a centred
-  // title over the gold ornament, each setting's name centred with its value
-  // under it between two copper arrows, a lighter band behind the selected
-  // value, and the button prompts at the bottom right, name first. Units are
-  // the game's 720p canvas, the sheet placed where the book's right page is.
+  // --- Layout (720p units, the page centred) -------------------------------------------
   struct Box {
     ImVec2 Min, Max;
     bool Contains(ImVec2 p) const { return p.x >= Min.x && p.y >= Min.y && p.x < Max.x && p.y < Max.y; }
   };
-  static constexpr float kLarge = 32.0f;  // the game's three menu font sizes
+  static constexpr float kLarge = 32.0f;   // the game's three menu font sizes
   static constexpr float kNormal = 27.0f;
   static constexpr float kSmall = 24.0f;
-  static constexpr float kPageLeft = -14.0f;   // sheet edges from the screen centre
-  static constexpr float kPageRight = 396.0f;
-  static constexpr float kCaptionY = 40.0f;
-  static constexpr float kTitleY = 66.0f;
-  static constexpr float kOrnamentY = 106.0f;
-  static constexpr float kListY = 134.0f;
-  static constexpr float kRow = 80.0f;
-  static constexpr float kArrowX = 150.0f;  // value arrows from the page centre
-  static constexpr int kMaxRows = 4;  // like the game's own options pages
-  static constexpr float kDescY = 462.0f;
+  static constexpr float kWidth = 820.0f;  // page width
+  static constexpr float kTitleY = 46.0f;
+  static constexpr float kTabsY = 108.0f;
+  static constexpr float kListY = 160.0f;
+  static constexpr float kRow = 36.0f;
+  static constexpr float kBar = 150.0f;
+  static constexpr int kMaxRows = 9;
 
   float X(float v) const { return v * k_; }
-  float PageX0() const { return cx_ + X(kPageLeft); }
-  float PageX1() const { return cx_ + X(kPageRight); }
-  float PageCX() const { return (PageX0() + PageX1()) * 0.5f; }
   int VisibleRows() const { return kMaxRows; }
-  float RowY(int i) const { return X(kListY + kRow * i); }
   Box RowBox(int i) const {
-    return Box{ImVec2(PageCX() - X(180), RowY(i)), ImVec2(PageCX() + X(180), RowY(i) + X(kRow))};
+    const float y = X(kListY + kRow * i);
+    return Box{ImVec2(ox_ - X(18), y), ImVec2(ox_ + X(kWidth + 18), y + X(kRow))};
   }
-  float ValueCY(int i) const { return RowY(i) + X(53); }
-  float BarX0(int) const { return PageCX() - X(130); }
-  float BarX1(int) const { return PageCX() + X(86); }
-  Box TitleArrow(bool right) const {
-    const float w = TextW(PageName(page_), kLarge);
-    const float x = PageCX() + (right ? 1.0f : -1.0f) * (w * 0.5f + X(26));
-    const float cy = X(kTitleY) + X(kLarge) * 0.5f;
-    return Box{ImVec2(x - X(16), cy - X(16)), ImVec2(x + X(16), cy + X(16))};
+  float ValueRight() const { return ox_ + X(kWidth); }
+  float BarX1() const { return ValueRight(); }
+  float BarX0() const { return ValueRight() - X(kBar); }
+  Box TabBox(int p) const {
+    float x = ox_;
+    for (int i = 0; i < p; ++i) x += TextW(PageName(i), kNormal) + X(30);
+    return Box{ImVec2(x - X(8), X(kTabsY - 6)), ImVec2(x + TextW(PageName(p), kNormal) + X(8), X(kTabsY + 34))};
   }
 
-  // --- Colours: ink on parchment ------------------------------------------------------
-  static constexpr ImU32 kInk = IM_COL32(72, 50, 30, 255);
-  static constexpr ImU32 kInkSoft = IM_COL32(104, 80, 58, 255);
-  static constexpr ImU32 kInkFaint = IM_COL32(128, 104, 80, 220);
-  static constexpr ImU32 kRust = IM_COL32(150, 64, 34, 255);  // restart reminders
+  // --- Drawing helpers ------------------------------------------------------------------
   static constexpr ImU32 kCream = IM_COL32(240, 230, 204, 255);
-  static constexpr ImU32 kParchment = IM_COL32(222, 210, 186, 255);  // when the art is missing
+  static constexpr ImU32 kCreamDim = IM_COL32(196, 184, 156, 255);
+  static constexpr ImU32 kFaint = IM_COL32(160, 150, 128, 220);
+  static constexpr ImU32 kGold = IM_COL32(218, 182, 98, 255);
+  static constexpr ImU32 kShadow = IM_COL32(0, 0, 0, 200);
   static ImU32 Alpha(ImU32 c, float a) {
     const int na = std::clamp(int(((c >> IM_COL32_A_SHIFT) & 0xFF) * a), 0, 255);
     return (c & ~IM_COL32_A_MASK) | (ImU32(na) << IM_COL32_A_SHIFT);
   }
 
-  // --- The game's art (gui_textures.bnk, loaded by Fable2App) -------------------------------
-  // Draws the pixel rect [sx0,sy0]-[sx1,sy1] of extra image `name` into
-  // [p0,p1]. False when the image is not loaded (the caller draws a stand-in).
-  bool Art(const char* name, float sx0, float sy0, float sx1, float sy1, ImVec2 p0, ImVec2 p1, ImU32 col) {
-    const int i = gameicons::FindExtra(name);
-    if (!gameicons::ExtraReady(i)) return false;
-    const auto& img = gameicons::extras()[i].img;
-    ImFontAtlasRect r;
-    if (!img.atlas || !img.atlas->GetCustomRect(img.rect_id, &r)) return false;
-    const float du = (r.uv1.x - r.uv0.x) / float(img.w), dv = (r.uv1.y - r.uv0.y) / float(img.h);
-    dl_->AddImage(dl_->_CmdHeader.TexRef, p0, p1, ImVec2(r.uv0.x + sx0 * du, r.uv0.y + sy0 * dv),
-                  ImVec2(r.uv0.x + sx1 * du, r.uv0.y + sy1 * dv), col);
-    return true;
-  }
-  // The game's copper arrow (its art only comes pointing up, and the runtime
-  // has no rotated image call, so it is drawn): a dark rim, the copper face
-  // and a lighter top facet. dir: 0 left, 1 right, 2 up, 3 down.
-  void Arrow(ImVec2 c, float r, int dir, float alpha) {
-    auto tri = [&](float rr, ImVec2 o, ImU32 col) {
-      ImVec2 p[3];
-      switch (dir) {
-        case 0: p[0] = {c.x - rr, c.y}; p[1] = {c.x + rr * 0.7f, c.y - rr}; p[2] = {c.x + rr * 0.7f, c.y + rr}; break;
-        case 1: p[0] = {c.x + rr, c.y}; p[1] = {c.x - rr * 0.7f, c.y + rr}; p[2] = {c.x - rr * 0.7f, c.y - rr}; break;
-        case 2: p[0] = {c.x, c.y - rr}; p[1] = {c.x + rr, c.y + rr * 0.7f}; p[2] = {c.x - rr, c.y + rr * 0.7f}; break;
-        default: p[0] = {c.x, c.y + rr}; p[1] = {c.x - rr, c.y - rr * 0.7f}; p[2] = {c.x + rr, c.y - rr * 0.7f}; break;
-      }
-      dl_->AddTriangleFilled(ImVec2(p[0].x + o.x, p[0].y + o.y), ImVec2(p[1].x + o.x, p[1].y + o.y),
-                             ImVec2(p[2].x + o.x, p[2].y + o.y), col);
-    };
-    tri(r * 1.18f, ImVec2(X(1), X(1.5f)), Alpha(IM_COL32(40, 22, 12, 200), alpha));  // shadow / rim
-    tri(r, ImVec2(0, 0), Alpha(IM_COL32(184, 104, 62, 255), alpha));                  // copper
-    tri(r * 0.55f, ImVec2(0, -r * 0.12f), Alpha(IM_COL32(226, 160, 112, 255), alpha)); // highlight
-  }
-
-  // --- Text ------------------------------------------------------------------------
   float TextW(const char* t, float size) const {
     if (gamefont::AnyReady()) return gamefont::Measure(t, X(size), size);
     return float(std::strlen(t)) * 7.0f;  // default ImGui font fallback
   }
   void Text(ImVec2 p, float size, ImU32 col, const char* t) {
-    if (gamefont::AnyReady()) gamefont::Draw(dl_, p, X(size), size, col, t);
-    else dl_->AddText(p, col, t);
+    if (gamefont::AnyReady()) {
+      const float px = X(size);
+      const float o = std::max(1.0f, px * 0.06f);
+      gamefont::Draw(dl_, ImVec2(p.x + o, p.y + o), px, size, Alpha(kShadow, ((col >> 24) & 0xFF) / 255.0f), t);
+      gamefont::Draw(dl_, p, px, size, col, t);
+    } else {
+      dl_->AddText(ImVec2(p.x + 1, p.y + 1), kShadow, t);
+      dl_->AddText(p, col, t);
+    }
   }
-  void TextCentred(float cx, float y, float size, ImU32 col, const char* t) {
-    Text(ImVec2(cx - TextW(t, size) * 0.5f, y), size, col, t);
+  void TextRight(float right, float y, float size, ImU32 col, const char* t) {
+    Text(ImVec2(right - TextW(t, size), y), size, col, t);
   }
-  // Word-wrapped and centred; at most `max_lines`. Returns the height used.
-  float TextWrapped(float cx, float y0, float size, float width, ImU32 col, const std::string& all,
-                    int max_lines = 3) {
-    std::vector<std::string> lines;
+  float TextWrapped(ImVec2 p, float size, float width, ImU32 col, const std::string& all) {
     std::string line;
+    float y = p.y;
     size_t i = 0;
     while (i <= all.size()) {
       const size_t j = all.find(' ', i);
       const std::string word = all.substr(i, j == std::string::npos ? std::string::npos : j - i);
       const std::string trial = line.empty() ? word : line + " " + word;
       if (!line.empty() && TextW(trial.c_str(), size) > width) {
-        lines.push_back(line);
+        Text(ImVec2(p.x, y), size, col, line.c_str());
+        y += X(size) * 1.05f;
         line = word;
       } else {
         line = trial;
@@ -572,191 +529,226 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
       if (j == std::string::npos) break;
       i = j + 1;
     }
-    if (!line.empty()) lines.push_back(line);
-    float y = y0;
-    for (int n = 0; n < int(lines.size()) && n < max_lines; ++n) {
-      TextCentred(cx, y, size, col, lines[n].c_str());
-      y += X(size) * 1.02f;
+    if (!line.empty()) {
+      Text(ImVec2(p.x, y), size, col, line.c_str());
+      y += X(size) * 1.05f;
     }
-    return y - y0;
+    return y - p.y;
   }
-
-  // A prompt the way the game's pages show them: the name, then the button.
-  // The game's button art when loaded, else a key cap. Returns the width.
-  float Prompt(float right, float y, const char* button, const char* label, ImU32 ink, bool measure = false) {
-    const float h = X(28);
+  void Diamond(ImVec2 c, float r, ImU32 col) {
+    dl_->AddQuadFilled(ImVec2(c.x, c.y - r), ImVec2(c.x + r, c.y), ImVec2(c.x, c.y + r), ImVec2(c.x - r, c.y), col);
+  }
+  // Gold rule fading out at both ends, a diamond in the middle.
+  void Rule(float x0, float x1, float y, float a) {
+    const float mid = (x0 + x1) * 0.5f;
+    const float h = std::max(1.0f, X(1.2f));
+    const ImU32 g = Alpha(kGold, 0.85f * a), z = Alpha(kGold, 0.0f);
+    dl_->AddRectFilledMultiColor(ImVec2(x0, y), ImVec2(mid, y + h), z, g, g, z);
+    dl_->AddRectFilledMultiColor(ImVec2(mid, y), ImVec2(x1, y + h), g, z, z, g);
+    Diamond(ImVec2(mid, y + h * 0.5f), X(3.5f), g);
+  }
+  void Chevron(ImVec2 c, float r, bool right, ImU32 col) {
+    const float d = right ? 1.0f : -1.0f;
+    dl_->AddTriangleFilled(ImVec2(c.x + d * r, c.y), ImVec2(c.x - d * r * 0.6f, c.y - r),
+                           ImVec2(c.x - d * r * 0.6f, c.y + r), col);
+  }
+  // A button prompt: the game's button art when loaded, else a cap with the
+  // name; then its label. Returns the width.
+  float Prompt(float x, float y, const char* button, const char* label, bool measure = false) {
+    const float h = X(30);
     const float cy = y + h * 0.5f;
+    float w;
     const int icon = gameicons::Find(button);
-    float cap = h;
-    if (!gameicons::Ready(icon)) cap = std::max(h, TextW(button, kSmall) * 0.8f + X(14));
-    const float tw = TextW(label, kSmall);
-    const float w = tw + X(8) + cap;
-    if (measure) return w;
-    const float x = right - w;
-    Text(ImVec2(x, cy - X(kSmall) * 0.52f), kSmall, ink, label);
-    const float bx = x + tw + X(8);
     if (gameicons::Ready(icon)) {
       const float s = h * 1.25f;
-      gameicons::Draw(dl_, icon, ImVec2(bx - (s - h) * 0.5f, cy - s * 0.5f), s);
+      if (!measure) gameicons::Draw(dl_, icon, ImVec2(x - (s - h) * 0.5f, cy - s * 0.5f), s);
+      w = h;
     } else {
-      dl_->AddRectFilled(ImVec2(bx, y), ImVec2(bx + cap, y + h), IM_COL32(28, 22, 16, 235), X(5));
-      const float bw = TextW(button, kSmall) * 0.8f;
-      if (gamefont::AnyReady())
-        gamefont::Draw(dl_, ImVec2(bx + (cap - bw) * 0.5f, cy - X(kSmall) * 0.8f * 0.52f), X(kSmall) * 0.8f, kSmall,
-                       kCream, button);
-      else
-        dl_->AddText(ImVec2(bx + 4, y + 2), kCream, button);
+      const float tw = TextW(button, kSmall) * 0.8f;
+      w = std::max(h, tw + X(14));
+      if (!measure) {
+        dl_->AddRectFilled(ImVec2(x, y), ImVec2(x + w, y + h), IM_COL32(18, 16, 12, 220), X(6));
+        dl_->AddRect(ImVec2(x, y), ImVec2(x + w, y + h), Alpha(kCreamDim, 0.8f), X(6), 0, std::max(1.0f, X(1.2f)));
+        if (gamefont::AnyReady())
+          gamefont::Draw(dl_, ImVec2(x + (w - tw) * 0.5f, cy - X(kSmall) * 0.8f * 0.52f), X(kSmall) * 0.8f, kSmall,
+                         kCream, button);
+        else
+          dl_->AddText(ImVec2(x + 4, y + 2), kCream, button);
+      }
     }
-    return w;
+    w += X(8);
+    if (!measure) Text(ImVec2(x + w, cy - X(kSmall) * 0.52f), kSmall, kCream, label);
+    return w + TextW(label, kSmall);
   }
 
   // --- Drawing -------------------------------------------------------------------------
   void Draw(ImGuiIO& io) {
     const float W = io.DisplaySize.x, H = io.DisplaySize.y;
-    const float fade = std::clamp(float(detail::now_ms() - opened_ms_) / 160.0f, 0.0f, 1.0f);
-    cx_ = W * 0.5f;
-    const float x0 = PageX0(), x1 = PageX1(), pcx = PageCX();
+    const float fade = std::clamp(float(detail::now_ms() - opened_ms_) / 150.0f, 0.0f, 1.0f);
+    ox_ = std::max(X(40), (W - X(kWidth)) * 0.5f);
 
-    // The menu on the left steps back while the page is open, as the game's
-    // own menu does when one of its options pages opens.
-    dl_->AddRectFilled(ImVec2(0, 0), ImVec2(x0 + X(10), H), IM_COL32(8, 6, 4, int(120 * fade)));
+    // Darken the game's menu behind the page, most behind the page itself.
+    dl_->AddRectFilled(ImVec2(0, 0), ImVec2(W, H), IM_COL32(4, 3, 2, int(160 * fade)));
+    const float px0 = ox_ - X(70), px1 = ox_ + X(kWidth + 70);
+    const ImU32 dark = IM_COL32(6, 5, 3, int(200 * fade)), clear = IM_COL32(6, 5, 3, 0);
+    dl_->AddRectFilled(ImVec2(px0, 0), ImVec2(px1, H), dark);
+    dl_->AddRectFilledMultiColor(ImVec2(px0 - X(120), 0), ImVec2(px0, H), clear, dark, dark, clear);
+    dl_->AddRectFilledMultiColor(ImVec2(px1, 0), ImVec2(px1 + X(120), H), dark, clear, clear, dark);
 
-    // The sheet: the two halves of the game's framed parchment.
-    const ImU32 white = Alpha(IM_COL32_WHITE, fade);
-    const float mid = H * 0.5f;
-    const bool paper = Art(kArtPaperTop, 0, 0, 512, 512, ImVec2(x0, 0), ImVec2(x1, mid), white) &&
-                       Art(kArtPaperBottom, 0, 0, 512, 512, ImVec2(x0, mid), ImVec2(x1, H), white);
-    if (!paper) {
-      dl_->AddRectFilled(ImVec2(x0, 0), ImVec2(x1, H), Alpha(kParchment, fade));
-      dl_->AddRect(ImVec2(x0 + X(6), X(6)), ImVec2(x1 - X(6), H - X(6)), Alpha(IM_COL32(110, 70, 40, 255), fade), 0,
-                   0, std::max(1.0f, X(3)));
+    // Title with the game's Options icon.
+    float tx = ox_;
+    const int icon = gameicons::FindExtra(kOptionsIcon);
+    if (gameicons::ExtraReady(icon)) {
+      const float s = X(46);
+      gameicons::DrawExtra(dl_, icon, ImVec2(ox_ - X(4), X(kTitleY) - X(8)), s, Alpha(IM_COL32_WHITE, fade));
+      tx += s + X(6);
+    }
+    Text(ImVec2(tx, X(kTitleY)), kLarge, Alpha(kCream, fade), "Advanced Options");
+    Rule(ox_ - X(14), ox_ + X(kWidth + 14), X(kTitleY + 44), fade);
+
+    // Pages: LB  Display  Frame Rate  Mouse  Fixes  Photo Mode  RB
+    for (int p = 0; p < kPageCount; ++p) {
+      const Box b = TabBox(p);
+      const bool cur = p == page_;
+      const float x = b.Min.x + X(8);
+      Text(ImVec2(x, X(kTabsY)), kNormal, Alpha(cur ? kGold : kFaint, fade), PageName(p));
+      if (cur)
+        dl_->AddRectFilled(ImVec2(x, X(kTabsY + 30)), ImVec2(b.Max.x - X(8), X(kTabsY + 30) + std::max(1.0f, X(1.5f))),
+                           Alpha(kGold, fade));
+    }
+    if (pad_prompts_) {
+      const float w = Prompt(0, 0, "LB", "", true) - X(8);
+      Prompt(ox_ - X(16) - w, X(kTabsY - 1), "LB", "");
+      Prompt(TabBox(kPageCount - 1).Max.x + X(8), X(kTabsY - 1), "RB", "");
     }
 
-    // Caption, the tab's title between arrows, and the gold ornament.
-    TextCentred(pcx, X(kCaptionY), kSmall, Alpha(kInkFaint, fade), "Advanced Options");
-    TextCentred(pcx, X(kTitleY), kLarge, Alpha(kInk, fade), PageName(page_));
-    for (bool right : {false, true}) {
-      const Box b = TitleArrow(right);
-      const ImVec2 c((b.Min.x + b.Max.x) * 0.5f, (b.Min.y + b.Max.y) * 0.5f);
-      Arrow(c, X(10), right ? 1 : 0, fade);
-      // LB / RB (or Page Up / Down) beside the arrows.
-      const char* key = pad_prompts_ ? (right ? "RB" : "LB") : (right ? "PgDn" : "PgUp");
-      const int icon = gameicons::Find(key);
-      const float s = X(30);
-      const float kx = right ? c.x + X(16) : c.x - X(16) - s;
-      if (gameicons::Ready(icon)) {
-        gameicons::Draw(dl_, icon, ImVec2(kx, c.y - s * 0.5f), s, white);
-      } else {
-        const float tw = TextW(key, kSmall) * 0.7f;
-        const float bx = right ? c.x + X(16) : c.x - X(16) - tw - X(10);
-        dl_->AddRectFilled(ImVec2(bx, c.y - X(11)), ImVec2(bx + tw + X(10), c.y + X(11)),
-                           Alpha(IM_COL32(28, 22, 16, 220), fade), X(4));
-        if (gamefont::AnyReady())
-          gamefont::Draw(dl_, ImVec2(bx + X(5), c.y - X(kSmall) * 0.7f * 0.52f), X(kSmall) * 0.7f, kSmall,
-                         Alpha(kCream, fade), key);
-      }
-    }
-    if (!Art(kArtMotifs, 22, 8, 362, 29, ImVec2(pcx - X(165), X(kOrnamentY)), ImVec2(pcx + X(165), X(kOrnamentY + 20)),
-             white))
-      dl_->AddRectFilled(ImVec2(pcx - X(150), X(kOrnamentY + 9)), ImVec2(pcx + X(150), X(kOrnamentY + 11)),
-                         Alpha(IM_COL32(170, 130, 60, 255), fade));
-
-    // The settings: name, then the value between the arrows.
+    // Lines.
     const std::vector<int> rows = Rows();
     const int shown = std::min(int(rows.size()), VisibleRows());
     for (int r = scroll_; r < scroll_ + shown && r < int(rows.size()); ++r) {
       const int i = rows[r];
       const Setting& s = list_[i];
-      const int vis = r - scroll_;
+      const Box box = RowBox(r - scroll_);
       const bool cur = r == sel_;
-      const float y = RowY(vis);
-      const float vcy = ValueCY(vis);
-
-      // Name, with the restart note under it in small print when it has one.
-      std::string label = s.label;
-      TextCentred(pcx, y + X(4), kNormal, Alpha(cur ? kInk : kInkSoft, fade), label.c_str());
+      const float cy = (box.Min.y + box.Max.y) * 0.5f;
+      const float ty = cy - X(kNormal) * 0.52f;
+      if (cur) {
+        const ImU32 a = IM_COL32(218, 182, 98, int(70 * fade)), z = IM_COL32(218, 182, 98, 0);
+        dl_->AddRectFilledMultiColor(box.Min, box.Max, a, z, z, a);
+        dl_->AddRectFilled(box.Min, ImVec2(box.Min.x + std::max(1.0f, X(2)), box.Max.y), Alpha(kGold, fade));
+        Diamond(ImVec2(ox_ - X(8), cy), X(3.5f), Alpha(kGold, fade));
+      }
+      const ImU32 col = Alpha(cur ? kCream : kCreamDim, fade);
+      Text(ImVec2(ox_ + X(6), ty), kNormal, col, s.label);
+      // Restart marker: gold once changed since the game started.
       if (s.when == When::kRestart) {
         const bool pending = values_[i] != at_launch_[i];
-        const char* note = pending ? "restart to apply" : "restart";
-        const float nw = TextW(note, kSmall) * 0.72f;
-        const float lw = TextW(label.c_str(), kNormal);
-        if (gamefont::AnyReady())
-          gamefont::Draw(dl_, ImVec2(pcx + lw * 0.5f + X(8), y + X(10)), X(kSmall) * 0.72f, kSmall,
-                         Alpha(pending ? kRust : kInkFaint, fade), note);
-        (void)nw;
-      }
-
-      // The selected value sits on a lighter band, as in the game.
-      if (cur) {
-        const ImU32 band = IM_COL32(255, 252, 240, int(120 * fade)), clear = IM_COL32(255, 252, 240, 0);
-        const float bx0 = pcx - X(175), bx1 = pcx + X(175), by0 = vcy - X(17), by1 = vcy + X(17);
-        dl_->AddRectFilledMultiColor(ImVec2(bx0, by0), ImVec2(pcx, by1), clear, band, band, clear);
-        dl_->AddRectFilledMultiColor(ImVec2(pcx, by0), ImVec2(bx1, by1), band, clear, clear, band);
+        const float lx = ox_ + X(6) + TextW(s.label, kNormal) + X(12);
+        Text(ImVec2(lx, cy - X(kSmall) * 0.5f), kSmall, Alpha(pending ? kGold : kFaint, fade * (pending ? 1.0f : 0.8f)),
+             pending ? "Restart to apply" : "Restart");
       }
       const std::string val = detail::ValueText(s, values_[i]);
-      if (s.control == Control::kSlider) {
-        const float t = float(std::clamp((values_[i].Number() - s.lo) / (s.hi - s.lo), 0.0, 1.0));
-        const float b0 = BarX0(vis), b1 = BarX1(vis);
-        if (!Art(kArtSlider, 7, 108, 495, 122, ImVec2(b0, vcy - X(5)), ImVec2(b1, vcy + X(5)), white))
-          dl_->AddRectFilled(ImVec2(b0, vcy - X(2)), ImVec2(b1, vcy + X(2)), Alpha(kInkSoft, fade), X(2));
-        const float kx = b0 + (b1 - b0) * t;
-        dl_->AddRectFilled(ImVec2(kx - X(4), vcy - X(9)), ImVec2(kx + X(4), vcy + X(9)),
-                           Alpha(IM_COL32(196, 118, 72, 255), fade), X(2));
-        dl_->AddRect(ImVec2(kx - X(4), vcy - X(9)), ImVec2(kx + X(4), vcy + X(9)), Alpha(IM_COL32(90, 50, 28, 255), fade),
-                     X(2), 0, std::max(1.0f, X(1)));
-        Text(ImVec2(b1 + X(14), vcy - X(kSmall) * 0.52f), kSmall, Alpha(cur ? kInk : kInkSoft, fade), val.c_str());
-      } else {
-        TextCentred(pcx, vcy - X(kNormal) * 0.52f, kNormal, Alpha(cur ? kInk : kInkSoft, fade), val.c_str());
-        Arrow(ImVec2(pcx - X(kArrowX), vcy), X(cur ? 11 : 9), 0, fade * (cur ? 1.0f : 0.55f));
-        Arrow(ImVec2(pcx + X(kArrowX), vcy), X(cur ? 11 : 9), 1, fade * (cur ? 1.0f : 0.55f));
+      switch (s.control) {
+        case Control::kToggle: {
+          const bool on = values_[i].b != s.inverted;
+          const float right = cur ? ValueRight() - X(16) : ValueRight();
+          TextRight(right, ty, kNormal, Alpha(on ? kGold : kCreamDim, fade), val.c_str());
+          if (cur) {
+            Chevron(ImVec2(right - TextW(val.c_str(), kNormal) - X(12), cy), X(5), false, Alpha(kGold, fade));
+            Chevron(ImVec2(ValueRight() - X(4), cy), X(5), true, Alpha(kGold, fade));
+          }
+          break;
+        }
+        case Control::kChoice: {
+          const float right = cur ? ValueRight() - X(16) : ValueRight();
+          TextRight(right, ty, kNormal, col, val.c_str());
+          if (cur) {
+            Chevron(ImVec2(right - TextW(val.c_str(), kNormal) - X(12), cy), X(5), false, Alpha(kGold, fade));
+            Chevron(ImVec2(ValueRight() - X(4), cy), X(5), true, Alpha(kGold, fade));
+          }
+          break;
+        }
+        case Control::kSlider: {
+          const float t = float(std::clamp((values_[i].Number() - s.lo) / (s.hi - s.lo), 0.0, 1.0));
+          const float bh = std::max(2.0f, X(3));
+          const float x0 = BarX0(), x1 = BarX1();
+          dl_->AddRectFilled(ImVec2(x0, cy - bh * 0.5f), ImVec2(x1, cy + bh * 0.5f), IM_COL32(255, 255, 255, int(40 * fade)),
+                             bh * 0.5f);
+          dl_->AddRectFilled(ImVec2(x0, cy - bh * 0.5f), ImVec2(x0 + (x1 - x0) * t, cy + bh * 0.5f),
+                             Alpha(cur ? kGold : kCreamDim, fade * (cur ? 1.0f : 0.7f)), bh * 0.5f);
+          Diamond(ImVec2(x0 + (x1 - x0) * t, cy), X(cur ? 6.0f : 4.5f), Alpha(cur ? kGold : kCreamDim, fade));
+          TextRight(x0 - X(16), ty, kNormal, col, val.c_str());
+          break;
+        }
       }
     }
-    // More settings above / below.
-    if (scroll_ > 0) Arrow(ImVec2(pcx, X(kListY - 6)), X(7), 2, fade);
-    if (scroll_ + shown < int(rows.size())) Arrow(ImVec2(pcx, X(kListY + kRow * shown + 2)), X(7), 3, fade);
+    // More lines above / below.
+    if (scroll_ > 0) Chevron(ImVec2(ox_ + X(kWidth * 0.5f), X(kListY - 6)), X(5), false, Alpha(kGold, fade));
+    if (scroll_ + shown < int(rows.size()))
+      Chevron(ImVec2(ox_ + X(kWidth * 0.5f), X(kListY + kRow * shown + 6)), X(5), true, Alpha(kGold, fade));
 
-    // The selected setting's description and when a change takes effect.
-    float y = X(kDescY);
-    const float wrap = (x1 - x0) - X(80);
+    // Description of the selected line, and when a change takes effect.
+    float y = X(kListY + kRow * VisibleRows() + 16);
+    Rule(ox_ - X(14), ox_ + X(kWidth + 14), y, 0.5f * fade);
+    y += X(12);
     if (!rows.empty()) {
       const int i = rows[std::clamp(sel_, 0, int(rows.size()) - 1)];
       const Setting& s = list_[i];
-      std::string when = s.when == When::kRestart    ? "Takes effect the next time the game starts."
-                         : s.when == When::kNextLoad ? "Takes effect when a save is loaded."
-                                                     : "Takes effect at once.";
-      if (i < int(pinned_.size()) && pinned_[i]) when += " fable_2.toml or the command line also sets this.";
-      y += TextWrapped(pcx, y, kSmall, wrap, Alpha(kInkSoft, fade), s.desc, 3);
-      y += TextWrapped(pcx, y, kSmall, wrap, Alpha(kInkFaint, fade), when, 1);
+      y += TextWrapped(ImVec2(ox_, y), kSmall, X(kWidth), Alpha(kCreamDim, fade), s.desc);
+      std::string when;
+      if (s.when == When::kRestart) when = "Takes effect the next time the game starts.";
+      else if (s.when == When::kNextLoad) when = "Takes effect when a save is loaded.";
+      else if (s.when == When::kAtStart) when = "Used when the game starts: the videos only play then.";
+      else when = "Takes effect at once.";
+      if (s.has_recommended)
+        when = "Recommended: " + detail::PlainValueText(s, s.recommended) + ". " + when;
+      if (i < int(pinned_.size()) && pinned_[i])
+        when += " fable_2.toml or the command line also sets this, and wins when the game starts.";
+      y += X(4);
+      TextWrapped(ImVec2(ox_, y), kSmall, X(kWidth), Alpha(kFaint, fade), when);
     }
+
+    // Restart reminder and file problems, above the prompts.
     std::string pending;
     for (size_t i = 0; i < list_.size(); ++i)
       if (list_[i].when == When::kRestart && values_[i] != at_launch_[i])
         pending += std::string(pending.empty() ? "" : ", ") + list_[i].label;
+    const float by = H - X(118);
     if (!file_error_.empty())
-      TextWrapped(pcx, y + X(4), kSmall, wrap, Alpha(kRust, fade), file_error_, 1);
+      TextWrapped(ImVec2(ox_, by - X(24)), kSmall, X(kWidth), Alpha(IM_COL32(230, 120, 90, 255), fade), file_error_);
     else if (!pending.empty())
-      TextWrapped(pcx, y + X(4), kSmall, wrap, Alpha(kRust, fade), "Restart to apply: " + pending, 1);
+      TextWrapped(ImVec2(ox_, by - X(24)), kSmall, X(kWidth), Alpha(kGold, fade), "Restart the game to apply: " + pending);
 
     DrawPrompts(io, fade);
   }
 
   void DrawPrompts(ImGuiIO& io, float fade) {
-    const float H = io.DisplaySize.y;
+    const float W = io.DisplaySize.x, H = io.DisplaySize.y;
     struct P { const char* button; const char* label; };
     std::vector<P> list;
     const std::vector<int> rows = Rows();
     const bool slider = !rows.empty() && list_[rows[std::clamp(sel_, 0, int(rows.size()) - 1)]].control == Control::kSlider;
     if (pad_prompts_) {
-      list = {{"B", "Back"}, {"Y", "Default"}, slider ? P{"D-Pad", "Adjust"} : P{"A", "Change"}};
+      list.push_back(slider ? P{"D-Pad", "Adjust"} : P{"A", "Change"});
+      list.push_back({"Y", "Default"});
+      list.push_back({"B", "Back"});
     } else {
-      list = {{"Esc", "Back"}, {"Delete", "Default"}, slider ? P{"Arrows", "Adjust"} : P{"Enter", "Change"}};
+      if (!slider) list.push_back({"Enter", "Change"});
+      list.push_back({"Delete", "Default"});
+      list.push_back({"Esc", "Back"});
     }
-    // Stacked at the bottom right of the sheet, like Cancel / Accept.
-    const float right = PageX1() - X(40);
-    float y = H - X(34) - X(30) * float(list.size());
-    for (const P& p : list) {
-      Prompt(right, y, p.button, p.label, Alpha(kInk, fade));
-      y += X(30);
+    dl_->AddRectFilledMultiColor(ImVec2(0, H - X(90)), ImVec2(W, H), IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0),
+                                 IM_COL32(0, 0, 0, int(150 * fade)), IM_COL32(0, 0, 0, int(150 * fade)));
+    const float gap = X(30);
+    float total = 0;
+    for (const P& p : list) total += Prompt(0, 0, p.button, p.label, true) + gap;
+    float x = ox_ + X(kWidth) - (total - gap);
+    const float y = H - X(56);
+    for (const P& p : list) x += Prompt(x, y, p.button, p.label) + gap;
+    if (!pad_prompts_) {
+      const char* keys = "Arrows Move and Change    Page Up / Down Page";
+      if (ox_ + TextW(keys, kSmall) + X(40) < ox_ + X(kWidth) - (total - gap))
+        Text(ImVec2(ox_, y + X(15) - X(kSmall) * 0.52f), kSmall, Alpha(kFaint, fade), keys);
     }
   }
 
@@ -771,10 +763,8 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     const float W = io.DisplaySize.x;
     const float w = TextW(toast_.c_str(), kNormal);
     const float x = W - X(48) - w;
-    const float y = X(46);
-    // Soft dark backing so it reads over any picture.
-    dl_->AddRectFilled(ImVec2(x - X(16), y - X(8)), ImVec2(W - X(30), y + X(38)), IM_COL32(0, 0, 0, int(120 * a)), X(6));
-    Text(ImVec2(x, y), kNormal, Alpha(kCream, a), toast_.c_str());
+    Rule(x - X(20), W - X(28), X(80), a);
+    Text(ImVec2(x, X(46)), kNormal, Alpha(kCream, a), toast_.c_str());
   }
 };
 

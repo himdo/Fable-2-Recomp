@@ -145,14 +145,15 @@ void fable2_hook_skip_intro_videos(PPCRegister& r3) {
 // at load by src/core/fable2_patches.cpp) and the patch had no effect.
 // Toggle: [patches] high_tick_rate.
 bool fable2_hook_high_tick_rate_skip_store() {
-  static const bool enabled = [] {
-    const bool on = fable2::config::Get().high_tick_rate;
-    if (on) {
-      REXSYS_INFO("[tick-rate] LF tick forced to 30 Hz (high_tick_rate)");
-    }
-    return on;
-  }();
-  return enabled;
+  // Read on every call: the Advanced Options page can change it live
+  // (fable2::patches::SetTickRates writes the value this store would undo).
+  const bool on = fable2::config::Get().high_tick_rate;
+  static bool logged = false;
+  if (on && !logged) {
+    logged = true;
+    REXSYS_INFO("[tick-rate] LF tick forced to 30 Hz (high_tick_rate)");
+  }
+  return on;
 }
 
 // Higher HF Tick Rate (Xenia patch by Ultra), code half. Runs BEFORE the store
@@ -164,18 +165,21 @@ bool fable2_hook_high_tick_rate_skip_store() {
 // break the 2:1 ratio the other way, so it is ignored unless both are on.
 // Toggle: [patches] higher_hf_tick_rate (needs [patches] high_tick_rate).
 bool fable2_hook_high_hf_tick_rate_skip_store() {
-  static const bool enabled = [] {
-    const auto& cfg = fable2::config::Get();
-    if (cfg.higher_hf_tick_rate && !cfg.high_tick_rate) {
+  // Read on every call, like the LF hook above.
+  const auto& cfg = fable2::config::Get();
+  static bool warned = false, logged = false;
+  if (cfg.higher_hf_tick_rate && !cfg.high_tick_rate) {
+    if (!warned) {
+      warned = true;
       REXSYS_WARN("[tick-rate] higher_hf_tick_rate ignored: it requires high_tick_rate");
-      return false;
     }
-    if (cfg.higher_hf_tick_rate) {
-      REXSYS_INFO("[tick-rate] HF tick forced to 60 Hz (higher_hf_tick_rate)");
-    }
-    return cfg.higher_hf_tick_rate;
-  }();
-  return enabled;
+    return false;
+  }
+  if (cfg.higher_hf_tick_rate && !logged) {
+    logged = true;
+    REXSYS_INFO("[tick-rate] HF tick forced to 60 Hz (higher_hf_tick_rate)");
+  }
+  return cfg.higher_hf_tick_rate;
 }
 
 // Direct mouse-to-camera look (separates the mouse from the keyboard->gamepad

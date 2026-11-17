@@ -11,7 +11,8 @@
 //     to the template in src/core/fable2_config.cpp);
 //   - when a change takes effect: Live(fn) applies it at once (fn sets the
 //     cvar or the fable2::config::Values field the game reads),
-//     NextLoad() when the game reads it as a save loads, Restart() when
+//     NextLoad() when the game reads it as a save loads, AtStart() for what
+//     only matters while the game starts (intro videos), Restart() when
 //     only a restart picks it up. The page marks Restart keys and lists the
 //     ones changed since the game started.
 // Example (a frame rate key in [perf]):
@@ -25,6 +26,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <functional>
+#include <mutex>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -32,6 +35,7 @@
 
 #include "fable2_config.h"
 #include "fable2_fit_window.h"
+#include "fable2_patches.h"
 #include "photo_mode_state.h"
 
 namespace fable2::portsettings {
@@ -89,7 +93,9 @@ inline const char* PageName(int p) {
 }
 
 enum class Control { kToggle, kChoice, kSlider };
-enum class When { kLive, kNextLoad, kRestart };
+// kAtStart: only matters while the game starts (the intro videos), so it is
+// simply used from the next start; no restart is asked for.
+enum class When { kLive, kNextLoad, kAtStart, kRestart };
 
 struct ChoiceItem {
   Value value;
@@ -116,8 +122,22 @@ struct Setting {
   // environment variable or the command line, that source keeps winning: the
   // page says so instead of claiming the change applied.
   std::vector<const char*> cvars;
+  // The value to suggest: the page shows "On (Recommended)" when it is set and
+  // "Recommended: On" in the description.
+  bool has_recommended = false;
+  Value recommended;
 
+  Setting& Recommend(Value v) {
+    has_recommended = true;
+    recommended = std::move(v);
+    return *this;
+  }
   Setting& Restart() { when = When::kRestart; live = nullptr; return *this; }
+  Setting& AtStart(std::function<void(const Value&)> fn) {
+    when = When::kAtStart;
+    live = std::move(fn);
+    return *this;
+  }
   Setting& NextLoad(std::function<void(const Value&)> fn) {
     when = When::kNextLoad;
     live = std::move(fn);
@@ -210,6 +230,23 @@ inline std::function<void(const Value&)> Field(T config::Values::*m) {
   };
 }
 
+// A string that lives for the whole run (for the atomic key-name overrides).
+inline const char* Intern(const std::string& text) {
+  static std::mutex m;
+  static std::set<std::string> strings;
+  std::lock_guard<std::mutex> lock(m);
+  return strings.insert(text).first->c_str();
+}
+
+// Fable2App turns the fast memexport readback off when both shaders run on the
+// CPU (nothing is left to read back, and the fast path shows stale geometry);
+// keep that true when either changes live.
+inline void SyncMemexportReadback() {
+  const auto& cfg = config::Get();
+  if (CvarPinned("readback_memexport_fast")) return;
+  rex::cvar::SetFlagByName("readback_memexport_fast", cfg.terrain_tess_cpu && cfg.skinning_cpu ? "false" : "true");
+}
+
 inline const std::vector<Setting>& Settings() {
   static const std::vector<Setting> list = [] {
     std::vector<Setting> s;
@@ -240,6 +277,7 @@ inline const std::vector<Setting>& Settings() {
                        "Keep loading screens and the saving banner at 16:9 in the middle of a wide picture "
                        "instead of stretching them.",
                        true)
+                    .Recommend(Bool(true))
                     .LiveCvars({"fit_window_native_16x9"}));
     s.push_back(Toggle(kDisplay, "patches", "disable_motion_blur", "Motion Blur",
                        "The blur the camera adds to the whole screen when it moves quickly.", false, true)
@@ -252,28 +290,47 @@ inline const std::vector<Setting>& Settings() {
                                Field(&Values::faster_render_targets)));
     s.push_back(Toggle(kDisplay, "patches", "realtime_texture_morphing", "Real-Time Skin Textures",
                        "Build your hero's and dog's changing skin textures on the graphics card, the way the "
-                       "game can. Fixes a black hero and dog.",
+                       "game can. Fixes a black hero and dog. Used from the next texture the game builds "
+                       "(changing clothes, loading a save).",
                        true)
-                    .Restart());
+                    .Live(Field(&Values::realtime_texture_morphing)));
     s.push_back(Toggle(kDisplay, "patches", "hero_dog_texture_readback", "Skin Texture Readback",
                        "The older fix for a black hero and dog. Only used when Real-Time Skin Textures is off.",
                        false)
-                    .Restart());
+                    .Live([](const Value& v) {
+                      // Fable2App seeds the same cvar from this key at startup.
+                      rex::cvar::SetFlagByName("readback_resolve_force_addresses", v.b ? "0x12704000" : "");
+                      config::MutableForLiveEdit().hero_dog_texture_readback = v.b;
+                    }));
     s.push_back(Toggle(kDisplay, "patches", "dog_fur_depth_bias", "Dog Fur Fix",
                        "Stops the dog's fur flickering in blocky patches.", true)
-                    .Restart());
+                    .Live([](const Value& v) {
+                      // The GPU plugin puts this bias into each draw's pipeline key, so
+                      // the next frame already uses it (Fable2App seeds it at startup).
+                      rex::cvar::SetFlagByName("depth_bias_shader", v.b ? "014F8A02DB7B19CA" : "");
+                      rex::cvar::SetFlagByName("depth_bias_shader_units", v.b ? "16" : "0");
+                      config::MutableForLiveEdit().dog_fur_depth_bias = v.b;
+                    }));
 
     // Frame rate ------------------------------------------------------------------------
     s.push_back(Toggle(kFrameRate, "patches", "high_tick_rate", "High Tick Rate",
                        "Run the game's logic at 30 Hz instead of 15 Hz: smoother menus and less input delay. "
                        "Turn on Higher Physics Rate with it.",
                        false)
-                    .Restart());
+                    .Live([](const Value& v) {
+                      auto& cfg = config::MutableForLiveEdit();
+                      cfg.high_tick_rate = v.b;
+                      patches::SetTickRates(cfg.high_tick_rate, cfg.higher_hf_tick_rate);
+                    }));
     s.push_back(Toggle(kFrameRate, "patches", "higher_hf_tick_rate", "Higher Physics Rate",
                        "Run physics at 60 Hz to match High Tick Rate; cloth misbehaves without it. Needs High "
                        "Tick Rate.",
                        false)
-                    .Restart());
+                    .Live([](const Value& v) {
+                      auto& cfg = config::MutableForLiveEdit();
+                      cfg.higher_hf_tick_rate = v.b;
+                      patches::SetTickRates(cfg.high_tick_rate, cfg.higher_hf_tick_rate);
+                    }));
     s.push_back(Toggle(kFrameRate, "patches", "gpu_frame_sync", "GPU Frame Sync",
                        "Wait for the graphics card to finish each frame before starting the next. Fixes "
                        "flickering when it falls behind, for a few frames per second. D3D12 only.",
@@ -283,12 +340,18 @@ inline const std::vector<Setting>& Settings() {
                        "Work out the terrain's detail on the processor, so the game does not wait for the "
                        "graphics card every frame. D3D12 only.",
                        true)
-                    .Restart());
+                    .LiveCvars({"terrain_tess_cpu"}, [](const Value& v) {
+                      config::MutableForLiveEdit().terrain_tess_cpu = v.b;
+                      SyncMemexportReadback();
+                    }));
     s.push_back(Toggle(kFrameRate, "patches", "skinning_cpu", "Character Skinning on CPU",
                        "Move characters' skin on the processor, removing another wait for the graphics card "
                        "every frame. D3D12 only.",
                        true)
-                    .Restart());
+                    .LiveCvars({"skinning_cpu"}, [](const Value& v) {
+                      config::MutableForLiveEdit().skinning_cpu = v.b;
+                      SyncMemexportReadback();
+                    }));
     s.push_back(Toggle(kFrameRate, "perf", "refresh_gpu_memory_each_frame", "Refresh GPU Memory",
                        "Copy all the memory each frame uses to the graphics card again. A safety net that costs "
                        "speed; leave it off unless something is missing on screen.",
@@ -347,7 +410,7 @@ inline const std::vector<Setting>& Settings() {
                     .NextLoad(Field(&Values::unlock_ce)));
     s.push_back(Toggle(kFixes, "patches", "skip_intro_videos", "Skip Intro Videos",
                        "Leave out the Microsoft and Lionhead logo videos when the game starts.", false)
-                    .Restart());
+                    .AtStart(Field(&Values::skip_intro_videos)));
 
     // Photo mode ------------------------------------------------------------------------
     s.push_back(Toggle(kPhotoMode, "photo_mode", "enabled", "Photo Mode",
@@ -365,12 +428,12 @@ inline const std::vector<Setting>& Settings() {
                        "The key that opens and closes photo mode.", Str("F6"),
                        {{Str("F6"), "F6"}, {Str("F7"), "F7"}, {Str("F8"), "F8"}, {Str("F9"), "F9"},
                         {Str("F10"), "F10"}, {Str("P"), "P"}})
-                    .Restart());
+                    .Live([](const Value& v) { photomode::toggle_key_override().store(Intern(v.s)); }));
     s.push_back(Choice(kPhotoMode, "photo_mode", "screenshot_key", "Screenshot Key",
                        "The key that takes a photo in photo mode.", Str("F12"),
                        {{Str("F12"), "F12"}, {Str("F11"), "F11"}, {Str("PrintScreen"), "Print Screen"},
                         {Str("Space"), "Space"}})
-                    .Restart());
+                    .Live([](const Value& v) { photomode::screenshot_key_override().store(Intern(v.s)); }));
     s.push_back(Slider(kPhotoMode, "photo_mode", "move_speed", "Camera Speed",
                        "How fast the free camera flies when photo mode opens.", Float(4.0), 0.5, 20.0, 0.5,
                        Printf("%.1f m/s"))

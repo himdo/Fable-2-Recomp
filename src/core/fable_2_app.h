@@ -762,8 +762,8 @@ class Fable2App : public rex::ReXApp {
       // The pose cards' expression icons come from the same bank.
       std::vector<std::string> pose_icons;
       for (const auto& pose : fable2::photomode::kPoses) pose_icons.push_back(pose.icon);
-      // The Advanced Options page's parchment, ornament and arrows.
-      for (const char* art : fable2::portsettings::kArtNames) pose_icons.push_back(art);
+      // The Advanced Options page's title icon (the game's Options icon).
+      pose_icons.push_back(fable2::portsettings::kOptionsIcon);
       icons = gi::Load(root, icon_log, pose_icons);
       if (icons > 0) break;
     }

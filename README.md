@@ -149,11 +149,12 @@ game recreates it with defaults on launch if it is ever missing. Loaded in
 Most of these settings can also be changed in the game: choose **Advanced
 Options** in the main menu, or **Options > Advanced** in the pause (Start)
 menu. It covers the window fit and aspect ratio presets (`[display]`), and
-most of the settings above. The page looks
-like the game's own options pages and works with the controller (D-pad, A to change,
-Y for the default, LB / RB for the tabs, B to go back), the keyboard (arrows,
-Enter, Delete, Page Up / Page Down, Escape) and the mouse. Changes apply at
-once where the game allows it; the rest are marked *Restart*. Leaving the
+most of the settings above. The page looks like the game's own menus and
+works with the controller (D-pad, A to change, Y for the default, LB / RB for
+the tabs, B to go back), the keyboard (arrows, Enter, Delete, Page Up / Page
+Down, Escape) and the mouse. Every change applies while the game runs, with
+no restart (Skip Intro Videos is used at the next start, since the videos
+only play then). Leaving the
 page saves the changed keys to `fable2_config.toml`, keeping its comments and
 layout, the same way the launcher does. See
 [docs/ADVANCED_OPTIONS.md](docs/ADVANCED_OPTIONS.md), which also shows how to list a

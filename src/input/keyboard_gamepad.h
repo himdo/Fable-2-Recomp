@@ -550,12 +550,17 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     namespace pm = fable2::photomode;
     const auto& cfg = fable2::config::Get();
     if (!cfg.photo_mode_enabled) return;
-    if (cfg.photo_mode_toggle_key != photo_toggle_name_) {
-      photo_toggle_name_ = cfg.photo_mode_toggle_key;
+    // The Advanced Options page can change both keys while the game runs.
+    const char* toggle_override = pm::toggle_key_override().load();
+    const char* shot_override = pm::screenshot_key_override().load();
+    const std::string& toggle_name = toggle_override ? std::string(toggle_override) : cfg.photo_mode_toggle_key;
+    const std::string& shot_name = shot_override ? std::string(shot_override) : cfg.photo_mode_screenshot_key;
+    if (toggle_name != photo_toggle_name_) {
+      photo_toggle_name_ = toggle_name;
       photo_toggle_vk_ = static_cast<uint16_t>(rex::ui::ParseVirtualKey(photo_toggle_name_));
     }
-    if (cfg.photo_mode_screenshot_key != photo_shot_name_) {
-      photo_shot_name_ = cfg.photo_mode_screenshot_key;
+    if (shot_name != photo_shot_name_) {
+      photo_shot_name_ = shot_name;
       photo_shot_vk_ = static_cast<uint16_t>(rex::ui::ParseVirtualKey(photo_shot_name_));
     }
     const bool on = pm::active();

@@ -161,7 +161,12 @@ const std::vector<Patch>& Patches() {
   return patches;
 }
 
+namespace {
+rex::memory::Memory* g_memory = nullptr;  // kept by ApplyAll for SetTickRates
+}  // namespace
+
 size_t ApplyAll(rex::memory::Memory* memory, const rex::PPCImageInfo& image) {
+  g_memory = memory;
   if (!memory) {
     REXSYS_ERROR("[patches] no guest memory available; not applying patches");
     return 0;
@@ -239,6 +244,28 @@ size_t ApplyAll(rex::memory::Memory* memory, const rex::PPCImageInfo& image) {
   REXSYS_INFO("[patches] done: {} op(s) applied, {} skipped", applied,
               skipped);
   return applied;
+}
+
+bool SetTickRates(bool high_tick_rate, bool higher_hf_tick_rate) {
+  if (!g_memory) return false;
+  // The exponent byte of each big-endian double: 15.0 / 30.0 / 60.0.
+  const struct {
+    uint32_t address;
+    uint8_t value;
+  } writes[] = {
+      {0x83319511, uint8_t(high_tick_rate ? 0x3E : 0x2E)},                         // LF 30 / 15 Hz
+      {0x83319519, uint8_t(high_tick_rate && higher_hf_tick_rate ? 0x4E : 0x3E)},  // HF 60 / 30 Hz
+  };
+  for (const auto& w : writes) {
+    auto* heap = g_memory->LookupHeap(w.address);
+    if (!heap) return false;
+    PageWriteGuard guard(heap, w.address, 1);
+    if (!guard.ok()) return false;
+    *g_memory->TranslateVirtual<uint8_t*>(w.address) = w.value;
+  }
+  REXSYS_INFO("[tick-rate] now LF {} Hz, HF {} Hz", high_tick_rate ? 30 : 15,
+              high_tick_rate && higher_hf_tick_rate ? 60 : 30);
+  return true;
 }
 
 }  // namespace fable2::patches
