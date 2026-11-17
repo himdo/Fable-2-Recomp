@@ -128,7 +128,8 @@ game recreates it with defaults on launch if it is ever missing. Loaded in
 - To add a setting: add a member to `fable2::config::Values` (with default),
   read it in `Load()`, and document the key in `config/fable2_config.toml`
   **and** the embedded template in `src/core/fable2_config.cpp` (keep both in
-  sync).
+  sync). To show it on the in-game PC Settings page, add one entry to
+  `src/core/port_settings_schema.h`.
 - Settings that back an SDK cvar (currently the `[input]` section:
   `keyboard_gamepad_map`, `mouse_look`, `mouse_look_scale`) are seeded into
   the cvar at startup — but only when no higher-priority
@@ -142,6 +143,19 @@ game recreates it with defaults on launch if it is ever missing. Loaded in
   "High Tick Rate" / "Higher HF Tick Rate"; turn both on together), which
   also drive the guest-image data writes below. There is no separate patch
   file.
+
+### In-game PC Settings
+
+Most of these settings can also be changed in the game: choose **PC Settings**
+in the main menu or at the bottom of the pause (Start) menu. The page looks
+like the game's own menus and works with the controller (D-pad, A to change,
+Y for the default, LB / RB for the tabs, B to go back), the keyboard (arrows,
+Enter, Delete, Page Up / Page Down, Escape) and the mouse. Changes apply at
+once where the game allows it; the rest are marked *Restart*. Leaving the
+page saves the changed keys to `fable2_config.toml`, keeping its comments and
+layout, the same way the launcher does. See
+[docs/PC_SETTINGS.md](docs/PC_SETTINGS.md), which also shows how to list a
+new key on the page.
 
 
 

@@ -120,7 +120,10 @@ per count, when the mouse goes to the camera or the stick, the retries that
 start `mouse_direct.lua`, the numbers it returns to Lua, the fallback for a
 NaN or infinite setting, and the inject speed profiles), the RunScript gate
 (scripts only run inside the world-update service, per thread; see
-`src/core/world_thread.h`), and the version catalogue in each build profile.
+`src/core/world_thread.h`), how the in-game PC Settings page edits
+`fable2_config.toml` (only the changed values, keeping comments and layout,
+the same way as the launcher; see `src/core/fable2_config_edit.h`), and the
+version catalogue in each build profile.
 Test executables go under `out/tests`.
 
 They use [Catch2](https://github.com/catchorg/Catch2) v3, from the SDK's own

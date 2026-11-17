@@ -49376,3 +49376,32 @@ name = "TextureCompress_Quantized_83008E98"
 # GPU mip generation. PDB: __imp__sub_821FC4A0, 6505 bytes.
 [entrypoint.functions."0x821FC4A0"]
 name = "TextureMips_BuildGPU_821FC4A0"
+
+# Pause (Start) menu, the in-game ExpandableMenu (World Map, Abilities, Items,
+# Weapons, Clothing, Logbook, Options; Kick Henchman in co-op).
+# Adds one item: the same arguments as ExpandableMenu_SpawnButton (r3 = menu,
+# r4 = name, r5 = localized text, r6 = icon, r7 = parent, r8 = IDs, r9 =
+# event type, r10 = menu element, 9th argument at caller sp+0x54). The pause
+# menu's top-level items use event type 300 (0x12C).
+[entrypoint.functions."0x824083C0"]
+name = "PauseMenu_SpawnButton"
+
+# Builds the pause menu: the Save group (Save and Continue / Save and Quit /
+# Quit Without Saving), then the top-level items, each with
+# PauseMenu_SpawnButton; the menu element it passes is
+# *(*(*(0x834968A4) + 0x38) + 0xC). r3 = menu.
+[entrypoint.functions."0x82842860"]
+name = "PauseMenu_Populate"
+
+# Event handler of the pause menu (r3 = menu, r4 = event, r5 = owner). The
+# event's first word points at the chosen item's name string, the word at +4
+# is the event type: types 2 and 300 (a chosen item) go to
+# PauseMenu_OpenItemScreen (or its co-op henchman variant).
+[entrypoint.functions."0x8240EAA0"]
+name = "PauseMenu_HandleEvent"
+
+# Opens the screen for a chosen pause-menu item: compares the item name
+# against "Map", "Items", "Weapons", "Clothing", "Abilities", "Logbook",
+# "Options", "Kick" (StrCmpIgnoreCase_82CA6320) and pushes that screen.
+[entrypoint.functions."0x82412378"]
+name = "PauseMenu_OpenItemScreen"

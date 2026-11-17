@@ -46,6 +46,7 @@
 #include "remote_gamepad_driver.h"
 #include "fable2_crash_log.h"  // host crash report (fable2_crash.log)
 #include "photo_mode_dialog.h"  // photo mode settings panel (ImGui)
+#include "port_settings_dialog.h"  // in-game PC Settings page
 #ifdef FABLE2_REMOTE_CONTROL
 #include "remote_control_server.h"
 // 1-second game-state classifier (src/diagnostics/fable2_state_probe.h, single-TU inline).
@@ -108,6 +109,9 @@ class Fable2App : public rex::ReXApp {
   // Photo mode settings panel (src/core/photo_mode_dialog.h). Created in
   // OnCreateDialogs, released in OnShutdown (before the SDK drops the drawer).
   std::unique_ptr<fable2::photomode::PhotoModeDialog> photo_dialog_;
+  // In-game PC Settings page (src/core/port_settings_dialog.h), opened from
+  // the main menu and the pause menu (src/menu/main_menu.cpp).
+  std::unique_ptr<fable2::portsettings::PortSettingsDialog> settings_dialog_;
 
   // Emulate the Xbox 360 Xenos GPU. Two plugins are staged next to the exe:
   //   rexgpu-xenos[d].dll        -> D3D12 (prebuilt SDK plugin; the default)
@@ -480,6 +484,7 @@ class Fable2App : public rex::ReXApp {
     // The panel unregisters itself from the ImGui drawer, which the SDK
     // destroys right after this hook.
     photo_dialog_.reset();
+    settings_dialog_.reset();
 #ifdef FABLE2_REMOTE_CONTROL
     // Stop the state classifier thread, then the remote control server
     // threads, before anything else tears down.
@@ -729,6 +734,8 @@ class Fable2App : public rex::ReXApp {
       // The pose cards' expression icons come from the same bank.
       std::vector<std::string> pose_icons;
       for (const auto& pose : fable2::photomode::kPoses) pose_icons.push_back(pose.icon);
+      // The PC Settings page's title icon (the game's Options icon).
+      pose_icons.push_back(fable2::portsettings::kOptionsIcon);
       icons = gi::Load(root, icon_log, pose_icons);
       if (icons > 0) break;
     }
@@ -739,6 +746,7 @@ class Fable2App : public rex::ReXApp {
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     // fable2::deadbeef_overlay::register_overlay(drawer);
     photo_dialog_ = std::make_unique<fable2::photomode::PhotoModeDialog>(drawer);
+    settings_dialog_ = std::make_unique<fable2::portsettings::PortSettingsDialog>(drawer);
 #ifdef _WIN32
     fable2::crashlog::Install();  // again, after the SDK set up its own handlers
 #endif

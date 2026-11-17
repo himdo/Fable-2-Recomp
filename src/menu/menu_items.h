@@ -19,8 +19,17 @@ struct MenuItem {
 void SetQuitHandler(std::function<void()> handler);
 void QuitGame();
 
+// Opens the PC Settings page (src/core/port_settings_dialog.h).
+void OpenPortSettings();
+
 inline constexpr MenuItem kMainMenuItems[] = {
+    {"RecompSettings", "pc_settings", OpenPortSettings},
     {"RecompQuit", "quit", QuitGame},
+};
+
+// Added to the pause (Start) menu, after the game's own items.
+inline constexpr MenuItem kPauseMenuItems[] = {
+    {"RecompSettings", "pc_settings", OpenPortSettings},
 };
 
 }  // namespace fable2::menu

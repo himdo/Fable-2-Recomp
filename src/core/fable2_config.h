@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace fable2::config {
 
@@ -261,6 +262,23 @@ const Values& Get();
 // Change [photo_mode] gamepad_toggle in memory and in the file Load() read
 // (only that line is rewritten; comments and the rest are kept).
 bool SavePhotoModeGamepadToggle(const std::string& combo);
+
+// The values Get() returns, for settings changed live from the in-game PC
+// Settings page (src/core/port_settings_dialog.h). Only plain bool / number
+// fields are written through it while the game runs: hooks on other threads
+// read them every call.
+Values& MutableForLiveEdit();
+
+// The file Load() read (empty before Load()).
+const std::filesystem::path& Path();
+
+// One `key = value` line to set in the config file (fable2_config_edit.h).
+struct FileEdit;
+
+// ApplyFileEdits (fable2_config_edit.h) on the file Load() read, written
+// through a temporary file that then replaces it. Returns false (and logs) if
+// it could not be written.
+bool SaveFileEdits(const std::vector<FileEdit>& edits);
 
 // The default template written when the file is missing. Must match
 // config/fable2_config.toml in the repo (staged next to the exe by the build).

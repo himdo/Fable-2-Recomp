@@ -11,8 +11,11 @@
 // still runs), so a hand edit can never wedge the launch.
 
 #include "fable2_config.h"
+#include "fable2_config_edit.h"
 
+#include <algorithm>
 #include <array>
+#include <charconv>
 #include <cctype>
 #include <format>
 #include <fstream>
@@ -659,50 +662,44 @@ const Values& Get() { return g_values; }
 
 bool SavePhotoModeGamepadToggle(const std::string& combo) {
   g_values.photo_mode_gamepad_toggle = combo;
+  const bool ok = SaveFileEdits({{"photo_mode", "gamepad_toggle", TomlString(combo)}});
+  if (ok)
+    REXSYS_INFO("[fable2-config] photo_mode.gamepad_toggle = \"{}\" saved to {}", combo, g_path.string());
+  return ok;
+}
+
+Values& MutableForLiveEdit() { return g_values; }
+
+const std::filesystem::path& Path() { return g_path; }
+
+bool SaveFileEdits(const std::vector<FileEdit>& edits) {
   if (g_path.empty()) return false;
   std::string text;
   {
     std::ifstream in(g_path, std::ios::binary);
-    if (!in) return false;
-    text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    if (in) text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
   }
-  const std::string line = "gamepad_toggle = \"" + combo + "\"";
-  const std::string eol = text.find("\r\n") != std::string::npos ? "\r\n" : "\n";
-  // Find the [photo_mode] section and, inside it, the gamepad_toggle line.
-  size_t sec = text.find("\n[photo_mode]");
-  if (sec == std::string::npos && text.rfind("[photo_mode]", 0) == 0) sec = 0;
-  if (sec == std::string::npos) {
-    if (!text.empty() && text.back() != '\n') text += eol;
-    text += eol + "[photo_mode]" + eol + line + eol;
-  } else {
-    const size_t body = text.find('\n', sec + 1);
-    size_t end = body == std::string::npos ? text.size() : text.find("\n[", body);
-    if (end == std::string::npos) end = text.size();
-    size_t pos = body == std::string::npos ? std::string::npos : body + 1;
-    bool replaced = false;
-    while (pos != std::string::npos && pos < end) {
-      size_t le = text.find('\n', pos);
-      if (le == std::string::npos) le = text.size();
-      const std::string_view l(text.data() + pos, le - pos);
-      const size_t k = l.find_first_not_of(" \t");
-      if (k != std::string_view::npos && l.substr(k).rfind("gamepad_toggle", 0) == 0) {
-        const size_t cut = (le > pos && text[le - 1] == '\r') ? le - 1 : le;
-        text.replace(pos, cut - pos, line);
-        replaced = true;
-        break;
-      }
-      pos = le + 1;
-    }
-    if (!replaced) {
-      const size_t at = body == std::string::npos ? text.size() : body + 1;
-      text.insert(at, line + eol);
+  text = ApplyFileEdits(std::move(text), edits);
+  // Write a temporary file next to it, then swap it in, so a crash mid-write
+  // never leaves a half-written config.
+  std::filesystem::path tmp = g_path;
+  tmp += ".saving";
+  {
+    std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+    out << text;
+    if (!out) {
+      REXSYS_ERROR("[fable2-config] could not write {}", tmp.string());
+      return false;
     }
   }
-  std::ofstream out(g_path, std::ios::binary | std::ios::trunc);
-  if (!out) return false;
-  out << text;
-  REXSYS_INFO("[fable2-config] photo_mode.gamepad_toggle = \"{}\" saved to {}", combo, g_path.string());
-  return bool(out);
+  std::error_code ec;
+  std::filesystem::rename(tmp, g_path, ec);
+  if (ec) {
+    REXSYS_ERROR("[fable2-config] could not replace {}: {}", g_path.string(), ec.message());
+    std::filesystem::remove(tmp, ec);
+    return false;
+  }
+  return true;
 }
 
 const char* DefaultTemplate() { return kTemplate; }
