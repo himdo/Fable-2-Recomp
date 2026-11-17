@@ -51,6 +51,10 @@ The window settings apply at once. At startup `fit_to_window`, `hud_to_edges` an
 command line still win), and `aspect_ratio` sets the forced aspect the
 console's `ws aspect` sets.
 
+The rendering fixes `faster_render_targets`, `realtime_texture_morphing`,
+`hero_dog_texture_readback` and `dog_fur_depth_bias` are not on the page; they
+stay in `fable2_config.toml` (and the launcher) with their defaults.
+
 | | Controller | Keyboard | Mouse |
 |---|---|---|---|
 | Move | D-pad / left stick | arrow keys, W / S | point at a line |
@@ -76,16 +80,12 @@ until it is released, so it does not also close the Options menu.
 Every setting applies while the game runs; none needs a restart.
 
 - **At once**: the value goes to the cvar, the guest memory or the setting
-  the game reads every frame: window fit and aspect ratio, motion blur, faster
-  render targets, the dog fur fix and the skin texture readback (both are
-  GPU cvars read per draw), High Tick Rate and Higher Physics Rate (the tick
+  the game reads every frame: window fit and aspect ratio, motion blur, High Tick Rate and Higher Physics Rate (the tick
   doubles are rewritten in guest memory and their hooks follow the setting),
   GPU frame sync, terrain detail and skinning on the CPU (with the fast
   memexport readback kept in step), GPU memory refresh, thread yielding,
   everything on the Mouse tab, and all of photo mode (the keys switch through
   atomics the input poll reads).
-- **Real-Time Skin Textures**: used from the next skin texture the game builds
-  (changing clothes, loading a save).
 - **From the next area or save load**: Draw Distance and Detail Distance
   (each object takes them as it loads; the draw multipliers are rewritten in
   guest memory at once, the LOD hook reads the setting each time).
@@ -141,12 +141,14 @@ The page reads values straight from the file, so a key does not need a
 ## How it hooks the game
 
 **Main menu.** The item is added with the game's own menu code
-(`src/menu/main_menu.cpp`, which already added Quit):
+(`src/menu/main_menu.cpp`, which already added Quit). The same file leaves
+out the game's **Downloadable Content** item: the port has no marketplace to
+show.
 
 | Address | Name | Role |
 |---|---|---|
 | `0x826CA6E0` | `FrontMenu_Populate` | builds the main menu; the recomp's items are spawned after it returns |
-| `0x826CB808` | `ExpandableMenu_SpawnButton` | adds one main-menu item (event type 2, element `*(menu + 20)`) |
+| `0x826CB808` | `ExpandableMenu_SpawnButton` | adds one main-menu item (event type 2, element `*(menu + 20)`); while `FrontMenu_Populate` runs, the game's Downloadable Content item is not spawned |
 | `0x826C81A0` | `FrontMenu_HandleEvent` | main-menu handler: a chosen item's event points at its name |
 
 **Pause menu, Options.** Its rows are not added by game code. The Options

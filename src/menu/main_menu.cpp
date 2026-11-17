@@ -7,6 +7,7 @@
 #include "fable_2_pch.h"
 
 #include <mutex>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -138,14 +139,58 @@ void QuitGame() {
   if (g_quit_handler) g_quit_handler();
 }
 
-void OpenPortSettings() { fable2::portsettings::open_request().store(true); }
+void OpenPortSettings() {
+  fable2::portsettings::from_main_menu().store(false);
+  fable2::portsettings::open_request().store(true);
+}
+
+void OpenPortSettingsFromMainMenu() {
+  fable2::portsettings::from_main_menu().store(true);
+  fable2::portsettings::open_request().store(true);
+}
 
 }  // namespace fable2::menu
+
+namespace {
+// Set while the game's own FrontMenu_Populate runs, so the SpawnButton filter
+// below only touches the main menu.
+thread_local bool t_populating_front_menu = false;
+
+std::string GuestName(uint8_t* base, uint32_t slot) {
+  std::string s;
+  if (slot == 0) return s;
+  // The slot holds the string object; its first word points at the chars.
+  const uint32_t object = REX_LOAD_U32(slot);
+  if (object == 0) return s;
+  const uint32_t chars = REX_LOAD_U32(object);
+  if (chars == 0) return s;
+  for (uint32_t i = 0; i < 64; ++i) {
+    const char c = static_cast<char>(REX_LOAD_U8(chars + i));
+    if (c == '\0') break;
+    s.push_back(c);
+  }
+  return s;
+}
+}  // namespace
+
+// The main menu's Downloadable Content row is left out: the port has no
+// marketplace to show. The game's populate still runs; only that button's
+// spawn is skipped.
+extern "C" void __imp__ExpandableMenu_SpawnButton(PPCContext& ctx, uint8_t* base);
+extern "C" void ExpandableMenu_SpawnButton(PPCContext& ctx, uint8_t* base) {
+  if (t_populating_front_menu && GuestName(base, ctx.r4.u32) == "Downloadable Content") {
+    REXSYS_INFO("[main-menu] left out Downloadable Content");
+    return;
+  }
+  __imp__ExpandableMenu_SpawnButton(ctx, base);
+}
 
 extern "C" void __imp__FrontMenu_Populate(PPCContext& ctx, uint8_t* base);
 extern "C" void FrontMenu_Populate(PPCContext& ctx, uint8_t* base) {
   const uint32_t menu = ctx.r3.u32;
+  t_populating_front_menu = true;
   __imp__FrontMenu_Populate(ctx, base);
+  t_populating_front_menu = false;
   const uint64_t result = ctx.r3.u64;
   for (const auto& item : fable2::menu::kMainMenuItems) {
     fable2::menu::AddItem(ctx, base, menu, item);

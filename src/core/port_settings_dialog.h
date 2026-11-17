@@ -54,6 +54,8 @@
 #include "port_settings_schema.h"
 #include "port_settings_state.h"
 
+REXCVAR_DECLARE(bool, fit_window_hud_to_edges);
+
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -239,6 +241,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
   float k_ = 1.0f;   // pixels per 720p unit
   float ox_ = 0.0f;  // left edge of the text column, in pixels
   float cx_ = 0.0f;  // screen centre (the book's spine), in pixels
+  float shift_ = 0.0f;  // how far the game moved its right cover on a wide screen, in pixels
   bool paper_ = false;         // drawing on the paper (dark ink gets a light emboss)
 
   std::vector<int> Rows() const {
@@ -523,8 +526,10 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
 
   float X(float v) const { return v * k_; }
   int VisibleRows() const { return kMaxRows; }
-  float PageX0() const { return cx_ + X(kPageLeft); }
-  float PageX1() const { return cx_ + X(kPageRight); }
+  // The text column moves by half of the cover's shift, so it stays in the
+  // middle of the wider paper.
+  float PageX0() const { return cx_ + X(kPageLeft) + shift_ * 0.5f; }
+  float PageX1() const { return cx_ + X(kPageRight) + shift_ * 0.5f; }
   Box RowBox(int i) const {
     const float y = X(kListY + kRow * i);
     return Box{ImVec2(ox_ - X(12), y), ImVec2(ox_ + X(kWidth + 12), y + X(kRow))};
@@ -677,6 +682,16 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     const float W = io.DisplaySize.x, H = io.DisplaySize.y;
     const float fade = std::clamp(float(detail::now_ms() - opened_ms_) / 150.0f, 0.0f, 1.0f);
     cx_ = W * 0.5f;
+    // On a wide screen with the HUD at the edges, the game moves its book's
+    // right side out by a multiple of the extra width per side (360 * aspect
+    // - 640 at 720p; src/core/fable2_fit_window_ui.h): the main menu's frame
+    // by 1x, the pause menu's right cover by 1.2x. The page's cover and the
+    // paper under it go where the game's are, so only one cover shows.
+    {
+      const float extra = std::max(0.0f, 360.0f * (W / std::max(H, 1.0f)) - 640.0f);
+      const bool main_menu = from_main_menu().load(std::memory_order_relaxed);
+      shift_ = REXCVAR_GET(fit_window_hud_to_edges) ? X(extra * (main_menu ? 1.0f : 1.2f)) : 0.0f;
+    }
     ox_ = PageX0() + X(kMargin);
     const float px0 = PageX0(), px1 = PageX1();
 
@@ -698,7 +713,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     const bool textured = gameicons::ExtraReady(paper) && gameicons::ExtraReady(sheet);
     const float rim_left = cx_ + X(562 - 640);   // the outer strip's left end (x 562 at 720p)
     const float paper_x0 = cx_ + X(600 - 640);   // where the paper texture's left edge is laid
-    const float under = cx_ + X(1064 - 640);     // the paper runs on under the cover
+    const float under = cx_ + X(1064 - 640) + shift_;  // the paper runs on under the cover
     const float span = under - paper_x0;
     const ImU32 dark = IM_COL32(40, 24, 8, int(90 * fade)), soft = IM_COL32(40, 24, 8, int(45 * fade));
     const ImU32 clear = IM_COL32(40, 24, 8, 0);
@@ -727,12 +742,12 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
                                  ImVec2(330.0f + e - 18, 152.0f + r0), ImVec2(330.0f + e + 12, 152.0f + r0 + kSlice),
                                  tint, bottom);
     }
-    dl_->AddRectFilledMultiColor(ImVec2(px1 - X(22), 0), ImVec2(under, H), clear, soft, soft, clear);
+    dl_->AddRectFilledMultiColor(ImVec2(px1 + shift_ * 0.5f - X(22), 0), ImVec2(under, H), clear, soft, soft, clear);
     dl_->AddRectFilledMultiColor(ImVec2(rim_left, 0), ImVec2(under, X(22)), soft, soft, clear, clear);
     dl_->AddRectFilledMultiColor(ImVec2(rim_left, H - X(22)), ImVec2(under, H), clear, clear, soft, soft);
     // The rim along the cover (x 986 at 720p).
     {
-      const float x0 = cx_ + X(986 - 640), x1 = x0 + X(95);
+      const float x0 = cx_ + X(986 - 640) + shift_, x1 = x0 + X(95);
       const ImVec2 t0(330, 152), t1(425, 512);
       gameicons::DrawExtraRegion(dl_, sheet, ImVec2(x0, 0), ImVec2(x1, X(360)), t0, t1, tint, false);
       gameicons::DrawExtraRegion(dl_, sheet, ImVec2(x0, X(360)), ImVec2(x1, X(720)), t0, t1, tint, true);
@@ -740,7 +755,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     // The leather cover back on top of the paper, where the game has it
     // (x 1008-1280 of its 1280x720 screen).
     {
-      const float x0 = cx_ + X(1008 - 640), x1 = x0 + X(512);  // the art is 512 wide, its right part clear
+      const float x0 = cx_ + X(1008 - 640) + shift_, x1 = x0 + X(512);  // the art is 512 wide, its right part clear
       gameicons::DrawExtraRect(dl_, gameicons::FindExtra(kCoverTop), ImVec2(x0, 0), ImVec2(x1, X(512)), tint, false,
                                1.0f);
       gameicons::DrawExtraRect(dl_, gameicons::FindExtra(kCoverBottom), ImVec2(x0, X(512)), ImVec2(x1, X(720)), tint,

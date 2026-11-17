@@ -27,6 +27,12 @@ inline std::atomic<bool>& open_request() {
   static std::atomic<bool> v{false};
   return v;
 }
+// Whether the last open came from the main menu (else the pause menu's
+// Options). Their book frames are moved by different amounts on wide screens.
+inline std::atomic<bool>& from_main_menu() {
+  static std::atomic<bool> v{false};
+  return v;
+}
 // True while the page is on screen (written by the UI thread).
 inline std::atomic<bool>& is_open() {
   static std::atomic<bool> v{false};

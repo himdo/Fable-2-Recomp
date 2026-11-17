@@ -22,9 +22,11 @@ void QuitGame();
 // Opens the Advanced Options page (src/core/port_settings_dialog.h). In the
 // pause menu it is the Advanced row of Options (src/core/port_settings_lua.h).
 void OpenPortSettings();
+// The same from the main menu, whose book frame sits elsewhere on wide screens.
+void OpenPortSettingsFromMainMenu();
 
 inline constexpr MenuItem kMainMenuItems[] = {
-    {"RecompSettings", "advanced_options", OpenPortSettings},
+    {"RecompSettings", "advanced_options", OpenPortSettingsFromMainMenu},
     {"RecompQuit", "quit", QuitGame},
 };
 

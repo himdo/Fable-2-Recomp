@@ -296,35 +296,6 @@ inline const std::vector<Setting>& Settings() {
     s.push_back(Toggle(kDisplay, "patches", "disable_motion_blur", "Motion Blur",
                        "The blur the camera adds to the whole screen when it moves quickly.", false, true)
                     .Live(Field(&Values::disable_motion_blur)));
-    s.push_back(Toggle(kDisplay, "patches", "faster_render_targets", "Faster Render Targets",
-                       "Skip copying screen data the game is about to clear. Mostly helps at higher internal "
-                       "resolutions, and removes the purple bar at the bottom of the screen. D3D12 only.",
-                       true)
-                    .LiveCvars({"execute_unclipped_draw_vs_on_cpu", "skip_depth_clear_transfers"},
-                               Field(&Values::faster_render_targets)));
-    s.push_back(Toggle(kDisplay, "patches", "realtime_texture_morphing", "Real-Time Skin Textures",
-                       "Build your hero's and dog's changing skin textures on the graphics card, the way the "
-                       "game can. Fixes a black hero and dog. Used from the next texture the game builds "
-                       "(changing clothes, loading a save).",
-                       true)
-                    .Live(Field(&Values::realtime_texture_morphing)));
-    s.push_back(Toggle(kDisplay, "patches", "hero_dog_texture_readback", "Skin Texture Readback",
-                       "The older fix for a black hero and dog. Only used when Real-Time Skin Textures is off.",
-                       false)
-                    .Live([](const Value& v) {
-                      // Fable2App seeds the same cvar from this key at startup.
-                      rex::cvar::SetFlagByName("readback_resolve_force_addresses", v.b ? "0x12704000" : "");
-                      config::MutableForLiveEdit().hero_dog_texture_readback = v.b;
-                    }));
-    s.push_back(Toggle(kDisplay, "patches", "dog_fur_depth_bias", "Dog Fur Fix",
-                       "Stops the dog's fur flickering in blocky patches.", true)
-                    .Live([](const Value& v) {
-                      // The GPU plugin puts this bias into each draw's pipeline key, so
-                      // the next frame already uses it (Fable2App seeds it at startup).
-                      rex::cvar::SetFlagByName("depth_bias_shader", v.b ? "014F8A02DB7B19CA" : "");
-                      rex::cvar::SetFlagByName("depth_bias_shader_units", v.b ? "16" : "0");
-                      config::MutableForLiveEdit().dog_fur_depth_bias = v.b;
-                    }));
 
     // Frame rate ------------------------------------------------------------------------
     s.push_back(Toggle(kFrameRate, "patches", "high_tick_rate", "High Tick Rate",
