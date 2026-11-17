@@ -151,7 +151,8 @@ Options** in the main menu, or **Options > Advanced** in the pause (Start)
 menu. It covers the window fit and aspect ratio presets (`[display]`), the
 draw and detail distances, and most of the settings above. It is a page of
 the game's book (the game's menu stays on the left, the settings are written
-on the right-hand paper page, under the leather cover) and works like the game's own options pages:
+on the right-hand paper page, which slides out from under the leather cover as
+the game's pages do) and works like the game's own options pages:
 D-pad left / right changes a value, Y sets the default, LB / RB switch tabs,
 A accepts and B cancels (putting the changes back). The keyboard (arrows,
 Delete, Page Up / Page Down, Enter, Escape) and the mouse work too. Every change applies while the game runs, with

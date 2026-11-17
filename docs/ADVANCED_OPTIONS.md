@@ -21,7 +21,13 @@ the cover stays on top as it does on the game's pages. Like the game's
 pages, the paper has a copper rim on both sides, from the page-edge strip in
 `frames_elements.tex`: along the cover, and on the outer edge, which curves
 in towards the middle of the page (drawn in thin slices so the paper follows
-the curve). The text keeps inside
+the curve). As the game's pages do, the page slides out from under the cover
+when it opens and back under it when it closes (about 0.4 s, eased in and
+out, timed against the game's Game page), and on a wide window with the HUD
+at the edges it sits where the game moves its own: the page and cover go
+right by 1.2x the extra width per side (360 * aspect - 640 at 720p) in the
+pause menu, and the cover by 1x on the main menu, over the game's frame
+there, so only one cover shows. The text keeps inside
 the page: a name too long for its line drops to the small font (then the
 value does, then the name is shortened), and the description stops above the
 button prompts. One tab shows at a time (LB / RB or Page Up / Page

@@ -196,12 +196,19 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     if (open_request().exchange(false)) {
       if (!is_open().load() && !photomode::active()) Open();
     }
-    if (is_open().load() && photomode::active()) Close(true);  // photo mode took over
+    if (is_open().load() && photomode::active() && closing_ms_ == 0) Close(true);  // photo mode took over
+    // The closing slide: the page is still up (the game still sees no
+    // input) until it is back under the cover.
+    if (closing_ms_ != 0 && float(detail::now_ms() - closing_ms_) >= kSlideMs) {
+      closing_ms_ = 0;
+      hold_until_released().store(true);
+      is_open().store(false);
+    }
     if (!is_open().load()) {
       DrawToast(io);
       return;
     }
-    HandleInput(io);
+    if (closing_ms_ == 0) HandleInput(io);
     if (!is_open().load()) {  // closed by this frame's input
       DrawToast(io);
       return;
@@ -242,6 +249,12 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
   float ox_ = 0.0f;  // left edge of the text column, in pixels
   float cx_ = 0.0f;  // screen centre (the book's spine), in pixels
   float shift_ = 0.0f;  // how far the game moved its right cover on a wide screen, in pixels
+  float po_ = 0.0f;     // the page's offset: shift_ plus the slide, in pixels
+  int64_t closing_ms_ = 0;  // when the closing slide started, 0 when not closing
+  // The game's options pages slide out from under the right cover in about
+  // 0.4 s, easing in and out, and slide back under it when they close
+  // (measured from its Game page at 2.39:1).
+  static constexpr float kSlideMs = 380.0f;
   bool paper_ = false;         // drawing on the paper (dark ink gets a light emboss)
 
   std::vector<int> Rows() const {
@@ -267,6 +280,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     scroll_ = 0;
     drag_row_ = -1;
     opened_ms_ = detail::now_ms();
+    closing_ms_ = 0;
     // Whatever is held now (the A that chose the menu item) is not a press.
     prev_buttons_ = merged_pad().buttons;
     for (int vk = 0; vk < 256; ++vk) prev_keys_[vk] = KeyDown(vk);
@@ -289,8 +303,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
           ++undone;
         }
       REXSYS_INFO("[advanced-options] cancelled, {} change(s) put back", undone);
-      hold_until_released().store(true);
-      is_open().store(false);
+      StartClosing();
       return;
     }
     std::vector<config::FileEdit> edits;
@@ -310,8 +323,14 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     } else {
       REXSYS_INFO("[advanced-options] closed, nothing changed");
     }
-    hold_until_released().store(true);
-    is_open().store(false);
+    StartClosing();
+  }
+
+  // The page slides back under the cover; OnDraw closes it when it is in.
+  void StartClosing() {
+    // Closing mid-slide starts from where the page is.
+    const float in = std::clamp(float(detail::now_ms() - opened_ms_) / kSlideMs, 0.0f, 1.0f);
+    closing_ms_ = detail::now_ms() - int64_t((1.0f - in) * kSlideMs);
   }
 
   void Set(int i, Value v) {
@@ -526,10 +545,9 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
 
   float X(float v) const { return v * k_; }
   int VisibleRows() const { return kMaxRows; }
-  // The text column moves by half of the cover's shift, so it stays in the
-  // middle of the wider paper.
-  float PageX0() const { return cx_ + X(kPageLeft) + shift_ * 0.5f; }
-  float PageX1() const { return cx_ + X(kPageRight) + shift_ * 0.5f; }
+  // The page moves with the game's right cover on a wide screen, and slides.
+  float PageX0() const { return cx_ + po_ + X(kPageLeft); }
+  float PageX1() const { return cx_ + po_ + X(kPageRight); }
   Box RowBox(int i) const {
     const float y = X(kListY + kRow * i);
     return Box{ImVec2(ox_ - X(12), y), ImVec2(ox_ + X(kWidth + 12), y + X(kRow))};
@@ -680,24 +698,36 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
   // --- Drawing -------------------------------------------------------------------------
   void Draw(ImGuiIO& io) {
     const float W = io.DisplaySize.x, H = io.DisplaySize.y;
-    const float fade = std::clamp(float(detail::now_ms() - opened_ms_) / 150.0f, 0.0f, 1.0f);
+    // How far out the page is (0 under the cover, 1 open), eased as the
+    // game's slide. The page itself does not fade.
+    float t = std::clamp(float(detail::now_ms() - opened_ms_) / kSlideMs, 0.0f, 1.0f);
+    if (closing_ms_ != 0) t = 1.0f - std::clamp(float(detail::now_ms() - closing_ms_) / kSlideMs, 0.0f, 1.0f);
+    const float out = t * t * (3.0f - 2.0f * t);
+    const float fade = 1.0f;
     cx_ = W * 0.5f;
     // On a wide screen with the HUD at the edges, the game moves its book's
     // right side out by a multiple of the extra width per side (360 * aspect
     // - 640 at 720p; src/core/fable2_fit_window_ui.h): the main menu's frame
-    // by 1x, the pause menu's right cover by 1.2x. The page's cover and the
-    // paper under it go where the game's are, so only one cover shows.
+    // by 1x, the pause menu's right page and cover by 1.2x. The page and its
+    // cover go where the game's are, so only one cover shows.
     {
       const float extra = std::max(0.0f, 360.0f * (W / std::max(H, 1.0f)) - 640.0f);
       const bool main_menu = from_main_menu().load(std::memory_order_relaxed);
       shift_ = REXCVAR_GET(fit_window_hud_to_edges) ? X(extra * (main_menu ? 1.0f : 1.2f)) : 0.0f;
     }
+    // Under the cover the page's left rim (x 562 at 720p) is at the cover's
+    // edge (x 1008).
+    po_ = shift_ + (1.0f - out) * X(1008 - 562);
     ox_ = PageX0() + X(kMargin);
     const float px0 = PageX0(), px1 = PageX1();
 
     // The game's menu on the left page steps back, as it does when one of
     // its own options pages opens.
-    dl_->AddRectFilled(ImVec2(0, 0), ImVec2(px0, H), IM_COL32(4, 3, 2, int(90 * fade)));
+    dl_->AddRectFilled(ImVec2(0, 0), ImVec2(std::min(px0, cx_ + shift_ + X(1008 - 640)), H),
+                       IM_COL32(4, 3, 2, int(90 * out)));
+    // The cover is drawn over the page last. It is opaque from its edge to
+    // the 16:9 screen edge (x 1008-1280), and the page never reaches past
+    // the screen edge beyond it, so the sliding page needs no clipping.
     // The right-hand page turns to paper: the game's parchment texture,
     // shaded at its edges, between two copper rims as on the game's pages:
     // the outer edge, which curves in towards the middle of the page, and
@@ -711,9 +741,9 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     const int sheet = gameicons::FindExtra(kFrameSheet);
     const ImU32 tint = Alpha(IM_COL32_WHITE, fade);
     const bool textured = gameicons::ExtraReady(paper) && gameicons::ExtraReady(sheet);
-    const float rim_left = cx_ + X(562 - 640);   // the outer strip's left end (x 562 at 720p)
-    const float paper_x0 = cx_ + X(600 - 640);   // where the paper texture's left edge is laid
-    const float under = cx_ + X(1064 - 640) + shift_;  // the paper runs on under the cover
+    const float rim_left = cx_ + po_ + X(562 - 640);   // the outer strip's left end (x 562 at 720p)
+    const float paper_x0 = cx_ + po_ + X(600 - 640);   // where the paper texture's left edge is laid
+    const float under = cx_ + po_ + X(1064 - 640);  // the paper runs on under the cover
     const float span = under - paper_x0;
     const ImU32 dark = IM_COL32(40, 24, 8, int(90 * fade)), soft = IM_COL32(40, 24, 8, int(45 * fade));
     const ImU32 clear = IM_COL32(40, 24, 8, 0);
@@ -742,25 +772,31 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
                                  ImVec2(330.0f + e - 18, 152.0f + r0), ImVec2(330.0f + e + 12, 152.0f + r0 + kSlice),
                                  tint, bottom);
     }
-    dl_->AddRectFilledMultiColor(ImVec2(px1 + shift_ * 0.5f - X(22), 0), ImVec2(under, H), clear, soft, soft, clear);
+    dl_->AddRectFilledMultiColor(ImVec2(px1 - X(22), 0), ImVec2(under, H), clear, soft, soft, clear);
     dl_->AddRectFilledMultiColor(ImVec2(rim_left, 0), ImVec2(under, X(22)), soft, soft, clear, clear);
     dl_->AddRectFilledMultiColor(ImVec2(rim_left, H - X(22)), ImVec2(under, H), clear, clear, soft, soft);
-    // The rim along the cover (x 986 at 720p).
-    {
-      const float x0 = cx_ + X(986 - 640) + shift_, x1 = x0 + X(95);
-      const ImVec2 t0(330, 152), t1(425, 512);
-      gameicons::DrawExtraRegion(dl_, sheet, ImVec2(x0, 0), ImVec2(x1, X(360)), t0, t1, tint, false);
-      gameicons::DrawExtraRegion(dl_, sheet, ImVec2(x0, X(360)), ImVec2(x1, X(720)), t0, t1, tint, true);
-    }
-    // The leather cover back on top of the paper, where the game has it
-    // (x 1008-1280 of its 1280x720 screen).
-    {
-      const float x0 = cx_ + X(1008 - 640) + shift_, x1 = x0 + X(512);  // the art is 512 wide, its right part clear
-      gameicons::DrawExtraRect(dl_, gameicons::FindExtra(kCoverTop), ImVec2(x0, 0), ImVec2(x1, X(512)), tint, false,
-                               1.0f);
-      gameicons::DrawExtraRect(dl_, gameicons::FindExtra(kCoverBottom), ImVec2(x0, X(512)), ImVec2(x1, X(720)), tint,
-                               false, 208.0f / 512.0f);
-    }
+    // The rim along the cover and the leather cover. Open, they go under the
+    // text (the values reach a little onto the cover's edge, as before);
+    // while the page slides, over everything (below).
+    auto draw_cover = [&] {
+      // The rim along the cover (x 986 at 720p).
+      {
+        const float x0 = cx_ + X(986 - 640) + shift_, x1 = x0 + X(95);
+        const ImVec2 t0(330, 152), t1(425, 512);
+        gameicons::DrawExtraRegion(dl_, sheet, ImVec2(x0, 0), ImVec2(x1, X(360)), t0, t1, tint, false);
+        gameicons::DrawExtraRegion(dl_, sheet, ImVec2(x0, X(360)), ImVec2(x1, X(720)), t0, t1, tint, true);
+      }
+      // The leather cover back on top of the paper, where the game has it
+      // (x 1008-1280 of its 1280x720 screen).
+      {
+        const float x0 = cx_ + X(1008 - 640) + shift_, x1 = x0 + X(512);  // the art is 512 wide, its right part clear
+        gameicons::DrawExtraRect(dl_, gameicons::FindExtra(kCoverTop), ImVec2(x0, 0), ImVec2(x1, X(512)), tint, false,
+                                 1.0f);
+        gameicons::DrawExtraRect(dl_, gameicons::FindExtra(kCoverBottom), ImVec2(x0, X(512)), ImVec2(x1, X(720)), tint,
+                                 false, 208.0f / 512.0f);
+      }
+    };
+    if (out >= 1.0f) draw_cover();
 
     // Title, centred over the game's flourish as on its own pages.
     {
@@ -897,6 +933,8 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
 
     DrawPrompts(io, fade);
     paper_ = false;
+    // Sliding, the page goes under the cover, so the cover is drawn last.
+    if (out < 1.0f) draw_cover();
   }
 
   void DrawPrompts(ImGuiIO& io, float fade) {
