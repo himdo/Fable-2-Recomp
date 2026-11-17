@@ -143,7 +143,7 @@ would open the game's own Game page, nothing worse.
 the page and blanked while it is open (`src/core/port_settings_pad.h`).
 Choosing an item only raises a flag; the page is drawn on the UI thread
 (`src/core/port_settings_dialog.h`). Its art (`papera`, `paperb`, `motifs`,
-`sliderframe` from `art\guirames\`) is loaded with photo mode's button icons
+`sliderframe` from `art\gui\frames\`) is loaded with photo mode's button icons
 (`src/core/photo_mode_icons.h`); if a texture is missing the page draws a
 plain stand-in. The runtime exports no rotated-image draw call, so the copper
 arrows are drawn as shapes in the art's colours.
