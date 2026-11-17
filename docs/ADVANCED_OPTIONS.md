@@ -7,9 +7,12 @@ on the **Advanced Options** page. It opens from:
 - the pause (Start) menu: **Options > Advanced**, after the game's own Game,
   Video, Controls and Audio.
 
-The page is drawn like the game's own menus: the game's GUI typeface, cream
-text with a gold highlight and gold rules, the game's Options icon and
-controller button art, over a dark fade. Never ImGui windows.
+It is a page of the book, as the game's own options pages (Game, Video,
+Audio) are: the game's menu stays on the left page (stepping back a little)
+and the settings fill the right-hand page, in the game's GUI typeface, cream
+text with a gold highlight and gold rules, with the game's Options icon and
+controller button art. One tab shows at a time (LB / RB or Page Up / Page
+Down, or the chevrons beside its name). Never ImGui windows.
 
 ## Using it
 
@@ -26,8 +29,10 @@ describes the selected setting and says when a change takes effect.
 | Aspect Ratio | `aspect_ratio` | Match Window (`"auto"`), 4:3, 16:10, 16:9, 21:9, 32:9; the file also takes any `"w:h"` or number between 4:3 and 4:1 |
 | HUD at the Edges | `hud_to_edges` | the HUD at the edges of a wide picture, from the next screen that opens |
 | 16:9 Loading Screens | `native_16x9_screens` | loading screens and the saving banner kept 16:9 (recommended: On, shown as *On (Recommended)*) |
+| Draw Distance | `[patches] view_distance_multiplier` | 1.00x to 10.00x: how far objects, buildings, villagers and creatures are drawn before they pop out |
+| Detail Distance | `[patches] lod_distance_multiplier` | 1.00x to 10.00x: how far out models keep their full-detail version |
 
-All four apply at once. At startup `fit_to_window`, `hud_to_edges` and
+The window settings apply at once. At startup `fit_to_window`, `hud_to_edges` and
 `native_16x9_screens` seed the cvars `fit_game_to_window`,
 `fit_window_hud_to_edges` and `fit_window_native_16x9` (fable_2.toml or the
 command line still win), and `aspect_ratio` sets the forced aspect the
@@ -63,6 +68,9 @@ Every setting applies while the game runs; none needs a restart.
   atomics the input poll reads).
 - **Real-Time Skin Textures**: used from the next skin texture the game builds
   (changing clothes, loading a save).
+- **From the next area or save load**: Draw Distance and Detail Distance
+  (each object takes them as it loads; the draw multipliers are rewritten in
+  guest memory at once, the LOD hook reads the setting each time).
 - **When a save is loaded**: website and Collector's Edition items.
 - **When the game starts**: Skip Intro Videos (the videos only play then).
 
@@ -145,6 +153,16 @@ A on an Options row is handled in C++:
 
 The row's event type is the Game row's (70), so if the hook ever missed, A
 would open the game's own Game page, nothing worse.
+
+**View distance.** The game has a draw distance multiplier per object class
+(static, animated, villager, creature; floats at `0x83319368`..`0x83319374`,
+1.0 in the image) that only a debug Lua setter changes;
+`GraphicComponent_InitDrawDistances_825470E0` multiplies each object's
+MaxDrawDistance by one as it loads. The "View Distance" data patch
+(`src/core/fable2_patches.cpp`) sets them at startup and
+`fable2::patches::SetDrawDistance` while the game runs. The mid-asm hook
+`fable2_hook_lod_distance` (before `stfs f1, 52(r31)` at `0x825471C4`)
+scales each model's LodDistance. The launcher has sliders for both.
 
 **Input.** `InputGetPadState_822B2D60` (every guest pad read) is captured for
 the page and blanked while it is open (`src/core/port_settings_pad.h`).

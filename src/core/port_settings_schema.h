@@ -279,6 +279,20 @@ inline const std::vector<Setting>& Settings() {
                        true)
                     .Recommend(Bool(true))
                     .LiveCvars({"fit_window_native_16x9"}));
+    s.push_back(Slider(kDisplay, "patches", "view_distance_multiplier", "Draw Distance",
+                       "How far away objects, buildings, villagers and creatures are drawn before they pop "
+                       "out. 1.00x is the game's own distance; higher costs some GPU time. Objects take it "
+                       "as they load: the next area or save.",
+                       Float(1.0), 1.0, 10.0, 0.25, Printf("%.2fx"))
+                    .NextLoad([](const Value& v) {
+                      config::MutableForLiveEdit().view_distance_multiplier = float(v.Number());
+                      patches::SetDrawDistance(float(v.Number()));
+                    }));
+    s.push_back(Slider(kDisplay, "patches", "lod_distance_multiplier", "Detail Distance",
+                       "How far out models keep their full-detail version. 1.00x is the game's own distance. "
+                       "Objects take it as they load: the next area or save.",
+                       Float(1.0), 1.0, 10.0, 0.25, Printf("%.2fx"))
+                    .NextLoad(Field(&Values::lod_distance_multiplier)));
     s.push_back(Toggle(kDisplay, "patches", "disable_motion_blur", "Motion Blur",
                        "The blur the camera adds to the whole screen when it moves quickly.", false, true)
                     .Live(Field(&Values::disable_motion_blur)));

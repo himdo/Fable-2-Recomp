@@ -73,4 +73,10 @@ size_t ApplyAll(rex::memory::Memory* memory, const rex::PPCImageInfo& image);
 // memory). Higher HF only counts with High Tick Rate, as at startup.
 bool SetTickRates(bool high_tick_rate, bool higher_hf_tick_rate);
 
+// View distance while the game runs: rewrites the four per-class draw
+// distance multipliers the "View Distance" patch sets (clamped to 1..10).
+// Objects pick them up as they load, so the change shows from the next area
+// or save load. Needs ApplyAll to have run.
+bool SetDrawDistance(float multiplier);
+
 }  // namespace fable2::patches

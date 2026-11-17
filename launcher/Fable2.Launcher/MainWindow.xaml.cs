@@ -676,6 +676,8 @@ public partial class MainWindow : Window
             MouseSensitivitySlider.Value = _advanced.MouseLookScale;
             MouseSensitivityBox.Text = _advanced.MouseLookScale.ToString(CultureInfo.InvariantCulture);
             HotFuncYieldSlider.Value = Math.Clamp(_advanced.HotFuncYieldEvery, 0, 16);
+            SetDistance(ViewDistanceSlider, ViewDistanceBox, _advanced.ViewDistanceMultiplier);
+            SetDistance(LodDistanceSlider, LodDistanceBox, _advanced.LodDistanceMultiplier);
             HotFuncYieldBox.Text = _advanced.HotFuncYieldEvery.ToString(CultureInfo.InvariantCulture);
             LoadPhotoMode();
             BuildKeybindRows(Fable2ConfigFile.ParseKeybinds(_advanced.KeyboardGamepadMap));
@@ -1081,6 +1083,32 @@ public partial class MainWindow : Window
         }
     }
 
+    // ---- View distance ([patches] view_distance_multiplier / lod_distance_multiplier) ----
+
+    private static void SetDistance(Slider slider, TextBox box, double value)
+    {
+        value = Math.Clamp(value, 1.0, 10.0);
+        slider.Value = value;
+        box.Text = Fable2ConfigFile.FormatDouble(value);
+    }
+
+    private TextBox? DistanceBoxFor(object slider) =>
+        ReferenceEquals(slider, ViewDistanceSlider) ? ViewDistanceBox
+        : ReferenceEquals(slider, LodDistanceSlider) ? LodDistanceBox : null;
+
+    private void DistanceSliderChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (DistanceBoxFor(sender) is TextBox box)
+            box.Text = Fable2ConfigFile.FormatDouble(e.NewValue);
+    }
+
+    private void DistanceBoxLostFocus(object sender, RoutedEventArgs e)
+    {
+        Slider slider = ReferenceEquals(sender, ViewDistanceBox) ? ViewDistanceSlider : LodDistanceSlider;
+        var box = (TextBox)sender;
+        SetDistance(slider, box, ReadDoubleBox(box, slider.Value, 1.0, 10.0));
+    }
+
     // ---- Photo mode ([photo_mode] in fable2_config.toml) ----
 
     private static void FillKeyCombo(ComboBox combo, string value)
@@ -1149,6 +1177,8 @@ public partial class MainWindow : Window
             ? Math.Clamp(yieldEvery, 0, 4096) : (int)HotFuncYieldSlider.Value;
         _advanced.KeyboardGamepadMap = CollectKeybinds();
         CollectPatches();
+        _advanced.ViewDistanceMultiplier = ReadDoubleBox(ViewDistanceBox, ViewDistanceSlider.Value, 1.0, 10.0);
+        _advanced.LodDistanceMultiplier = ReadDoubleBox(LodDistanceBox, LodDistanceSlider.Value, 1.0, 10.0);
         CollectPhotoMode();
 
         string path = AdvancedConfigPath();

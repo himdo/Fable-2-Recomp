@@ -202,6 +202,13 @@ struct Values {
   // camera passes to the renderer (hook fable2_hook_disable_motion_blur in
   // src/core/fable2_hooks.cpp). false = original.
   bool disable_motion_blur = false;
+  // [patches] view_distance_multiplier: the game's own per-class draw
+  // distance multipliers (the values Lua's Set*DrawDistanceMultiplier would
+  // set; data write in src/core/fable2_patches.cpp). lod_distance_multiplier
+  // scales each model's LodDistance (hook fable2_hook_lod_distance in
+  // src/core/fable2_hooks.cpp). Both are clamped to 1..10; 1 = original.
+  float view_distance_multiplier = 1.0f;
+  float lod_distance_multiplier = 1.0f;
   // [patches] realtime_texture_morphing: build the hero/dog morphed skin
   // textures on the GPU (the game's own RealTimeTextureMorphing mode) instead
   // of CPU-compressing a resolved scratch texture, so they are not black on a

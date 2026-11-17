@@ -14,6 +14,7 @@
 #include <rex/ppc/context.h>  // PPCRegister (union with u64/s64/u32/... views)
 #include <rex/logging/macros.h>
 
+#include <algorithm>
 #include <string>
 
 #include <fmt/format.h>
@@ -121,6 +122,19 @@ void fable2_hook_disable_motion_blur(PPCRegister& f12) {
   // Photo mode sets the blur itself (its "Screen blur" slider).
   if (disable && !fable2::photomode::active()) {
     f12.f64 = 0.0;
+  }
+}
+
+// View distance, LOD half (the draw distance half is a data write in
+// src/core/fable2_patches.cpp). Runs before `stfs f1, 52(r31)` at 0x825471C4
+// in GraphicComponent_InitDrawDistances_825470E0, where f1 is the object
+// definition's LodDistance. Scaling it keeps the full-detail model farther
+// out. Runs once per graphic as objects load.
+void fable2_hook_lod_distance(PPCRegister& f1) {
+  const float mult =
+      std::clamp(fable2::config::Get().lod_distance_multiplier, 1.0f, 10.0f);
+  if (mult != 1.0f) {
+    f1.f64 *= mult;
   }
 }
 

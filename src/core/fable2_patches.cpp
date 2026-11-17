@@ -10,6 +10,8 @@
 
 #include "fable2_patches.h"
 
+#include <algorithm>
+#include <bit>
 #include <format>
 
 #include <rex/logging.h>
@@ -30,6 +32,16 @@ namespace {
 // ---------------------------------------------------------------------------
 std::vector<Patch> BuildPatches() {
   const auto& cfg = fable2::config::Get();
+  // View distance: the game's per-class draw distance multipliers
+  // (floats, 1.0 in the image). Only the Lua setters
+  // Set{StaticEntity,AnimatedEntity,Creature,Villager}DrawDistanceMultiplier write
+  // them, and no shipped script calls those. GraphicComponent_InitDrawDistances
+  // multiplies each object's MaxDrawDistance by one of them as the object is
+  // loaded. The LOD half is the hook fable2_hook_lod_distance.
+  const float draw_mult = std::clamp(cfg.view_distance_multiplier, 1.0f, 10.0f);
+  const uint64_t draw_bits = std::bit_cast<uint32_t>(draw_mult);
+  REXSYS_INFO("[view-distance] draw x{:.2f}, LOD x{:.2f}",
+              draw_mult, std::clamp(cfg.lod_distance_multiplier, 1.0f, 10.0f));
   return {
       {
           "High Tick Rate",
@@ -52,6 +64,19 @@ std::vector<Patch> BuildPatches() {
           {
               // HF tick double at 0x83319518: 30.0 -> 60.0.
               {Op::Width::kBe8, 0x83319519, 0x4E},
+          },
+      },
+      {
+          "View Distance",
+          "Sets the static, animated, villager and creature draw distance "
+          "multipliers.",
+          "Fable 2 Recomp",
+          draw_mult != 1.0f,
+          {
+              {Op::Width::kBe32, 0x83319368, draw_bits},  // static entities
+              {Op::Width::kBe32, 0x8331936C, draw_bits},  // animated entities
+              {Op::Width::kBe32, 0x83319370, draw_bits},  // villagers
+              {Op::Width::kBe32, 0x83319374, draw_bits},  // creatures
           },
       },
   };
@@ -162,7 +187,7 @@ const std::vector<Patch>& Patches() {
 }
 
 namespace {
-rex::memory::Memory* g_memory = nullptr;  // kept by ApplyAll for SetTickRates
+rex::memory::Memory* g_memory = nullptr;  // kept by ApplyAll for the live setters
 }  // namespace
 
 size_t ApplyAll(rex::memory::Memory* memory, const rex::PPCImageInfo& image) {
@@ -265,6 +290,23 @@ bool SetTickRates(bool high_tick_rate, bool higher_hf_tick_rate) {
   }
   REXSYS_INFO("[tick-rate] now LF {} Hz, HF {} Hz", high_tick_rate ? 30 : 15,
               high_tick_rate && higher_hf_tick_rate ? 60 : 30);
+  return true;
+}
+
+bool SetDrawDistance(float multiplier) {
+  if (!g_memory) return false;
+  const float m = std::clamp(multiplier, 1.0f, 10.0f);
+  const uint32_t bits = std::bit_cast<uint32_t>(m);
+  // Static, animated, villager and creature multipliers (see "View Distance").
+  for (uint32_t address : {0x83319368u, 0x8331936Cu, 0x83319370u, 0x83319374u}) {
+    auto* heap = g_memory->LookupHeap(address);
+    if (!heap) return false;
+    PageWriteGuard guard(heap, address, 4);
+    if (!guard.ok()) return false;
+    uint8_t* host = g_memory->TranslateVirtual<uint8_t*>(address);
+    for (int i = 0; i < 4; ++i) host[i] = uint8_t(bits >> (8 * (3 - i)));  // big-endian
+  }
+  REXSYS_INFO("[view-distance] draw x{:.2f} (objects loaded from now on)", m);
   return true;
 }
 

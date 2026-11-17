@@ -290,6 +290,17 @@ higher_hf_tick_rate = false
 # Default: false
 disable_motion_blur = false
 
+# View distance: objects, buildings, villagers and creatures are drawn
+# view_distance_multiplier times farther away before they pop out (the game's
+# own draw distance multipliers, which no shipped script changes), and models
+# keep their full-detail version lod_distance_multiplier times farther out.
+# Applied as each object is loaded, so change them before loading a save.
+# Higher values cost some GPU time in towns and open areas. Both are clamped
+# to 1..10; 1 = the original distances.
+# Default: 1.0
+view_distance_multiplier = 1.0
+lod_distance_multiplier = 1.0
+
 # Realtime Texture Morphing (mid-asm hook fable2_hook_realtime_texture_morphing):
 # the hero's and dog's morphed skin textures are rendered straight into their
 # final texture on the GPU (the game's own RealTimeTextureMorphing mode)
@@ -620,6 +631,13 @@ bool Load(const std::filesystem::path& path) {
     values.disable_motion_blur =
         Read<bool>(patches_table, "patches", "disable_motion_blur", "boolean",
                    values.disable_motion_blur);
+    // Whole numbers are read too (3 as well as 3.0).
+    values.view_distance_multiplier = static_cast<float>(
+        Read<double>(patches_table, "patches", "view_distance_multiplier", "number",
+                     values.view_distance_multiplier));
+    values.lod_distance_multiplier = static_cast<float>(
+        Read<double>(patches_table, "patches", "lod_distance_multiplier", "number",
+                     values.lod_distance_multiplier));
     values.realtime_texture_morphing =
         Read<bool>(patches_table, "patches", "realtime_texture_morphing", "boolean",
                    values.realtime_texture_morphing);

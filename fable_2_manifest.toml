@@ -116,6 +116,20 @@ name = "fable2_hook_disable_motion_blur"
 registers = ["f12"]
 after_instruction = true
 #
+# View distance, LOD half. GraphicComponent_InitDrawDistances_825470E0
+# reads each graphic's distances from its object definition: MaxDrawDistance
+# (times the per-class draw distance multiplier at 0x83319368..74, which the
+# data half in src/core/fable2_patches.cpp raises), then
+# DrawDistanceFadeRangeFactor, MaxClothDistance, BillboardDistance and
+# LodDistance. The LodDistance read returns in f1 and is stored by
+# `stfs f1, 52(r31)` at 0x825471C4; the hook runs before that store and scales
+# f1 so the full-detail model is kept farther out.
+# Setting: [patches] lod_distance_multiplier (1 = original).
+[[entrypoint.midasm_hook]]
+address = 0x825471C4
+name = "fable2_hook_lod_distance"
+registers = ["f1"]
+#
 # Direct mouse-to-camera look (src/core/fable2_hooks.cpp + src/input/mouse_look.h).
 # Runs at 0x822A47F8 in CECCameraUpdateFrame_822A47C0 (after the virtual method that
 # writes the fresh per-frame "current" transform to the caller stack); r31 is the
@@ -49393,3 +49407,13 @@ name = "OptionsMenu_HandleInput"
 # *(*(*(0x834968A4) + 0x1C) + 0x3C)).
 [entrypoint.functions."0x8259DB00"]
 name = "ExpandableMenu_GetHighlightedItem"
+
+# Graphic component distance setup. Reads MaxDrawDistance (times the class
+# multiplier set by Set*DrawDistanceMultiplier: static 0x83319368, animated
+# 0x8331936C, villager 0x83319370, creature 0x83319374),
+# DrawDistanceFadeRangeFactor, MaxClothDistance, BillboardDistance,
+# LodDistance, FadeInDistance, FadeInRangeFactor and LodScreenFraction from the
+# object definition into +40/+36/+44/+48/+52/+56/+60/+72, then clamps the
+# billboard distance to the draw distance.
+[entrypoint.functions."0x825470E0"]
+name = "GraphicComponent_InitDrawDistances_825470E0"
