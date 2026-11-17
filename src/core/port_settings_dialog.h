@@ -1,7 +1,8 @@
-// fable_2 - The in-game PC Settings page.
+// fable_2 - The Advanced Options page.
 //
-// Opened from the "PC Settings" item the recomp adds to the main menu and the
-// pause menu (src/menu/main_menu.cpp). Lists the fable2_config.toml settings
+// Opened from the "Advanced Options" item the recomp adds to the main menu
+// (src/menu/main_menu.cpp) and from the "Advanced" row it adds to the pause
+// menu's Options (src/core/port_settings_lua.h). Lists the fable2_config.toml settings
 // from src/core/port_settings_schema.h on pages (Display, Frame Rate, Mouse,
 // Fixes, Photo Mode) and lets the player change them.
 //
@@ -242,7 +243,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     rep_up_ = rep_down_ = rep_left_ = rep_right_ = photomode::Repeater{};
     pad_prompts_ = !LastInputWasKeyboard();
     is_open().store(true);
-    REXSYS_INFO("[pc-settings] opened ({} settings{}{})", list_.size(), file_error_.empty() ? "" : "; ",
+    REXSYS_INFO("[advanced-options] opened ({} settings{}{})", list_.size(), file_error_.empty() ? "" : "; ",
                 file_error_);
   }
 
@@ -259,10 +260,10 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
       const bool ok = file_error_.empty() && config::SaveFileEdits(edits);
       toast_ = ok ? "Settings Saved" : "Settings Not Saved";
       toast_ms_ = detail::now_ms();
-      if (ok) REXSYS_INFO("[pc-settings] saved {}", names);
-      else REXSYS_WARN("[pc-settings] could not save {} ({})", names, file_error_);
+      if (ok) REXSYS_INFO("[advanced-options] saved {}", names);
+      else REXSYS_WARN("[advanced-options] could not save {} ({})", names, file_error_);
     } else {
-      REXSYS_INFO("[pc-settings] closed, nothing changed");
+      REXSYS_INFO("[advanced-options] closed, nothing changed");
     }
     hold_until_released().store(true);
     is_open().store(false);
@@ -279,7 +280,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     if (v == values_[i]) return;
     values_[i] = v;
     if (s.live && s.when != When::kRestart) s.live(v);
-    REXSYS_INFO("[pc-settings] {}.{} = {}{}", s.section, s.key, detail::Literal(v),
+    REXSYS_INFO("[advanced-options] {}.{} = {}{}", s.section, s.key, detail::Literal(v),
                 s.when == When::kRestart ? " (after a restart)" : s.when == When::kNextLoad ? " (next save load)" : "");
   }
 
@@ -591,7 +592,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
       gameicons::DrawExtra(dl_, icon, ImVec2(ox_ - X(4), X(kTitleY) - X(8)), s, Alpha(IM_COL32_WHITE, fade));
       tx += s + X(6);
     }
-    Text(ImVec2(tx, X(kTitleY)), kLarge, Alpha(kCream, fade), "PC Settings");
+    Text(ImVec2(tx, X(kTitleY)), kLarge, Alpha(kCream, fade), "Advanced Options");
     Rule(ox_ - X(14), ox_ + X(kWidth + 14), X(kTitleY + 44), fade);
 
     // Pages: LB  Display  Frame Rate  Mouse  Fixes  Photo Mode  RB

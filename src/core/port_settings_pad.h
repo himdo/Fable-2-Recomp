@@ -1,4 +1,4 @@
-// fable_2 - The PC Settings page's view of the guest pad reads
+// fable_2 - The Advanced Options page's view of the guest pad reads
 // (src/core/port_settings_state.h). Included where InputGetPadState_822B2D60
 // is overridden (src/core/fable2_photo_mode.h and the remote-control state
 // probe), after the recompiled code's headers.

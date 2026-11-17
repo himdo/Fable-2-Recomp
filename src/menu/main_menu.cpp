@@ -1,13 +1,8 @@
-// Adds the recomp's items to the front-end main menu and the pause menu.
+// Adds the recomp's items to the front-end main menu.
 //
 // FrontMenu_Populate builds the main menu with one ExpandableMenu_SpawnButton
 // call per item. When an item is chosen, FrontMenu_HandleEvent receives an
 // event whose first word points at the item's name string.
-//
-// The pause (Start) menu is the same kind of menu: PauseMenu_Populate adds
-// its items with PauseMenu_SpawnButton (same arguments, event type 300, the
-// menu element from a global instead of the menu), and PauseMenu_HandleEvent
-// gets the chosen item the same way.
 
 #include "fable_2_pch.h"
 
@@ -22,7 +17,6 @@
 extern "C" void ConstructRefCounted_8222CF18(PPCContext& ctx, uint8_t* base);
 extern "C" void DestructRefCounted_82214F08(PPCContext& ctx, uint8_t* base);
 extern "C" void ExpandableMenu_SpawnButton(PPCContext& ctx, uint8_t* base);
-extern "C" void PauseMenu_SpawnButton(PPCContext& ctx, uint8_t* base);
 
 namespace fable2::menu {
 namespace {
@@ -43,17 +37,11 @@ constexpr uint32_t kIconChars = 0x130;
 constexpr uint32_t kTextChars = 0x160;
 constexpr size_t kMaxTextLength = (kFrameSize - kTextChars) / 2 - 1;
 
-// How the game adds the items of one menu: its spawn function, the event
-// type its items send when chosen, and the icon its options item shows. All
-// items hang off the "Root" item.
-struct MenuKind {
-  void (*spawn)(PPCContext&, uint8_t*);
-  uint32_t event_type;
-  std::string_view icon;
-};
-constexpr MenuKind kMainMenu = {ExpandableMenu_SpawnButton, 2, "Art\\GUI\\icon_options.tga"};
-constexpr MenuKind kPauseMenu = {PauseMenu_SpawnButton, 300, "Art\\GUI\\WheelIcons\\icon_options.tga"};
+// The game's main-menu items all use event type 2, hang off the "Root" item
+// and show an icon.
+constexpr uint32_t kMenuButtonEventType = 2;
 constexpr std::string_view kRootParent = "Root";
+constexpr std::string_view kIcon = "Art\\GUI\\icon_options.tga";
 
 void WriteString(uint8_t* base, uint32_t addr, std::string_view text, size_t max_length) {
   text = text.substr(0, max_length);
@@ -83,19 +71,16 @@ void DestructString(PPCContext& ctx, uint8_t* base, uint32_t slot) {
   DestructRefCounted_82214F08(ctx, base);
 }
 
-// Mirrors one add-item call in FrontMenu_Populate / PauseMenu_Populate. The
-// label is handed over as the already-localized wide string the game would get
-// from its string table. `element` is the menu element the populate function
-// passes to every spawn call.
-void AddItem(PPCContext& ctx, uint8_t* base, uint32_t menu, uint32_t element, const MenuKind& kind,
-             const MenuItem& item) {
+// Mirrors one add-item call in FrontMenu_Populate. The label is handed over as
+// the already-localized wide string the game would get from its string table.
+void AddItem(PPCContext& ctx, uint8_t* base, uint32_t menu, const MenuItem& item) {
   const uint32_t caller_sp = ctx.r1.u32;
   const uint32_t sp = caller_sp - kFrameSize;
   REX_STORE_U32(sp, caller_sp);
   REX_STORE_U32(sp + 84, 0);
   WriteString(base, sp + kNameChars, item.id, kParentChars - kNameChars - 1);
   WriteString(base, sp + kParentChars, kRootParent, kIconChars - kParentChars - 1);
-  WriteString(base, sp + kIconChars, kind.icon, kTextChars - kIconChars - 1);
+  WriteString(base, sp + kIconChars, kIcon, kTextChars - kIconChars - 1);
   WriteWideString(base, sp + kTextChars, LabelText(item.label));
   REX_STORE_U32(sp + kTextSlot, sp + kTextHandle);
   REX_STORE_U32(sp + kTextHandle, sp + kTextChars);
@@ -111,9 +96,9 @@ void AddItem(PPCContext& ctx, uint8_t* base, uint32_t menu, uint32_t element, co
   ctx.r6.u64 = sp + kIconSlot;
   ctx.r7.u64 = sp + kParentSlot;
   ctx.r8.u64 = 0;
-  ctx.r9.u64 = kind.event_type;
-  ctx.r10.u64 = element;
-  kind.spawn(ctx, base);
+  ctx.r9.u64 = kMenuButtonEventType;
+  ctx.r10.u64 = REX_LOAD_U32(menu + 20);
+  ExpandableMenu_SpawnButton(ctx, base);
 
   DestructString(ctx, base, sp + kParentSlot);
   DestructString(ctx, base, sp + kIconSlot);
@@ -121,17 +106,16 @@ void AddItem(PPCContext& ctx, uint8_t* base, uint32_t menu, uint32_t element, co
   ctx.r1.u64 = caller_sp;
 }
 
-template <size_t N>
-const MenuItem* FindChosenItem(uint8_t* base, uint32_t event, const MenuItem (&items)[N]) {
+const MenuItem* FindChosenItem(uint8_t* base, uint32_t event) {
   if (event == 0) return nullptr;
-  // These event types never carry an item name (see the original handlers).
+  // These event types never carry an item name (see the original handler).
   const uint32_t type = REX_LOAD_U32(event + 4);
   if (type == 302 || type == 141 || type == 140) return nullptr;
   const uint32_t name_ref = REX_LOAD_U32(event);
   if (name_ref == 0) return nullptr;
   const uint32_t name = REX_LOAD_U32(name_ref);
   if (name == 0) return nullptr;
-  for (const MenuItem& item : items) {
+  for (const MenuItem& item : kMainMenuItems) {
     bool match = true;
     for (size_t i = 0; match && i <= item.id.size(); ++i) {
       const char expected = i < item.id.size() ? item.id[i] : '\0';
@@ -163,45 +147,84 @@ extern "C" void FrontMenu_Populate(PPCContext& ctx, uint8_t* base) {
   const uint32_t menu = ctx.r3.u32;
   __imp__FrontMenu_Populate(ctx, base);
   const uint64_t result = ctx.r3.u64;
-  const uint32_t element = REX_LOAD_U32(menu + 20);
   for (const auto& item : fable2::menu::kMainMenuItems) {
-    fable2::menu::AddItem(ctx, base, menu, element, fable2::menu::kMainMenu, item);
+    fable2::menu::AddItem(ctx, base, menu, item);
   }
   ctx.r3.u64 = result;
 }
 
 extern "C" void __imp__FrontMenu_HandleEvent(PPCContext& ctx, uint8_t* base);
 extern "C" void FrontMenu_HandleEvent(PPCContext& ctx, uint8_t* base) {
-  if (const auto* item = fable2::menu::FindChosenItem(base, ctx.r4.u32, fable2::menu::kMainMenuItems)) {
+  if (const auto* item = fable2::menu::FindChosenItem(base, ctx.r4.u32)) {
     item->activate();
     return;
   }
   __imp__FrontMenu_HandleEvent(ctx, base);
 }
 
-extern "C" void __imp__PauseMenu_Populate(PPCContext& ctx, uint8_t* base);
-extern "C" void PauseMenu_Populate(PPCContext& ctx, uint8_t* base) {
-  const uint32_t menu = ctx.r3.u32;
-  __imp__PauseMenu_Populate(ctx, base);
-  const uint64_t result = ctx.r3.u64;
-  // The element PauseMenu_Populate hands to every spawn call:
-  // *(*(*(0x834968A4) + 0x38) + 0xC).
-  uint32_t element = 0;
-  if (const uint32_t gui = REX_LOAD_U32(0x834968A4u))
-    if (const uint32_t screens = REX_LOAD_U32(gui + 0x38)) element = REX_LOAD_U32(screens + 0xC);
-  if (element != 0) {
-    for (const auto& item : fable2::menu::kPauseMenuItems) {
-      fable2::menu::AddItem(ctx, base, menu, element, fable2::menu::kPauseMenu, item);
+// The pause menu's Options screen: its rows come from GameFace Lua, where
+// src/core/port_settings_lua.h adds the Advanced row. A on a row reaches
+// OptionsMenu_HandleInput, which asks ExpandableMenu_GetHighlightedItem for
+// the row and opens options page (row event type - 70). For the Advanced row
+// the Advanced Options page opens instead and the game's handler is skipped.
+extern "C" void ExpandableMenu_GetHighlightedItem(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__OptionsMenu_HandleInput(PPCContext& ctx, uint8_t* base);
+
+namespace fable2::menu {
+namespace {
+
+constexpr uint32_t kInputA = 0x24;
+constexpr std::string_view kAdvancedRow = "RecompSettings";  // port_settings_lua.h NAME
+
+// Whether the Options menu's highlighted row is the Advanced row, read the
+// same way OptionsMenu_HandleInput reads it.
+bool AdvancedRowHighlighted(PPCContext& ctx, uint8_t* base) {
+  const uint32_t gui = REX_LOAD_U32(0x834968A4u);
+  const uint32_t screens = gui ? REX_LOAD_U32(gui + 0x1C) : 0;
+  const uint32_t owner = screens ? REX_LOAD_U32(screens + 0x3C) : 0;
+  if (owner == 0) return false;
+
+  const PPCContext saved = ctx;
+  const uint32_t caller_sp = ctx.r1.u32;
+  const uint32_t sp = caller_sp - 0x100;
+  const uint32_t data = sp + 0x60;  // {type, id, name string, text string}
+  REX_STORE_U32(sp, caller_sp);
+  REX_STORE_U32(data, 0);
+  REX_STORE_U32(data + 4, 0);
+  ctx.r1.u64 = sp;
+  ConstructString(ctx, base, data + 8, 0);
+  ConstructString(ctx, base, data + 12, 0);
+
+  ctx.r3.u64 = owner;
+  ctx.r4.u64 = data;
+  ExpandableMenu_GetHighlightedItem(ctx, base);
+
+  bool match = false;
+  if (const uint32_t name_ref = REX_LOAD_U32(data + 8)) {
+    if (const uint32_t name = REX_LOAD_U32(name_ref)) {
+      match = true;
+      for (size_t i = 0; match && i <= kAdvancedRow.size(); ++i) {
+        const char expected = i < kAdvancedRow.size() ? kAdvancedRow[i] : '\0';
+        match = static_cast<char>(REX_LOAD_U8(name + i)) == expected;
+      }
     }
   }
-  ctx.r3.u64 = result;
+  DestructString(ctx, base, data + 12);
+  DestructString(ctx, base, data + 8);
+  ctx = saved;
+  return match;
 }
 
-extern "C" void __imp__PauseMenu_HandleEvent(PPCContext& ctx, uint8_t* base);
-extern "C" void PauseMenu_HandleEvent(PPCContext& ctx, uint8_t* base) {
-  if (const auto* item = fable2::menu::FindChosenItem(base, ctx.r4.u32, fable2::menu::kPauseMenuItems)) {
-    item->activate();
+}  // namespace
+}  // namespace fable2::menu
+
+extern "C" void OptionsMenu_HandleInput(PPCContext& ctx, uint8_t* base) {
+  const uint32_t screen = ctx.r3.u32;
+  // A on the menu (no options page open: the byte at screen+0x18 is 0).
+  if (ctx.r4.u32 == fable2::menu::kInputA && screen != 0 && REX_LOAD_U8(screen + 0x18) == 0 &&
+      fable2::menu::AdvancedRowHighlighted(ctx, base)) {
+    fable2::menu::OpenPortSettings();
     return;
   }
-  __imp__PauseMenu_HandleEvent(ctx, base);
+  __imp__OptionsMenu_HandleInput(ctx, base);
 }

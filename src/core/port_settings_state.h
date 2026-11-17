@@ -1,9 +1,10 @@
-// fable_2 - State shared by the in-game PC Settings page and the game threads.
+// fable_2 - State shared by the Advanced Options page and the game threads.
 //
 // The page (src/core/port_settings_dialog.h) is drawn on the UI thread. It is
-// opened from the game's own menus (the "PC Settings" item that
-// src/menu/main_menu.cpp adds to the main menu and the pause menu), whose
-// event handlers run on a game thread: they only raise open_request().
+// opened from the game's own menus (the "Advanced Options" item that
+// src/menu/main_menu.cpp adds to the main menu, and the "Advanced" row
+// src/core/port_settings_lua.h adds to the pause menu's Options), on game
+// or GUI threads: they only raise open_request().
 //
 // While the page is open the game must not see the controller or the keys
 // mapped onto it (the menu underneath would move), so every guest pad read

@@ -33,6 +33,7 @@
 #pragma once
 
 #include "fable2_ui_events.h"
+#include "port_settings_lua.h"
 #include <rex/cvar.h>
 #include <rex/logging.h>
 #include <rex/ppc/context.h>
@@ -708,33 +709,20 @@ inline void Install(rex::memory::Memory* memory) {
               detail::LogLayout());
 }
 
-// Runs the layout script in a presentation that just loaded. ctx is the
-// state right after the game's own ProcessAndProcessAndProcess21_823FE988.
-inline void OnPresentationLoaded(PPCContext& ctx, uint8_t* base,
-                                 uint32_t presentation) {
+// Runs `script` (Lua) in a presentation, with the calls the game makes for
+// its own strings, on a scratch frame below the current stack pointer.
+// Registers are restored afterwards. ctx is the state right after the game's
+// own ProcessAndProcessAndProcess21_823FE988.
+inline bool RunLuaInPresentation(PPCContext& ctx, uint8_t* base,
+                                 uint32_t presentation,
+                                 const std::string& script) {
   rex::memory::Memory* memory = detail::g_memory.load();
-  if (!memory || !presentation) return;
-  const bool move_hud = REXCVAR_GET(fit_window_hud_to_edges);
-  const bool log_tree = detail::LogLayout();
-  // 0 = the fit is off right now (`f2 ws off`): load the script at 16:9 so
-  // the screen still follows a later `ws on` or `ws aspect`.
-  float aspect = fable2::fitwindow::CurrentAspect();
-  if (aspect <= 0.0f) aspect = 16.0f / 9.0f;
-  if (!move_hud && !log_tree) return;
-
-  const uint32_t index = detail::g_presentations.fetch_add(1) + 1;
-  REXSYS_INFO("[fit-window] UI screen #{} loaded (0x{:08X}): running the HUD "
-              "edge script, aspect {:.4f}",
-              index, presentation, aspect);
-  const std::string script = detail::BuildScript(aspect, move_hud, log_tree);
-  if (script.empty() || script.size() >= detail::kScriptBufferSize) {
-    REXSYS_WARN("[fit-window] HUD script is {} bytes, buffer is {}: not run",
+  if (!memory || !presentation || script.empty()) return false;
+  if (script.size() >= detail::kScriptBufferSize) {
+    REXSYS_WARN("[fit-window] Lua script is {} bytes, buffer is {}: not run",
                 script.size(), detail::kScriptBufferSize);
-    return;
+    return false;
   }
-
-  // Same calls the game makes for its own strings, on a scratch frame below
-  // the current stack pointer. Registers are restored afterwards.
   const PPCContext saved = ctx;
   if (!detail::g_script_buffer) {
     // One buffer for the script text, from the game's own allocator
@@ -744,9 +732,8 @@ inline void OnPresentationLoaded(PPCContext& ctx, uint8_t* base,
     detail::g_script_buffer = ctx.r3.u32;
     ctx = saved;
     if (!detail::g_script_buffer) {
-      REXSYS_WARN("[fit-window] no guest memory for the HUD script; the HUD "
-                  "stays in the middle");
-      return;
+      REXSYS_WARN("[fit-window] no guest memory for a Lua script");
+      return false;
     }
   }
   std::memcpy(memory->TranslateVirtual<char*>(detail::g_script_buffer),
@@ -771,6 +758,29 @@ inline void OnPresentationLoaded(PPCContext& ctx, uint8_t* base,
   REX_CALL_INDIRECT_FUNC(0x82214F08);  // DestructRefCounted_82214F08
 
   ctx = saved;
+  return true;
+}
+
+// Runs the layout script in a presentation that just loaded. ctx is the
+// state right after the game's own ProcessAndProcessAndProcess21_823FE988.
+inline void OnPresentationLoaded(PPCContext& ctx, uint8_t* base,
+                                 uint32_t presentation) {
+  rex::memory::Memory* memory = detail::g_memory.load();
+  if (!memory || !presentation) return;
+  const bool move_hud = REXCVAR_GET(fit_window_hud_to_edges);
+  const bool log_tree = detail::LogLayout();
+  // 0 = the fit is off right now (`f2 ws off`): load the script at 16:9 so
+  // the screen still follows a later `ws on` or `ws aspect`.
+  float aspect = fable2::fitwindow::CurrentAspect();
+  if (aspect <= 0.0f) aspect = 16.0f / 9.0f;
+  if (!move_hud && !log_tree) return;
+
+  const uint32_t index = detail::g_presentations.fetch_add(1) + 1;
+  REXSYS_INFO("[fit-window] UI screen #{} loaded (0x{:08X}): running the HUD "
+              "edge script, aspect {:.4f}",
+              index, presentation, aspect);
+  RunLuaInPresentation(ctx, base, presentation,
+                       detail::BuildScript(aspect, move_hud, log_tree));
 }
 
 // A message from Gameface's report callback (r3 = level, r4 = text).
@@ -801,6 +811,9 @@ extern "C" void ProcessAndProcessAndProcess21_823FE988(PPCContext& ctx,
   const uint32_t presentation = ctx.r4.u32;
   __imp__ProcessAndProcessAndProcess21_823FE988(ctx, base);
   fable2::fitwindow::ui::OnPresentationLoaded(ctx, base, presentation);
+  // The Advanced row in the pause menu's Options (port_settings_lua.h).
+  fable2::fitwindow::ui::RunLuaInPresentation(
+      ctx, base, presentation, fable2::portsettings::kOptionsRowLua);
 }
 
 extern "C" void NoOp_Stub_829CE870(PPCContext& ctx, uint8_t* base) {

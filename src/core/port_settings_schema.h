@@ -1,4 +1,4 @@
-// fable_2 - What the in-game PC Settings page shows: one entry per
+// fable_2 - What the Advanced Options page shows: one entry per
 // fable2_config.toml key, grouped into pages.
 //
 // To add a setting, add one entry to Settings() below (in the page it belongs

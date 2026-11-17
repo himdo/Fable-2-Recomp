@@ -55,7 +55,7 @@
 #include "mouse_look.h"     // fable2::mouselook (accumulates the mouse delta)
 #include "mouse_stick.h"    // velocity window + deadzone compensation
 #include "photo_mode_state.h"  // fable2::photomode (hotkeys, RMB-drag look)
-#include "port_settings_state.h"  // PC Settings page open: free cursor
+#include "port_settings_state.h"  // Advanced Options page open: free cursor
 
 #ifdef _WIN32
 #include <windows.h>
@@ -348,7 +348,7 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     // away releases the lock) and on the debug menu being closed (F4) so the
     // cursor is free while the menu is open. Fable 2 inverts Y, so mouse-up
     // (dy<0) maps to +ry (look up).
-    // The PC Settings page (src/core/port_settings_dialog.h) needs a free
+    // The Advanced Options page (src/core/port_settings_dialog.h) needs a free
     // cursor too.
     bool looking = focused && REXCVAR_GET(mouse_look) && !console_open_ && !fable2::portsettings::active();
     if (photo) {

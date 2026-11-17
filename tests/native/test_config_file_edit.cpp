@@ -1,5 +1,5 @@
 // Changing values in fable2_config.toml (src/core/fable2_config_edit.h), as
-// the in-game PC Settings page saves them. The rules match the launcher's
+// the Advanced Options page saves them. The rules match the launcher's
 // Fable2ConfigFile.Write, so both can write the same file.
 #include "../../src/core/fable2_config_edit.h"
 

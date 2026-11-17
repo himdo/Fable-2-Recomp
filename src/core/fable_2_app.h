@@ -46,7 +46,7 @@
 #include "remote_gamepad_driver.h"
 #include "fable2_crash_log.h"  // host crash report (fable2_crash.log)
 #include "photo_mode_dialog.h"  // photo mode settings panel (ImGui)
-#include "port_settings_dialog.h"  // in-game PC Settings page
+#include "port_settings_dialog.h"  // Advanced Options page
 #ifdef FABLE2_REMOTE_CONTROL
 #include "remote_control_server.h"
 // 1-second game-state classifier (src/diagnostics/fable2_state_probe.h, single-TU inline).
@@ -109,8 +109,9 @@ class Fable2App : public rex::ReXApp {
   // Photo mode settings panel (src/core/photo_mode_dialog.h). Created in
   // OnCreateDialogs, released in OnShutdown (before the SDK drops the drawer).
   std::unique_ptr<fable2::photomode::PhotoModeDialog> photo_dialog_;
-  // In-game PC Settings page (src/core/port_settings_dialog.h), opened from
-  // the main menu and the pause menu (src/menu/main_menu.cpp).
+  // In-game Advanced Options page (src/core/port_settings_dialog.h), opened from
+  // the main menu (src/menu/main_menu.cpp) and the pause menu's Options
+  // (src/core/port_settings_lua.h).
   std::unique_ptr<fable2::portsettings::PortSettingsDialog> settings_dialog_;
 
   // Emulate the Xbox 360 Xenos GPU. Two plugins are staged next to the exe:
@@ -734,7 +735,7 @@ class Fable2App : public rex::ReXApp {
       // The pose cards' expression icons come from the same bank.
       std::vector<std::string> pose_icons;
       for (const auto& pose : fable2::photomode::kPoses) pose_icons.push_back(pose.icon);
-      // The PC Settings page's title icon (the game's Options icon).
+      // The Advanced Options page's title icon (the game's Options icon).
       pose_icons.push_back(fable2::portsettings::kOptionsIcon);
       icons = gi::Load(root, icon_log, pose_icons);
       if (icons > 0) break;

@@ -16,7 +16,7 @@ inline constexpr std::string_view kFallbackLanguage = "en";
 
 inline constexpr Label kLabels[] = {
     {"quit", "en", u"Quit"},
-    {"pc_settings", "en", u"PC Settings"},
+    {"advanced_options", "en", u"Advanced Options"},
 };
 
 // Only English exists so far, so this always returns the fallback.

@@ -1,8 +1,13 @@
-# In-game PC Settings
+# Advanced Options (in game)
 
-The port's own settings (`fable2_config.toml`) can be changed inside the game.
-A **PC Settings** item sits in the main menu (above Quit) and at the bottom of
-the pause (Start) menu. It opens a page drawn like the game's own menus: the
+The port's own settings (`fable2_config.toml`) can be changed inside the game,
+on the **Advanced Options** page. It opens from:
+
+- the main menu: **Advanced Options** (above Quit);
+- the pause (Start) menu: **Options > Advanced**, after the game's own Game,
+  Video, Controls and Audio.
+
+The page is drawn like the game's own menus: the
 game's GUI typeface, its Options icon and controller button art, cream text
 with a gold highlight. No ImGui windows.
 
@@ -25,7 +30,7 @@ they do in the game's menus. The button prompts follow the last device used.
 
 While the page is open the game sees no controller input, so the menu under
 it does not move. The button that closed the page is held back from the game
-until it is released, so it does not also close the pause menu.
+until it is released, so it does not also close the Options menu.
 
 ## When a change takes effect
 
@@ -82,24 +87,43 @@ The page reads values straight from the file, so a key does not need a
 
 ## How it hooks the game
 
-The items are added with the game's own menu code (`src/menu/main_menu.cpp`,
-which already added Quit to the main menu):
+**Main menu.** The item is added with the game's own menu code
+(`src/menu/main_menu.cpp`, which already added Quit):
 
 | Address | Name | Role |
 |---|---|---|
 | `0x826CA6E0` | `FrontMenu_Populate` | builds the main menu; the recomp's items are spawned after it returns |
 | `0x826CB808` | `ExpandableMenu_SpawnButton` | adds one main-menu item (event type 2, element `*(menu + 20)`) |
 | `0x826C81A0` | `FrontMenu_HandleEvent` | main-menu handler: a chosen item's event points at its name |
-| `0x82842860` | `PauseMenu_Populate` | builds the pause menu (World Map ... Options); PC Settings is spawned after it returns |
-| `0x824083C0` | `PauseMenu_SpawnButton` | adds one pause-menu item, same arguments, event type 300, element `*(*(*(0x834968A4) + 0x38) + 0xC)` |
-| `0x8240EAA0` | `PauseMenu_HandleEvent` | pause-menu handler: types 2 and 300 are a chosen item |
-| `0x82412378` | `PauseMenu_OpenItemScreen` | opens the screen for a chosen item (named for reference, not hooked) |
-| `0x822B2D60` | `InputGetPadState_822B2D60` | every guest pad read; captured for the page and blanked while it is open |
 
-Choosing the item only raises a flag; the page is drawn on the UI thread
-(`src/core/port_settings_dialog.h`) and reads the controller from the pad
-reads (`src/core/port_settings_pad.h`). No game script is registered, so
-nothing of the page ends up in a save.
+**Pause menu, Options.** Its rows are not added by game code. The Options
+screen's GameFace Lua fills its menu from a table: `g_Menu:SetPopulationTable()`
+(`ExpandableMenuPopulationScript.lua`) picks the rows for the menu's
+`MenuPopulationScript` (`OptionsMenu`: Game, Video, Controls, Audio). A short
+Lua script (`src/core/port_settings_lua.h`) runs in each GameFace screen as it
+loads, through the same call `src/core/fable2_fit_window_ui.h` uses for its
+layout script, and each frame from `GUI.onUpdate`. Once per menu it wraps
+`SetPopulationTable` to append the Advanced row, and refills an Options menu
+that filled itself before the wrapper was there (the menu fills itself in its
+`onInitialize`, where `g_Menu` is also set). It is GameFace's Lua, a separate
+VM from the game's scripts, so nothing is registered with the game's script
+manager and nothing ends up in a save.
 
-The log shows `[pc-settings] opened`, each change
-(`[pc-settings] input.mouse_look_scale = 272`) and what was saved.
+A on an Options row is handled in C++:
+
+| Address | Name | Role |
+|---|---|---|
+| `0x82582E50` | `OptionsMenu_HandleInput` | Options screen input; A (`0x24`) with no options page open reads the highlighted row and opens page *event type - 70*. For the Advanced row the Advanced Options page opens instead and the game's handler is skipped |
+| `0x8259DB00` | `ExpandableMenu_GetHighlightedItem` | asks the Lua menu for the highlighted row (`GetHighlightedMenuItemData`): +0 event type, +4 ID, +8 name, +12 text tag |
+
+The row's event type is the Game row's (70), so if the hook ever missed, A
+would open the game's own Game page, nothing worse.
+
+**Input.** `InputGetPadState_822B2D60` (every guest pad read) is captured for
+the page and blanked while it is open (`src/core/port_settings_pad.h`).
+Choosing an item only raises a flag; the page is drawn on the UI thread
+(`src/core/port_settings_dialog.h`).
+
+The log shows `[recomp-settings] row added to OptionsMenu`,
+`[advanced-options] opened`, each change
+(`[advanced-options] input.mouse_look_scale = 272`) and what was saved.

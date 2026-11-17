@@ -1,7 +1,7 @@
 // fable_2 - ReXGlue Recompiled Project
 //
 // Changing values in fable2_config.toml without touching anything else in
-// it. The in-game PC Settings page (src/core/port_settings_dialog.h) and
+// it. The Advanced Options page (src/core/port_settings_dialog.h) and
 // photo mode's controller shortcut save through this; the launcher
 // (launcher/Fable2.Launcher/Fable2ConfigFile.cs) edits the file the same way,
 // so the game and the launcher can both write it:
