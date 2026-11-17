@@ -141,15 +141,20 @@ inline int EnsureComplete(const std::filesystem::path& game_data_root) {
 
   // 2. Everything under data/ (relative, backslash form, lowercased).
   std::vector<std::string> missing;
-  for (const auto& entry :
-       std::filesystem::recursive_directory_iterator(
-           data_root,
-           std::filesystem::directory_options::skip_permission_denied, ec)) {
-    if (!entry.is_regular_file(ec)) continue;
+  // increment(ec), not a range-for: operator++ throws on an unreadable entry.
+  std::filesystem::recursive_directory_iterator it(
+      data_root, std::filesystem::directory_options::skip_permission_denied, ec);
+  for (; !ec && it != std::filesystem::recursive_directory_iterator(); it.increment(ec)) {
+    const auto& entry = *it;
+    std::error_code file_ec;
+    if (!entry.is_regular_file(file_ec)) continue;
     std::string rel = detail::Key(entry.path().lexically_relative(data_root).generic_string());
     if (rel.empty() || rel == "dir.manifest") continue;  // the index itself
     if (existing.count(rel)) continue;
     missing.push_back(std::move(rel));
+  }
+  if (ec) {
+    REXSYS_WARN("[manifest] stopped scanning {} early: {}", data_root.string(), ec.message());
   }
   if (missing.empty()) return 0;
 

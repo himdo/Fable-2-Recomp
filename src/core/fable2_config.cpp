@@ -13,8 +13,12 @@
 #include "fable2_config.h"
 
 #include <array>
+#include <cctype>
 #include <format>
 #include <fstream>
+#include <type_traits>
+#include <iterator>
+#include <string_view>
 
 #include <rex/logging/macros.h>
 #include <rex/system.h>
@@ -25,6 +29,7 @@ namespace fable2::config {
 namespace {
 
 Values g_values;
+std::filesystem::path g_path;  // file Load() read (for SavePhotoModeGamepadToggle)
 
 // Kept in sync with config/fable2_config.toml (staged next to the exe by the
 // build); this copy is what a first launch writes out.
@@ -75,10 +80,138 @@ keyboard_gamepad_map = "LMB:X,RMB:Y,MMB:B,Shift:A,E:A,Q:LT,Tab:RB,R:RT,Z:LB,B:B,
 # Default: true
 mouse_look = true
 
-# Mouse-look sensitivity: right-stick units per pixel of mouse movement
-# (1..4096; larger = more sensitive).
-# Default: 256
+# Mouse-look sensitivity slider (1..4096; 256 = 1x). Shared by BOTH look modes:
+# for the right-stick mapping it sets the stick units per pixel; for the direct
+# mode it multiplies mouse_look_sens_x / mouse_look_sens_y.
+# Larger = more sensitive. Default: 256
 mouse_look_scale = 256
+
+# Even mouse look: the stick reports the mouse's speed over one camera update
+# (so no movement is lost between input checks), and the game's 30% stick
+# deadzone and diagonal boost are undone (so slow movement turns the camera
+# slowly instead of not at all, and diagonals aren't faster). The top turn
+# speed is unchanged. false = the previous mapping, one input check at a time.
+# Default: true
+mouse_look_smoothing = true
+
+# Length of that speed window in milliseconds. 0 = one camera update (67 ms,
+# or 33 ms with high_tick_rate). Longer is smoother but adds delay.
+# Default: 0
+mouse_look_window_ms = 0
+
+# Mouse-look diagnostics: write fable2_mouse.log next to the exe (every input
+# poll, camera updates from `f2 mouse trace on`, and a per-second summary).
+# For measuring mouse stutter; leave off for normal play. `f2 mouse diag on`
+# turns it on without a restart.
+# Default: false
+mouse_look_diag = false
+
+# How the mouse turns the camera. "direct": the gameplay camera turns by a
+# fixed angle per count of mouse movement, with no top speed and no coasting
+# after the mouse stops (target lock, cutscenes and other cameras still get the
+# mouse as the right stick). "stick": the mouse always drives the right stick,
+# like a controller (see mouse_look_smoothing).
+# Default: "direct"
+mouse_look_mode = "direct"
+
+# Direct mode: degrees of camera turn per count of mouse movement, sideways (x)
+# and up/down (y). Multiplied by mouse_look_scale / 256 and by the in-game
+# camera sensitivity. 0.06 is about 96 degrees per inch of hand movement on a
+# 1600 DPI mouse; for the same feel, halve it at 3200 DPI and double it at 800.
+# Up/down moves the camera height, which the game limits and slowly brings
+# back to the middle, as it does with the stick.
+# Default: 0.06
+mouse_look_sens_x = 0.06
+mouse_look_sens_y = 0.06
+
+# Direct mode: true = moving the mouse up makes the camera look down.
+# Default: false
+mouse_look_invert_y = false
+
+# Direct mode: share of the mouse movement held back at each camera update and
+# delivered over the following ones (0 = none, up to 0.9). Smoother, but the
+# camera then keeps turning briefly after the mouse stops.
+# Default: 0.0
+mouse_look_direct_smoothing = 0.0
+
+# Direct mouse-to-camera look: apply mouse movement straight to the active
+# camera's orientation (desktop-FPS style, no stick rate cap) instead of
+# writing it into the pad's right stick. false = legacy right-stick mapping.
+# EXPERIMENTAL (default false; may feel wrong in some scenes).
+direct_mouse_look = false
+
+# Fallback for direct_mouse_look. true (default) = use the OLD re-implemented
+# 2-axis external orbit (eye rotated around a low-passed hero pivot + look-at
+# quaternion, independent yaw); a working hand-rolled orbit. false = offset the
+# game's target orbit angle (cam+68) and let the native easing drive the camera
+# (the intended 1:1 path, still being tuned -- see plans/plan-direct-mouse-1to1.md).
+mouse_look_legacy_orbit = true
+
+# Camera-look sensitivity: radians of camera rotation per host mouse pixel
+# (signed; make it negative to flip the axis direction).
+mouse_look_yaw_sens = -0.0022
+mouse_look_pitch_sens = -0.0022
+# Native look-orbit angle limits, in the game's own orbit-angle scale (the
+# target angle at camera+68 that the right-stick look integrates and clamps).
+# A full-range stick test shows the native orbit clamps this angle to
+# [floor, ceil]: floor = camera low / looking up, ceil = camera high / looking
+# down. The mouse adds its pitch on top of the native angle and is clamped so
+# the TOTAL (native + mouse) stays within [floor, ceil] — so the mouse and the
+# stick share one orbit and one set of bounds (no compounding past the limits).
+mouse_look_pitch_floor = 1.458
+mouse_look_pitch_ceil = 4.067
+# Camera local axis each look direction rotates around (0=X, 1=Y, 2=Z). The
+# camera looks along its local Y, so a correct orbit turns around the local up
+# (Z) and pitches around the local right (X). Negate the matching *_sens to
+# flip a look direction.
+mouse_look_yaw_axis = 2
+mouse_look_pitch_axis = 0
+# 1:1 native right-stick injection: RightStickLookProcess_832BB018 adds the
+# per-frame mouse Y delta (scaled by this factor, in stick u16 units per host
+# mouse pixel) to the right-stick Y u16 so the native orbit pipeline runs with
+# combined stick + mouse input (identical bounds to the stick). The stick is an
+# int16 centered at 0 with full deflection ~32768, so 512 px = a full
+# deflection at the default 64. Negative flips the direction.
+mouse_look_stick_scale = 64
+# 1:1 native right-stick injection. true = the RightStickLookProcess_832BB018
+# hotfunc override adds the mouse Y delta to the right-stick Y u16 so the game's
+# OWN orbit/easing/clamp runs with combined stick + mouse input (identical
+# bounds to the stick). The legacy direct-mouse hook then only resets the delta
+# (no orbit). false = the legacy direct-mouse hook's orbit runs (external or
+# native target offset, per mouse_look_legacy_orbit).
+mouse_look_native_inject = false
+# Log the rest (pre-injection) and injected right-stick-Y u16 (capped) to
+# calibrate mouse_look_stick_scale. Off by default.
+mouse_look_stick_diag = false
+
+# Active-camera (CECCamera) field offsets (bytes from the camera object). The
+# look-orbit is reproduced by rotating BOTH the orientation quaternions AND the
+# world-space eye position around the hero, exactly like the game's own
+# right-stick look. The rotation-state quaternions (target +160, current +176,
+# x,y,z,w) keep the camera facing the hero; the eye position (+144) is the
+# world-space camera position that physically sweeps around the hero. The hero
+# pivot is eye + forward * camera_distance (forward = camera local +Y). Verify
+# with mouse_look_camera_diag and adjust if a look axis or radius is off (no
+# rebuild needed).
+camera_rot_tgt_off = 160
+camera_rot_cur_off = 176
+camera_eye_off = 144
+# "Is this the hero-orbit camera?" flag. The hook only orbits the hero (player)
+# camera (flag 1.0) and skips cinematic/cutscene cameras (flag 0.0), so
+# cutscenes and scripted shots play normally instead of being hijacked.
+camera_hero_flag_off = 108
+# Distance from the hero to the camera eye (= orbit radius). The native stick
+# orbit's horizontal radius is ~3.1; tune so the mouse orbit matches.
+camera_distance = 3.1
+
+# Log the active camera's orientation fields once, the first frame the mouse
+# moves, to confirm the offsets above. Default: false
+mouse_look_camera_diag = false
+
+# Dump EVERY 4-byte field of the active camera object (offset 0..260) plus the
+# orientation quaternions, once per frame (capped), to the [ml-dump] log. Used
+# to find which fields the game's own right-stick look changes. Default: false
+mouse_look_camera_dump = false
 
 [patches]
 # Toggles for the recomp-level (mid-asm hook) patches, consulted at runtime
@@ -137,6 +270,37 @@ disable_motion_blur = false
 # Default: true
 dog_fur_depth_bias = true
 
+# Terrain Tessellation on CPU (SDK cvar terrain_tess_cpu): compute the terrain's
+# tessellation factors on the CPU so the game does not wait every frame for the
+# GPU to read them back. The draw still runs on the GPU. D3D12 only.
+# false = wait for the GPU, as original.
+# Default: true
+terrain_tess_cpu = true
+
+# Skinning on CPU (SDK cvar skinning_cpu): compute the vertices the game skins
+# with memexport shader F6C546D6C2645541 on the CPU, which removes another wait
+# for the GPU every frame. The draw still runs on the GPU. D3D12 only.
+# false = wait for the GPU, as original.
+# Default: true
+skinning_cpu = true
+
+# Faster Render Targets (SDK cvars execute_unclipped_draw_vs_on_cpu and
+# skip_depth_clear_transfers): works out how far full-screen draws really reach
+# and skips copying depth that a clear is about to overwrite. Most of the gain is
+# at higher internal resolutions: 33 to about 57 FPS at 2x in a busy town. Also
+# removes the purple bar at the bottom of the screen. D3D12 only.
+# false = as the SDK defaults.
+# Default: true
+faster_render_targets = true
+
+# GPU Frame Sync (SDK cvar gpu_sync_at_frame_start): at the start of each frame,
+# wait until the GPU has finished the previous one. Fixes flicker (blue distant
+# trees, the dog's texture, sun lighting) when the GPU falls behind, mostly at
+# higher internal resolutions. Costs a few FPS where the GPU is the limit.
+# D3D12 only. false = let the GPU run up to three frames behind.
+# Default: true
+gpu_frame_sync = true
+
 [perf]
 # NtYieldExecution batching for the hot-function overrides (see
 # src/core/hotfunc/hotfunc_yield.h): every Nth guest yield does the real
@@ -146,6 +310,59 @@ dog_fur_depth_bias = true
 # every call); 0 = never yield; larger = fewer context switches.
 # Default: 1
 hotfunc_yield_every = 1
+
+# Refresh GPU Memory Each Frame (SDK cvar clear_memory_page_state): at the end of
+# every frame the SDK forgets which guest memory it has already copied to the
+# GPU, so everything the next frame uses is copied again. It is a safety net for
+# CPU writes the page protection cannot see. With it off, 2x went from 34 to 38
+# FPS indoors with nothing missing on screen in testing.
+# false = trust the write tracking. Default: false
+refresh_gpu_memory_each_frame = false
+
+[photo_mode]
+# Photo mode: freeze the world, fly a free camera and take screenshots, with a
+# settings panel for field of view, roll, depth of field, vignette, colour
+# grading and time of day. Toggle it in game with toggle_key, or with the
+# controller shortcut in gamepad_toggle (the Guide button by default).
+# false = photo mode is off and its keys do nothing.
+# Default: true
+enabled = true
+
+# Keyboard key that turns photo mode on and off (a Windows key name, e.g. F6,
+# F7, P). Escape also leaves photo mode.
+# Default: "F6"
+toggle_key = "F6"
+
+# Keyboard key that saves a screenshot while photo mode is on.
+# Default: "F12"
+screenshot_key = "F12"
+
+# Controller shortcut that enters and leaves photo mode: button names joined
+# with "+" (Guide, A, B, X, Y, LB, RB, Start, Back, L3, R3, Up, Down, Left,
+# Right), e.g. "Guide", "L3 + R3" or "Back + Start"; "Off" for none. It can
+# also be changed in photo mode (Capture > Controller Shortcut).
+# Default: "Guide"
+gamepad_toggle = "Guide"
+
+# Free-camera flying speed in metres per second (Shift = 4x, Ctrl = 1/4x).
+# The panel can change it live.
+# Default: 4.0
+move_speed = 4.0
+
+# Look speed for the mouse (hold the right mouse button and drag), in radians
+# per mouse pixel.
+# Default: 0.0025
+mouse_sensitivity = 0.0025
+
+# How far (metres) the free camera may fly from where photo mode started.
+# 0 = no limit.
+# Default: 0.0
+max_distance = 0.0
+
+# Folder for screenshots, relative to fable_2.exe (or an absolute path). Files
+# are named Fable2_YYYYMMDD_HHMMSS.png.
+# Default: "screenshots"
+screenshot_folder = "screenshots"
 )TOML_EOF";
 
 std::string_view TypeName(toml::node_type t) {
@@ -160,7 +377,12 @@ T Read(const toml::table& section, std::string_view section_name,
   const toml::path key_path{key};
   const auto view = section[key_path];
   if (!view) return default_value;
-  if (auto v = view.value_exact<T>()) return static_cast<T>(*v);
+  if constexpr (std::is_same_v<T, double>) {
+    // Accept whole numbers too: camera_distance = 3 is a valid TOML integer.
+    if (auto v = view.value<double>()) return *v;
+  } else if (auto v = view.value_exact<T>()) {
+    return static_cast<T>(*v);
+  }
   REXSYS_WARN(
       "[fable2-config] [{}] {}: expected {}, got {}; using built-in default",
       section_name, key, type_name, TypeName(view.type()));
@@ -203,8 +425,8 @@ bool Load(const std::filesystem::path& path) {
 
   // Warn about unknown top-level sections (usually a typo or a file written
   // for a newer build).
-  static constexpr std::array<std::string_view, 4> kKnownSections = {
-      "general", "input", "patches", "perf"};
+  static constexpr std::array<std::string_view, 5> kKnownSections = {
+      "general", "input", "patches", "perf", "photo_mode"};
   for (const auto& [key, value] : root) {
     const bool known =
         std::ranges::find(kKnownSections, key.str()) != kKnownSections.end();
@@ -234,6 +456,84 @@ bool Load(const std::filesystem::path& path) {
     values.mouse_look_scale = static_cast<int32_t>(Read<int64_t>(
         input_table, "input", "mouse_look_scale", "integer",
         values.mouse_look_scale));
+    values.mouse_look_smoothing =
+        Read<bool>(input_table, "input", "mouse_look_smoothing", "boolean",
+                   values.mouse_look_smoothing);
+    values.mouse_look_window_ms = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "mouse_look_window_ms", "integer",
+        values.mouse_look_window_ms));
+    values.mouse_look_diag =
+        Read<bool>(input_table, "input", "mouse_look_diag", "boolean",
+                   values.mouse_look_diag);
+    {
+      std::string mode = Read<std::string>(input_table, "input", "mouse_look_mode", "string",
+                                           values.mouse_look_mode);
+      for (auto& c : mode) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if (mode == "direct" || mode == "stick") values.mouse_look_mode = mode;
+    }
+    values.mouse_look_sens_x = Read<double>(input_table, "input", "mouse_look_sens_x", "number",
+                                            values.mouse_look_sens_x);
+    values.mouse_look_sens_y = Read<double>(input_table, "input", "mouse_look_sens_y", "number",
+                                            values.mouse_look_sens_y);
+    values.mouse_look_invert_y = Read<bool>(input_table, "input", "mouse_look_invert_y", "boolean",
+                                            values.mouse_look_invert_y);
+    values.mouse_look_direct_smoothing =
+        Read<double>(input_table, "input", "mouse_look_direct_smoothing", "number",
+                     values.mouse_look_direct_smoothing);
+    values.direct_mouse_look =
+        Read<bool>(input_table, "input", "direct_mouse_look", "boolean",
+                   values.direct_mouse_look);
+    values.mouse_look_legacy_orbit =
+        Read<bool>(input_table, "input", "mouse_look_legacy_orbit", "boolean",
+                   values.mouse_look_legacy_orbit);
+    values.mouse_look_yaw_sens = static_cast<float>(
+        Read<double>(input_table, "input", "mouse_look_yaw_sens", "number",
+                     values.mouse_look_yaw_sens));
+    values.mouse_look_pitch_sens = static_cast<float>(
+        Read<double>(input_table, "input", "mouse_look_pitch_sens", "number",
+                     values.mouse_look_pitch_sens));
+    values.mouse_look_pitch_floor = static_cast<float>(
+        Read<double>(input_table, "input", "mouse_look_pitch_floor", "number",
+                     values.mouse_look_pitch_floor));
+    values.mouse_look_pitch_ceil = static_cast<float>(
+        Read<double>(input_table, "input", "mouse_look_pitch_ceil", "number",
+                     values.mouse_look_pitch_ceil));
+    values.mouse_look_yaw_axis = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "mouse_look_yaw_axis", "integer",
+        values.mouse_look_yaw_axis));
+    values.mouse_look_pitch_axis = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "mouse_look_pitch_axis", "integer",
+        values.mouse_look_pitch_axis));
+    values.mouse_look_stick_scale = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "mouse_look_stick_scale", "integer",
+        values.mouse_look_stick_scale));
+    values.mouse_look_stick_diag = static_cast<bool>(
+        Read<bool>(input_table, "input", "mouse_look_stick_diag", "boolean",
+                   values.mouse_look_stick_diag));
+    values.mouse_look_native_inject = static_cast<bool>(
+        Read<bool>(input_table, "input", "mouse_look_native_inject", "boolean",
+                   values.mouse_look_native_inject));
+    values.camera_rot_tgt_off = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "camera_rot_tgt_off", "integer",
+        values.camera_rot_tgt_off));
+    values.camera_rot_cur_off = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "camera_rot_cur_off", "integer",
+        values.camera_rot_cur_off));
+    values.camera_eye_off = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "camera_eye_off", "integer",
+        values.camera_eye_off));
+    values.camera_hero_flag_off = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "camera_hero_flag_off", "integer",
+        values.camera_hero_flag_off));
+    values.camera_distance = static_cast<float>(Read<double>(
+        input_table, "input", "camera_distance", "number",
+        values.camera_distance));
+    values.mouse_look_camera_diag =
+        Read<bool>(input_table, "input", "mouse_look_camera_diag", "boolean",
+                   values.mouse_look_camera_diag);
+    values.mouse_look_camera_dump =
+        Read<bool>(input_table, "input", "mouse_look_camera_dump", "boolean",
+                   values.mouse_look_camera_dump);
   }
   const toml::path patches_path{"patches"};
   const auto patches = root[patches_path];
@@ -259,6 +559,18 @@ bool Load(const std::filesystem::path& path) {
     values.dog_fur_depth_bias =
         Read<bool>(patches_table, "patches", "dog_fur_depth_bias", "boolean",
                    values.dog_fur_depth_bias);
+    values.terrain_tess_cpu =
+        Read<bool>(patches_table, "patches", "terrain_tess_cpu", "boolean",
+                   values.terrain_tess_cpu);
+    values.skinning_cpu =
+        Read<bool>(patches_table, "patches", "skinning_cpu", "boolean",
+                   values.skinning_cpu);
+    values.gpu_frame_sync =
+        Read<bool>(patches_table, "patches", "gpu_frame_sync", "boolean",
+                   values.gpu_frame_sync);
+    values.faster_render_targets =
+        Read<bool>(patches_table, "patches", "faster_render_targets", "boolean",
+                   values.faster_render_targets);
   }
   const toml::path perf_path{"perf"};
   const auto perf = root[perf_path];
@@ -267,15 +579,104 @@ bool Load(const std::filesystem::path& path) {
     values.hotfunc_yield_every = static_cast<int32_t>(Read<int64_t>(
         perf_table, "perf", "hotfunc_yield_every", "integer",
         values.hotfunc_yield_every));
+    values.refresh_gpu_memory_each_frame = Read<bool>(
+        perf_table, "perf", "refresh_gpu_memory_each_frame", "boolean",
+        values.refresh_gpu_memory_each_frame);
+  }
+  const toml::path photo_path{"photo_mode"};
+  const auto photo = root[photo_path];
+  if (photo.is_table()) {
+    const toml::table& photo_table = *photo.as_table();
+    values.photo_mode_enabled = Read<bool>(photo_table, "photo_mode", "enabled",
+                                           "boolean", values.photo_mode_enabled);
+    values.photo_mode_toggle_key =
+        Read<std::string>(photo_table, "photo_mode", "toggle_key", "string",
+                          values.photo_mode_toggle_key);
+    values.photo_mode_screenshot_key =
+        Read<std::string>(photo_table, "photo_mode", "screenshot_key", "string",
+                          values.photo_mode_screenshot_key);
+    // gamepad_toggle: a button combo string; older files have a boolean
+    // (true = the default shortcut, false = off).
+    if (const auto node = photo_table.get("gamepad_toggle")) {
+      if (const auto b = node->value<bool>()) {
+        values.photo_mode_gamepad_toggle = *b ? "Guide" : "Off";
+      } else if (const auto str = node->value<std::string>()) {
+        values.photo_mode_gamepad_toggle = *str;
+      } else {
+        REXSYS_WARN("[fable2-config] photo_mode.gamepad_toggle should be a string like \"Guide\"; using {}",
+                    values.photo_mode_gamepad_toggle);
+      }
+    }
+    values.photo_mode_move_speed = static_cast<float>(
+        Read<double>(photo_table, "photo_mode", "move_speed", "number",
+                     values.photo_mode_move_speed));
+    values.photo_mode_mouse_sensitivity = static_cast<float>(
+        Read<double>(photo_table, "photo_mode", "mouse_sensitivity", "number",
+                     values.photo_mode_mouse_sensitivity));
+    values.photo_mode_max_distance = static_cast<float>(
+        Read<double>(photo_table, "photo_mode", "max_distance", "number",
+                     values.photo_mode_max_distance));
+    values.photo_mode_screenshot_folder =
+        Read<std::string>(photo_table, "photo_mode", "screenshot_folder", "string",
+                          values.photo_mode_screenshot_folder);
   }
 
   g_values = values;
+  g_path = path;
   REXSYS_INFO("[fable2-config] loaded {} (config_version={})", path.string(),
               values.config_version);
   return true;
 }
 
 const Values& Get() { return g_values; }
+
+bool SavePhotoModeGamepadToggle(const std::string& combo) {
+  g_values.photo_mode_gamepad_toggle = combo;
+  if (g_path.empty()) return false;
+  std::string text;
+  {
+    std::ifstream in(g_path, std::ios::binary);
+    if (!in) return false;
+    text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+  }
+  const std::string line = "gamepad_toggle = \"" + combo + "\"";
+  const std::string eol = text.find("\r\n") != std::string::npos ? "\r\n" : "\n";
+  // Find the [photo_mode] section and, inside it, the gamepad_toggle line.
+  size_t sec = text.find("\n[photo_mode]");
+  if (sec == std::string::npos && text.rfind("[photo_mode]", 0) == 0) sec = 0;
+  if (sec == std::string::npos) {
+    if (!text.empty() && text.back() != '\n') text += eol;
+    text += eol + "[photo_mode]" + eol + line + eol;
+  } else {
+    const size_t body = text.find('\n', sec + 1);
+    size_t end = body == std::string::npos ? text.size() : text.find("\n[", body);
+    if (end == std::string::npos) end = text.size();
+    size_t pos = body == std::string::npos ? std::string::npos : body + 1;
+    bool replaced = false;
+    while (pos != std::string::npos && pos < end) {
+      size_t le = text.find('\n', pos);
+      if (le == std::string::npos) le = text.size();
+      const std::string_view l(text.data() + pos, le - pos);
+      const size_t k = l.find_first_not_of(" \t");
+      if (k != std::string_view::npos && l.substr(k).rfind("gamepad_toggle", 0) == 0) {
+        const size_t cut = (le > pos && text[le - 1] == '\r') ? le - 1 : le;
+        text.replace(pos, cut - pos, line);
+        replaced = true;
+        break;
+      }
+      pos = le + 1;
+    }
+    if (!replaced) {
+      const size_t at = body == std::string::npos ? text.size() : body + 1;
+      text.insert(at, line + eol);
+    }
+  }
+  std::ofstream out(g_path, std::ios::binary | std::ios::trunc);
+  if (!out) return false;
+  out << text;
+  REXSYS_INFO("[fable2-config] photo_mode.gamepad_toggle = \"{}\" saved to {}", combo, g_path.string());
+  return bool(out);
+}
 
 const char* DefaultTemplate() { return kTemplate; }
 

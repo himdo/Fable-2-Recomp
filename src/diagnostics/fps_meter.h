@@ -69,7 +69,7 @@ inline void run_window(int64_t now_us) {
   const int64_t end_us = start_us + static_cast<int64_t>(dur_s * 1e6);
   if (now_us < start_us) return;
   if (now_us < end_us) {
-    if (!fable2::functrace::enabled().load()) {
+    if (!fable2::functrace::enabled()) {
       const char* f = std::getenv("FABLE2_TRACE_FILTER");
       if (f) Fable2FuncTraceSetFilter(f);
       fable2::functrace::set_enabled(true);
@@ -77,7 +77,7 @@ inline void run_window(int64_t now_us) {
                    "[functrace-window] tracing %.1fs starting now\n", dur_s);
     }
   } else {
-    if (fable2::functrace::enabled().load()) {
+    if (fable2::functrace::enabled()) {
       fable2::functrace::set_enabled(false);
       fable2::functrace::flush();
       std::fprintf(stderr, "[functrace-window] window done, log flushed\n");
@@ -142,8 +142,9 @@ extern "C" void MainRenderLoop_82B9CD68(PPCContext& ctx, uint8_t* base) {
       }
     }
   }
-  // F5 (host) -> run the external Lua file (per-frame, responsive).
-  fable2::f5lua::poll_mainloop(ctx, base);
+  // F5 (run the external Lua file) is not handled here: it runs on the world
+  // thread (fable2::f5lua::poll_world, from console::service_world_thread).
+  fable2::console::poll(ctx, base);
   // Main-menu mod item: keep the relabeled row's string cache fresh.
   fable2::modmenu::on_frame(base);
   __imp__MainRenderLoop_82B9CD68(ctx, base);

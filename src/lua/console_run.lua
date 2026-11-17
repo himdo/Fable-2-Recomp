@@ -1,0 +1,3 @@
+-- Rewritten at runtime by the developer console (fable2_console.h) as
+-- `return <seq>, [==[<command line>]==]`; console_pump.lua reads it. It must
+-- exist at startup so it is listed in dir.manifest.

@@ -8,8 +8,8 @@
 // How it works (all hooks are recompiled-function probes so they have ctx+base):
 //   A) poll_f5() is called per frame from the host input poll; it edge-detects
 //      F5 and latches a flag (g_f5_pending).
-//   B) poll_mainloop() is called per frame from the MainRenderLoop hook; when
-//      the flag is latched it calls run_external().
+//   B) poll_world() is called at the start of every world update, on the
+//      world's thread; when the flag is latched it calls run_external().
 //   C) run_external() builds a game (refcounted) string for the path in guest
 //      memory and calls the captured CScriptManager::RunScript method.
 //   D) The dispatcher probe (LuaBind_RunScript_82806168) captures the
@@ -17,9 +17,10 @@
 //      member fn, so the wrapper holds (this=instance, method=fn). We pin the
 //      (this, method) whose string argument ends in ".lua".
 //
-// The RunScript binding and the MainRenderLoop hook both run on the guest main
-// thread (the thread that drives the in-game Lua VM), so replaying the run is
-// thread-safe.
+// RunScript must run on the world update's thread. The MainRenderLoop hook runs
+// on a different host thread, and calling RunScript there raced the world
+// update (guest null reads in GuildChest_ProcessItems), so it is never called
+// from there. run_external() enforces this: see world_thread.h.
 
 #pragma once
 
@@ -32,8 +33,11 @@
 #include <mutex>
 #include <string>
 
+#include <rex/logging/macros.h>  // REXSYS_WARN
+
 #include "rex/cvar.h"
 #include "rex/ppc/context.h"  // PPCContext
+#include "world_thread.h"
 
 // Guest-memory helpers (defined in src/diagnostics/fable2_text_append.h, which
 // is included later in main.cpp). We only need these five; forward-declare them
@@ -96,7 +100,7 @@ inline std::atomic<uint32_t> g_expected_head{0};
 // line) always shows the last run number before a hard crash.
 inline std::atomic<uint32_t> g_run_count{0};
 
-// Latched by the per-frame F5 poll; consumed by poll_mainloop.
+// Latched by the per-frame F5 poll; consumed by poll_world.
 inline std::atomic<bool> g_f5_pending{false};
 inline bool g_f5_down_prev = false;
 
@@ -131,9 +135,9 @@ inline void logline(const char* fmt, ...) {
 }
 
 // Per-frame F5 edge detector. Call from the host input poll (per frame).
-inline void poll_f5() {
+inline void poll_f5(bool focused) {
 #ifdef _WIN32
-  const bool down = (GetAsyncKeyState(FABLE2_F5_VK) & 0x8000) != 0;
+  const bool down = focused && (GetAsyncKeyState(FABLE2_F5_VK) & 0x8000) != 0;
   const bool edge = down && !g_f5_down_prev;
   g_f5_down_prev = down;
   if (edge) g_f5_pending.store(true);
@@ -141,15 +145,28 @@ inline void poll_f5() {
 }
 
 // Run the external Lua file via the captured CScriptManager::RunScript.
-// Returns true if invoked. Must be called from the guest main thread.
-inline bool run_external(PPCContext& ctx, uint8_t* base) {
+// Returns true if invoked. Must be called inside the world-update service
+// (console::service_world_thread), never from the MainRenderLoop hook: anywhere
+// else it refuses and logs, because RunScript off the world update corrupts the
+// game's script engine (the 1.6 alt-tab crash; see world_thread.h).
+inline bool run_external(PPCContext& ctx, uint8_t* base, const std::string* path_override = nullptr) {
+  if (!fable2::worldthread::MayRunScript()) {
+    const std::string refused = path_override ? *path_override : REXCVAR_GET(f5_lua_path);
+    if (fable2::worldthread::FirstRefusal(refused))
+      REXSYS_WARN(
+          "[lua] RunScript refused for {}: asked for outside the world-update service. "
+          "Run it from console::service_world_thread (see src/core/world_thread.h).",
+          refused);
+    logline("[f5] RunScript refused off the world-update service: %s\n", refused.c_str());
+    return false;
+  }
   const uint32_t this_ptr = g_this.load();
   const uint32_t method = g_method.load();
   if (this_ptr == 0 || method == 0) {
     logline("[f5] requested but RunScript callable not captured yet\n");
     return false;
   }
-  const std::string path = REXCVAR_GET(f5_lua_path);
+  const std::string path = path_override ? *path_override : REXCVAR_GET(f5_lua_path);
   if (path.empty()) return false;
 
   // Safety: the captured method must resolve to a real recompiled guest
@@ -243,16 +260,20 @@ inline bool run_external(PPCContext& ctx, uint8_t* base) {
   return true;
 }
 
-// Per-frame entry point. Called from the MainRenderLoop_82B9CD68 hook (in
-// fps_meter.h). Runs the external file when F5 is latched. This makes F5
-// responsive (fires on the very next frame).
-inline void poll_mainloop(PPCContext& ctx, uint8_t* base) {
+// Runs the external file when F5 is latched. Called at the start of every world
+// update, on the world's own thread (console::service_world_thread, from photo
+// mode's GameWorldState_Update hook), so F5 fires on the next world update,
+// i.e. once a game is loaded. It used to run from the MainRenderLoop hook, but
+// that is a different host thread: RunScript there raced the world update and
+// crashed it (a stress test of 1500 calls crashed every render-thread run within
+// ~200 calls, in GuildChest_ProcessItems; world-thread runs never crashed).
+inline void poll_world(PPCContext& ctx, uint8_t* base) {
   if (!g_f5_pending.exchange(false)) return;
   // run_external calls guest functions (ConstructRefCounted, the RunScript
   // method, DestructRefCounted) which clobber the PPC registers. Save the whole
   // context and restore it so the real MainRenderLoop sees the state it had
   // when the hook fired (only F5 detection should be side-effectful).
-  logline("[f5] poll_mainloop: r1=0x%08X r2=0x%08X r3=0x%08X (about to run_external)\n",
+  logline("[f5] poll_world: r1=0x%08X r2=0x%08X r3=0x%08X (about to run_external)\n",
           (uint32_t)ctx.r1.u64, (uint32_t)ctx.r2.u64, (uint32_t)ctx.r3.u64);
   const PPCContext saved = ctx;
   try {

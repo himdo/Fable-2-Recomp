@@ -54,19 +54,60 @@
 
 namespace fable2::functrace {
 
-inline std::atomic<bool>& enabled() {
-  static std::atomic<bool> e{[] {
+namespace detail {
+
+// All runtime toggles packed into one word so the per-call gate in trace()
+// is a single relaxed load + one branch.
+enum Flags : uint32_t {
+  F_ENABLED = 1u,  // FABLE2_FUNC_TRACE=1 / Fable2FuncTraceSetEnabled
+  F_SUMMARY = 2u,  // FABLE2_FUNC_TRACE_SUMMARY (default on)
+  F_LOG = 4u,      // FABLE2_FUNC_TRACE_LOG (default on)
+  F_SUBS = 8u,     // FABLE2_FUNC_TRACE_SUBS_ONLY
+};
+
+// "1" env var (rest of the string ignored; unset/"" = off).
+inline bool env_flag_on(const char* var) {
 #ifdef _WIN32
-    char v[8] = {};
-    size_t n = 0;
-    return ::getenv_s(&n, v, sizeof(v), "FABLE2_FUNC_TRACE") == 0 &&
-           v[0] == '1';
+  char v[8] = {};
+  size_t n = 0;
+  return ::getenv_s(&n, v, sizeof(v), var) == 0 && v[0] == '1';
 #else
-    const char* v = std::getenv("FABLE2_FUNC_TRACE");
-    return v != nullptr && v[0] == '1';
+  const char* v = std::getenv(var);
+  return v != nullptr && v[0] == '1';
 #endif
-  }()};
-  return e;
+}
+
+// Output-toggle env var: only a leading "0" disables (default on; rest of
+// the string ignored).
+inline bool env_toggle_on(const char* var) {
+#ifdef _WIN32
+  char v[8] = {};
+  size_t n = 0;
+  if (::getenv_s(&n, v, sizeof(v), var) != 0) return true;
+  return v[0] != '0';
+#else
+  const char* v = std::getenv(var);
+  return v == nullptr || v[0] != '0';
+#endif
+}
+
+}  // namespace detail
+
+// NOTE: namespace-scope `inline` variable, deliberately NOT a
+// function-local static: call sites do a plain load with no per-call
+// static-guard check. Toggles mutate it via relaxed fetch_or/fetch_and.
+inline std::atomic<uint32_t> g_flags{[] {
+  uint32_t v = 0;
+  if (detail::env_flag_on("FABLE2_FUNC_TRACE")) v |= detail::F_ENABLED;
+  if (detail::env_toggle_on("FABLE2_FUNC_TRACE_SUMMARY"))
+    v |= detail::F_SUMMARY;
+  if (detail::env_toggle_on("FABLE2_FUNC_TRACE_LOG")) v |= detail::F_LOG;
+  if (detail::env_flag_on("FABLE2_FUNC_TRACE_SUBS_ONLY")) v |= detail::F_SUBS;
+  return v;
+}()};
+
+inline bool enabled() {
+  return (g_flags.load(std::memory_order_relaxed) & detail::F_ENABLED) != 0;
 }
 
 inline std::string& filter() {
@@ -86,7 +127,10 @@ inline std::string& filter() {
 }
 
 inline void set_enabled(bool on) {
-  enabled().store(on, std::memory_order_relaxed);
+  if (on)
+    g_flags.fetch_or(detail::F_ENABLED, std::memory_order_relaxed);
+  else
+    g_flags.fetch_and(~detail::F_ENABLED, std::memory_order_relaxed);
 }
 
 // "Subs only" mode (FABLE2_FUNC_TRACE_SUBS_ONLY=1): log just the unnamed
@@ -95,59 +139,39 @@ inline void set_enabled(bool on) {
 // xstart, ... For the naming workflow: it leaves only the functions that
 // still need names. Composes with the substring filter (e.g. FILTER=82B9
 // narrows to one address range).
-inline std::atomic<bool>& subs_only() {
-  static std::atomic<bool> s{[] {
-#ifdef _WIN32
-    char v[8] = {};
-    size_t n = 0;
-    return ::getenv_s(&n, v, sizeof(v), "FABLE2_FUNC_TRACE_SUBS_ONLY") == 0 &&
-           v[0] == '1';
-#else
-    const char* v = std::getenv("FABLE2_FUNC_TRACE_SUBS_ONLY");
-    return v != nullptr && v[0] == '1';
-#endif
-  }()};
-  return s;
+inline bool subs_only() {
+  return (g_flags.load(std::memory_order_relaxed) & detail::F_SUBS) != 0;
 }
 
 inline void set_subs_only(bool on) {
-  subs_only().store(on, std::memory_order_relaxed);
+  if (on)
+    g_flags.fetch_or(detail::F_SUBS, std::memory_order_relaxed);
+  else
+    g_flags.fetch_and(~detail::F_SUBS, std::memory_order_relaxed);
 }
 
 // Output toggles (default on when tracing is enabled): "0" disables the
 // sequential trace log, "0" disables the periodic summary file. The rest of
-// the string is ignored ("1" = on).
-namespace detail {
-inline bool env_toggle_on(const char* var) {
-#ifdef _WIN32
-  char v[8] = {};
-  size_t n = 0;
-  if (::getenv_s(&n, v, sizeof(v), var) != 0) return true;
-  return v[0] != '0';
-#else
-  const char* v = std::getenv(var);
-  return v == nullptr || v[0] != '0';
-#endif
-}
-}  // namespace detail
-
-inline std::atomic<bool>& trace_log_enabled() {
-  static std::atomic<bool> t{detail::env_toggle_on("FABLE2_FUNC_TRACE_LOG")};
-  return t;
+inline bool trace_log_enabled() {
+  return (g_flags.load(std::memory_order_relaxed) & detail::F_LOG) != 0;
 }
 
-inline std::atomic<bool>& summary_enabled() {
-  static std::atomic<bool> s{
-      detail::env_toggle_on("FABLE2_FUNC_TRACE_SUMMARY")};
-  return s;
+inline bool summary_enabled() {
+  return (g_flags.load(std::memory_order_relaxed) & detail::F_SUMMARY) != 0;
 }
 
 inline void set_trace_log_enabled(bool on) {
-  trace_log_enabled().store(on, std::memory_order_relaxed);
+  if (on)
+    g_flags.fetch_or(detail::F_LOG, std::memory_order_relaxed);
+  else
+    g_flags.fetch_and(~detail::F_LOG, std::memory_order_relaxed);
 }
 
 inline void set_summary_enabled(bool on) {
-  summary_enabled().store(on, std::memory_order_relaxed);
+  if (on)
+    g_flags.fetch_or(detail::F_SUMMARY, std::memory_order_relaxed);
+  else
+    g_flags.fetch_and(~detail::F_SUMMARY, std::memory_order_relaxed);
 }
 
 // Matches the codegen naming convention for unnamed guest functions:
@@ -191,6 +215,7 @@ struct ThreadState {
   const char* lastPtr = nullptr;  // original name pointer of the in-flight run
   uint64_t run = 0;    // how many times in a row (0 = no run in flight)
   std::string buf;     // finished runs, waiting to be written
+  std::string tag;     // "t<n> " thread tag that starts every log line
   std::mutex m;        // guards counts (the summary sweeper snapshots it)
   std::unordered_map<std::string, uint64_t> counts;
   std::atomic<bool> dead{false};
@@ -240,6 +265,8 @@ inline ThreadState& state() {
   static thread_local ThreadState* ts = [] {
     auto* t = new ThreadState;  // leaked on purpose
     t->counts.reserve(1024);
+    // Lines carry a short thread tag, so interleaved threads can be told apart.
+    t->tag = "t" + std::to_string(std::hash<std::thread::id>{}(std::this_thread::get_id()) % 100000) + " ";
     // Register so the sweeper can snapshot this thread's counters. Stays in
     // the registry after exit (dead flag set by Unreg's destructor).
     std::lock_guard<std::mutex> l(registry_lock());
@@ -273,6 +300,7 @@ inline void commit_run(ThreadState& ts, bool want_summary, bool want_log) {
       it->second += ts.run;
   }
   if (want_log) {
+    ts.buf.append(ts.tag);
     ts.buf.append(ts.last);
     if (ts.run > 1) {
       ts.buf.append(" x ");
@@ -358,39 +386,31 @@ struct final_summary_guard {
   ~final_summary_guard() { write_summary(); }
 };
 
-// Starts the sweeper exactly once (on the first traced call).
+// Starts the sweeper exactly once (on the first traced call). The plain
+// load keeps the per-call cost to one L1 read in the common case where the
+// sweeper already exists (no cmpxchg).
 inline void ensure_sweeper() {
   static std::atomic<bool> started{false};
+  if (started.load(std::memory_order_relaxed)) return;
   bool expected = false;
-  if (started.compare_exchange_strong(expected, true)) {
-    // Touch every static write_summary() needs so it is constructed NOW
-    // (on the first traced call), which also guarantees it is destroyed
-    // AFTER the guard below (statics die in reverse construction order).
-    (void)registry_lock();
-    (void)registry();
-    (void)global_counts();
-    std::thread(sweeper_loop).detach();
-    static final_summary_guard guard;  // destructor = final summary write
-  }
+  if (!started.compare_exchange_strong(expected, true)) return;
+  // Touch every static write_summary() needs so it is constructed NOW
+  // (on the first traced call), which also guarantees it is destroyed
+  // AFTER the guard below (statics die in reverse construction order).
+  (void)registry_lock();
+  (void)registry();
+  (void)global_counts();
+  std::thread(sweeper_loop).detach();
+  static final_summary_guard guard;  // destructor = final summary write
 }
 
-// Hot path: a handful of atomic loads when disabled or when every output
-// is off. When enabled, the common case (same function entered again) is a
-// single pointer compare + counter bump; the per-thread summary map is
-// touched once per RUN of identical calls, and finished runs flush to disk
-// every 8 KB.
-inline void trace(const char* name) {
-  if (!enabled().load(std::memory_order_relaxed)) return;
-  const bool want_summary = summary_enabled().load(std::memory_order_relaxed);
-  const bool want_log = trace_log_enabled().load(std::memory_order_relaxed);
+// Runs the rest of the tracing for an accepted call. `f` is the flags-word
+// snapshot taken by trace(); toggles made concurrently are picked up on
+// later calls (same relaxed semantics as the old per-flag atomics).
+inline void trace_enabled(const char* name, uint32_t f) {
+  const bool want_summary = (f & detail::F_SUMMARY) != 0;
+  const bool want_log = (f & detail::F_LOG) != 0;
   if (want_summary) ensure_sweeper();
-  // The function body lives in __imp__<name> (name is a weak alias), so
-  // __func__ carries the __imp__ prefix - strip it for readable logs.
-  if (std::strncmp(name, "__imp__", 7) == 0) name += 7;
-  const std::string& f = filter();
-  if (!f.empty() && std::strstr(name, f.c_str()) == nullptr) return;
-  if (subs_only().load(std::memory_order_relaxed) && !is_sub_name(name))
-    return;
 
   if (!want_summary && !want_log) return;
 
@@ -398,13 +418,22 @@ inline void trace(const char* name) {
   // Fast path: the same function entered again. name is the compile-time
   // __func__ literal, so the pointer is identical for the same function -
   // extend the in-flight run with a single pointer compare (no lock, no
-  // map, no string copy) and get out.
+  // map, no string copy, no string scanning) and get out.
   if (ts.run > 0 && (ts.lastPtr == name || ts.last == name)) {
     ts.run++;
     return;
   }
-  // Name changed: commit the finished run (one locked map update per run,
-  // not per call), then start a new one.
+  // Name changed: only now do the string work. The function body lives in
+  // __imp__<name> (name is a weak alias), so __func__ carries the __imp__
+  // prefix - strip it for readable logs. Filtered-out names return without
+  // touching the in-flight run (matches the previous semantics).
+  if (std::strncmp(name, "__imp__", 7) == 0) name += 7;
+  const std::string& filt = filter();
+  if (!filt.empty() && std::strstr(name, filt.c_str()) == nullptr) return;
+  if ((f & detail::F_SUBS) != 0 && !is_sub_name(name)) return;
+
+  // Commit the finished run (one locked map update per run, not per call),
+  // then start a new one.
   commit_run(ts, want_summary, want_log);
   ts.last = name;
   ts.lastPtr = name;
@@ -412,11 +441,23 @@ inline void trace(const char* name) {
   if (want_log && ts.buf.size() >= 8192) flush_buffer(ts.buf);
 }
 
+// Hot path: one relaxed load + one branch when disabled. This function is
+// tiny, so it inlines into every REX_FUNC_PROLOGUE() call site (no call
+// overhead, no static-guard checks). When enabled, the common case (same
+// function entered again) is a pointer compare + counter bump; the
+// per-thread summary map is touched once per RUN of identical calls, and
+// finished runs flush to disk every 8 KB.
+inline void trace(const char* name) {
+  const uint32_t f = g_flags.load(std::memory_order_relaxed);
+  if ((f & detail::F_ENABLED) == 0) return;
+  trace_enabled(name, f);
+}
+
 // Finalizes the calling thread's in-flight run and writes everything to disk.
 inline void flush() {
   ThreadState& ts = state();
-  commit_run(ts, summary_enabled().load(std::memory_order_relaxed),
-             trace_log_enabled().load(std::memory_order_relaxed));
+  const uint32_t f = g_flags.load(std::memory_order_relaxed);
+  commit_run(ts, (f & detail::F_SUMMARY) != 0, (f & detail::F_LOG) != 0);
   flush_buffer(ts.buf);
 }
 

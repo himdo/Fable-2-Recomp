@@ -2,15 +2,6 @@
 // parsing (src/input/keyboard_gamepad.h). No game, GPU, SDL or audio device
 // needed: it links the SDK's real keybinds.cpp (rex::ui::ParseVirtualKey)
 // plus a stub for the one SDK cvar symbol that keybinds.cpp references.
-//
-// Covers:
-//   - the requested mouse-button config ("LMB:X,RMB:Y,MMB:B,Shift:A,...")
-//     parses fully and every entry lands on the expected VirtualKey +
-//     guest button/trigger/stick target;
-//   - mouse-button key names: LMB/RMB/MMB via the SDK table, case-insensitive
-//     spellings, and XMB1/XMB2 side buttons (VK_XBUTTON1/2);
-//   - malformed / unknown entries are skipped without killing the rest;
-//   - guest-target aliases (LSHOULDER, View, ltrigger, ...) still resolve.
 
 #include <rex/cvar.h>  // FlagEntry (needed for the stub below)
 
@@ -25,164 +16,163 @@ std::optional<size_t> RegisterFlag(FlagEntry) { return {}; }
 // This test never instantiates the driver, so a bare declaration suffices
 // and the symbol is never emitted.
 namespace fable2::f5lua {
-void poll_f5();
+void poll_f5(bool focused);
 }
 
 #include "src/input/keyboard_gamepad.h"
 // The built-in default map (src/core/fable2_config.h) must parse fully too.
 #include "src/core/fable2_config.h"
 
-#include <cstdio>
 #include <optional>
 #include <string>
-#include <string_view>
+
+#include "catch_amalgamated.hpp"
 
 using B = rex::input::X_INPUT_GAMEPAD_BUTTON;
 using M = fable2::input_detail::Mapping;
+using V = rex::ui::VirtualKey;
 using fable2::input_detail::FillGuestTarget;
 using fable2::input_detail::ParseKey;
 using fable2::input_detail::ParseMap;
 
-static int failures = 0;
-#define CHECK(cond)                                                          \
-  do {                                                                       \
-    if (!(cond)) {                                                           \
-      std::printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond);            \
-      ++failures;                                                            \
-    }                                                                        \
-  } while (0)
-
 // Find a binding by VirtualKey code (returns nullopt when absent).
-static std::optional<M> Find(const std::vector<M>& map, uint16_t vk) {
+static std::optional<M> Find(const std::vector<M>& map, V key) {
   for (const auto& m : map) {
-    if (m.vk == vk) return m;
+    if (m.vk == static_cast<uint16_t>(key)) return m;
   }
   return std::nullopt;
 }
 
-static void CheckBinding(const std::vector<M>& map, uint16_t vk, uint16_t button,
-                         char trigger = 0, int8_t axis = 0, int8_t axis_sign = 0) {
-  auto m = Find(map, vk);
-  CHECK(m.has_value());
-  if (!m) return;
+static void CheckBinding(const std::vector<M>& map, V key, uint16_t button, char trigger = 0,
+                         int8_t axis = 0, int8_t axis_sign = 0) {
+  INFO("key 0x" << std::hex << static_cast<int>(key));
+  const auto m = Find(map, key);
+  REQUIRE(m.has_value());
   CHECK(m->button == button);
   CHECK(m->trigger == trigger);
-  CHECK(m->axis == axis);
-  CHECK(m->axis_sign == axis_sign);
+  CHECK(int(m->axis) == int(axis));
+  CHECK(int(m->axis_sign) == int(axis_sign));
 }
 
-int main() {
-  using V = rex::ui::VirtualKey;
-
-  // 1) The requested mouse-button config, verbatim, must parse fully:
-  //    LMB:X,RMB:Y,MMB:B,Shift:A,Space:A,E:A,Q:LT,Tab:RB,R:RT,Z:LB,B:B,
-  //    W:StickUp,S:StickDown,A:StickLeft,D:StickRight,Escape:Pause,M:Select,
-  //    Up:Up,Down:Down,Left:Right? no - Left:Left,Right:Right,F1:Up,F2:Down,
-  //    F3:Left
-  const std::string kRequested =
-      "LMB:X,RMB:Y,MMB:B,Shift:A,Space:A,E:A,Q:LT,Tab:RB,R:RT,Z:LB,B:B,"
-      "W:StickUp,S:StickDown,A:StickLeft,D:StickRight,Escape:Pause,M:Select,"
-      "Up:Up,Down:Down,Left:Left,Right:Right,F1:Up,F2:Down,F3:Left";
-  auto map = ParseMap(kRequested);
-  CHECK(map.size() == 24);  // every entry valid (duplicate targets are fine)
-
-  // Mouse buttons -> guest face buttons.
-  CheckBinding(map, static_cast<uint16_t>(V::kLButton), B::X_INPUT_GAMEPAD_X);
-  CheckBinding(map, static_cast<uint16_t>(V::kRButton), B::X_INPUT_GAMEPAD_Y);
-  CheckBinding(map, static_cast<uint16_t>(V::kMButton), B::X_INPUT_GAMEPAD_B);
-  // Keyboard keys.
-  CheckBinding(map, static_cast<uint16_t>(V::kShift), B::X_INPUT_GAMEPAD_A);
-  CheckBinding(map, static_cast<uint16_t>(V::kSpace), B::X_INPUT_GAMEPAD_A);
-  CheckBinding(map, static_cast<uint16_t>(V::kE), B::X_INPUT_GAMEPAD_A);
-  CheckBinding(map, static_cast<uint16_t>(V::kQ), 0, 'L');
-  CheckBinding(map, static_cast<uint16_t>(V::kTab), B::X_INPUT_GAMEPAD_RIGHT_SHOULDER);
-  CheckBinding(map, static_cast<uint16_t>(V::kR), 0, 'R');
-  CheckBinding(map, static_cast<uint16_t>(V::kZ), B::X_INPUT_GAMEPAD_LEFT_SHOULDER);
-  CheckBinding(map, static_cast<uint16_t>(V::kB), B::X_INPUT_GAMEPAD_B);
-  // Left stick axes (signs match the driver's convention).
-  CheckBinding(map, static_cast<uint16_t>(V::kW), 0, 0, 2, 1);
-  CheckBinding(map, static_cast<uint16_t>(V::kS), 0, 0, 2, -1);
-  CheckBinding(map, static_cast<uint16_t>(V::kA), 0, 0, 1, -1);
-  CheckBinding(map, static_cast<uint16_t>(V::kD), 0, 0, 1, 1);
-  // Dpad / menu / back.
-  CheckBinding(map, static_cast<uint16_t>(V::kEscape), B::X_INPUT_GAMEPAD_START);
-  CheckBinding(map, static_cast<uint16_t>(V::kM), B::X_INPUT_GAMEPAD_BACK);
-  CheckBinding(map, static_cast<uint16_t>(V::kUp), B::X_INPUT_GAMEPAD_DPAD_UP);
-  CheckBinding(map, static_cast<uint16_t>(V::kDown), B::X_INPUT_GAMEPAD_DPAD_DOWN);
-  CheckBinding(map, static_cast<uint16_t>(V::kLeft), B::X_INPUT_GAMEPAD_DPAD_LEFT);
-  CheckBinding(map, static_cast<uint16_t>(V::kRight), B::X_INPUT_GAMEPAD_DPAD_RIGHT);
-  CheckBinding(map, static_cast<uint16_t>(V::kF1), B::X_INPUT_GAMEPAD_DPAD_UP);
-  CheckBinding(map, static_cast<uint16_t>(V::kF2), B::X_INPUT_GAMEPAD_DPAD_DOWN);
-  CheckBinding(map, static_cast<uint16_t>(V::kF3), B::X_INPUT_GAMEPAD_DPAD_LEFT);
-
-  // 2) Mouse-button key names: SDK table (case-sensitive) and the local
-  //    case-insensitive / side-button fallback.
-  CHECK(ParseKey("LMB") == V::kLButton);
-  CHECK(ParseKey("RMB") == V::kRButton);
-  CHECK(ParseKey("MMB") == V::kMButton);
-  CHECK(ParseKey("lmb") == V::kLButton);
-  CHECK(ParseKey("rmb") == V::kRButton);
-  CHECK(ParseKey("mmb") == V::kMButton);
-  CHECK(ParseKey(" XMB1 ") == V::kXButton1);  // side button 1, stray spaces ok
-  CHECK(ParseKey("xmb2") == V::kXButton2);    // side button 2
-  CHECK(ParseKey("XButton1") == V::kXButton1);
-  CHECK(ParseKey("SideButton2") == V::kXButton2);
-  auto side = ParseMap("XMB1:A,XMB2:LT");
-  CHECK(side.size() == 2);
-  CheckBinding(side, static_cast<uint16_t>(V::kXButton1), B::X_INPUT_GAMEPAD_A);
-  CheckBinding(side, static_cast<uint16_t>(V::kXButton2), 0, 'L');
-
-  // 3) Malformed / unknown entries are skipped, the rest still parse.
-  auto bad = ParseMap("NotAKey:A,LMB:NotAButton,,E:A,Space:");
-  CHECK(bad.size() == 1);
-  if (bad.size() == 1) {
-    CheckBinding(bad, static_cast<uint16_t>(V::kE), B::X_INPUT_GAMEPAD_A);
+TEST_CASE("ParseMap", "[input]") {
+  SECTION("parses the requested mouse-button config in full") {
+    const auto map = ParseMap(
+        "LMB:X,RMB:Y,MMB:B,Shift:A,Space:A,E:A,Q:LT,Tab:RB,R:RT,Z:LB,B:B,"
+        "W:StickUp,S:StickDown,A:StickLeft,D:StickRight,Escape:Pause,M:Select,"
+        "Up:Up,Down:Down,Left:Left,Right:Right,F1:Up,F2:Down,F3:Left");
+    CHECK(map.size() == 24);  // every entry valid (duplicate targets are fine)
+    // Mouse buttons -> guest face buttons.
+    CheckBinding(map, V::kLButton, B::X_INPUT_GAMEPAD_X);
+    CheckBinding(map, V::kRButton, B::X_INPUT_GAMEPAD_Y);
+    CheckBinding(map, V::kMButton, B::X_INPUT_GAMEPAD_B);
+    // Keyboard keys.
+    CheckBinding(map, V::kShift, B::X_INPUT_GAMEPAD_A);
+    CheckBinding(map, V::kSpace, B::X_INPUT_GAMEPAD_A);
+    CheckBinding(map, V::kE, B::X_INPUT_GAMEPAD_A);
+    CheckBinding(map, V::kQ, 0, 'L');
+    CheckBinding(map, V::kTab, B::X_INPUT_GAMEPAD_RIGHT_SHOULDER);
+    CheckBinding(map, V::kR, 0, 'R');
+    CheckBinding(map, V::kZ, B::X_INPUT_GAMEPAD_LEFT_SHOULDER);
+    CheckBinding(map, V::kB, B::X_INPUT_GAMEPAD_B);
+    // Left stick axes (signs match the driver's convention).
+    CheckBinding(map, V::kW, 0, 0, 2, 1);
+    CheckBinding(map, V::kS, 0, 0, 2, -1);
+    CheckBinding(map, V::kA, 0, 0, 1, -1);
+    CheckBinding(map, V::kD, 0, 0, 1, 1);
+    // Dpad / menu / back.
+    CheckBinding(map, V::kEscape, B::X_INPUT_GAMEPAD_START);
+    CheckBinding(map, V::kM, B::X_INPUT_GAMEPAD_BACK);
+    CheckBinding(map, V::kUp, B::X_INPUT_GAMEPAD_DPAD_UP);
+    CheckBinding(map, V::kDown, B::X_INPUT_GAMEPAD_DPAD_DOWN);
+    CheckBinding(map, V::kLeft, B::X_INPUT_GAMEPAD_DPAD_LEFT);
+    CheckBinding(map, V::kRight, B::X_INPUT_GAMEPAD_DPAD_RIGHT);
+    CheckBinding(map, V::kF1, B::X_INPUT_GAMEPAD_DPAD_UP);
+    CheckBinding(map, V::kF2, B::X_INPUT_GAMEPAD_DPAD_DOWN);
+    CheckBinding(map, V::kF3, B::X_INPUT_GAMEPAD_DPAD_LEFT);
   }
-  CHECK(ParseMap("").empty());
-  CHECK(ParseMap(",,,").empty());
 
-  // 3b) The built-in default map (kDefaultKeyboardGamepadMap) parses fully
-  //     and lands every entry on the intended target.
-  auto def = ParseMap(fable2::config::kDefaultKeyboardGamepadMap);
-  CHECK(def.size() == 20);
-  CheckBinding(def, static_cast<uint16_t>(V::kLButton), B::X_INPUT_GAMEPAD_X);
-  CheckBinding(def, static_cast<uint16_t>(V::kRButton), B::X_INPUT_GAMEPAD_Y);
-  CheckBinding(def, static_cast<uint16_t>(V::kMButton), B::X_INPUT_GAMEPAD_B);
-  CheckBinding(def, static_cast<uint16_t>(V::kShift), B::X_INPUT_GAMEPAD_A);
-  CheckBinding(def, static_cast<uint16_t>(V::kE), B::X_INPUT_GAMEPAD_A);
-  CheckBinding(def, static_cast<uint16_t>(V::kB), B::X_INPUT_GAMEPAD_B);
-  CheckBinding(def, static_cast<uint16_t>(V::kQ), 0, 'L');
-  CheckBinding(def, static_cast<uint16_t>(V::kTab), B::X_INPUT_GAMEPAD_RIGHT_SHOULDER);
-  CheckBinding(def, static_cast<uint16_t>(V::kR), 0, 'R');
-  CheckBinding(def, static_cast<uint16_t>(V::kZ), B::X_INPUT_GAMEPAD_LEFT_SHOULDER);
-  CheckBinding(def, static_cast<uint16_t>(V::kW), 0, 0, 2, 1);
-  CheckBinding(def, static_cast<uint16_t>(V::kS), 0, 0, 2, -1);
-  CheckBinding(def, static_cast<uint16_t>(V::kA), 0, 0, 1, -1);
-  CheckBinding(def, static_cast<uint16_t>(V::kD), 0, 0, 1, 1);
-  CheckBinding(def, static_cast<uint16_t>(V::kEscape), B::X_INPUT_GAMEPAD_START);
-  CheckBinding(def, static_cast<uint16_t>(V::kM), B::X_INPUT_GAMEPAD_BACK);
-  CheckBinding(def, static_cast<uint16_t>(V::kUp), B::X_INPUT_GAMEPAD_DPAD_UP);
-  CheckBinding(def, static_cast<uint16_t>(V::kDown), B::X_INPUT_GAMEPAD_DPAD_DOWN);
-  CheckBinding(def, static_cast<uint16_t>(V::kLeft), B::X_INPUT_GAMEPAD_DPAD_LEFT);
-  CheckBinding(def, static_cast<uint16_t>(V::kRight), B::X_INPUT_GAMEPAD_DPAD_RIGHT);
+  SECTION("binds the mouse side buttons") {
+    const auto side = ParseMap("XMB1:A,XMB2:LT");
+    CHECK(side.size() == 2);
+    CheckBinding(side, V::kXButton1, B::X_INPUT_GAMEPAD_A);
+    CheckBinding(side, V::kXButton2, 0, 'L');
+  }
 
-  // 4) Guest-target aliases still resolve.
+  SECTION("skips malformed and unknown entries and keeps the rest") {
+    const auto bad = ParseMap("NotAKey:A,LMB:NotAButton,,E:A,Space:");
+    CHECK(bad.size() == 1);
+    CheckBinding(bad, V::kE, B::X_INPUT_GAMEPAD_A);
+    CHECK(ParseMap("").empty());
+    CHECK(ParseMap(",,,").empty());
+  }
+
+  SECTION("parses the built-in default map in full") {
+    const auto def = ParseMap(fable2::config::kDefaultKeyboardGamepadMap);
+    CHECK(def.size() == 20);
+    CheckBinding(def, V::kLButton, B::X_INPUT_GAMEPAD_X);
+    CheckBinding(def, V::kRButton, B::X_INPUT_GAMEPAD_Y);
+    CheckBinding(def, V::kMButton, B::X_INPUT_GAMEPAD_B);
+    CheckBinding(def, V::kShift, B::X_INPUT_GAMEPAD_A);
+    CheckBinding(def, V::kE, B::X_INPUT_GAMEPAD_A);
+    CheckBinding(def, V::kB, B::X_INPUT_GAMEPAD_B);
+    CheckBinding(def, V::kQ, 0, 'L');
+    CheckBinding(def, V::kTab, B::X_INPUT_GAMEPAD_RIGHT_SHOULDER);
+    CheckBinding(def, V::kR, 0, 'R');
+    CheckBinding(def, V::kZ, B::X_INPUT_GAMEPAD_LEFT_SHOULDER);
+    CheckBinding(def, V::kW, 0, 0, 2, 1);
+    CheckBinding(def, V::kS, 0, 0, 2, -1);
+    CheckBinding(def, V::kA, 0, 0, 1, -1);
+    CheckBinding(def, V::kD, 0, 0, 1, 1);
+    CheckBinding(def, V::kEscape, B::X_INPUT_GAMEPAD_START);
+    CheckBinding(def, V::kM, B::X_INPUT_GAMEPAD_BACK);
+    CheckBinding(def, V::kUp, B::X_INPUT_GAMEPAD_DPAD_UP);
+    CheckBinding(def, V::kDown, B::X_INPUT_GAMEPAD_DPAD_DOWN);
+    CheckBinding(def, V::kLeft, B::X_INPUT_GAMEPAD_DPAD_LEFT);
+    CheckBinding(def, V::kRight, B::X_INPUT_GAMEPAD_DPAD_RIGHT);
+  }
+}
+
+TEST_CASE("ParseKey", "[input]") {
+  SECTION("reads the mouse buttons from the SDK's table") {
+    CHECK(ParseKey("LMB") == V::kLButton);
+    CHECK(ParseKey("RMB") == V::kRButton);
+    CHECK(ParseKey("MMB") == V::kMButton);
+  }
+
+  SECTION("reads mouse-button names in any case") {
+    CHECK(ParseKey("lmb") == V::kLButton);
+    CHECK(ParseKey("rmb") == V::kRButton);
+    CHECK(ParseKey("mmb") == V::kMButton);
+  }
+
+  SECTION("reads the side buttons under each name, ignoring stray spaces") {
+    CHECK(ParseKey(" XMB1 ") == V::kXButton1);
+    CHECK(ParseKey("xmb2") == V::kXButton2);
+    CHECK(ParseKey("XButton1") == V::kXButton1);
+    CHECK(ParseKey("SideButton2") == V::kXButton2);
+  }
+}
+
+TEST_CASE("FillGuestTarget", "[input]") {
   M m;
-  FillGuestTarget(m, "lShoulder");
-  CHECK(m.button == B::X_INPUT_GAMEPAD_LEFT_SHOULDER);
-  FillGuestTarget(m, "VIEW");
-  CHECK(m.button == B::X_INPUT_GAMEPAD_BACK);
-  FillGuestTarget(m, "ltrigger");
-  CHECK(m.trigger == 'L');
-  FillGuestTarget(m, "StIckRighT");
-  CHECK(m.axis == 1 && m.axis_sign == 1);
-  FillGuestTarget(m, "Bogus");
-  CHECK(!m.valid());
 
-  if (failures) {
-    std::printf("%d failure(s)\n", failures);
-    return 1;
+  SECTION("resolves button aliases in any case") {
+    FillGuestTarget(m, "lShoulder");
+    CHECK(m.button == B::X_INPUT_GAMEPAD_LEFT_SHOULDER);
+    FillGuestTarget(m, "VIEW");
+    CHECK(m.button == B::X_INPUT_GAMEPAD_BACK);
   }
-  std::printf("PASS: keyboard/mouse gamepad map parsing\n");
-  return 0;
+
+  SECTION("resolves trigger and stick aliases") {
+    FillGuestTarget(m, "ltrigger");
+    CHECK(m.trigger == 'L');
+    FillGuestTarget(m, "StIckRighT");
+    CHECK(int(m.axis) == 1);
+    CHECK(int(m.axis_sign) == 1);
+  }
+
+  SECTION("leaves an unknown target invalid") {
+    FillGuestTarget(m, "Bogus");
+    CHECK_FALSE(m.valid());
+  }
 }

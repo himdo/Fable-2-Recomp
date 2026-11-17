@@ -1,10 +1,23 @@
 # Fable 2 — ReXGlue Recompiled Project
 First and for most this project was made to test the capabilities of local and open source AI. This project was made using Qwen3.8 27b. After about an hour it got the game running. Then after a large amount of human trial and error I was able to get enough of the functions mapped to be able to complete the game. I currently do not consider this to be fully complete as I have yet to 100% the game. The sha256 of the iso that started this project is: "685a0d3bea9718812f17bcd155907a5359a548b6d3d8342dd2a6c944f45e35ff" and its the Fable 2 GOTY for USA and Europe.
 
-Recompilation of Fable 2 (Xbox 360, title ID 4D5307F1) using the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk) v0.10.0. Guest PPC code is statically recompiled to C++ at build time by `rexglue codegen`, driven by `fable_2_manifest.toml`.
+Recompilation of Fable 2 (Xbox 360, title ID 4D5307F1) using the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk) v0.10.0, with the SDK built from [the project's fork](https://github.com/himdo/rexglue-sdk). Guest PPC code is statically recompiled to C++ at build time by `rexglue codegen`, driven by `fable_2_manifest.toml`.
 
 # Important Note:
 **This project does not condone Piracy, any mentions or links will result in removal and an instant ban from this repo!**
+
+# Playing the game
+
+You need your own Fable 2 GOTY disc image (`.iso`) and about 7 GB of free space.
+
+1. Download the `windows` zip from the [latest release](https://github.com/himdo/Fable-2-Recomp/releases/latest) and unzip it anywhere.
+2. Open `Fable2Launcher.exe`.
+3. Click **Extract from ISO** and pick your `.iso`. The game files go into the launcher's folder.
+4. Click **Play Fable II**.
+
+**Updating:** unzip the new release into its own folder, copy your `saves` folder across and extract your `.iso` again.
+
+**Need help?** Ask on the [Discord](https://discord.gg/8TQUZpPNeR). To compile the game yourself, see [Building](#building).
 
 # Current and planned features
 
@@ -43,7 +56,8 @@ Original GOTY USA/Europe and German GOTY dumps are supported by the default
 
 The optional WPF launcher detects the original game edition and configures
 output resolution, internal render scale, anisotropic filtering, FXAA, VSync,
-window/fullscreen mode and a 30/60/120/144/165/240/unlimited FPS limit. It keeps its preferences
+window/fullscreen mode, and separate 30/60/120/144/165/240/unlimited FPS limits for the game
+and for presenting to the display. It keeps its preferences
 in `launcher-settings.toml` and writes `fable_2.toml`, preserving other settings
 and a one-time backup. Preferences survive the runtime rewriting its config.
 It can also extract the game straight from a disc image: the **Extract from
@@ -55,19 +69,27 @@ discs with the shared [X360Extract](tools/x360extract/) library, so its output
 matches the `x360extract` tool byte for byte — making the launcher the simplest
 way to get the game files in place, with no separate extractor tool.
 
+Packaged releases check GitHub for a newer release when the launcher opens and
+show a button that opens its page. Local builds don't check, and a failed check
+is ignored.
+
 The game-folder selection defaults to the launcher's own folder on first launch
 and then remembers the user's saved location. Game files can live separately;
 the launcher uses `--game_data_root`. Both applications are named Fable 2
 Recompiled and use new project-owned icons.
 
 
+# There is now a discord!
+I've made a custom discord for this project, as well as forks and other recomps and decomps of the fable series
+
+https://discord.gg/8TQUZpPNeR
 
 
 
 # Notes for running the game
 - **How to extract (built-in, recommended):** the launcher has an **Extract from ISO** button. Click **Extract from ISO** and pick your disc image (`.iso`). It first checks the iso against the supported-version list, and only once that matches does it extract disc (`default.xex` and `data/`) into the launcher's own folder. No separate tool is required.
 - **How to extract (external GUI tool):** alternatively, rip the disc to an ISO and open it with **[XboxImageExtractor](https://github.com/dromex1/XboxImageExtractor)** — a GUI tool for Xbox 360 game images. It lists the image's filesystem; select `default.xex` and `data` and extract them into the project root (`data` extract as folders).
-- **You must supply the game content yourself** (it is not in the repo): rip the Fable 2 GOTY (USA/EU) disc (the one with SHA-256 above) and put `default.xex` and `data/` in the project root. The build does not copy this into the build directories   
+- **You must supply the game content yourself** (it is not in the repo): rip the Fable 2 GOTY (USA/EU) disc (see the hashes in [German GOTY support](docs/GERMAN_GOTY_SUPPORT.md)) and put `default.xex` and `data/` in the project root. The build does not copy this into the build directories   
 - **Saves live in `<build dir>\saves\`** — back that folder up to keep your progress, and copy it between build trees (Debug/Release) or machines to carry a save over.
 - The `--game_data_root <path>` override still points the content root at a different tree (e.g. to run from a shared content copy without staging); saves/cache still land next to the exe.
 - Although this was made for the US / Europe GOTY version I have been able to run the following regions: Germany, France, Italy, Russia, and Spain. Your milage may very if you use those regions.
@@ -78,7 +100,7 @@ Recompiled and use new project-owned icons.
 To run the game you must:
 1) Extract a downloaded copy release of the game 
 2) Extract the "data" and "default.xex" from your copy of the game — easiest with the launcher's **Extract from ISO** button, or an external GUI tool (see "How to extract")
-3) Run the fable.exe program and if no errors pop up then the game should launch and you are good to go
+3) Run the fable_2.exe program and if no errors pop up then the game should launch and you are good to go
   - If an error pops up about the hash being wrong try to extract a different version of the game and then try again.
 
 
@@ -166,21 +188,33 @@ Remap at launch without recompiling, e.g.
 fable_2.exe --keyboard_gamepad_map "E:A,B:B,Space:L3,Enter:Start"
 ```
 
-### Mouse look (right stick)
+### Mouse look
 
-Mouse movement is mapped to the guest **right stick** for camera control. The
-movement since the previous poll is converted into stick deflection, so you
-**sweep the mouse to look and stop to stop**. Two cvars control it:
+The mouse turns the camera in one of two modes:
+
+- **`direct` (default):** the gameplay camera turns by a fixed angle per count
+  of mouse movement, with no top speed and no coasting after the mouse stops.
+  Up/down moves the camera height, like the stick, within the same limit.
+  Target lock, cutscenes and other cameras still get the mouse as the right
+  stick.
+- **`stick`:** the mouse always drives the guest **right stick**, like a
+  controller, with the stick's top speed.
 
 | Argument | Effect |
 |---|---|
 | `--mouse_look <bool>` | Enable/disable mouse look (default `true`) |
-| `--mouse_look_scale <n>` | Sensitivity: right-stick units per pixel of mouse movement (default `256`; larger = more sensitive) |
+| `--mouse_look_mode <direct\|stick>` | How the mouse turns the camera (default `direct`) |
+| `--mouse_look_scale <n>` | Overall sensitivity, the launcher's slider (default `256` = 1×; larger = more sensitive) |
+| `--mouse_look_sens_x <deg>` / `--mouse_look_sens_y <deg>` | Direct mode: degrees per count (default `0.06`, before `mouse_look_scale`) |
+| `--mouse_look_invert_y <bool>` | Direct mode: invert up/down (default `false`) |
+| `--mouse_look_smoothing <bool>` | Stick mode: smooth the stick over a camera update (default `true`) |
 
-The defaults come from `[input] mouse_look` / `[input] mouse_look_scale` in
-`fable2_config.toml` (edit there to change them permanently), the command
-line overrides per launch, and both cvars are hot-reloadable from the in-game
-console, so you can dial in the sensitivity live. Example: `fable_2.exe
+The defaults come from the `[input]` section of `fable2_config.toml` (edit
+there to change them permanently; the launcher's Advanced Options set the mode
+and `mouse_look_scale`), the command line overrides per launch, and the cvars
+are hot-reloadable from the in-game console. `f2 mouse` shows the current
+settings, and `f2 mouse mode|sens|invert` change them live (see
+`docs/console/CONSOLE-COMMANDS.md`, "Mouse look"). Example: `fable_2.exe
 --mouse_look_scale 512` for a more sensitive camera.
 
 All cvars above are hot-reloadable, so they can also be changed from the in-game console.
@@ -441,12 +475,10 @@ and Vulkan GPU plugins (each implements `CaptureGuestOutput`). Each capture
 blocks the connection for a few hundred milliseconds. Implementation:
 `src/diagnostics/fable2_frame_capture.h`.
 
-Config (`[remote]` in `fable2_config.toml`): `enabled` (default `true`),
-`host` (`127.0.0.1`; `0.0.0.0` exposes it on all interfaces), `port`
-(`8791`; if busy, `+1..+9` are tried, the bound port is logged at startup),
-`token` (empty = no auth; when set, each connection's first line must be
-`{"cmd":"auth","token":"..."}`). Every received command is logged (audit
-trail) to `logs/`.
+The server has no config options: it is always on in Debug builds, listens on
+`127.0.0.1:8791` (if busy, `+1..+9` are tried and the bound port is logged at
+startup) and needs no token. Every received command is logged (audit trail) to
+`logs/`.
 
 ## Building
 
@@ -456,12 +488,11 @@ hardcoded paths**. Prerequisites (all standard tools):
 - **CMake** ≥ 3.25 (on PATH)
 - **LLVM** (clang/clang++/lld) — on PATH or the default `C:\Program Files\LLVM` install
 - **Ninja** (on PATH, `%USERPROFILE%\bin`, or the WinGet package dir)
-- **Internet** on first build — `build.cmd` auto-downloads the prebuilt
-  ReXGlue SDK v0.10.0 (~100 MB) from the
-  [official release](https://github.com/rexglue/rexglue-sdk/releases/tag/v0.10.0)
-  into `out\tooling\rexglue-sdk-0.10.0\`. A compatible official SDK on PATH
-  is used instead if present. Downloads never replace the source submodule.
-- **Python and Git** for code generation and source-SDK preparation; **Visual
+- **Internet** on first build — `build.cmd` fetches the
+  [SDK fork](https://github.com/himdo/rexglue-sdk) and its submodules, then builds the
+  SDK, including the `rexglue` codegen tool, under `out\`. Later builds don't rebuild it.
+- **Python and Git** for code generation and source-SDK preparation, plus the
+  `pefile` package (`pip install pefile`) for the post-build PE cleaning; **Visual
   Studio Build Tools / Windows SDK** (x64 developer shell) for the native build.
 
 ```
@@ -471,15 +502,14 @@ build.cmd <target>      # any other CMake target
 build.cmd -release [t]  # build as Release (-O3) instead of Debug (-r is short form)
 ```
 
-The first `build.cmd` run fetches the official SDK if needed under `out/tooling`.
-Both Debug and Release build the pinned, patched SDK from source; see
+Both Debug and Release build the pinned, patched SDK from source, and a first Debug
+build also builds the Release SDK because only that one ships the codegen tool; see
 [runtime build requirements](docs/RUNTIME_FIXES.md). Game content is required
 for code generation but is never published with this repository.
 
 Manual/advanced setup (normally not needed):
 
 ```
-tools\setup_sdk.cmd      # fetch the prebuilt SDK only (what build.cmd auto-runs)
 tools\setup_sdk_src.cmd  # fetch the SDK SOURCE for the Vulkan plugin: clones
                          # rexglue/rexglue-sdk at the pinned commit
                          # (f5337cdc), pins its submodules to the SHAs in
@@ -490,14 +520,13 @@ git                     # only needed for setup_sdk_src.cmd
 ```
 
 The build also accepts explicit overrides if you keep the SDK elsewhere:
-`cmake -DREXGLUE_SDK_ROOT=<prebuilt SDK root> -DREXGLUE_SDK_SOURCE=<SDK source>`
-(`build.cmd` sets `REXGLUE_SDK_ROOT`/`REXGLUE_SDK_SOURCE` from its own search).
+`cmake -DREXGLUE_SDK_ROOT=<staged SDK root> -DREXGLUE_SDK_SOURCE=<SDK source>`
+(`build.cmd` sets `REXGLUE_SDK_ROOT`/`REXGLUE_SDK_SOURCE` itself).
 
 - Toolchain: the `win-amd64-debug` preset (Ninja + clang) by default. The SDK's public headers use clang builtins (`__builtin_bswap32`, `__VA_OPT__`), so plain MSVC `cl` cannot compile the generated code — a `win-msvc-debug` preset exists but only works for targets that don't compile `generated/`.
 - **Release builds:** `build.cmd` defaults to the `win-amd64-debug` preset (`-O0`, `out\build\win-amd64-debug`). Pass the `-release` flag (short form: `-r`) to select the `win-amd64-release` preset (`-O3`, `out\build\win-amd64-release`):
 
   ```
-  build.cmd -release fable_2_codegen
   build.cmd -release fable_2
   ```
 
@@ -505,14 +534,25 @@ The build also accepts explicit overrides if you keep the SDK elsewhere:
 - Codegen runs as part of the build and re-runs automatically when `fable_2_manifest.toml` or `default.xex` change (tracked via the generated DEPFILE).
 - A full clean build recompiles ~291 generated translation units (60,462 guest functions).
 
+## Packaging a release
+
+```
+build.cmd package
+```
+
+This builds the Release game and the launcher, then writes the player zip, a
+separate zip of debug symbols and `SHA256SUMS` to `out\dist`. The version comes
+from `git describe --tags`, so build from a release tag. Only the files listed
+in `tools/package_release.py` are packaged, so game files, saves and logs stay out.
+
 ## Vulkan renderer
 
 The goal is a Vulkan rendering path for the game (the SDK's Windows GPU plugin only ships a
 D3D12 Xenos backend; the SDK's own Vulkan backend lives in `rexglue-sdk-src/src/graphics/vulkan/`
 but is not compiled into the shipped plugin). Per the project constraint, all Vulkan work lives in
-this repo. The SDK source itself is built as stock upstream **plus this
-project's tracked local patch** (`thirdparty/rexglue-sdk-local.patch` —
-see below); the upstream repo is never forked or pushed to.
+this repo. The SDK source itself is built from [the project's fork](https://github.com/himdo/rexglue-sdk)
+**plus this project's tracked local patch** (`thirdparty/rexglue-sdk-local.patch` —
+see below).
 
 **Stage 1 — foundation (DONE, verified).** A self-contained Vulkan pipeline that creates a window,
 inits Vulkan, and presents a clear color, proving the whole stack on a real GPU:
@@ -566,11 +606,11 @@ this repo.
 Two plugins are staged next to the exe, selected by the `gpu_plugin` argument:
 
 ```
-out\build\win-amd64-release\fable_2.exe --gpu_plugin=xenos           # D3D12 (default; prebuilt plugin)
+out\build\win-amd64-release\fable_2.exe --gpu_plugin=xenos           # D3D12 (default)
 out\build\win-amd64-release\fable_2.exe --gpu_plugin=xenos-vulkan    # Vulkan (source-built plugin)
 ```
 
-- `rexgpu-xenos.dll` is the prebuilt D3D12 plugin (staged by `GPU_PLUGINS xenos`).
+- `rexgpu-xenos.dll` is the D3D12 plugin, built from the patched SDK source.
 - `rexgpu-xenos-vulkan.dll` is the source-built plugin (staged by CMake from the SDK build tree,
   Release-only). `Fable2App::OnPreSetup` loads it with `LoadGpuPlugin("xenos-vulkan", "vulkan")`,
   forcing the Vulkan backend (the plugin is compiled with both; the default `"any"` would pick D3D12).

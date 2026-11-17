@@ -37,15 +37,14 @@ if(FABLE2_CODEGEN_TOOL)
     if(NOT EXISTS "${FABLE2_CODEGEN_TOOL}")
         message(FATAL_ERROR "FABLE2_CODEGEN_TOOL does not exist")
     endif()
-    # The official tool must keep its own runtime. Host headers, integration
-    # sources and libraries come from the matched source-built SDK instead.
+    # The tool only ships in the Release SDK, so a Debug host points at it here.
     set_target_properties(rex::rexglue PROPERTIES
         IMPORTED_LOCATION "${FABLE2_CODEGEN_TOOL}"
         IMPORTED_LOCATION_DEBUG "${FABLE2_CODEGEN_TOOL}"
         IMPORTED_LOCATION_RELWITHDEBINFO "${FABLE2_CODEGEN_TOOL}"
         IMPORTED_LOCATION_RELEASE "${FABLE2_CODEGEN_TOOL}")
-    # A staged package still contains the official SDK's other configurations.
-    # Reject selecting those by accident via an old/manual CMake cache.
+    # Reject selecting the other configuration's SDK by accident via an
+    # old/manual CMake cache.
     get_filename_component(FABLE2_PACKAGE_ROOT "${rexglue_DIR}/../../.." ABSOLUTE)
     set(FABLE2_SDK_PROVENANCE "${FABLE2_PACKAGE_ROOT}/renderer-sdk-provenance.json")
     if(WIN32 AND EXISTS "${FABLE2_SDK_PROVENANCE}")
@@ -78,6 +77,8 @@ set(FABLE2_SOURCES
     src/core/fable2_patches.cpp
     src/core/fable2_hooks.cpp
     src/core/fable2_address_scan.cpp
+    src/menu/main_menu.cpp
+    src/gui/keycap_render.cpp
     ${HOTFUNC_SOURCES}
 )
 
@@ -87,17 +88,24 @@ else()
     add_executable(fable_2 ${FABLE2_SOURCES})
 endif()
 
-# The app's headers live in subfolders (src/core, src/diagnostics, src/input)
-# and are included by bare filename ("fable2_config.h"), so the subfolders
-# must be on the include path of both the app and the recompiled code.
+# The app's headers live in subfolders (src/core, src/diagnostics, src/input,
+# src/menu) and are included by bare filename ("fable2_config.h"), so the
+# subfolders must be on the include path of both the app and the recompiled code.
 set(FABLE2_HEADER_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core
     ${CMAKE_CURRENT_SOURCE_DIR}/src/diagnostics
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/input)
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/input
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/menu
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/gui)
 target_include_directories(fable_2 PRIVATE ${FABLE2_HEADER_DIRS})
 if(TARGET fable_2_recomp)
     target_include_directories(fable_2_recomp PRIVATE ${FABLE2_HEADER_DIRS})
 endif()
+
+# stb_truetype (keycap text rendering, src/gui/keycap_render.cpp). The app's
+# gui headers are self-contained; stb is a thirdparty single-file library.
+target_include_directories(fable_2 PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb)
 
 # Stage the Xenos GPU emulation plugin next to the exe (rexglue picks the
 # per-configuration variant: rexgpu-xenosd.dll for Debug, rexgpu-xenos.dll
@@ -342,6 +350,21 @@ add_custom_command(TARGET fable_2 POST_BUILD
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/StartWithoutAudio.cmd"
             "$<TARGET_FILE_DIR:fable_2>/StartWithoutAudio.cmd")
 
+# Stage the bundled keycap font (Google Sans, Open Font License) next to the
+# exe so the prompt keycaps render identically on every OS (no dependency on
+# host-installed fonts). OFL.txt ships alongside the .ttf as the Open Font
+# License requires. Loaded by src/gui/keycap_render.cpp (LoadFont).
+add_custom_command(TARGET fable_2 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:fable_2>/assets/fonts/Google Sans"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Google Sans/GoogleSans-VariableFont_GRAD,opsz,wght.ttf"
+            "$<TARGET_FILE_DIR:fable_2>/assets/fonts/Google Sans/GoogleSans-VariableFont_GRAD,opsz,wght.ttf"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Google Sans/OFL.txt"
+            "$<TARGET_FILE_DIR:fable_2>/assets/fonts/Google Sans/OFL.txt"
+    COMMENT "Staging bundled keycap font (Google Sans + OFL license) next to fable_2.exe")
+
 # --- Vulkan renderer: Stage 2 (source-built plugin, swappable at launch) --
 # The prebuilt plugin above (GPU_PLUGINS xenos) is D3D12-only. The Vulkan
 # backend is built from the (unmodified) SDK source via
@@ -354,10 +377,9 @@ add_custom_command(TARGET fable_2 POST_BUILD
 # the source plugin hasn't been built yet.
 # SDK locations, resolved relative to this repo (no hardcoded paths).
 # Override on the command line with:
-#   -DREXGLUE_SDK_ROOT=<prebuilt SDK root>    (win-amd64 layout: bin/, include/, lib/)
+#   -DREXGLUE_SDK_ROOT=<staged SDK root>      (win-amd64 layout: bin/, include/, lib/)
 #   -DREXGLUE_SDK_SOURCE=<SDK source tree>    (optional; Vulkan plugin only)
-# The defaults are created by tools/setup_sdk.cmd (prebuilt, auto-run by
-# build.cmd) and tools/setup_sdk_src.cmd (source, only for the Vulkan path).
+# build.cmd sets both, staging the SDK with tools/build_runtime_sdk.cmd.
 if(NOT DEFINED REXGLUE_SDK_ROOT)
     set(REXGLUE_SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/rexglue-sdk/win-amd64")
 endif()
@@ -365,6 +387,12 @@ if(NOT DEFINED REXGLUE_SDK_SOURCE)
     set(REXGLUE_SDK_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/rexglue-sdk")
 endif()
 set(FABLE2_SDK_SRC "${REXGLUE_SDK_SOURCE}")
+# Photo mode's ImGui panel (src/core/photo_mode_dialog.h) calls into the ImGui
+# compiled into rexruntime.dll, so it must see the exact imgui.h that DLL was
+# built from (the SDK source tree), not an older copy in the prebuilt SDK.
+if(EXISTS "${REXGLUE_SDK_SOURCE}/thirdparty/imgui/imgui.h")
+    target_include_directories(fable_2 BEFORE PRIVATE "${REXGLUE_SDK_SOURCE}/thirdparty/imgui")
+endif()
 set(FABLE2_SDK_ROOT "${REXGLUE_SDK_ROOT}")
 # Never replace a matched SDK with DLLs left over from an older Vulkan build.
 # (The candidate-existence checks below guard every copy, so the staging is
@@ -508,6 +536,11 @@ if(WIN32 AND FABLE2_NO_PE_CLEAN)
 elseif(WIN32)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_FOUND)
+        execute_process(COMMAND ${Python3_EXECUTABLE} -c "import pefile"
+                        RESULT_VARIABLE FABLE2_PEFILE_MISSING OUTPUT_QUIET ERROR_QUIET)
+        if(FABLE2_PEFILE_MISSING)
+            message(FATAL_ERROR "The post-build PE cleaning needs pefile: ${Python3_EXECUTABLE} -m pip install pefile")
+        endif()
         add_custom_command(TARGET fable_2 POST_BUILD
             COMMAND ${Python3_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tools/repro/clean_pe.py
@@ -519,3 +552,6 @@ elseif(WIN32)
         message(STATUS "Python3 not found; skipping stable-hash PE cleaning")
     endif()
 endif()
+
+# Native zlib-ng for the game's inflate (src/core/hotfunc/zlib/NativeInflate.cpp).
+include(src/core/hotfunc/zlib/native_inflate.cmake)

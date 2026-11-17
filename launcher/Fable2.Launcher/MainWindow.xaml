@@ -60,6 +60,9 @@
           <TextBlock x:Name="ConfigStateText" Text="Configuration ready" FontSize="12"
                      Foreground="#FFB9D6C7" />
         </Border>
+        <Button x:Name="UpdateButton" Click="UpdateClicked" Visibility="Collapsed"
+                Style="{StaticResource SecondaryButton}" Margin="14,0,0,0"
+                Foreground="{StaticResource AccentHoverBrush}" BorderBrush="{StaticResource AccentBrush}" />
         <Button x:Name="AdvancedOptionsButton" Content="Advanced Options"
                 Click="AdvancedOptionsClicked" Style="{StaticResource SecondaryButton}"
                 Margin="14,0,0,0" />
@@ -148,9 +151,16 @@
               </StackPanel>
 
               <StackPanel Margin="0,18,0,0">
-                <TextBlock Text="FPS LIMIT" Style="{StaticResource FieldLabel}" />
+                <TextBlock Text="GUEST FPS LIMIT" Style="{StaticResource FieldLabel}" />
                 <ComboBox x:Name="FrameLimitCombo" SelectionChanged="SettingChanged" />
                 <TextBlock Text="Requires the matching runtime. VSync may impose a lower limit; gameplay timing above 60 FPS is not fully verified."
+                           FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,0" TextWrapping="Wrap" />
+              </StackPanel>
+
+              <StackPanel Margin="0,18,0,0">
+                <TextBlock Text="HOST FPS LIMIT" Style="{StaticResource FieldLabel}" />
+                <ComboBox x:Name="HostFrameLimitCombo" SelectionChanged="SettingChanged" />
+                <TextBlock Text="Caps how often frames reach your display, without slowing the game. Requires the matching runtime."
                            FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,0" TextWrapping="Wrap" />
               </StackPanel>
 
@@ -261,7 +271,7 @@
               <StackPanel>
                 <TextBlock Text="Mouse" Style="{StaticResource SectionTitle}" />
                 <TextBlock Text="Mouse look (camera)" FontWeight="SemiBold" />
-                <TextBlock Text="Map mouse movement to the guest right stick. Disable to keep the cursor free."
+                <TextBlock Text="Turn the camera with the mouse. Disable to keep the cursor free."
                            FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0"
                            TextWrapping="Wrap" />
                 <CheckBox x:Name="MouseLookCheck" IsChecked="True" Margin="0,10,0,0"
@@ -282,6 +292,16 @@
                            TextAlignment="Center" VerticalContentAlignment="Center"
                            LostFocus="MouseSensitivityBoxLostFocus" />
                 </Grid>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Text="CAMERA MODE" Style="{StaticResource FieldLabel}" />
+                  <ComboBox x:Name="MouseLookModeCombo">
+                    <ComboBoxItem Tag="direct">Direct: a fixed turn per mouse movement</ComboBoxItem>
+                    <ComboBoxItem Tag="stick">Stick: the mouse acts as the right stick</ComboBoxItem>
+                  </ComboBox>
+                  <TextBlock Text="Direct has no top speed and stops when the mouse stops. Target lock and cutscenes still use the stick. Stick turns like a controller, with its top speed."
+                             FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,0"
+                             TextWrapping="Wrap" />
+                </StackPanel>
               </StackPanel>
             </Border>
           </StackPanel>
@@ -320,6 +340,80 @@
                            TextAlignment="Center" VerticalContentAlignment="Center"
                            LostFocus="HotFuncYieldBoxLostFocus" />
                 </Grid>
+              </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Panel}" Margin="0,18,0,0">
+              <StackPanel>
+                <TextBlock Text="Photo Mode" Style="{StaticResource SectionTitle}" />
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <StackPanel>
+                    <TextBlock Text="Enable photo mode" FontWeight="SemiBold" />
+                    <TextBlock Text="Freeze the world, fly a free camera, add filters and take screenshots. Off = its keys and controller shortcut do nothing."
+                               FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,2,0,0"
+                               TextWrapping="Wrap" />
+                  </StackPanel>
+                  <CheckBox x:Name="PhotoModeEnabledCheck" Grid.Column="1" IsChecked="True"
+                            VerticalAlignment="Top" Margin="10,0,0,0"
+                            Foreground="{StaticResource TextBrush}" />
+                </Grid>
+                <Grid Margin="0,14,0,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <StackPanel>
+                    <TextBlock Text="TOGGLE KEY" Style="{StaticResource FieldLabel}" />
+                    <ComboBox x:Name="PhotoModeToggleKeyCombo" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="2">
+                    <TextBlock Text="SCREENSHOT KEY" Style="{StaticResource FieldLabel}" />
+                    <ComboBox x:Name="PhotoModeScreenshotKeyCombo" />
+                  </StackPanel>
+                </Grid>
+                <StackPanel Margin="0,12,0,0">
+                  <TextBlock Text="CONTROLLER SHORTCUT" Style="{StaticResource FieldLabel}" />
+                  <ComboBox x:Name="PhotoModeGamepadCombo" IsEditable="True" />
+                  <TextBlock Text="Pick one, or type buttons joined with + (Guide, A, B, X, Y, LB, RB, Start, Back, L3, R3, Up, Down, Left, Right). Photo mode can also record one (Capture &gt; Record Shortcut)."
+                             FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0"
+                             TextWrapping="Wrap" />
+                </StackPanel>
+                <Grid Margin="0,12,0,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <StackPanel>
+                    <TextBlock Text="MOVE SPEED (M/S)" Style="{StaticResource FieldLabel}" />
+                    <TextBox x:Name="PhotoModeMoveSpeedBox" Text="4.0" VerticalContentAlignment="Center" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="2">
+                    <TextBlock Text="MOUSE SENSITIVITY" Style="{StaticResource FieldLabel}" />
+                    <TextBox x:Name="PhotoModeMouseSensitivityBox" Text="0.0025" VerticalContentAlignment="Center" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="4">
+                    <TextBlock Text="MAX DISTANCE (M)" Style="{StaticResource FieldLabel}" />
+                    <TextBox x:Name="PhotoModeMaxDistanceBox" Text="0.0" VerticalContentAlignment="Center" />
+                  </StackPanel>
+                </Grid>
+                <TextBlock Text="Max distance limits how far the camera can fly from where photo mode started; 0 = no limit."
+                           FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0"
+                           TextWrapping="Wrap" />
+                <StackPanel Margin="0,12,0,0">
+                  <TextBlock Text="SCREENSHOT FOLDER" Style="{StaticResource FieldLabel}" />
+                  <TextBox x:Name="PhotoModeScreenshotFolderBox" Text="screenshots" VerticalContentAlignment="Center" />
+                  <TextBlock Text="Relative to fable_2.exe, or a full path."
+                             FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0"
+                             TextWrapping="Wrap" />
+                </StackPanel>
               </StackPanel>
             </Border>
           </StackPanel>

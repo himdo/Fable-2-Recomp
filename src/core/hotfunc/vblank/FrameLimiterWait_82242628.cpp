@@ -25,6 +25,11 @@
 // Only the function's own stack frame is private to this thread; it goes
 // through the same helpers, which cost nothing extra there.
 //
+// Deliberate deviation from the guest: the guest loop back-edges to
+// GpuProgressCheck with no delay between iterations. This version interposes
+// a short CPU pause when still not ready, so the emulated loop does not
+// hammer the counter as aggressively. The pause touches no guest state, so
+// the register-state invariants above still hold.
 // Guest structure (addresses are the guest instructions):
 //   0x82242628  prologue: save r29/lr, 144-byte frame, r31=limit (r3),
 //               r30=now (r4), r29=flag (r5).
@@ -39,6 +44,8 @@
 //   0x822426E0  wait loop: GpuProgressCheck_82B9BF90 (0 = ready -> leave),
 //               else re-run the readiness test and spin while not ready.
 //   0x8224270C  call sub_82B9BEC8(r1+80), then the epilogue at 0x82242714.
+#include <windows.h>
+
 #include "fable_2_pch.h"
 
 extern "C" void FastHelper_821E8D20(PPCContext& ctx, uint8_t* base);
@@ -72,6 +79,10 @@ constexpr uint32_t kArgCounter = 88;
 constexpr uint32_t kArgProgress = 92;
 constexpr uint32_t kArgProgressCopy = 96;
 constexpr uint32_t kArgTimebase = 100;
+
+// PAUSE instructions between not-ready iterations of the wait loop.
+// (The guest loop has no delay; on hardware this is a tight spin.)
+constexpr int kPauseSpins = 32;
 
 // Guest return addresses (the instruction after each bl).
 constexpr uint32_t kRetSaveGpr = 0x82242630;
@@ -149,6 +160,12 @@ void BuildArgBlock(PPCContext& ctx, uint8_t* base) {
   ctx.cr6.compare<uint32_t>(ctx.r11.u32, ctx.r10.u32, ctx.xer);
 }
 
+// Sleep and waits round to scheduler ticks and would overshoot the frame
+// deadline, so spin with PAUSE instead. Touches no guest state.
+void SpinPause() {
+  for (int i = 0; i < kPauseSpins; ++i) YieldProcessor();
+}
+
 // addi r1,r1,144; b __restgprlr_29 (0x82242714).
 void Epilogue(PPCContext& ctx, uint8_t* base) {
   ctx.r1.s64 = ctx.r1.s64 + kFrameSize;
@@ -197,6 +214,9 @@ extern "C" void FrameLimiterWait_82242628(PPCContext& __restrict ctx, uint8_t* b
       break;
     }
     ReadinessR9R11(ctx, base);
+    if (ctx.cr6.lt != 0) {
+      SpinPause();
+    }
   }
 
   ctx.r3.s64 = ctx.r1.s64 + kArgBlock;

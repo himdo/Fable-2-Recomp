@@ -5,8 +5,7 @@ rem project's local patch (thirdparty/rexglue-sdk-local.patch).
 rem
 rem Uses a thin CMake wrapper (tools/vulkan_sdk) that add_subdirectory()s the
 rem SDK, which skips the SDK's top-level install/export step (it fails on a
-rem missing raw "SPIRV" target for the Vulkan-on-Windows config). The upstream
-rem SDK repo is not forked; local changes live only in the tracked patch.
+rem missing raw "SPIRV" target for the Vulkan-on-Windows config).
 rem
 rem Result: rexgpu-xenos.dll compiled with REXGLUE_USE_VULKAN=ON (D3D12 off),
 rem plus its deps (rexruntime, glslang, VMA, SPIRV-Tools, Vulkan loader). The

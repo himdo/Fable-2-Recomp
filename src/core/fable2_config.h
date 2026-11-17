@@ -41,7 +41,128 @@ struct Values {
   // mouse_look_scale); the cvar keeps its compiled default as a fallback so
   // an empty/missing config can never wedge input.
   bool mouse_look = true;
+  // Shared mouse-look sensitivity slider (1..4096, 256 = 1x): stick units per
+  // pixel, and a multiplier on mouse_look_sens_x/_y for the direct mode.
   int32_t mouse_look_scale = 256;  // range 1..4096 (cvar constraint)
+  // Even mouse-look turning (src/input/mouse_stick.h): velocity over one camera
+  // update, game deadzone and diagonal boost undone. Seeds the cvars of the
+  // same names; false = the previous per-poll mapping.
+  bool mouse_look_smoothing = true;
+  int32_t mouse_look_window_ms = 0;  // 0 = one camera update; range 0..500
+  // Mouse-look diagnostics to fable2_mouse.log (src/input/mouse_diag.h).
+  // Seeds the mouse_look_diag cvar; `f2 mouse diag on|off` changes it live.
+  bool mouse_look_diag = false;
+  // Direct mouse camera (src/input/mouse_direct.h). Seed the cvars of the same
+  // names; `f2 mouse mode|sens|invert|smooth` change them live.
+  std::string mouse_look_mode = "direct";  // "direct" or "stick"
+  double mouse_look_sens_x = 0.06;          // degrees per count
+  double mouse_look_sens_y = 0.06;
+  bool mouse_look_invert_y = false;
+  double mouse_look_direct_smoothing = 0.0;  // 0..0.9
+  // Direct mouse-to-camera look (see src/input/mouse_look.h). EXPERIMENTAL.
+  // When true, mouse movement bypasses the synthetic pad's right stick and is
+  // applied directly to the active camera's orientation by
+  // fable2_hook_direct_mouse_look, giving a desktop-FPS "move the mouse that
+  // far, turn that far" feel with no rate cap. When false, the legacy
+  // right-stick mapping (mouse_look_scale) is used. Defaults to false but is
+  // still considered experimental.
+  bool direct_mouse_look = false;
+  // Fallback for direct_mouse_look. When true (and direct_mouse_look is on) the
+  // OLD re-implemented orbit runs: the hook at CECCameraUpdateFrame rotates the
+  // world-space eye around a low-passed hero pivot and writes a look-at
+  // quaternion (2-axis orbit with independent yaw). This is a working but
+  // hand-rolled orbit (not 1:1 with the stick). When false the direct-mouse
+  // path offsets the game's target orbit angle (cam+68) and lets the native
+  // easing drive the camera -- the intended 1:1 path, but it is still being
+  // tuned (see plans/plan-direct-mouse-1to1.md), so the default is the legacy
+  // orbit until that path is confirmed to move the eye.
+  bool mouse_look_legacy_orbit = true;
+  // Camera-look sensitivity: radians of camera rotation per host mouse pixel.
+  // Signed so an axis direction can be flipped without a code change.
+  float mouse_look_yaw_sens = -0.0022f;   // horizontal mouse -> camera yaw
+  float mouse_look_pitch_sens = -0.0022f;  // vertical mouse -> camera pitch
+  // Native look-orbit angle limits, in the game's own orbit-angle scale (the
+  // target angle at camera+68, which the right-stick look integrates and clamps).
+  // A full-range stick test (hero stationary) shows the native orbit clamps this
+  // angle to [floor, ceil]: floor = camera low / looking up, ceil = camera high /
+  // looking down, with the rest position in between (~2.81 at spawn).
+  //
+  // The mouse adds its cumulative pitch ON TOP of the native angle, and is
+  // clamped so the TOTAL (native orbit + mouse) stays within [floor, ceil]. This
+  // makes the mouse and the stick share one orbit and one set of bounds, so the
+  // two can't compound past the native limits (the mouse's headroom shrinks as
+  // the stick approaches a limit).
+  float mouse_look_pitch_floor = 1.458f;  // native floor angle (camera low)
+  float mouse_look_pitch_ceil = 4.067f;   // native ceiling angle (camera high)
+  // Camera local axis each look direction rotates around (0=X, 1=Y, 2=Z). The
+  // camera looks along its local Y, so a correct orbit turns around the local up
+  // (Z) and pitches around the local right (X). Negate the matching *_sens to flip
+  // a look direction. No rebuild needed to change these.
+  int32_t mouse_look_yaw_axis = 2;   // default Z (local up -> orbit)
+  int32_t mouse_look_pitch_axis = 0; // default X (local right -> pitch)
+  // 1:1 native right-stick injection: RightStickLookProcess_832BB018 (the game's
+  // active per-frame right-stick-Y consumer) reads the stick Y u16 and drives the
+  // camera orbit. The hotfunc override adds the per-frame mouse Y delta, scaled by
+  // this factor, to that u16 so the native orbit/easing/clamp pipeline runs with
+  // combined stick + mouse input (identical bounds to the stick). Scale is in
+  // stick u16 units per host mouse pixel. The stick is an int16 centered at 0 with
+  // full deflection at ~32768, so 512 px of mouse travel = a full deflection at
+  // the default 64. Signed: negative flips the direction.
+  int32_t mouse_look_stick_scale = 64;
+  // 1:1 native right-stick injection mode. When true (and mouse_look +
+  // direct_mouse_look are on) the RightStickLookProcess_832BB018 hotfunc override
+  // adds the per-frame mouse Y delta (scaled by mouse_look_stick_scale) to the
+  // right-stick Y u16, so the game's OWN orbit/easing/clamp pipeline runs with
+  // combined stick + mouse input. The mouse shares the stick's exact orbit
+  // bounds (no compounding past the native limits) because it feeds the same
+  // u16 the stick does. The legacy direct-mouse hook (fable2_hook_direct_mouse_
+  // look) resets the mouse delta once per frame but skips its orbit logic in this
+  // mode. Off by default (the legacy external orbit remains the default).
+  bool mouse_look_native_inject = false;
+  // Log the rest (pre-injection) and injected right-stick-Y u16 in the
+  // RightStickLookProcess override, capped, to calibrate mouse_look_stick_scale.
+  // Off by default.
+  bool mouse_look_stick_diag = false;
+  // Active-camera (CECCamera) field offsets used by the direct-mouse-look hook
+  // (bytes from the camera object). The look-orbit is reproduced by rotating
+  // BOTH the orientation quaternions AND the world-space eye position around the
+  // hero, exactly like the game's own right-stick look:
+  //   * camera_rot_tgt_off (160) / camera_rot_cur_off (176): the rotation-state
+  //     orientation quaternions (x,y,z,w, |m|=1) the follow logic eases the view
+  //     through. Rotated (pre-multiplied) by the orbit rotation so the camera
+  //     keeps facing the hero.
+  //   * camera_eye_off (144): the world-space camera EYE position (large values,
+  //     e.g. ~204,~93,~55). When the stick orbits the camera (hero stationary)
+  //     this sweeps a ~3.1-radius circle around the hero. Rotated around the
+  //     hero pivot by the same orbit rotation so the eye physically moves (a
+  //     true orbit rather than an in-place turn).
+  // The hero pivot is derived as eye + forward * camera_distance, where forward
+  // is the camera's local +Y rotated by the target orientation. All of these
+  // can be tuned at runtime with no rebuild (see mouse_look_camera_diag).
+  int32_t camera_rot_tgt_off = 160;  // rotation-state target (quaternion)
+  int32_t camera_rot_cur_off = 176;  // rotation-state current (quaternion)
+  int32_t camera_eye_off = 144;      // world-space eye position (x,y,z)
+  // "Is this the hero-orbit camera?" flag offset. The direct-mouse-look hook
+  // fires for EVERY CECCamera, including cinematic/cutscene cameras that the
+  // game scripts on its own (opening movie, cut-in shots, ...). Orbiting those
+  // fights the cutscene and makes the camera go wild. The hero (player)
+  // camera has a flag of 1.0 at this offset; cutscene/secondary cameras have
+  // 0.0. The hook only orbits the camera when this flag is >= 0.5, leaving
+  // cinematic cameras untouched so cutscenes play normally.
+  int32_t camera_hero_flag_off = 108;
+  // Distance from the hero to the camera eye (= the orbit radius). The game's
+  // native stick orbit has a horizontal radius of ~3.1 (fit from a live
+  // capture); tune this so the mouse orbit radius matches the game's.
+  float camera_distance = 3.1f;
+  // Log the active camera's orientation fields once, the first frame the mouse
+  // moves, to confirm the offset guesses above (and to spot which fields are
+  // position vs. angle vs. the transform). Off by default.
+  bool mouse_look_camera_diag = false;
+  // Dump EVERY 4-byte field of the active camera object (offset 0..260) plus the
+  // orientation quaternions, once per frame (capped), to the [ml-dump] log. Used
+  // to empirically find which fields the game's own right-stick look changes so
+  // the mouse look can drive the same field(s). Off by default.
+  bool mouse_look_camera_dump = false;
   // [patches] - toggles for the recomp-level (mid-asm hook) patches. The
   // hook bodies consult these at runtime (src/core/fable2_hooks.cpp), so a patch
   // can be A/B'd with no rebuild. high_tick_rate / higher_hf_tick_rate also
@@ -79,6 +200,14 @@ struct Values {
   // at random, which shows as flickering patches on the dog. Seeds the SDK
   // cvars depth_bias_shader(_units) in Fable2App. false = no bias.
   bool dog_fur_depth_bias = true;
+  // [patches] terrain_tess_cpu: Terrain tessellation on the CPU (SDK cvar terrain_tess_cpu).
+  bool terrain_tess_cpu = true;
+  // [patches] skinning_cpu: Memexport skinning on the CPU (SDK cvar skinning_cpu).
+  bool skinning_cpu = true;
+  // [patches] faster_render_targets: Narrower EDRAM transfers (SDK cvars execute_unclipped_draw_vs_on_cpu, skip_depth_clear_transfers).
+  bool faster_render_targets = true;
+  // [patches] gpu_frame_sync: Keep the GPU at most one frame behind (SDK cvar gpu_sync_at_frame_start).
+  bool gpu_frame_sync = true;
   // [perf] - hot-function override tuning.
   // hotfunc_yield_every: NtYieldExecution batching factor for the hotfunc
   // overrides (see src/core/hotfunc/hotfunc_yield.h). Every Nth call does
@@ -86,6 +215,20 @@ struct Values {
   // original (yield every call), 0 = never yield. Larger = fewer context
   // switches, less frequent CPU rotation to other guest threads.
   int32_t hotfunc_yield_every = 1;
+  // [perf] refresh_gpu_memory_each_frame: false seeds the SDK cvar
+  // clear_memory_page_state off (see the config file).
+  bool refresh_gpu_memory_each_frame = false;
+  // [photo_mode] (src/core/fable2_photo_mode.h): free camera + settings panel.
+  bool photo_mode_enabled = true;
+  std::string photo_mode_toggle_key = "F6";
+  std::string photo_mode_screenshot_key = "F12";
+  // Controller shortcut that toggles photo mode: buttons joined by "+"
+  // ("Guide", "L3 + R3", "Back + Start"), "Off" for none. true = Guide.
+  std::string photo_mode_gamepad_toggle = "Guide";
+  float photo_mode_move_speed = 4.0f;     // metres per second
+  float photo_mode_mouse_sensitivity = 0.0025f;  // radians per mouse pixel
+  float photo_mode_max_distance = 0.0f;   // 0 = no limit
+  std::string photo_mode_screenshot_folder = "screenshots";
 };
 
 // Load the config from `path`.
@@ -99,6 +242,10 @@ bool Load(const std::filesystem::path& path);
 
 // Parsed values (in-memory defaults until Load() succeeds).
 const Values& Get();
+
+// Change [photo_mode] gamepad_toggle in memory and in the file Load() read
+// (only that line is rewritten; comments and the rest are kept).
+bool SavePhotoModeGamepadToggle(const std::string& combo);
 
 // The default template written when the file is missing. Must match
 // config/fable2_config.toml in the repo (staged next to the exe by the build).

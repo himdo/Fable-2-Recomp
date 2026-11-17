@@ -13,8 +13,16 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstdlib>
 
 namespace fable2::allocwatch {
+
+// Off unless FABLE2_ALLOC_WATCH=1: the monitor polls every 2 ms for the
+// whole session.
+inline bool Enabled() {
+  const char* v = std::getenv("FABLE2_ALLOC_WATCH");
+  return v && v[0] == '1';
+}
 
 // Guest arena host base. Fixed virtual mapping (not ASLR): 0x100000000.
 // Confirmed stable across runs (init probe + VEH fault host 0x10000001C).
