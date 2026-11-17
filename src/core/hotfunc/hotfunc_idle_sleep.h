@@ -14,6 +14,10 @@
 //     within about 0.5 ms whatever the system timer resolution is, so a
 //     request shorter than that still sleeps about 0.5 ms.
 //
+// IdleYieldSleepUs resolves [perf] idle_yield_sleep_us, where -1 (the default)
+// means the platform default: 0 (off) on Windows, where the shortest sleep is
+// about 500 us and would make the frame limiter wake late, and 100 elsewhere.
+//
 // IdleSleepMicros returns false, without sleeping, when no short sleep is
 // available (Windows older than 10 1803). Callers then keep their original
 // spin or yield rather than risk a tick-length sleep.
@@ -21,6 +25,8 @@
 #pragma once
 
 #include <cstdint>
+
+#include "fable2_config.h"
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -40,6 +46,18 @@
 #endif
 
 namespace fable2::hotfunc {
+
+inline int32_t IdleYieldSleepUs() {
+  const int32_t sleep_us = fable2::config::Get().idle_yield_sleep_us;
+  if (sleep_us >= 0) {
+    return sleep_us;
+  }
+#ifdef _WIN32
+  return 0;
+#else
+  return 100;
+#endif
+}
 
 #ifdef _WIN32
 

@@ -248,7 +248,8 @@ struct Values {
   // back with no work in between (it is polling for another thread), sleep
   // this many microseconds per yield instead of spinning a core at 100%
   // (see src/core/hotfunc/hotfunc_yield.h). 0 = never sleep (original).
-  // -1 = the platform default (see IdleYieldSleepUs() below).
+  // -1 = the platform default (see IdleYieldSleepUs() in
+  // src/core/hotfunc/hotfunc_idle_sleep.h).
   int32_t idle_yield_sleep_us = -1;
 };
 
@@ -263,22 +264,6 @@ bool Load(const std::filesystem::path& path);
 
 // Parsed values (in-memory defaults until Load() succeeds).
 const Values& Get();
-
-// [perf] idle_yield_sleep_us with -1 (the default) resolved to the platform
-// default: 0 (off) on Windows, where the shortest sleep is about 500 us and
-// would make the frame limiter wake late (see hotfunc/hotfunc_idle_sleep.h),
-// and 100 elsewhere.
-inline int32_t IdleYieldSleepUs() {
-  const int32_t sleep_us = Get().idle_yield_sleep_us;
-  if (sleep_us >= 0) {
-    return sleep_us;
-  }
-#ifdef _WIN32
-  return 0;
-#else
-  return 100;
-#endif
-}
 
 // Change [photo_mode] gamepad_toggle in memory and in the file Load() read
 // (only that line is rewritten; comments and the rest are kept).

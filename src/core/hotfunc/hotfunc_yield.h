@@ -73,7 +73,7 @@ inline bool IdleSpinBackoff(int32_t sleep_us) {
 }
 
 inline void BatchedYield() {
-  const int32_t idle_sleep_us = fable2::config::IdleYieldSleepUs();
+  const int32_t idle_sleep_us = fable2::hotfunc::IdleYieldSleepUs();
   if (idle_sleep_us > 0 && IdleSpinBackoff(idle_sleep_us)) {
     std::atomic_thread_fence(std::memory_order_seq_cst);
     return;
