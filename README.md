@@ -150,12 +150,14 @@ Most of these settings can also be changed in the game: choose **Advanced
 Options** in the main menu, or **Options > Advanced** in the pause (Start)
 menu. It covers the window fit and aspect ratio presets (`[display]`), the
 draw and detail distances, and most of the settings above. It is a page of
-the game's book (the game's menu stays on the left) and works with the controller (D-pad, A to change, Y for the default, LB / RB for
-the tabs, B to go back), the keyboard (arrows, Enter, Delete, Page Up / Page
-Down, Escape) and the mouse. Every change applies while the game runs, with
+the game's book (the game's menu stays on the left, the settings are written
+on the right-hand paper page, under the leather cover) and works like the game's own options pages:
+D-pad left / right changes a value, Y sets the default, LB / RB switch tabs,
+A accepts and B cancels (putting the changes back). The keyboard (arrows,
+Delete, Page Up / Page Down, Enter, Escape) and the mouse work too. Every change applies while the game runs, with
 no restart (Skip Intro Videos is used at the next start, since the videos
-only play then). Leaving the
-page saves the changed keys to `fable2_config.toml`, keeping its comments and
+only play then). Accepting
+saves the changed keys to `fable2_config.toml`, keeping its comments and
 layout, the same way the launcher does. See
 [docs/ADVANCED_OPTIONS.md](docs/ADVANCED_OPTIONS.md), which also shows how to list a
 new key on the page.

@@ -9,9 +9,19 @@ on the **Advanced Options** page. It opens from:
 
 It is a page of the book, as the game's own options pages (Game, Video,
 Audio) are: the game's menu stays on the left page (stepping back a little)
-and the settings fill the right-hand page, in the game's GUI typeface, cream
-text with a gold highlight and gold rules, with the game's Options icon and
-controller button art. One tab shows at a time (LB / RB or Page Up / Page
+and the settings are written on the right-hand page, on the paper the game's
+own pages use (`frames_page_texture.tex`), in brown ink with a deep red
+highlight, in the game's GUI typeface, with the game's Options icon and
+controller button art. The book's leather cover
+(`frame_new_right_top/bottom.tex`) is drawn again over the paper's edge, so
+the cover stays on top as it does on the game's pages. Like the game's
+pages, the paper has a copper rim on both sides, from the page-edge strip in
+`frames_elements.tex`: along the cover, and on the outer edge, which curves
+in towards the middle of the page (drawn in thin slices so the paper follows
+the curve). The text keeps inside
+the page: a name too long for its line drops to the small font (then the
+value does, then the name is shortened), and the description stops above the
+button prompts. One tab shows at a time (LB / RB or Page Up / Page
 Down, or the chevrons beside its name). Never ImGui windows.
 
 ## Using it
@@ -41,10 +51,15 @@ console's `ws aspect` sets.
 | | Controller | Keyboard | Mouse |
 |---|---|---|---|
 | Move | D-pad / left stick | arrow keys, W / S | point at a line |
-| Change | A, D-pad left / right | Enter, Space, E, arrow keys left / right | click (the left half of a choice goes back), drag a bar, wheel |
+| Change | D-pad / left stick left / right | arrow keys left / right | click (the left half of a choice goes back), drag a bar, wheel |
 | Default value | Y | Delete | |
-| Tab | LB / RB | Page Up / Page Down, Z / Tab, 1-5 | click a tab |
-| Back (saves) | B or Start | Escape, Backspace, B | right click |
+| Tab | LB / RB | Page Up / Page Down, Z / Tab, 1-5 | click a chevron |
+| Accept (saves) | A | Enter, Space, E | |
+| Cancel (puts back) | B or Start | Escape, Backspace, B | right click |
+
+As on the game's own options pages, **Accept** keeps the changes and saves
+them, and **Cancel** puts every value changed on this visit back (live too)
+and saves nothing.
 
 The keys mapped onto the controller (`[input] keyboard_gamepad_map`) work as
 they do in the game's menus. The button prompts follow the last device used.
@@ -83,7 +98,7 @@ so.
 
 ## Saving
 
-Leaving the page writes the changed keys to `fable2_config.toml` next to the
+Accepting writes the changed keys to `fable2_config.toml` next to the
 exe and shows *Settings Saved*. Only the value of each changed line is
 rewritten: indentation, spacing, inline comments, the comment blocks, unknown
 keys and sections, and the line endings stay as they were. A key missing from
