@@ -20,7 +20,7 @@
 // RunScript must run on the world update's thread. The MainRenderLoop hook runs
 // on a different host thread, and calling RunScript there raced the world
 // update (guest null reads in GuildChest_ProcessItems), so it is never called
-// from there.
+// from there. run_external() enforces this: see world_thread.h.
 
 #pragma once
 
@@ -33,8 +33,11 @@
 #include <mutex>
 #include <string>
 
+#include <rex/logging/macros.h>  // REXSYS_WARN
+
 #include "rex/cvar.h"
 #include "rex/ppc/context.h"  // PPCContext
+#include "world_thread.h"
 
 // Guest-memory helpers (defined in src/diagnostics/fable2_text_append.h, which
 // is included later in main.cpp). We only need these five; forward-declare them
@@ -142,9 +145,21 @@ inline void poll_f5(bool focused) {
 }
 
 // Run the external Lua file via the captured CScriptManager::RunScript.
-// Returns true if invoked. Must be called on the world update's thread
-// (console::service_world_thread), never from the MainRenderLoop hook.
+// Returns true if invoked. Must be called inside the world-update service
+// (console::service_world_thread), never from the MainRenderLoop hook: anywhere
+// else it refuses and logs, because RunScript off the world update corrupts the
+// game's script engine (the 1.6 alt-tab crash; see world_thread.h).
 inline bool run_external(PPCContext& ctx, uint8_t* base, const std::string* path_override = nullptr) {
+  if (!fable2::worldthread::MayRunScript()) {
+    const std::string refused = path_override ? *path_override : REXCVAR_GET(f5_lua_path);
+    if (fable2::worldthread::FirstRefusal(refused))
+      REXSYS_WARN(
+          "[lua] RunScript refused for {}: asked for outside the world-update service. "
+          "Run it from console::service_world_thread (see src/core/world_thread.h).",
+          refused);
+    logline("[f5] RunScript refused off the world-update service: %s\n", refused.c_str());
+    return false;
+  }
   const uint32_t this_ptr = g_this.load();
   const uint32_t method = g_method.load();
   if (this_ptr == 0 || method == 0) {

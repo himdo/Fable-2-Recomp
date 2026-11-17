@@ -13,8 +13,11 @@
 #ifndef FABLE2_GUI_GUI_TEX_CODEC_H
 #define FABLE2_GUI_GUI_TEX_CODEC_H
 
+#include <algorithm>
 #include <cstdint>
 #include <cstddef>
+#include <cstdlib>
+#include <cstring>
 #include <utility>
 #include <vector>
 
@@ -571,6 +574,160 @@ inline bool DecodeCompressedIconToTile(const uint8_t* payload, size_t size, int 
   }
   emit();
   return true;
+}
+
+// Decodes a compressed entry (CompFlag 1/11 Huffman, or 7 raw) into standard
+// little-endian BC3 blocks in row-major block order, 16 bytes each: the game's
+// own blocks, so re-storing them is lossless.
+inline bool DecodeCompressedToBc3(const uint8_t* payload, size_t size, int width, int height,
+                                  std::vector<uint8_t>& out) {
+  using namespace texcodec;
+  if (size < 48 || width % 4 != 0 || height % 4 != 0) return false;
+  auto u32be = [&](int o) {
+    return static_cast<uint32_t>(payload[o]) << 24 | static_cast<uint32_t>(payload[o + 1]) << 16 |
+           static_cast<uint32_t>(payload[o + 2]) << 8 | static_cast<uint32_t>(payload[o + 3]);
+  };
+  const int compflag = static_cast<int>(u32be(0));
+  const int data_offset = static_cast<int>(u32be(4));
+  const int data_size = static_cast<int>(u32be(8));
+  const int dual_flag = static_cast<int>(u32be(12));
+  const int dual_offset = static_cast<int>(u32be(16));
+  const int dual_size = static_cast<int>(u32be(20));
+  if (data_offset != 48 || data_size <= 0 ||
+      static_cast<size_t>(data_offset) + static_cast<size_t>(data_size) > size)
+    return false;
+  const size_t nblocks = static_cast<size_t>(width / 4) * (height / 4);
+  out.assign(nblocks * 16, 0);
+  if (compflag == 7) {
+    if (static_cast<size_t>(data_size) < nblocks * 16) return false;
+    for (size_t i = 0; i + 1 < nblocks * 16; i += 2) {
+      out[i] = payload[data_offset + i + 1];
+      out[i + 1] = payload[data_offset + i];
+    }
+    return true;
+  }
+  if (compflag != 1 && compflag != 11) return false;
+  std::vector<uint8_t> bc1, bc4;
+  int w, h;
+  if (!DecodeColourMip(payload + data_offset, static_cast<size_t>(data_size), w, h, bc1) ||
+      w != width || h != height)
+    return false;
+  const bool has_alpha =
+      dual_size > 0 && static_cast<size_t>(dual_offset) + static_cast<size_t>(dual_size) <= size &&
+      (dual_flag == 2 || dual_flag == 3 || dual_flag == 4) &&
+      DecodeAlphaMip(payload + dual_offset, static_cast<size_t>(dual_size), w, h, bc4);
+  for (size_t i = 0; i < nblocks; ++i) {
+    uint8_t* b = out.data() + i * 16;
+    if (has_alpha) {
+      std::memcpy(b, bc4.data() + i * 8, 8);
+    } else {
+      b[0] = b[1] = 255;
+    }
+    std::memcpy(b + 8, bc1.data() + i * 8, 8);
+  }
+  return true;
+}
+
+// Encodes 16 A,R,G,B pixels into one standard BC3 block (bounding-box
+// endpoints, colour always in 4-colour mode as BC3 decodes it).
+inline void EncodeBc3Block(const uint8_t argb[64], uint8_t out[16]) {
+  int amin = 255, amax = 0;
+  for (int i = 0; i < 16; ++i) {
+    amin = std::min<int>(amin, argb[i * 4]);
+    amax = std::max<int>(amax, argb[i * 4]);
+  }
+  out[0] = static_cast<uint8_t>(amax);
+  out[1] = static_cast<uint8_t>(amin);
+  uint64_t asel = 0;
+  if (amax > amin) {
+    uint8_t ramp[8] = {static_cast<uint8_t>(amax), static_cast<uint8_t>(amin)};
+    for (int i = 1; i <= 6; ++i) ramp[i + 1] = static_cast<uint8_t>(((7 - i) * amax + i * amin + 3) / 7);
+    for (int i = 0; i < 16; ++i) {
+      int best = 0;
+      for (int k = 1; k < 8; ++k)
+        if (std::abs(ramp[k] - argb[i * 4]) < std::abs(ramp[best] - argb[i * 4])) best = k;
+      asel |= static_cast<uint64_t>(best) << (3 * i);
+    }
+  }
+  for (int i = 0; i < 6; ++i) out[2 + i] = static_cast<uint8_t>(asel >> (8 * i));
+
+  int lo[3] = {255, 255, 255}, hi[3] = {0, 0, 0};
+  bool any = false;
+  for (int pass = 0; pass < 2 && !any; ++pass) {
+    for (int i = 0; i < 16; ++i) {
+      if (pass == 0 && argb[i * 4] == 0) continue;
+      any = true;
+      for (int c = 0; c < 3; ++c) {
+        lo[c] = std::min<int>(lo[c], argb[i * 4 + 1 + c]);
+        hi[c] = std::max<int>(hi[c], argb[i * 4 + 1 + c]);
+      }
+    }
+  }
+  auto to565 = [](const int c[3]) {
+    return static_cast<uint16_t>(((c[0] * 31 + 127) / 255) << 11 | ((c[1] * 63 + 127) / 255) << 5 |
+                                 ((c[2] * 31 + 127) / 255));
+  };
+  uint16_t e0 = to565(hi), e1 = to565(lo);
+  if (e0 < e1) std::swap(e0, e1);
+  uint32_t csel = 0;
+  if (e0 != e1) {
+    uint8_t blk[8] = {static_cast<uint8_t>(e0), static_cast<uint8_t>(e0 >> 8), static_cast<uint8_t>(e1),
+                      static_cast<uint8_t>(e1 >> 8), 0, 0x55, 0xAA, 0xFF};
+    uint8_t pal[64];
+    texcodec::ExpandBc1(blk, pal);  // pixels 0, 4, 8, 12 hold palette entries 0..3
+    for (int i = 0; i < 16; ++i) {
+      int best = 0, best_d = 1 << 30;
+      for (int k = 0; k < 4; ++k) {
+        int d = 0;
+        for (int c = 0; c < 3; ++c) {
+          const int diff = pal[k * 16 + 1 + c] - argb[i * 4 + 1 + c];
+          d += diff * diff;
+        }
+        if (d < best_d) best_d = d, best = k;
+      }
+      csel |= static_cast<uint32_t>(best) << (2 * i);
+    }
+  }
+  out[8] = static_cast<uint8_t>(e0);
+  out[9] = static_cast<uint8_t>(e0 >> 8);
+  out[10] = static_cast<uint8_t>(e1);
+  out[11] = static_cast<uint8_t>(e1 >> 8);
+  for (int i = 0; i < 4; ++i) out[12 + i] = static_cast<uint8_t>(csel >> (8 * i));
+}
+
+// A CompFlag 7 bank body: the 48-byte section header, then the BC3 blocks with
+// their 16-bit fields byte-swapped, as the game's raw BC3 textures store them.
+inline std::vector<uint8_t> BuildRawBc3Body(const std::vector<uint8_t>& bc3) {
+  std::vector<uint8_t> body(48 + bc3.size(), 0);
+  const uint32_t words[3] = {7, 48, static_cast<uint32_t>(bc3.size())};
+  for (int w = 0; w < 3; ++w)
+    for (int i = 0; i < 4; ++i) body[w * 4 + i] = static_cast<uint8_t>(words[w] >> (24 - 8 * i));
+  for (size_t i = 0; i + 1 < bc3.size(); i += 2) {
+    body[48 + i] = bc3[i + 1];
+    body[48 + i + 1] = bc3[i];
+  }
+  return body;
+}
+
+inline bool IsRawBc3Body(const std::vector<uint8_t>& body) {
+  return body.size() > 48 && body[0] == 0 && body[1] == 0 && body[2] == 0 && body[3] == 7 &&
+         body[4] == 0 && body[5] == 0 && body[6] == 0 && body[7] == 48;
+}
+
+// Where a raw BC3 body ends up in guest memory once loaded: the stored blocks,
+// in Xenos tile order (16-byte elements, pitch = width in blocks).
+inline std::vector<uint8_t> RawBc3LiveSurface(const std::vector<uint8_t>& body, int width) {
+  const int bw = width / 4;
+  const size_t nblocks = (body.size() - 48) / 16;
+  const int bh = bw > 0 ? static_cast<int>(nblocks / bw) : 0;
+  std::vector<uint8_t> live(nblocks * 16, 0);
+  for (int by = 0; by < bh; ++by)
+    for (int bx = 0; bx < bw; ++bx) {
+      const size_t dst = static_cast<size_t>(XenosTiledOffset16(bx, by, bw));
+      if (dst + 16 > live.size()) continue;
+      std::memcpy(live.data() + dst, body.data() + 48 + (static_cast<size_t>(by) * bw + bx) * 16, 16);
+    }
+  return live;
 }
 
 }  // namespace fable2::gui

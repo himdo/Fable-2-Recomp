@@ -35,7 +35,6 @@ local F5_MENU_ITEMS = {
   { name = "Get Player Position", path = "scripts/recomp/getPlayerPos.lua" },
   { name = "Modify Money", path = "scripts/recomp/modifyMoney.lua" },
   { name = "Morality / Purity", path = "scripts/recomp/modifyMoralityPurity.lua" },
-  { name = "Toggle Freecam", path = "scripts/recomp/toggleFreecam.lua" },
 }
 
 -- Run a script from the game VFS. The game's custom loadfile resolves paths
@@ -204,6 +203,15 @@ if not st.registered then
         -- to re-open. This is what keeps a re-opened box from reusing a stale
         -- hovered-item index from the previous box.
         cooldown = 40
+      else
+        -- Nothing open, nothing asked for: end this script. The
+        -- GeneralScriptManager writes its running scripts into save games,
+        -- and this table holds `_G`, so it must never still be in the list
+        -- when the game saves (2026-11-15: saves holding the console's
+        -- similar script crashed the game's script engine). The next F5
+        -- press registers it again.
+        st.registered = false
+        return
       end
       coroutine.yield()
     end

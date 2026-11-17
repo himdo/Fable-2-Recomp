@@ -61,6 +61,7 @@
 #include "host_pad.h"
 #include "mouse_look.h"
 #include "photo_mode_state.h"
+#include "world_thread.h"
 #include "fable2_func_trace.h"
 
 #ifdef _WIN32
@@ -911,9 +912,13 @@ inline void on_world_update_impl(PPCContext& ctx, uint8_t* base, bool force_run)
 // updates (every guest function entered, in order, to fable2_func_trace.log),
 // running each one even while photo mode has the world frozen.
 inline void on_world_update(PPCContext& ctx, uint8_t* base) {
-  // Work that must run on the world's thread between updates (the console's
-  // Lua pump install). It restores ctx itself.
-  if (world_thread_hook()) world_thread_hook()(ctx, base);
+  // Work that must run on the world's thread between updates: every host
+  // RunScript (console::service_world_thread). It restores ctx itself. The
+  // scope is what lets f5lua::run_external run (see world_thread.h).
+  if (world_thread_hook()) {
+    const fable2::worldthread::ServiceScope in_service;
+    world_thread_hook()(ctx, base);
+  }
   if (trace_world_request().load() > 0) {
     const int left = trace_world_request().fetch_sub(1);
     char buf[64];

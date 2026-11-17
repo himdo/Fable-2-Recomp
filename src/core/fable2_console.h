@@ -41,6 +41,7 @@
 #include <fstream>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -186,14 +187,18 @@ struct State {
   bool scan_float = false;
   bool scan_active = false;
   bool autoexec_done = false;
-  // Lua command pump (console_pump.lua): the game runs it inside its own
-  // script update; the cprint hook sets pump_ready / lua_done from its markers.
+  // Lua commands: console_pump.lua readies them (and retires old console
+  // scripts restored from a save), console_step.lua runs one. Both are run
+  // with RunScript by service_world_thread(), on the world's own thread; the
+  // cprint hook sets pump_ready / lua_done from their markers.
   std::atomic<bool> pump_ready{false};
   bool pump_requested = false;
   Clock::time_point pump_req_time{};
-  // Set by start_pump(), cleared by service_world_thread() once it has run
-  // RunScript at the start of a world update, on the world's own thread.
+  // Set by start_pump() (and right after each load), cleared by
+  // service_world_thread() once it has run console_pump.lua.
   std::atomic<bool> pump_install_wanted{false};
+  // Set by dispatch_lua(), cleared once console_step.lua has been run.
+  std::atomic<bool> step_wanted{false};
   std::string lua_pending;      // a Lua line held until the pump is ready
   uint64_t lua_seq = 0;
   std::atomic<uint64_t> lua_done{0};
@@ -1943,14 +1948,18 @@ inline void write_state_file() {
   fs::rename(tmp, s.root / "console" / "state.txt", ec);
 }
 
-// Lua commands run inside the game's own script update (console_pump.lua), not
-// from this hook: calling RunScript per command from MainRenderLoop raced the
-// game's Lua and corrupted the VM. RunScript is used once, to install the pump,
-// and even that one call must not run here: MainRenderLoop runs on a different
-// host thread from the world update, and installing the pump while the world
-// was mid-update crashed it (guest null read in GrowBitArrayForString, under
-// GuildChest_ProcessItems, ~10 ms after the request). So start_pump() only asks;
-// service_world_thread() installs it at the start of the next world update.
+// Lua commands never run from the MainRenderLoop hook: it runs on a different
+// host thread from the world update, and RunScript there raced the world update
+// and crashed it (guest null read in GrowBitArrayForString, under
+// GuildChest_ProcessItems, ~10 ms after the call). start_pump() and
+// dispatch_lua() only ask; service_world_thread() runs the scripts at the start
+// of the next world update.
+//
+// There is no per-frame "pump" script any more: the GeneralScriptManager writes
+// its running scripts into save games, and the old pump (with `_G = _G`) made
+// every save carry the whole global table; loading such a save restored it and
+// the game's script engine crashed soon after (2026-11-15). See
+// console_pump.lua.
 inline void start_pump(PPCContext& /*ctx*/, uint8_t* /*base*/) {
   State& s = S();
   s.pump_requested = true;
@@ -1975,6 +1984,9 @@ inline void stress_tick(int thread, PPCContext& ctx, uint8_t* base) {
   if (stress_mode() != thread || !S().pump_ready.load()) return;
   static int frame = 0, calls = 0;
   if (calls >= 1500 || (++frame % 3) != 0) return;
+  // The render-thread run is the race itself, on purpose (world_thread.h).
+  std::optional<fable2::worldthread::ResearchOffServiceScope> research;
+  if (thread == 1) research.emplace();
   const PPCContext saved = ctx;
   try {
     const std::string path = "scripts/recomp/stress_noop.lua";
@@ -1986,21 +1998,47 @@ inline void stress_tick(int thread, PPCContext& ctx, uint8_t* base) {
     out("stress", std::string(thread == 1 ? "render" : "world") + " thread RunScript #" + std::to_string(calls));
 }
 
+inline void poll_mouse_direct(PPCContext& ctx, uint8_t* base);
+
+inline void run_world_script(PPCContext& ctx, uint8_t* base, const char* path) {
+  const PPCContext saved = ctx;
+  try {
+    const std::string p = path;
+    f5lua::run_external(ctx, base, &p);
+  } catch (...) {
+  }
+  ctx = saved;
+}
+
 // Called at the start of every world update, on the world's thread, before the
-// game's own update (photo mode's GameWorldState_Update hook calls it).
+// game's own update (photo mode's GameWorldState_Update hook calls it). Every
+// RunScript the host makes goes through here.
 inline void service_world_thread(PPCContext& ctx, uint8_t* base) {
   State& s = S();
   stress_tick(2, ctx, base);
   f5lua::poll_world(ctx, base);  // F5: run the external Lua file
-  if (!s.pump_install_wanted.exchange(false)) return;
-  const PPCContext saved = ctx;
-  try {
-    const std::string path = "scripts/recomp/console_pump.lua";
-    f5lua::run_external(ctx, base, &path);
-  } catch (...) {
+  poll_mouse_direct(ctx, base);  // direct mouse camera: start mouse_direct.lua
+
+  // Right after each load, run console_pump.lua: it retires console
+  // and F5 scripts that an older save brought back (see console_pump.lua).
+  // This runs whether or not the console is used.
+  static int64_t last_load_seen = 0;
+  static int64_t cleanup_due = 0;
+  const int64_t loaded = fable2::uievents::LastFired("FINISHED_TRANSITIONING_TO_GAME");
+  if (loaded > last_load_seen) {
+    last_load_seen = loaded;
+    cleanup_due = fable2::uievents::NowMs() + 250;  // soon: a restored script is already running
   }
-  ctx = saved;
-  out("lua", "installing the command pump (world thread)");
+  if (cleanup_due != 0 && fable2::uievents::NowMs() >= cleanup_due) {
+    cleanup_due = 0;
+    s.pump_install_wanted.store(true);
+  }
+
+  if (s.pump_install_wanted.exchange(false)) {
+    run_world_script(ctx, base, "scripts/recomp/console_pump.lua");
+    out("lua", "readying Lua commands (world thread)");
+  }
+  if (s.step_wanted.exchange(false)) run_world_script(ctx, base, "scripts/recomp/console_step.lua");
 }
 
 // Direct mouse camera (src/input/mouse_direct.h): start
@@ -2008,21 +2046,16 @@ inline void service_world_thread(PPCContext& ctx, uint8_t* base) {
 // host for the mouse movement once per camera update. RunScript only works
 // with a save loaded, so this retries with a growing pause while the mouse is
 // being moved without reaching the camera (Boot in mouse_direct.h). Runs
-// whether or not the console is on.
+// whether or not the console is on, from service_world_thread(): like every
+// RunScript, it must run on the world's thread, not from MainRenderLoop.
 inline void poll_mouse_direct(PPCContext& ctx, uint8_t* base) {
   if (!REXCVAR_GET(mouse_look) || REXCVAR_GET(mouse_look_mode) == "stick") return;
   if (!fable2::mousedirect::BootState().ShouldTry(fable2::mousediag::NowUs())) return;
   fable2::mousediag::Diag::Get().Note("direct starting mouse_direct.lua");
-  const PPCContext saved = ctx;
-  try {
-    const std::string path = "scripts/recomp/mouse_direct.lua";
-    f5lua::run_external(ctx, base, &path);
-  } catch (...) {
-  }
-  ctx = saved;
+  run_world_script(ctx, base, "scripts/recomp/mouse_direct.lua");
 }
 
-// Hands one line to the pump: console_run.lua = `return <seq>, [==[line]==]`.
+// Hands one line to console_step.lua: console_run.lua = `return <seq>, [==[line]==]`.
 inline void dispatch_lua(const std::string& line) {
   State& s = S();
   // The game's Lua numbers are 4-byte floats (exact integers only up to 2^24),
@@ -2045,6 +2078,7 @@ inline void dispatch_lua(const std::string& line) {
   }
   s.lua_wait = true;
   s.lua_deadline = Clock::now() + std::chrono::seconds(30);
+  s.step_wanted.store(true);  // console_step.lua runs it on the next world update
 }
 
 inline void run_lua_line(const std::string& line, PPCContext& ctx, uint8_t* base) {
@@ -2279,8 +2313,7 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
   // Video letterboxing (fit-window) needs a per-frame tick; it does not
   // depend on the console being on.
   fable2::fitwindow::ui::TickVideo();
-  // The direct mouse camera doesn't depend on the console being on either.
-  poll_mouse_direct(ctx, base);
+  // (The direct mouse camera is started from service_world_thread().)
   State& s = S();
   const bool file_mode = enabled();
   if (!file_mode && !s.active.load(std::memory_order_relaxed)) return;
@@ -2381,13 +2414,13 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
   if (s.boot.step >= 0) {
     // boot in progress (BootStep)
   } else if (!s.lua_pending.empty()) {
-    // Waiting for console_pump.lua to register (it needs a loaded game).
+    // Waiting for console_pump.lua to report ready (it needs a loaded game).
     if (s.pump_ready.load()) {
       const std::string l = s.lua_pending;
       s.lua_pending.clear();
       dispatch_lua(l);
     } else if (Clock::now() - s.pump_req_time > std::chrono::seconds(20)) {
-      out("lua", "the Lua command pump did not start (load a save first); dropped: " + s.lua_pending, true);
+      out("lua", "Lua commands are not ready (load a save first); dropped: " + s.lua_pending, true);
       s.lua_pending.clear();
       s.pump_requested = false;  // retry on the next Lua command
       idle_if_empty();
@@ -2398,7 +2431,7 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
       idle_if_empty();
     } else if (Clock::now() >= s.lua_deadline) {
       s.lua_wait = false;
-      out("lua", "no reply from the Lua command pump within 30 s", true);
+      out("lua", "no reply from the Lua command within 30 s", true);
       idle_if_empty();
     }
   } else if (s.wait_frames > 0) {

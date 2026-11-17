@@ -16,6 +16,16 @@ inline int XenosTiledOffset(int x, int y, int pitch) {
          (bank << 6) + (offset & 63);
 }
 
+// Same for a 16-byte element (one BC3 block); pitch is the width in blocks.
+inline int XenosTiledOffset16(int x, int y, int pitch) {
+  int macro = ((x >> 5) + (y >> 5) * (pitch >> 5)) << 11;
+  int micro = ((x & 7) + ((y & 14) << 2)) << 4;
+  int offset = macro + ((micro & ~15) << 1) + (micro & 15) + ((y & 1) << 4);
+  int bank = (((y & 8) >> 2) + (x >> 3)) & 3;
+  return ((offset & ~511) << 3) + ((y & 16) << 7) + ((offset & 448) << 2) +
+         (bank << 6) + (offset & 63);
+}
+
 }  // namespace fable2::gui
 
 #endif

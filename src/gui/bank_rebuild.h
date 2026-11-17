@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <zlib-ng.h>
 
@@ -214,10 +215,13 @@ inline bool RebuildBank(const std::vector<uint8_t>& bank,
 // entry layout (21 big-endian dwords): [1]=pixel_byte_count, [3]=format, [6]=2,
 // [20]=0x0D. The entry is modified in place (same size), so the bank's directory
 // is unchanged. `names` are matched against the bank's entry names; `out`
-// receives the (possibly) modified bank bytes.
+// receives the (possibly) modified bank bytes. Names in `raw_bc3` get the
+// header of the game's own raw BC3 textures instead: [3]=0xB0, [6]=0x27,
+// [20]=2, with [1] the body size.
 inline bool RebuildHeaderBank(const std::vector<uint8_t>& bank,
                               const std::unordered_map<std::string, uint32_t>& names,
-                              std::vector<uint8_t>& out) {
+                              std::vector<uint8_t>& out,
+                              const std::unordered_set<std::string>& raw_bc3 = {}) {
   int base_offset = 0, packed_length = 0, table_length = 0;
   std::vector<BankTocEntry> toc;
   std::vector<uint8_t> table;
@@ -248,10 +252,11 @@ inline bool RebuildHeaderBank(const std::vector<uint8_t>& bank,
     if (off < 0 || off + 84 > int(out.size())) continue;
     uint8_t* h = out.data() + off;
     const uint32_t count = it->second;
-    wr(h + 4, count);    // [1] pixel_byte_count
-    wr(h + 12, 0x00A2);  // [3] format
-    wr(h + 24, 0x0002);  // [6]
-    wr(h + 80, 0x000D);  // [20]
+    const bool bc3 = raw_bc3.count(name) != 0;
+    wr(h + 4, count);                  // [1] pixel_byte_count
+    wr(h + 12, bc3 ? 0x00B0 : 0x00A2);  // [3] format
+    wr(h + 24, bc3 ? 0x0027 : 0x0002);  // [6]
+    wr(h + 80, bc3 ? 0x0002 : 0x000D);  // [20]
   }
   return true;
 }

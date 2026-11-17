@@ -32,3 +32,19 @@ jobs:
         run: python -m pytest --cov=tools --cov-report=term
       - name: Launcher tests
         run: dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release
+      - name: Check out the SDK sources the native tests use
+        # Only the SDK, the three header libraries the tests include and Catch2,
+        # not the SDK's other submodules (FFmpeg, SDL, the Vulkan libraries...).
+        shell: bash
+        run: |
+          git submodule update --init --depth 1 thirdparty/rexglue-sdk
+          git -C thirdparty/rexglue-sdk submodule update --init --depth 1 \
+            thirdparty/fmt thirdparty/simde thirdparty/spdlog thirdparty/catch2
+      - name: Native tests (with coverage)
+        shell: cmd
+        env:
+          FABLE2_COVERAGE: "1"
+        run: |
+          set "PATH=C:\Program Files\LLVM\bin;%PATH%"
+          clang++ --version
+          tests\run_native_tests.cmd
