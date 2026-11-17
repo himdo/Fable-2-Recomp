@@ -128,7 +128,8 @@ game recreates it with defaults on launch if it is ever missing. Loaded in
 - To add a setting: add a member to `fable2::config::Values` (with default),
   read it in `Load()`, and document the key in `config/fable2_config.toml`
   **and** the embedded template in `src/core/fable2_config.cpp` (keep both in
-  sync).
+  sync). To show it on the in-game Advanced Options page, add one entry to
+  `src/core/port_settings_schema.h`.
 - Settings that back an SDK cvar (currently the `[input]` section:
   `keyboard_gamepad_map`, `mouse_look`, `mouse_look_scale`) are seeded into
   the cvar at startup — but only when no higher-priority
@@ -142,6 +143,25 @@ game recreates it with defaults on launch if it is ever missing. Loaded in
   "High Tick Rate" / "Higher HF Tick Rate"; turn both on together), which
   also drive the guest-image data writes below. There is no separate patch
   file.
+
+### In-game Advanced Options
+
+Most of these settings can also be changed in the game: choose **Advanced
+Options** in the main menu, or **Options > Advanced** in the pause (Start)
+menu. It covers the window fit and aspect ratio presets (`[display]`), the
+draw and detail distances, and most of the settings above. It is a page of
+the game's book (the game's menu stays on the left, the settings are written
+on the right-hand paper page, which slides out from under the leather cover as
+the game's pages do) and works like the game's own options pages:
+D-pad left / right changes a value, Y sets the default, LB / RB switch tabs,
+A accepts and B cancels (putting the changes back). The keyboard (arrows,
+Delete, Page Up / Page Down, Enter, Escape) and the mouse work too. Every change applies while the game runs, with
+no restart (Skip Intro Videos is used at the next start, since the videos
+only play then). Accepting
+saves the changed keys to `fable2_config.toml`, keeping its comments and
+layout, the same way the launcher does. See
+[docs/ADVANCED_OPTIONS.md](docs/ADVANCED_OPTIONS.md), which also shows how to list a
+new key on the page.
 
 
 

@@ -320,6 +320,47 @@
 
             <Border Style="{StaticResource Panel}" Margin="0,18,0,0">
               <StackPanel>
+                <TextBlock Text="View distance" Style="{StaticResource SectionTitle}" />
+                <TextBlock Text="How far away objects, buildings and people are drawn, and how far models keep their full detail. 1 = original. Higher costs some GPU time. Applies on the next save load."
+                           FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,0"
+                           TextWrapping="Wrap" />
+                <Grid Margin="0,12,0,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="16" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <StackPanel>
+                    <TextBlock Text="DRAW DISTANCE" Style="{StaticResource FieldLabel}" />
+                    <Slider x:Name="ViewDistanceSlider" Minimum="1" Maximum="10" Value="1"
+                            SmallChange="0.25" LargeChange="1" IsSnapToTickEnabled="True" TickFrequency="0.25"
+                            ValueChanged="DistanceSliderChanged" />
+                  </StackPanel>
+                  <TextBox x:Name="ViewDistanceBox" Grid.Column="2" Width="56" Text="1.0"
+                           TextAlignment="Center" VerticalContentAlignment="Center"
+                           LostFocus="DistanceBoxLostFocus" />
+                </Grid>
+                <Grid Margin="0,12,0,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="16" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <StackPanel>
+                    <TextBlock Text="DETAIL DISTANCE" Style="{StaticResource FieldLabel}" />
+                    <Slider x:Name="LodDistanceSlider" Minimum="1" Maximum="10" Value="1"
+                            SmallChange="0.25" LargeChange="1" IsSnapToTickEnabled="True" TickFrequency="0.25"
+                            ValueChanged="DistanceSliderChanged" />
+                  </StackPanel>
+                  <TextBox x:Name="LodDistanceBox" Grid.Column="2" Width="56" Text="1.0"
+                           TextAlignment="Center" VerticalContentAlignment="Center"
+                           LostFocus="DistanceBoxLostFocus" />
+                </Grid>
+              </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Panel}" Margin="0,18,0,0">
+              <StackPanel>
                 <TextBlock Text="Performance" Style="{StaticResource SectionTitle}" />
                 <TextBlock Text="Hot-function yield batching. 1 = original (yield every call); larger = fewer context switches; 0 = never yield."
                            FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,10"

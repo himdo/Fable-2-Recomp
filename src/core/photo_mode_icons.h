@@ -441,5 +441,28 @@ inline bool ExtraReady(int i) {
 inline void DrawExtra(ImDrawList* dl, int i, ImVec2 p0, float size, ImU32 col = IM_COL32_WHITE) {
   if (ExtraReady(i)) DrawImage(dl, extras()[i].img, p0, size, col);
 }
+// The texels [t0, t1) of extra image `i` stretched over [p0, p1], upside
+// down when `flip_v`. Half a texel is kept off each edge so the atlas
+// neighbours do not bleed in. False if the image is not ready.
+inline bool DrawExtraRegion(ImDrawList* dl, int i, ImVec2 p0, ImVec2 p1, ImVec2 t0, ImVec2 t1, ImU32 col,
+                            bool flip_v) {
+  if (!ExtraReady(i)) return false;
+  const Image& img = extras()[i].img;
+  ImFontAtlasRect r;
+  if (!img.atlas->GetCustomRect(img.rect_id, &r)) return false;
+  const float du = (r.uv1.x - r.uv0.x) / float(img.w), dv = (r.uv1.y - r.uv0.y) / float(img.h);
+  const float u0 = r.uv0.x + (t0.x + 0.5f) * du, u1 = r.uv0.x + (t1.x - 0.5f) * du;
+  const float v0 = r.uv0.y + (t0.y + 0.5f) * dv, v1 = r.uv0.y + (t1.y - 0.5f) * dv;
+  dl->AddImage(dl->_CmdHeader.TexRef, p0, p1, ImVec2(u0, flip_v ? v1 : v0), ImVec2(u1, flip_v ? v0 : v1), col);
+  return true;
+}
+// Extra image `i` (its rows down to `v_max` of its height) stretched over
+// [p0, p1], upside down when `flip_v` (so two copies meet without a seam).
+inline bool DrawExtraRect(ImDrawList* dl, int i, ImVec2 p0, ImVec2 p1, ImU32 col, bool flip_v,
+                          float v_max = 1.0f) {
+  if (!ExtraReady(i)) return false;
+  const Image& img = extras()[i].img;
+  return DrawExtraRegion(dl, i, p0, p1, ImVec2(0, 0), ImVec2(float(img.w), float(img.h) * v_max), col, flip_v);
+}
 
 }  // namespace fable2::gameicons

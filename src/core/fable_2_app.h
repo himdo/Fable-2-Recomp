@@ -46,6 +46,7 @@
 #include "remote_gamepad_driver.h"
 #include "fable2_crash_log.h"  // host crash report (fable2_crash.log)
 #include "photo_mode_dialog.h"  // photo mode settings panel (ImGui)
+#include "port_settings_dialog.h"  // Advanced Options page
 #ifdef FABLE2_REMOTE_CONTROL
 #include "remote_control_server.h"
 // 1-second game-state classifier (src/diagnostics/fable2_state_probe.h, single-TU inline).
@@ -108,6 +109,10 @@ class Fable2App : public rex::ReXApp {
   // Photo mode settings panel (src/core/photo_mode_dialog.h). Created in
   // OnCreateDialogs, released in OnShutdown (before the SDK drops the drawer).
   std::unique_ptr<fable2::photomode::PhotoModeDialog> photo_dialog_;
+  // In-game Advanced Options page (src/core/port_settings_dialog.h), opened from
+  // the main menu (src/menu/main_menu.cpp) and the pause menu's Options
+  // (src/core/port_settings_lua.h).
+  std::unique_ptr<fable2::portsettings::PortSettingsDialog> settings_dialog_;
 
   // Emulate the Xbox 360 Xenos GPU. Two plugins are staged next to the exe:
   //   rexgpu-xenos[d].dll        -> D3D12 (prebuilt SDK plugin; the default)
@@ -168,7 +173,34 @@ class Fable2App : public rex::ReXApp {
       });
     });
     // Render at the window's aspect ratio (src/core/fable2_fit_window.h).
+    // [display] seeds the fit cvars (fable_2.toml / env / command line still
+    // win) and the forced aspect ratio.
+    {
+      const auto& cfg = fable2::config::Get();
+      const std::pair<const char*, bool> display_cvars[] = {
+          {"fit_game_to_window", cfg.fit_to_window},
+          {"fit_window_hud_to_edges", cfg.hud_to_edges},
+          {"fit_window_native_16x9", cfg.native_16x9_screens}};
+      for (const auto& [cvar, on] : display_cvars) {
+        if (rex::cvar::GetFlagSource(cvar) == rex::cvar::Source::kDefault &&
+            !rex::cvar::SetFlagByName(cvar, on ? "true" : "false")) {
+          REXSYS_WARN("[fable2-config] {} cvar missing", cvar);
+        }
+      }
+    }
     fable2::fitwindow::Install(runtime()->memory(), window());
+    {
+      float aspect = 0.0f;
+      const std::string& text = fable2::config::Get().aspect_ratio;
+      if (fable2::fitwindow::ParseAspect(text, aspect)) {
+        if (aspect > 0.0f) {
+          fable2::fitwindow::SetForcedAspect(aspect);
+          REXSYS_INFO("[fable2-config] aspect_ratio \"{}\": {:.4f}", text, aspect);
+        }
+      } else {
+        REXSYS_WARN("[fable2-config] aspect_ratio \"{}\" not understood; following the window", text);
+      }
+    }
     // Hero/dog black-texture fix (see plans/hero-dog-texture-readback.md).
     // Approach + guest base 0x12704000 credit just-harry's Unofficial Xenia
     // femtofork for Fable II. readback_resolve_force_addresses is defined in the
@@ -480,6 +512,7 @@ class Fable2App : public rex::ReXApp {
     // The panel unregisters itself from the ImGui drawer, which the SDK
     // destroys right after this hook.
     photo_dialog_.reset();
+    settings_dialog_.reset();
 #ifdef FABLE2_REMOTE_CONTROL
     // Stop the state classifier thread, then the remote control server
     // threads, before anything else tears down.
@@ -729,6 +762,12 @@ class Fable2App : public rex::ReXApp {
       // The pose cards' expression icons come from the same bank.
       std::vector<std::string> pose_icons;
       for (const auto& pose : fable2::photomode::kPoses) pose_icons.push_back(pose.icon);
+      // The Advanced Options page's title icon (the game's Options icon).
+      pose_icons.push_back(fable2::portsettings::kMotifs);
+      pose_icons.push_back(fable2::portsettings::kPaperTexture);
+      pose_icons.push_back(fable2::portsettings::kCoverTop);
+      pose_icons.push_back(fable2::portsettings::kCoverBottom);
+      pose_icons.push_back(fable2::portsettings::kFrameSheet);
       icons = gi::Load(root, icon_log, pose_icons);
       if (icons > 0) break;
     }
@@ -739,6 +778,7 @@ class Fable2App : public rex::ReXApp {
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     // fable2::deadbeef_overlay::register_overlay(drawer);
     photo_dialog_ = std::make_unique<fable2::photomode::PhotoModeDialog>(drawer);
+    settings_dialog_ = std::make_unique<fable2::portsettings::PortSettingsDialog>(drawer);
 #ifdef _WIN32
     fable2::crashlog::Install();  // again, after the SDK set up its own handlers
 #endif

@@ -11,8 +11,11 @@
 // still runs), so a hand edit can never wedge the launch.
 
 #include "fable2_config.h"
+#include "fable2_config_edit.h"
 
+#include <algorithm>
 #include <array>
+#include <charconv>
 #include <cctype>
 #include <format>
 #include <fstream>
@@ -213,6 +216,33 @@ mouse_look_camera_diag = false
 # to find which fields the game's own right-stick look changes. Default: false
 mouse_look_camera_dump = false
 
+[display]
+# Fit the game to the window: render at the window's aspect ratio, so a wide
+# window shows a wider view, and stretch the frame to fill the window.
+# false = the original 16:9 picture with black bars. Seeds the cvar
+# fit_game_to_window (fable_2.toml or the command line still win).
+# Default: true
+fit_to_window = true
+
+# The aspect ratio the game renders at while fit_to_window is on: "auto"
+# follows the window; a ratio such as "16:9", "16:10", "21:9", "32:9" or
+# "4:3" (or a number like "2.39") keeps that shape whatever the window size.
+# Ratios are kept between 4:3 and 4:1.
+# Default: "auto"
+aspect_ratio = "auto"
+
+# With fit_to_window: move the HUD's edge elements (health, minimap, ...) to
+# the edges of a wide window instead of a 16:9 box in the middle. Takes effect
+# when the next menu or HUD screen loads. Seeds fit_window_hud_to_edges.
+# Default: true
+hud_to_edges = true
+
+# With fit_to_window: keep the game's own 2D screens (loading screens, the
+# saving banner) at 16:9 in the middle of a wide window instead of stretching
+# them. Seeds fit_window_native_16x9.
+# Default: true
+native_16x9_screens = true
+
 [patches]
 # Toggles for the recomp-level (mid-asm hook) patches, consulted at runtime
 # by the hook bodies (src/core/fable2_hooks.cpp) - no rebuild needed.
@@ -259,6 +289,17 @@ higher_hf_tick_rate = false
 # the game asks for blur. false = blur as in the original game.
 # Default: false
 disable_motion_blur = false
+
+# View distance: objects, buildings, villagers and creatures are drawn
+# view_distance_multiplier times farther away before they pop out (the game's
+# own draw distance multipliers, which no shipped script changes), and models
+# keep their full-detail version lod_distance_multiplier times farther out.
+# Applied as each object is loaded, so change them before loading a save.
+# Higher values cost some GPU time in towns and open areas. Both are clamped
+# to 1..10; 1 = the original distances.
+# Default: 1.0
+view_distance_multiplier = 1.0
+lod_distance_multiplier = 1.0
 
 # Realtime Texture Morphing (mid-asm hook fable2_hook_realtime_texture_morphing):
 # the hero's and dog's morphed skin textures are rendered straight into their
@@ -446,8 +487,8 @@ bool Load(const std::filesystem::path& path) {
 
   // Warn about unknown top-level sections (usually a typo or a file written
   // for a newer build).
-  static constexpr std::array<std::string_view, 5> kKnownSections = {
-      "general", "input", "patches", "perf", "photo_mode"};
+  static constexpr std::array<std::string_view, 6> kKnownSections = {
+      "general", "input", "display", "patches", "perf", "photo_mode"};
   for (const auto& [key, value] : root) {
     const bool known =
         std::ranges::find(kKnownSections, key.str()) != kKnownSections.end();
@@ -556,6 +597,19 @@ bool Load(const std::filesystem::path& path) {
         Read<bool>(input_table, "input", "mouse_look_camera_dump", "boolean",
                    values.mouse_look_camera_dump);
   }
+  const toml::path display_path{"display"};
+  const auto display = root[display_path];
+  if (display.is_table()) {
+    const toml::table& display_table = *display.as_table();
+    values.fit_to_window = Read<bool>(display_table, "display", "fit_to_window", "boolean",
+                                      values.fit_to_window);
+    values.aspect_ratio = Read<std::string>(display_table, "display", "aspect_ratio", "string",
+                                            values.aspect_ratio);
+    values.hud_to_edges = Read<bool>(display_table, "display", "hud_to_edges", "boolean",
+                                     values.hud_to_edges);
+    values.native_16x9_screens = Read<bool>(display_table, "display", "native_16x9_screens",
+                                            "boolean", values.native_16x9_screens);
+  }
   const toml::path patches_path{"patches"};
   const auto patches = root[patches_path];
   if (patches.is_table()) {
@@ -577,6 +631,13 @@ bool Load(const std::filesystem::path& path) {
     values.disable_motion_blur =
         Read<bool>(patches_table, "patches", "disable_motion_blur", "boolean",
                    values.disable_motion_blur);
+    // Whole numbers are read too (3 as well as 3.0).
+    values.view_distance_multiplier = static_cast<float>(
+        Read<double>(patches_table, "patches", "view_distance_multiplier", "number",
+                     values.view_distance_multiplier));
+    values.lod_distance_multiplier = static_cast<float>(
+        Read<double>(patches_table, "patches", "lod_distance_multiplier", "number",
+                     values.lod_distance_multiplier));
     values.realtime_texture_morphing =
         Read<bool>(patches_table, "patches", "realtime_texture_morphing", "boolean",
                    values.realtime_texture_morphing);
@@ -659,50 +720,44 @@ const Values& Get() { return g_values; }
 
 bool SavePhotoModeGamepadToggle(const std::string& combo) {
   g_values.photo_mode_gamepad_toggle = combo;
+  const bool ok = SaveFileEdits({{"photo_mode", "gamepad_toggle", TomlString(combo)}});
+  if (ok)
+    REXSYS_INFO("[fable2-config] photo_mode.gamepad_toggle = \"{}\" saved to {}", combo, g_path.string());
+  return ok;
+}
+
+Values& MutableForLiveEdit() { return g_values; }
+
+const std::filesystem::path& Path() { return g_path; }
+
+bool SaveFileEdits(const std::vector<FileEdit>& edits) {
   if (g_path.empty()) return false;
   std::string text;
   {
     std::ifstream in(g_path, std::ios::binary);
-    if (!in) return false;
-    text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    if (in) text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
   }
-  const std::string line = "gamepad_toggle = \"" + combo + "\"";
-  const std::string eol = text.find("\r\n") != std::string::npos ? "\r\n" : "\n";
-  // Find the [photo_mode] section and, inside it, the gamepad_toggle line.
-  size_t sec = text.find("\n[photo_mode]");
-  if (sec == std::string::npos && text.rfind("[photo_mode]", 0) == 0) sec = 0;
-  if (sec == std::string::npos) {
-    if (!text.empty() && text.back() != '\n') text += eol;
-    text += eol + "[photo_mode]" + eol + line + eol;
-  } else {
-    const size_t body = text.find('\n', sec + 1);
-    size_t end = body == std::string::npos ? text.size() : text.find("\n[", body);
-    if (end == std::string::npos) end = text.size();
-    size_t pos = body == std::string::npos ? std::string::npos : body + 1;
-    bool replaced = false;
-    while (pos != std::string::npos && pos < end) {
-      size_t le = text.find('\n', pos);
-      if (le == std::string::npos) le = text.size();
-      const std::string_view l(text.data() + pos, le - pos);
-      const size_t k = l.find_first_not_of(" \t");
-      if (k != std::string_view::npos && l.substr(k).rfind("gamepad_toggle", 0) == 0) {
-        const size_t cut = (le > pos && text[le - 1] == '\r') ? le - 1 : le;
-        text.replace(pos, cut - pos, line);
-        replaced = true;
-        break;
-      }
-      pos = le + 1;
-    }
-    if (!replaced) {
-      const size_t at = body == std::string::npos ? text.size() : body + 1;
-      text.insert(at, line + eol);
+  text = ApplyFileEdits(std::move(text), edits);
+  // Write a temporary file next to it, then swap it in, so a crash mid-write
+  // never leaves a half-written config.
+  std::filesystem::path tmp = g_path;
+  tmp += ".saving";
+  {
+    std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+    out << text;
+    if (!out) {
+      REXSYS_ERROR("[fable2-config] could not write {}", tmp.string());
+      return false;
     }
   }
-  std::ofstream out(g_path, std::ios::binary | std::ios::trunc);
-  if (!out) return false;
-  out << text;
-  REXSYS_INFO("[fable2-config] photo_mode.gamepad_toggle = \"{}\" saved to {}", combo, g_path.string());
-  return bool(out);
+  std::error_code ec;
+  std::filesystem::rename(tmp, g_path, ec);
+  if (ec) {
+    REXSYS_ERROR("[fable2-config] could not replace {}: {}", g_path.string(), ec.message());
+    std::filesystem::remove(tmp, ec);
+    return false;
+  }
+  return true;
 }
 
 const char* DefaultTemplate() { return kTemplate; }

@@ -36,6 +36,8 @@ public class Fable2ConfigValues
     public bool HighTickRate { get; set; } = false;       // unstable
     public bool HigherHfTickRate { get; set; } = false;    // unstable
     public bool DisableMotionBlur { get; set; } = false;
+    public double ViewDistanceMultiplier { get; set; } = 1.0;  // 1..10, 1 = original
+    public double LodDistanceMultiplier { get; set; } = 1.0;   // 1..10, 1 = original
     public bool RealtimeTextureMorphing { get; set; } = true;
     public bool HeroDogTextureReadback { get; set; } = false;
 
@@ -146,6 +148,8 @@ public static class Fable2ConfigFile
                     else if (key == "high_tick_rate") values.HighTickRate = ParseBool(rawValue, values.HighTickRate);
                     else if (key == "higher_hf_tick_rate") values.HigherHfTickRate = ParseBool(rawValue, values.HigherHfTickRate);
                     else if (key == "disable_motion_blur") values.DisableMotionBlur = ParseBool(rawValue, values.DisableMotionBlur);
+                    else if (key == "view_distance_multiplier") values.ViewDistanceMultiplier = ParseDouble(rawValue, values.ViewDistanceMultiplier);
+                    else if (key == "lod_distance_multiplier") values.LodDistanceMultiplier = ParseDouble(rawValue, values.LodDistanceMultiplier);
                     else if (key == "realtime_texture_morphing") values.RealtimeTextureMorphing = ParseBool(rawValue, values.RealtimeTextureMorphing);
                     else if (key == "hero_dog_texture_readback") values.HeroDogTextureReadback = ParseBool(rawValue, values.HeroDogTextureReadback);
                     break;
@@ -201,6 +205,8 @@ public static class Fable2ConfigFile
             ("patches", "high_tick_rate", values.HighTickRate ? "true" : "false"),
             ("patches", "higher_hf_tick_rate", values.HigherHfTickRate ? "true" : "false"),
             ("patches", "disable_motion_blur", values.DisableMotionBlur ? "true" : "false"),
+            ("patches", "view_distance_multiplier", FormatDouble(values.ViewDistanceMultiplier)),
+            ("patches", "lod_distance_multiplier", FormatDouble(values.LodDistanceMultiplier)),
             ("patches", "realtime_texture_morphing", values.RealtimeTextureMorphing ? "true" : "false"),
             ("patches", "hero_dog_texture_readback", values.HeroDogTextureReadback ? "true" : "false"),
             ("perf", "hotfunc_yield_every", values.HotFuncYieldEvery.ToString(CultureInfo.InvariantCulture)),

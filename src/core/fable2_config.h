@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace fable2::config {
 
@@ -163,6 +164,14 @@ struct Values {
   // to empirically find which fields the game's own right-stick look changes so
   // the mouse look can drive the same field(s). Off by default.
   bool mouse_look_camera_dump = false;
+  // [display] (src/core/fable2_fit_window.h): fit the game to the window.
+  // fit_to_window, hud_to_edges and native_16x9_screens seed the cvars
+  // fit_game_to_window, fit_window_hud_to_edges and fit_window_native_16x9;
+  // aspect_ratio is "auto" (follow the window) or a ratio ("21:9", "2.39").
+  bool fit_to_window = true;
+  std::string aspect_ratio = "auto";
+  bool hud_to_edges = true;
+  bool native_16x9_screens = true;
   // [patches] - toggles for the recomp-level (mid-asm hook) patches. The
   // hook bodies consult these at runtime (src/core/fable2_hooks.cpp), so a patch
   // can be A/B'd with no rebuild. high_tick_rate / higher_hf_tick_rate also
@@ -193,6 +202,13 @@ struct Values {
   // camera passes to the renderer (hook fable2_hook_disable_motion_blur in
   // src/core/fable2_hooks.cpp). false = original.
   bool disable_motion_blur = false;
+  // [patches] view_distance_multiplier: the game's own per-class draw
+  // distance multipliers (the values Lua's Set*DrawDistanceMultiplier would
+  // set; data write in src/core/fable2_patches.cpp). lod_distance_multiplier
+  // scales each model's LodDistance (hook fable2_hook_lod_distance in
+  // src/core/fable2_hooks.cpp). Both are clamped to 1..10; 1 = original.
+  float view_distance_multiplier = 1.0f;
+  float lod_distance_multiplier = 1.0f;
   // [patches] realtime_texture_morphing: build the hero/dog morphed skin
   // textures on the GPU (the game's own RealTimeTextureMorphing mode) instead
   // of CPU-compressing a resolved scratch texture, so they are not black on a
@@ -261,6 +277,23 @@ const Values& Get();
 // Change [photo_mode] gamepad_toggle in memory and in the file Load() read
 // (only that line is rewritten; comments and the rest are kept).
 bool SavePhotoModeGamepadToggle(const std::string& combo);
+
+// The values Get() returns, for settings changed live from the in-game PC
+// Settings page (src/core/port_settings_dialog.h). Only plain bool / number
+// fields are written through it while the game runs: hooks on other threads
+// read them every call.
+Values& MutableForLiveEdit();
+
+// The file Load() read (empty before Load()).
+const std::filesystem::path& Path();
+
+// One `key = value` line to set in the config file (fable2_config_edit.h).
+struct FileEdit;
+
+// ApplyFileEdits (fable2_config_edit.h) on the file Load() read, written
+// through a temporary file that then replaces it. Returns false (and logs) if
+// it could not be written.
+bool SaveFileEdits(const std::vector<FileEdit>& edits);
 
 // The default template written when the file is missing. Must match
 // config/fable2_config.toml in the repo (staged next to the exe by the build).

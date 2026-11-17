@@ -398,6 +398,12 @@ inline std::vector<Page> BuildPages() {
 
 }  // namespace menu
 
+// The screenshot key's name (changed live from Advanced Options, or as loaded).
+inline std::string ScreenshotKeyName() {
+  const char* k = screenshot_key_override().load();
+  return k ? std::string(k) : config::Get().photo_mode_screenshot_key;
+}
+
 class PhotoModeDialog final : public rex::ui::ImGuiDialog {
  public:
   explicit PhotoModeDialog(rex::ui::ImGuiDrawer* drawer)
@@ -1167,7 +1173,7 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
       } else {
         list.clear();
         if (std::strcmp(a, "Take Photo") != 0) list.push_back({"Enter", a});
-        list.push_back({config::Get().photo_mode_screenshot_key, "Take Photo"});
+        list.push_back({ScreenshotKeyName(), "Take Photo"});
         list.push_back({"H", "Hide Menu"});
         list.push_back({"Esc", "Exit"});
       }
@@ -1176,7 +1182,7 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
                                    IM_COL32(0, 0, 0, 150), IM_COL32(0, 0, 0, 150));
     } else {
       list = pad ? std::vector<P>{{"A", "Take Photo"}, {"Y", "Show Menu"}}
-                 : std::vector<P>{{config::Get().photo_mode_screenshot_key, "Take Photo"}, {"H", "Show Menu"}};
+                 : std::vector<P>{{ScreenshotKeyName(), "Take Photo"}, {"H", "Show Menu"}};
     }
     // Right-aligned row along the bottom.
     float total = 0.0f;

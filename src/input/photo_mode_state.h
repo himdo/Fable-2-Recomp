@@ -386,6 +386,19 @@ inline std::atomic<int>& nav_activate() {  // A / Enter
   static std::atomic<int> v{0};
   return v;
 }
+// The toggle / screenshot key names, when changed while the game runs (the
+// Advanced Options page). nullptr = [photo_mode] toggle_key / screenshot_key
+// as loaded. They point at strings that live for the whole run, and are
+// atomics so the input poll never reads a string that is being replaced.
+inline std::atomic<const char*>& toggle_key_override() {
+  static std::atomic<const char*> v{nullptr};
+  return v;
+}
+inline std::atomic<const char*>& screenshot_key_override() {
+  static std::atomic<const char*> v{nullptr};
+  return v;
+}
+
 // Which prompts to show: true after pad input, false after keys / mouse.
 inline std::atomic<bool>& prompts_pad() {
   static std::atomic<bool> v{false};

@@ -55,6 +55,7 @@
 #include "mouse_look.h"     // fable2::mouselook (accumulates the mouse delta)
 #include "mouse_stick.h"    // velocity window + deadzone compensation
 #include "photo_mode_state.h"  // fable2::photomode (hotkeys, RMB-drag look)
+#include "port_settings_state.h"  // Advanced Options page open: free cursor
 
 #ifdef _WIN32
 #include <windows.h>
@@ -347,7 +348,9 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     // away releases the lock) and on the debug menu being closed (F4) so the
     // cursor is free while the menu is open. Fable 2 inverts Y, so mouse-up
     // (dy<0) maps to +ry (look up).
-    bool looking = focused && REXCVAR_GET(mouse_look) && !console_open_;
+    // The Advanced Options page (src/core/port_settings_dialog.h) needs a free
+    // cursor too.
+    bool looking = focused && REXCVAR_GET(mouse_look) && !console_open_ && !fable2::portsettings::active();
     if (photo) {
       // Start a look drag only when the right button goes down over the game
       // (not over the panel); keep it until the button is released.
@@ -547,12 +550,17 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     namespace pm = fable2::photomode;
     const auto& cfg = fable2::config::Get();
     if (!cfg.photo_mode_enabled) return;
-    if (cfg.photo_mode_toggle_key != photo_toggle_name_) {
-      photo_toggle_name_ = cfg.photo_mode_toggle_key;
+    // The Advanced Options page can change both keys while the game runs.
+    const char* toggle_override = pm::toggle_key_override().load();
+    const char* shot_override = pm::screenshot_key_override().load();
+    const std::string& toggle_name = toggle_override ? std::string(toggle_override) : cfg.photo_mode_toggle_key;
+    const std::string& shot_name = shot_override ? std::string(shot_override) : cfg.photo_mode_screenshot_key;
+    if (toggle_name != photo_toggle_name_) {
+      photo_toggle_name_ = toggle_name;
       photo_toggle_vk_ = static_cast<uint16_t>(rex::ui::ParseVirtualKey(photo_toggle_name_));
     }
-    if (cfg.photo_mode_screenshot_key != photo_shot_name_) {
-      photo_shot_name_ = cfg.photo_mode_screenshot_key;
+    if (shot_name != photo_shot_name_) {
+      photo_shot_name_ = shot_name;
       photo_shot_vk_ = static_cast<uint16_t>(rex::ui::ParseVirtualKey(photo_shot_name_));
     }
     const bool on = pm::active();

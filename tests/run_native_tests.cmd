@@ -64,6 +64,9 @@ rem Direct mouse camera (accumulator, route, Lua return values) and inject profi
 rem Keycap prompt textures (memory scan, raw BC3 path, labels).
 %CXX% -I"%ROOT%\src" "%~dp0native\test_keycap_textures.cpp" %CATCH_MAIN% -o "%OUT%\keycap-textures.exe" || exit /b 1
 "%OUT%\keycap-textures.exe" %RUN% || exit /b 1
+rem fable2_config.toml edits (the Advanced Options page's save).
+%CXX% "%~dp0native\test_config_file_edit.cpp" %CATCH_MAIN% -o "%OUT%\config-edit.exe" || exit /b 1
+"%OUT%\config-edit.exe" %RUN% || exit /b 1
 rem The RunScript gate: host scripts only run inside the world-update service.
 %CXX% -I"%ROOT%" "%~dp0native\test_world_thread.cpp" %CATCH_MAIN% -o "%OUT%\world-thread.exe" || exit /b 1
 "%OUT%\world-thread.exe" %RUN% || exit /b 1
