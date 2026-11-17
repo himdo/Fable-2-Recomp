@@ -7,9 +7,10 @@
 // Fixes, Photo Mode) and lets the player change them.
 //
 // Drawn like the game's own menus, not as a desktop window: the game's GUI
-// typeface (src/core/photo_mode_font.h), cream text with a gold highlight
-// and gold rules, the game's Options icon and controller button art
-// (src/core/photo_mode_icons.h), all straight into ImGui's foreground draw
+// typeface (src/core/photo_mode_font.h) in the ink colours of the game's
+// pages, on its paper between its page rims, with its title flourish and
+// controller button art (src/core/photo_mode_icons.h), all straight into
+// ImGui's foreground draw
 // list, with no ImGui windows or widgets.
 //
 // Controls, as on the game's own options pages (left / right change a line,
@@ -60,7 +61,9 @@
 namespace fable2::portsettings {
 
 // The game's Options icon (gui_textures.bnk), requested by Fable2App.
-inline constexpr const char* kOptionsIcon = "art\\gui\\wheelicons\\icon_options.tex";
+// The flourish the game's pages draw under their title (motifs.tex, texels
+// x 22-362, y 2-29).
+inline constexpr const char* kMotifs = "art\\gui\\frames\\motifs.tex";
 // The game's parchment, the paper its book pages are made of.
 inline constexpr const char* kPaperTexture = "art\\gui\\frames\\frames_page_texture.tex";
 // The book's right-hand leather cover, which the game draws 1:1 at the right
@@ -508,12 +511,12 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     return float(kRimRight[k]) + (float(kRimRight[k + 1]) - float(kRimRight[k])) * (t - float(k));
   }
   static constexpr float kPageLeft = 10.0f;    // text area edges from the screen centre (inside the rims)
-  static constexpr float kPageRight = 388.0f;
-  static constexpr float kMargin = 16.0f;      // text inset from the page edges
+  static constexpr float kPageRight = 396.0f;
+  static constexpr float kMargin = 10.0f;      // text inset from the page edges
   static constexpr float kWidth = kPageRight - kPageLeft - 2 * kMargin;  // text column
   static constexpr float kTitleY = 30.0f;
-  static constexpr float kTabsY = 86.0f;
-  static constexpr float kListY = 132.0f;
+  static constexpr float kTabsY = 96.0f;
+  static constexpr float kListY = 140.0f;
   static constexpr float kRow = 34.0f;
   static constexpr float kBar = 84.0f;
   static constexpr int kMaxRows = 10;
@@ -547,12 +550,17 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
   static constexpr ImU32 kCreamDim = IM_COL32(196, 184, 156, 255);
   static constexpr ImU32 kGold = IM_COL32(218, 182, 98, 255);
   static constexpr ImU32 kShadow = IM_COL32(0, 0, 0, 200);
-  // On the paper: brown ink, a deep red for the highlight.
-  static constexpr ImU32 kInk = IM_COL32(48, 32, 18, 255);
-  static constexpr ImU32 kInkDim = IM_COL32(84, 62, 40, 255);
-  static constexpr ImU32 kFaint = IM_COL32(112, 92, 66, 235);
-  static constexpr ImU32 kAccent = IM_COL32(128, 34, 18, 255);
-  static constexpr ImU32 kPaperShadow = IM_COL32(255, 248, 228, 110);
+  // On the paper, the colours of the game's own pages (measured from its
+  // Audio and Clothing pages): a warm brown title, muted brown names,
+  // near-black values and copper arrows and bars. No shadow.
+  static constexpr ImU32 kTitleInk = IM_COL32(86, 46, 22, 255);
+  static constexpr ImU32 kInk = IM_COL32(54, 28, 13, 255);       // the selected name
+  static constexpr ImU32 kInkDim = IM_COL32(95, 61, 39, 255);    // names
+  static constexpr ImU32 kValueInk = IM_COL32(40, 38, 31, 255);  // values
+  static constexpr ImU32 kPromptInk = IM_COL32(67, 45, 31, 255);
+  static constexpr ImU32 kDescInk = IM_COL32(80, 56, 38, 255);
+  static constexpr ImU32 kFaint = IM_COL32(128, 104, 80, 235);
+  static constexpr ImU32 kAccent = IM_COL32(176, 98, 58, 255);
   static ImU32 Alpha(ImU32 c, float a) {
     const int na = std::clamp(int(((c >> IM_COL32_A_SHIFT) & 0xFF) * a), 0, 255);
     return (c & ~IM_COL32_A_MASK) | (ImU32(na) << IM_COL32_A_SHIFT);
@@ -566,9 +574,8 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     if (gamefont::AnyReady()) {
       const float px = X(size);
       const float o = std::max(1.0f, px * 0.06f);
-      const bool on_paper = paper_ && ((col & 0xFF) + ((col >> 8) & 0xFF) + ((col >> 16) & 0xFF)) < 384;
-      gamefont::Draw(dl_, ImVec2(p.x + o, p.y + o), px, size,
-                     Alpha(on_paper ? kPaperShadow : kShadow, ((col >> 24) & 0xFF) / 255.0f), t);
+      if (!paper_)  // the game's pages have no shadow under their ink
+        gamefont::Draw(dl_, ImVec2(p.x + o, p.y + o), px, size, Alpha(kShadow, ((col >> 24) & 0xFF) / 255.0f), t);
       gamefont::Draw(dl_, p, px, size, col, t);
     } else {
       dl_->AddText(ImVec2(p.x + 1, p.y + 1), kShadow, t);
@@ -631,11 +638,18 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     dl_->AddTriangleFilled(ImVec2(c.x + d * r, c.y), ImVec2(c.x - d * r * 0.6f, c.y - r),
                            ImVec2(c.x - d * r * 0.6f, c.y + r), col);
   }
-  // A button prompt: the game's button art when loaded, else a cap with the
-  // name; then its label. Returns the width.
+  // A button prompt as the game's pages have it: the label, then the button
+  // (the game's button art when loaded, else a cap with the name). Returns
+  // the width.
   float Prompt(float x, float y, const char* button, const char* label, bool measure = false) {
     const float h = X(30);
     const float cy = y + h * 0.5f;
+    float lw = 0.0f;
+    if (*label) {
+      if (!measure) Text(ImVec2(x, cy - X(kSmall) * 0.52f), kSmall, kPromptInk, label);
+      lw = TextW(label, kSmall) + X(8);
+      x += lw;
+    }
     float w;
     const int icon = gameicons::Find(button);
     if (gameicons::Ready(icon)) {
@@ -655,9 +669,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
           dl_->AddText(ImVec2(x + 4, y + 2), kCream, button);
       }
     }
-    w += X(8);
-    if (!measure) Text(ImVec2(x + w, cy - X(kSmall) * 0.52f), kSmall, kInk, label);
-    return w + TextW(label, kSmall);
+    return lw + w;
   }
 
   // --- Drawing -------------------------------------------------------------------------
@@ -735,23 +747,24 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
                                false, 208.0f / 512.0f);
     }
 
-    // Title with the game's Options icon.
-    float tx = ox_;
-    const int icon = gameicons::FindExtra(kOptionsIcon);
-    if (gameicons::ExtraReady(icon)) {
-      const float s = X(40);
-      gameicons::DrawExtra(dl_, icon, ImVec2(ox_ - X(2), X(kTitleY) - X(5)), s, Alpha(IM_COL32_WHITE, fade));
-      tx += s + X(6);
+    // Title, centred over the game's flourish as on its own pages.
+    {
+      const float mid = ox_ + X(kWidth * 0.5f);
+      const char* title = "Advanced Options";
+      Text(ImVec2(mid - TextW(title, kLarge) * 0.5f, X(kTitleY)), kLarge, Alpha(kTitleInk, fade), title);
+      const float fy = X(kTitleY + 30);
+      if (!gameicons::DrawExtraRegion(dl_, gameicons::FindExtra(kMotifs), ImVec2(mid - X(170), fy),
+                                      ImVec2(mid + X(170), fy + X(27)), ImVec2(22, 2), ImVec2(362, 29),
+                                      Alpha(IM_COL32_WHITE, fade), false))
+        Rule(ox_ - X(10), ox_ + X(kWidth + 10), X(kTitleY + 42), fade, kAccent);
     }
-    Text(ImVec2(tx, X(kTitleY)), kLarge, Alpha(kInk, fade), "Advanced Options");
-    Rule(ox_ - X(10), ox_ + X(kWidth + 10), X(kTitleY + 42), fade, kAccent);
 
     // The tab:  LB  <  Display  >  RB
     {
       const float cx = ox_ + X(kWidth * 0.5f);
       const char* name = PageName(page_);
       const float w = TextW(name, kNormal);
-      Text(ImVec2(cx - w * 0.5f, X(kTabsY)), kNormal, Alpha(kAccent, fade), name);
+      Text(ImVec2(cx - w * 0.5f, X(kTabsY)), kNormal, Alpha(kTitleInk, fade), name);
       dl_->AddRectFilled(ImVec2(cx - w * 0.5f, X(kTabsY + 30)),
                          ImVec2(cx + w * 0.5f, X(kTabsY + 30) + std::max(1.0f, X(1.5f))), Alpha(kAccent, fade));
       const float cy = X(kTabsY) + X(kNormal) * 0.5f;
@@ -759,7 +772,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
       Chevron(ImVec2(cx + w * 0.5f + X(16), cy), X(6), true, Alpha(kAccent, fade));
       const char* lb = pad_prompts_ ? "LB" : "PgUp";
       const char* rb = pad_prompts_ ? "RB" : "PgDn";
-      const float lw = Prompt(0, 0, lb, "", true) - X(8);
+      const float lw = Prompt(0, 0, lb, "", true);
       Prompt(cx - w * 0.5f - X(32) - lw, X(kTabsY - 1), lb, "");
       Prompt(cx + w * 0.5f + X(32), X(kTabsY - 1), rb, "");
     }
@@ -774,7 +787,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
       const bool cur = r == sel_;
       const float cy = (box.Min.y + box.Max.y) * 0.5f;
       if (cur) {
-        const ImU32 a = IM_COL32(120, 70, 20, int(60 * fade)), z = IM_COL32(120, 70, 20, 0);
+        const ImU32 a = IM_COL32(255, 252, 240, int(110 * fade)), z = IM_COL32(255, 252, 240, 0);
         dl_->AddRectFilledMultiColor(box.Min, box.Max, a, z, z, a);
         dl_->AddRectFilled(box.Min, ImVec2(box.Min.x + std::max(1.0f, X(2)), box.Max.y), Alpha(kAccent, fade));
       }
@@ -785,7 +798,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
                                                           : TextW(val.c_str(), kNormal) + X(30);
       // Name and value never meet: the name drops to the small font, then
       // the value, then the name is shortened.
-      const float room = X(kWidth) - X(4) - X(14);
+      const float room = X(kWidth) - X(4) - X(8);
       float label_size = kNormal, value_size = kNormal;
       const auto value_width = [&](float size) {
         return s.control == Control::kSlider ? X(kBar + 12) + TextW(val.c_str(), size)
@@ -797,7 +810,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
       while (label.size() > 4 && TextW(label.c_str(), label_size) + value_width(value_size) > room)
         label = label.substr(0, label.size() - 4) + "...";
       Text(ImVec2(ox_ + X(4), cy - X(label_size) * 0.52f), label_size, col, label.c_str());
-      // Restart marker: gold once changed since the game started.
+      // Restart marker: copper once changed since the game started.
       if (s.when == When::kRestart) {
         const bool pending = values_[i] != at_launch_[i];
         const float lx = ox_ + X(4) + TextW(s.label, label_size) + X(10);
@@ -807,9 +820,8 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
       switch (s.control) {
         case Control::kToggle:
         case Control::kChoice: {
-          const bool gold = s.control == Control::kToggle && values_[i].b != s.inverted;
           const float right = cur ? ValueRight() - X(14) : ValueRight();
-          TextRight(right, cy - X(value_size) * 0.52f, value_size, gold ? Alpha(kAccent, fade) : col, val.c_str());
+          TextRight(right, cy - X(value_size) * 0.52f, value_size, Alpha(kValueInk, fade), val.c_str());
           if (cur) {
             Chevron(ImVec2(right - TextW(val.c_str(), value_size) - X(11), cy), X(5), false, Alpha(kAccent, fade));
             Chevron(ImVec2(ValueRight() - X(4), cy), X(5), true, Alpha(kAccent, fade));
@@ -825,7 +837,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
           dl_->AddRectFilled(ImVec2(x0, cy - bh * 0.5f), ImVec2(x0 + (x1 - x0) * t, cy + bh * 0.5f),
                              Alpha(cur ? kAccent : kInkDim, fade * (cur ? 1.0f : 0.7f)), bh * 0.5f);
           Diamond(ImVec2(x0 + (x1 - x0) * t, cy), X(cur ? 6.0f : 4.5f), Alpha(cur ? kAccent : kInkDim, fade));
-          TextRight(x0 - X(12), cy - X(value_size) * 0.52f, value_size, col, val.c_str());
+          TextRight(x0 - X(12), cy - X(value_size) * 0.52f, value_size, Alpha(kValueInk, fade), val.c_str());
           break;
         }
       }
@@ -844,7 +856,7 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
       const Setting& s = list_[i];
       // Nothing runs into the prompts (or the restart line above them).
       const float bottom = H - X(88);
-      y += TextWrapped(ImVec2(ox_, y), kSmall, X(kWidth), Alpha(kInkDim, fade), s.desc, bottom);
+      y += TextWrapped(ImVec2(ox_, y), kSmall, X(kWidth), Alpha(kDescInk, fade), s.desc, bottom);
       std::string when;
       if (s.when == When::kRestart) when = "Takes effect the next time the game starts.";
       else if (s.when == When::kNextLoad) when = "Takes effect from the next save load.";

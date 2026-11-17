@@ -763,7 +763,7 @@ class Fable2App : public rex::ReXApp {
       std::vector<std::string> pose_icons;
       for (const auto& pose : fable2::photomode::kPoses) pose_icons.push_back(pose.icon);
       // The Advanced Options page's title icon (the game's Options icon).
-      pose_icons.push_back(fable2::portsettings::kOptionsIcon);
+      pose_icons.push_back(fable2::portsettings::kMotifs);
       pose_icons.push_back(fable2::portsettings::kPaperTexture);
       pose_icons.push_back(fable2::portsettings::kCoverTop);
       pose_icons.push_back(fable2::portsettings::kCoverBottom);

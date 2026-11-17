@@ -10,8 +10,11 @@ on the **Advanced Options** page. It opens from:
 It is a page of the book, as the game's own options pages (Game, Video,
 Audio) are: the game's menu stays on the left page (stepping back a little)
 and the settings are written on the right-hand page, on the paper the game's
-own pages use (`frames_page_texture.tex`), in brown ink with a deep red
-highlight, in the game's GUI typeface, with the game's Options icon and
+own pages use (`frames_page_texture.tex`), with the text styled as on those
+pages: the game's GUI typeface in their ink colours (warm brown title, muted
+brown names, near-black values, copper arrows and bars, no shadow), the
+title centred over the game's flourish (`motifs.tex`), prompts as label then
+button, with the game's
 controller button art. The book's leather cover
 (`frame_new_right_top/bottom.tex`) is drawn again over the paper's edge, so
 the cover stays on top as it does on the game's pages. Like the game's
