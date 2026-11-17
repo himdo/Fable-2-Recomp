@@ -162,3 +162,21 @@ encryption=NORMAL (AES-CBC, zero IV), compression=BASIC = a block table of
 block data only; each block expands to `data_size` decrypted bytes followed by
 `zero_size` zero bytes. Block table (this file):
 `(0x168000, 0x8000), (0x1158000, 0x8000), (0x58000, 0x1D0000), (0x120000, 0)`.
+
+## vexptefp range fix (SDK codegen, always on)
+
+`build_vexptefp` (SDK `src/codegen/builders/vector.cpp`) builds 2^x as
+2^floor(x) from exponent bits times a polynomial for the fraction, with no range
+check: x < -127 produced garbage exponent bits, x >= 128 about 0, and +-inf NaN.
+The game's exp2f/expf/powf helpers use `vexptefp`, so any of their inputs
+outside that range got a wrong result instead of 0, +inf or NaN. (The blue/purple
+sky seen in some builds is a separate issue fixed on master; in testing, 9
+fog, dusk and night shots in Bower Lake, Wraithmarsh and Bloodstone looked the
+same with and without this change.) The builder now clamps n to
+[-126, 127] and fixes the out-of-range lanes after the multiply: below 2^-126
+the result is 0 (the VMX flush-to-zero result), from 128 it is +inf, and NaN
+passes through. Checked against `exp2f` from -inf to +inf (only results below
+2^-126 differ: they flush to 0). The SDK's `instr_vexptefp.s` test gained a
+range case. The SDK build stages a new `rexglue.exe`, which clears the codegen
+stamp, so the next build regenerates all recompiled code with the fix. This is
+a correctness fix in generated code, so it has no toggle.
