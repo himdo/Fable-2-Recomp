@@ -221,9 +221,11 @@ higher_hf_tick_rate = false
 # on every HF tick (30 Hz, or 60 Hz with higher_hf_tick_rate; their timers
 # already use real time, so speed is unchanged), and the bodies that push cloth
 # around are blended between the last two animation poses at the moment being
-# drawn, the way the game already draws characters. The log shows
+# drawn, the way the game already draws characters. Capes and coats also move
+# with the body as drawn instead of being jolted on every tick. The log shows
 # "[interpolation]".
-# false = text and cloth colliders update on LF ticks only (original).
+# false = text and cloth colliders update on LF ticks only, and cloth is
+# jolted on every tick (original).
 # Default: true
 interpolation = true
 

@@ -571,7 +571,8 @@ bool InterpolationEnabled() {
     const bool on = fable2::config::Get().interpolation;
     if (on) {
       REXSYS_INFO("[interpolation] on: GUI updates every HF tick, cloth "
-                  "colliders blended between poses");
+                  "colliders blended between poses, cloth moved with the drawn "
+                  "body");
     }
     return on;
   }();
@@ -682,4 +683,33 @@ void fable2_hook_cloth_collider_bone(PPCRegister& r1, PPCRegister& r11,
   }
   std::memcpy(GuestMem(scratch), raw_out, sizeof(raw_out));
   r11.u64 = scratch;
+}
+
+// Cloth world transform. The cloth is simulated every drawn frame (the render
+// traversal sub_821E2D40 queues a step through sub_821AC058 with the frame's
+// wall-clock dt) in the character's local space; the solver turns the change
+// of the cloth's world matrix between steps (cloth+128 -> cloth+192, set by
+// sub_8218D730) into inertia. sub_8219ADD8 copies that matrix from the entity
+// matrix at inst+336 first thing, before sub_822222D8 rewrites inst+336 for
+// this frame. So the copy is the previous frame's drawn matrix (one frame
+// late), except on tick frames, where the game update has just stored the new
+// tick position, up to a tick ahead of the drawn body; the next frame it
+// falls back. Measured while walking: the cloth's
+// translation went 95.15, 95.03, 95.08, 95.29, 95.19, 95.43, 95.30, ... So
+// every tick the cloth was flung forward and back while the body moved
+// smoothly: the cape and coat "stepped" at the tick rate.
+//
+// Right before queueing the step, sub_821E2D40 stores the owner's drawn world
+// matrix (sub_821E1C98: the instance interpolator's matrix at the render
+// time, or inst+336 when the instance has no interpolator) at owner+208, with
+// owner = *(cloth+0), the same layout sub_8220B5C8 produces. The hook (after
+// `addi r4,r1,80` at 0x8219AEA0, before `bl 0x8218d730`) points r4 there, so
+// the cloth follows the body exactly as drawn. Big moves still reach
+// sub_8218D730's own reset check (teleports reset the cloth as before).
+void fable2_hook_cloth_world_transform(PPCRegister& r4, PPCRegister& r30) {
+  if (!InterpolationEnabled()) return;
+  if (fable2::patches::GuestBase() == nullptr) return;
+  const uint32_t owner = LoadU32(r30.u32);
+  if (owner == 0) return;
+  r4.u64 = owner + 208;
 }

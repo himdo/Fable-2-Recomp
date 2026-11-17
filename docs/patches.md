@@ -49,7 +49,7 @@ The game updates gameplay, AI, scripts and the GUI only on LF ticks, which
 are every other HF tick. Characters are already drawn blended between their
 last two LF poses at the render time (the engine's own interpolator at
 instance+176, applied by `sub_8222E300`), and the camera is blended with the
-HF fraction. Two things were not, and this option fixes them:
+HF fraction. Three things were not, and this option fixes them:
 
 - **Text (subtitles, HUD).** `sub_82278C90` calls the front-end GUI update
   (vtable[2], `sub_82286B40`) only when an LF boundary was crossed. The GUI
@@ -70,6 +70,22 @@ HF fraction. Two things were not, and this option fixes them:
   - The blended bone goes 256 bytes below the guest stack pointer. At all
     four sites r11 is used only by the next four loads (+0, +8, +16, +32),
     with no store or call in between, so nothing overwrites it first.
+- **Cloth movement (capes, coats).** The cloth itself is simulated every drawn
+  frame (the render traversal `sub_821E2D40` queues a step with the frame's
+  wall-clock dt) in the character's local space, and the solver turns the
+  change of the cloth's world matrix between steps into inertia.
+  `sub_8219ADD8` took that matrix from the entity matrix at inst+336, copied
+  before it is updated for the frame: one frame late, and on tick frames the
+  raw new tick position, up to a tick ahead of the drawn body. While walking
+  the cloth's position went back and forth (95.15, 95.03, 95.08, 95.29, 95.19,
+  95.43, ...), so the cloth was flung forward and back every tick and visibly
+  stepped while the body moved smoothly.
+  `fable2_hook_cloth_world_transform` (0x8219AEA0, after `addi r4,r1,80`,
+  before `bl 0x8218d730`) points r4 at owner+208 instead (owner =
+  `*(cloth+0)`): the drawn world matrix `sub_821E2D40` stores there just
+  before queueing the step (`sub_821E1C98`, the interpolator's matrix at the
+  render time). The matrix now moves steadily, and teleports still trigger
+  `sub_8218D730`'s own cloth reset.
 
 Split from himdo/Fable-2-Recomp PR 72 without its dynamic tick rate.
 
