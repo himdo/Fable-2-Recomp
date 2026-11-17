@@ -252,6 +252,14 @@ high_tick_rate = false
 # Default: false
 higher_hf_tick_rate = false
 
+# GUI every HF tick: subtitles and HUD text update on every HF tick instead
+# of every LF tick (15 Hz in the original), so at 30 Hz, or 60 Hz with
+# higher_hf_tick_rate. Their timers already use real time, so speed is
+# unchanged. The log shows "[gui-every-hf-tick]".
+# false = text updates on LF ticks only (original).
+# Default: true
+gui_every_hf_tick = true
+
 # Disable Motion Blur (mid-asm hook fable2_hook_disable_motion_blur): the
 # camera's full-screen motion blur amount (what scripts set via Camera.SetBlur)
 # is zeroed on its way to the renderer each frame. The camera's own value is
@@ -574,6 +582,9 @@ bool Load(const std::filesystem::path& path) {
     values.higher_hf_tick_rate =
         Read<bool>(patches_table, "patches", "higher_hf_tick_rate", "boolean",
                    values.higher_hf_tick_rate);
+    values.gui_every_hf_tick =
+        Read<bool>(patches_table, "patches", "gui_every_hf_tick", "boolean",
+                   values.gui_every_hf_tick);
     values.disable_motion_blur =
         Read<bool>(patches_table, "patches", "disable_motion_blur", "boolean",
                    values.disable_motion_blur);

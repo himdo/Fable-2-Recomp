@@ -140,7 +140,9 @@ game recreates it with defaults on launch if it is ever missing. Loaded in
   (`src/core/fable2_hooks.cpp`) — flip one and relaunch to A/B a patch with no
   rebuild. This includes `high_tick_rate` and `higher_hf_tick_rate` (Xenia
   "High Tick Rate" / "Higher HF Tick Rate"; turn both on together), which
-  also drive the guest-image data writes below. There is no separate patch
+  also drive the guest-image data writes below, and `gui_every_hf_tick` (on
+  by default), which updates subtitles and HUD text every HF tick
+  (`docs/patches.md`, "GUI every HF tick"). There is no separate patch
   file.
 
 
