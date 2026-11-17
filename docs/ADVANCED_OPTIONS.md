@@ -7,15 +7,35 @@ on the **Advanced Options** page. It opens from:
 - the pause (Start) menu: **Options > Advanced**, after the game's own Game,
   Video, Controls and Audio.
 
-The page is drawn like the game's own menus: the
-game's GUI typeface, its Options icon and controller button art, cream text
-with a gold highlight. No ImGui windows.
+The page looks like the game's own options pages (Game, Video, Audio): a
+sheet of the book's framed parchment on the right, the menu stepping back on
+the left, the tab's title over the gold ornament, each setting's name with its
+value under it between copper arrows, sliders on the game's slider track, and
+the prompts at the bottom right. It uses the game's typeface, parchment,
+ornament, slider and button art (read from `gui_textures.bnk`), never ImGui
+windows.
 
 ## Using it
 
 The page has five tabs: **Display**, **Frame Rate**, **Mouse**, **Fixes** and
-**Photo Mode**. The line under the list describes the selected setting and
-says when a change takes effect.
+**Photo Mode**, four settings in view at a time. The text under the list
+describes the selected setting and says when a change takes effect.
+
+**Display** starts with the window fitting the game already does
+(`src/core/fable2_fit_window.h`), now saved in `[display]`:
+
+| Setting | Key | Values |
+|---|---|---|
+| Fit to Window | `fit_to_window` | On: render at the window's shape and fill it. Off: the original 16:9 picture with black bars |
+| Aspect Ratio | `aspect_ratio` | Match Window (`"auto"`), 4:3, 16:10, 16:9, 21:9, 32:9; the file also takes any `"w:h"` or number between 4:3 and 4:1 |
+| HUD at the Edges | `hud_to_edges` | the HUD at the edges of a wide picture, from the next screen that opens |
+| 16:9 Loading Screens | `native_16x9_screens` | loading screens and the saving banner kept 16:9 |
+
+All four apply at once. At startup `fit_to_window`, `hud_to_edges` and
+`native_16x9_screens` seed the cvars `fit_game_to_window`,
+`fit_window_hud_to_edges` and `fit_window_native_16x9` (fable_2.toml or the
+command line still win), and `aspect_ratio` sets the forced aspect the
+console's `ws aspect` sets.
 
 | | Controller | Keyboard | Mouse |
 |---|---|---|---|
@@ -35,12 +55,12 @@ until it is released, so it does not also close the Options menu.
 ## When a change takes effect
 
 - **At once**: the value goes to the cvar or the setting the game reads every
-  frame (motion blur, GPU frame sync, faster render targets, GPU memory
+  frame (window fit and aspect ratio, motion blur, GPU frame sync, faster render targets, GPU memory
   refresh, thread yielding, everything on the Mouse tab, photo mode on/off,
   its controller shortcut and camera speed).
 - **When a save is loaded**: website and Collector's Edition items.
-- **After a restart**: marked *Restart* next to the name. Once changed it
-  reads *Restart to apply*, and the page lists those settings above the
+- **After a restart**: marked *restart* next to the name. Once changed it
+  reads *restart to apply*, and the page lists those settings above the
   prompts.
 
 If `fable_2.toml`, a `REX_*` environment variable or the command line sets
@@ -122,7 +142,11 @@ would open the game's own Game page, nothing worse.
 **Input.** `InputGetPadState_822B2D60` (every guest pad read) is captured for
 the page and blanked while it is open (`src/core/port_settings_pad.h`).
 Choosing an item only raises a flag; the page is drawn on the UI thread
-(`src/core/port_settings_dialog.h`).
+(`src/core/port_settings_dialog.h`). Its art (`papera`, `paperb`, `motifs`,
+`sliderframe` from `art\guirames\`) is loaded with photo mode's button icons
+(`src/core/photo_mode_icons.h`); if a texture is missing the page draws a
+plain stand-in. The runtime exports no rotated-image draw call, so the copper
+arrows are drawn as shapes in the art's colours.
 
 The log shows `[recomp-settings] row added to OptionsMenu`,
 `[advanced-options] opened`, each change

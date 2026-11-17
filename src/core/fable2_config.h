@@ -164,6 +164,14 @@ struct Values {
   // to empirically find which fields the game's own right-stick look changes so
   // the mouse look can drive the same field(s). Off by default.
   bool mouse_look_camera_dump = false;
+  // [display] (src/core/fable2_fit_window.h): fit the game to the window.
+  // fit_to_window, hud_to_edges and native_16x9_screens seed the cvars
+  // fit_game_to_window, fit_window_hud_to_edges and fit_window_native_16x9;
+  // aspect_ratio is "auto" (follow the window) or a ratio ("21:9", "2.39").
+  bool fit_to_window = true;
+  std::string aspect_ratio = "auto";
+  bool hud_to_edges = true;
+  bool native_16x9_screens = true;
   // [patches] - toggles for the recomp-level (mid-asm hook) patches. The
   // hook bodies consult these at runtime (src/core/fable2_hooks.cpp), so a patch
   // can be A/B'd with no rebuild. high_tick_rate / higher_hf_tick_rate also

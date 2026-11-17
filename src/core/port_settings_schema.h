@@ -31,6 +31,7 @@
 #include <rex/cvar.h>
 
 #include "fable2_config.h"
+#include "fable2_fit_window.h"
 #include "photo_mode_state.h"
 
 namespace fable2::portsettings {
@@ -215,6 +216,31 @@ inline const std::vector<Setting>& Settings() {
     using config::Values;
 
     // Display ---------------------------------------------------------------------------
+    s.push_back(Toggle(kDisplay, "display", "fit_to_window", "Fit to Window",
+                       "Render at the window's shape and fill it. Off: the original 16:9 picture with black "
+                       "bars.",
+                       true)
+                    .Live([](const Value& v) { fitwindow::SetEnabled(v.b); }));
+    s.push_back(Choice(kDisplay, "display", "aspect_ratio", "Aspect Ratio",
+                       "The shape of the picture. Match Window follows the window; a ratio keeps that shape "
+                       "whatever the window size. Needs Fit to Window.",
+                       Str("auto"),
+                       {{Str("auto"), "Match Window"}, {Str("4:3"), "4:3"}, {Str("16:10"), "16:10"},
+                        {Str("16:9"), "16:9"}, {Str("21:9"), "21:9"}, {Str("32:9"), "32:9"}})
+                    .Live([](const Value& v) {
+                      float aspect = 0.0f;
+                      if (fitwindow::ParseAspect(v.s, aspect)) fitwindow::SetForcedAspect(aspect);
+                    }));
+    s.push_back(Toggle(kDisplay, "display", "hud_to_edges", "HUD at the Edges",
+                       "Put the health bar, minimap and the rest of the HUD at the edges of a wide picture "
+                       "instead of a 16:9 box in the middle. Shows from the next screen that opens.",
+                       true)
+                    .LiveCvars({"fit_window_hud_to_edges"}));
+    s.push_back(Toggle(kDisplay, "display", "native_16x9_screens", "16:9 Loading Screens",
+                       "Keep loading screens and the saving banner at 16:9 in the middle of a wide picture "
+                       "instead of stretching them.",
+                       true)
+                    .LiveCvars({"fit_window_native_16x9"}));
     s.push_back(Toggle(kDisplay, "patches", "disable_motion_blur", "Motion Blur",
                        "The blur the camera adds to the whole screen when it moves quickly.", false, true)
                     .Live(Field(&Values::disable_motion_blur)));

@@ -43,6 +43,8 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
+#include <string>
 #include <string_view>
 
 #include "fable2_fit_window_ui.h"
@@ -277,6 +279,30 @@ inline void Reapply() {
   if (!WindowSize(width, height)) return;
   detail::g_last_aspect.store(0.0f);
   ApplySize(width, height);
+}
+
+// "auto" (or empty) -> 0, the window's own shape; "21:9" -> 21/9; "2.39" ->
+// 2.39. Returns false for anything else. ([display] aspect_ratio.)
+inline bool ParseAspect(std::string_view text, float& aspect) {
+  while (!text.empty() && text.front() == ' ') text.remove_prefix(1);
+  while (!text.empty() && text.back() == ' ') text.remove_suffix(1);
+  if (text.empty() || text == "auto" || text == "window") {
+    aspect = 0.0f;
+    return true;
+  }
+  auto number = [](std::string_view s, float& out) {
+    if (s.empty()) return false;
+    std::string buf(s);
+    char* end = nullptr;
+    out = std::strtof(buf.c_str(), &end);
+    return end == buf.c_str() + buf.size() && out > 0.0f;
+  };
+  const size_t colon = text.find(':');
+  if (colon == std::string_view::npos) return number(text, aspect);
+  float w = 0, h = 0;
+  if (!number(text.substr(0, colon), w) || !number(text.substr(colon + 1), h)) return false;
+  aspect = w / h;
+  return true;
 }
 
 // 0 goes back to following the window. Clamped like the window aspect.

@@ -216,6 +216,33 @@ mouse_look_camera_diag = false
 # to find which fields the game's own right-stick look changes. Default: false
 mouse_look_camera_dump = false
 
+[display]
+# Fit the game to the window: render at the window's aspect ratio, so a wide
+# window shows a wider view, and stretch the frame to fill the window.
+# false = the original 16:9 picture with black bars. Seeds the cvar
+# fit_game_to_window (fable_2.toml or the command line still win).
+# Default: true
+fit_to_window = true
+
+# The aspect ratio the game renders at while fit_to_window is on: "auto"
+# follows the window; a ratio such as "16:9", "16:10", "21:9", "32:9" or
+# "4:3" (or a number like "2.39") keeps that shape whatever the window size.
+# Ratios are kept between 4:3 and 4:1.
+# Default: "auto"
+aspect_ratio = "auto"
+
+# With fit_to_window: move the HUD's edge elements (health, minimap, ...) to
+# the edges of a wide window instead of a 16:9 box in the middle. Takes effect
+# when the next menu or HUD screen loads. Seeds fit_window_hud_to_edges.
+# Default: true
+hud_to_edges = true
+
+# With fit_to_window: keep the game's own 2D screens (loading screens, the
+# saving banner) at 16:9 in the middle of a wide window instead of stretching
+# them. Seeds fit_window_native_16x9.
+# Default: true
+native_16x9_screens = true
+
 [patches]
 # Toggles for the recomp-level (mid-asm hook) patches, consulted at runtime
 # by the hook bodies (src/core/fable2_hooks.cpp) - no rebuild needed.
@@ -449,8 +476,8 @@ bool Load(const std::filesystem::path& path) {
 
   // Warn about unknown top-level sections (usually a typo or a file written
   // for a newer build).
-  static constexpr std::array<std::string_view, 5> kKnownSections = {
-      "general", "input", "patches", "perf", "photo_mode"};
+  static constexpr std::array<std::string_view, 6> kKnownSections = {
+      "general", "input", "display", "patches", "perf", "photo_mode"};
   for (const auto& [key, value] : root) {
     const bool known =
         std::ranges::find(kKnownSections, key.str()) != kKnownSections.end();
@@ -558,6 +585,19 @@ bool Load(const std::filesystem::path& path) {
     values.mouse_look_camera_dump =
         Read<bool>(input_table, "input", "mouse_look_camera_dump", "boolean",
                    values.mouse_look_camera_dump);
+  }
+  const toml::path display_path{"display"};
+  const auto display = root[display_path];
+  if (display.is_table()) {
+    const toml::table& display_table = *display.as_table();
+    values.fit_to_window = Read<bool>(display_table, "display", "fit_to_window", "boolean",
+                                      values.fit_to_window);
+    values.aspect_ratio = Read<std::string>(display_table, "display", "aspect_ratio", "string",
+                                            values.aspect_ratio);
+    values.hud_to_edges = Read<bool>(display_table, "display", "hud_to_edges", "boolean",
+                                     values.hud_to_edges);
+    values.native_16x9_screens = Read<bool>(display_table, "display", "native_16x9_screens",
+                                            "boolean", values.native_16x9_screens);
   }
   const toml::path patches_path{"patches"};
   const auto patches = root[patches_path];
