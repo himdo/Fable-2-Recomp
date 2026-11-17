@@ -220,7 +220,8 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
   // Drawing.
   ImDrawList* dl_ = nullptr;
   float k_ = 1.0f;   // pixels per 720p unit
-  float ox_ = 0.0f;  // left edge of the page, in pixels
+  float ox_ = 0.0f;  // left edge of the text column, in pixels
+  float cx_ = 0.0f;  // screen centre (the book's spine), in pixels
 
   std::vector<int> Rows() const {
     std::vector<int> r;
@@ -451,7 +452,11 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     if (sel_ >= scroll_ + shown) scroll_ = sel_ - shown + 1;
   }
 
-  // --- Layout (720p units, the page centred) -------------------------------------------
+  // --- Layout ------------------------------------------------------------------------
+  // The page is the book's right-hand page, as the game's own options pages
+  // (Game, Video, Audio) are: the game's menu stays on the left page, the
+  // settings fill the right one. Units are the game's 720p canvas; the page
+  // runs from the book's spine (the screen centre) to its right edge.
   struct Box {
     ImVec2 Min, Max;
     bool Contains(ImVec2 p) const { return p.x >= Min.x && p.y >= Min.y && p.x < Max.x && p.y < Max.y; }
@@ -459,27 +464,38 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
   static constexpr float kLarge = 32.0f;   // the game's three menu font sizes
   static constexpr float kNormal = 27.0f;
   static constexpr float kSmall = 24.0f;
-  static constexpr float kWidth = 820.0f;  // page width
-  static constexpr float kTitleY = 46.0f;
-  static constexpr float kTabsY = 108.0f;
-  static constexpr float kListY = 160.0f;
-  static constexpr float kRow = 36.0f;
-  static constexpr float kBar = 150.0f;
-  static constexpr int kMaxRows = 9;
+  static constexpr float kPageLeft = -6.0f;    // page edges from the screen centre
+  static constexpr float kPageRight = 388.0f;
+  static constexpr float kMargin = 22.0f;      // text inset from the page edges
+  static constexpr float kWidth = kPageRight - kPageLeft - 2 * kMargin;  // text column
+  static constexpr float kTitleY = 30.0f;
+  static constexpr float kTabsY = 86.0f;
+  static constexpr float kListY = 132.0f;
+  static constexpr float kRow = 34.0f;
+  static constexpr float kBar = 84.0f;
+  static constexpr int kMaxRows = 10;
 
   float X(float v) const { return v * k_; }
   int VisibleRows() const { return kMaxRows; }
+  float PageX0() const { return cx_ + X(kPageLeft); }
+  float PageX1() const { return cx_ + X(kPageRight); }
   Box RowBox(int i) const {
     const float y = X(kListY + kRow * i);
-    return Box{ImVec2(ox_ - X(18), y), ImVec2(ox_ + X(kWidth + 18), y + X(kRow))};
+    return Box{ImVec2(ox_ - X(12), y), ImVec2(ox_ + X(kWidth + 12), y + X(kRow))};
   }
   float ValueRight() const { return ox_ + X(kWidth); }
   float BarX1() const { return ValueRight(); }
   float BarX0() const { return ValueRight() - X(kBar); }
+  // Only one tab's name fits on the page: the chevrons either side of it are
+  // the boxes for the previous and next tab; other tabs have none.
   Box TabBox(int p) const {
-    float x = ox_;
-    for (int i = 0; i < p; ++i) x += TextW(PageName(i), kNormal) + X(30);
-    return Box{ImVec2(x - X(8), X(kTabsY - 6)), ImVec2(x + TextW(PageName(p), kNormal) + X(8), X(kTabsY + 34))};
+    const float cx = ox_ + X(kWidth * 0.5f);
+    const float half = TextW(PageName(page_), kNormal) * 0.5f;
+    const float cy = X(kTabsY) + X(kNormal) * 0.5f;
+    const int prev = (page_ + kPageCount - 1) % kPageCount, next = (page_ + 1) % kPageCount;
+    if (p == prev && p != page_) return Box{ImVec2(cx - half - X(34), cy - X(16)), ImVec2(cx - half - X(4), cy + X(16))};
+    if (p == next && p != page_) return Box{ImVec2(cx + half + X(4), cy - X(16)), ImVec2(cx + half + X(34), cy + X(16))};
+    return Box{ImVec2(0, 0), ImVec2(0, 0)};
   }
 
   // --- Drawing helpers ------------------------------------------------------------------
@@ -585,41 +601,44 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
   void Draw(ImGuiIO& io) {
     const float W = io.DisplaySize.x, H = io.DisplaySize.y;
     const float fade = std::clamp(float(detail::now_ms() - opened_ms_) / 150.0f, 0.0f, 1.0f);
-    ox_ = std::max(X(40), (W - X(kWidth)) * 0.5f);
+    cx_ = W * 0.5f;
+    ox_ = PageX0() + X(kMargin);
+    const float px0 = PageX0(), px1 = PageX1();
 
-    // Darken the game's menu behind the page, most behind the page itself.
-    dl_->AddRectFilled(ImVec2(0, 0), ImVec2(W, H), IM_COL32(4, 3, 2, int(160 * fade)));
-    const float px0 = ox_ - X(70), px1 = ox_ + X(kWidth + 70);
-    const ImU32 dark = IM_COL32(6, 5, 3, int(200 * fade)), clear = IM_COL32(6, 5, 3, 0);
-    dl_->AddRectFilled(ImVec2(px0, 0), ImVec2(px1, H), dark);
-    dl_->AddRectFilledMultiColor(ImVec2(px0 - X(120), 0), ImVec2(px0, H), clear, dark, dark, clear);
-    dl_->AddRectFilledMultiColor(ImVec2(px1, 0), ImVec2(px1 + X(120), H), dark, clear, clear, dark);
+    // The game's menu on the left page steps back a little; the right page
+    // darkens to hold the settings, softly at the spine.
+    dl_->AddRectFilled(ImVec2(0, 0), ImVec2(px0, H), IM_COL32(4, 3, 2, int(90 * fade)));
+    const ImU32 dark = IM_COL32(6, 5, 3, int(215 * fade)), clear = IM_COL32(6, 5, 3, 0);
+    dl_->AddRectFilledMultiColor(ImVec2(px0, 0), ImVec2(px0 + X(16), H), clear, dark, dark, clear);
+    dl_->AddRectFilled(ImVec2(px0 + X(16), 0), ImVec2(px1, H), dark);
 
     // Title with the game's Options icon.
     float tx = ox_;
     const int icon = gameicons::FindExtra(kOptionsIcon);
     if (gameicons::ExtraReady(icon)) {
-      const float s = X(46);
-      gameicons::DrawExtra(dl_, icon, ImVec2(ox_ - X(4), X(kTitleY) - X(8)), s, Alpha(IM_COL32_WHITE, fade));
+      const float s = X(40);
+      gameicons::DrawExtra(dl_, icon, ImVec2(ox_ - X(2), X(kTitleY) - X(5)), s, Alpha(IM_COL32_WHITE, fade));
       tx += s + X(6);
     }
     Text(ImVec2(tx, X(kTitleY)), kLarge, Alpha(kCream, fade), "Advanced Options");
-    Rule(ox_ - X(14), ox_ + X(kWidth + 14), X(kTitleY + 44), fade);
+    Rule(ox_ - X(10), ox_ + X(kWidth + 10), X(kTitleY + 42), fade);
 
-    // Pages: LB  Display  Frame Rate  Mouse  Fixes  Photo Mode  RB
-    for (int p = 0; p < kPageCount; ++p) {
-      const Box b = TabBox(p);
-      const bool cur = p == page_;
-      const float x = b.Min.x + X(8);
-      Text(ImVec2(x, X(kTabsY)), kNormal, Alpha(cur ? kGold : kFaint, fade), PageName(p));
-      if (cur)
-        dl_->AddRectFilled(ImVec2(x, X(kTabsY + 30)), ImVec2(b.Max.x - X(8), X(kTabsY + 30) + std::max(1.0f, X(1.5f))),
-                           Alpha(kGold, fade));
-    }
-    if (pad_prompts_) {
-      const float w = Prompt(0, 0, "LB", "", true) - X(8);
-      Prompt(ox_ - X(16) - w, X(kTabsY - 1), "LB", "");
-      Prompt(TabBox(kPageCount - 1).Max.x + X(8), X(kTabsY - 1), "RB", "");
+    // The tab:  LB  <  Display  >  RB
+    {
+      const float cx = ox_ + X(kWidth * 0.5f);
+      const char* name = PageName(page_);
+      const float w = TextW(name, kNormal);
+      Text(ImVec2(cx - w * 0.5f, X(kTabsY)), kNormal, Alpha(kGold, fade), name);
+      dl_->AddRectFilled(ImVec2(cx - w * 0.5f, X(kTabsY + 30)),
+                         ImVec2(cx + w * 0.5f, X(kTabsY + 30) + std::max(1.0f, X(1.5f))), Alpha(kGold, fade));
+      const float cy = X(kTabsY) + X(kNormal) * 0.5f;
+      Chevron(ImVec2(cx - w * 0.5f - X(16), cy), X(6), false, Alpha(kGold, fade));
+      Chevron(ImVec2(cx + w * 0.5f + X(16), cy), X(6), true, Alpha(kGold, fade));
+      const char* lb = pad_prompts_ ? "LB" : "PgUp";
+      const char* rb = pad_prompts_ ? "RB" : "PgDn";
+      const float lw = Prompt(0, 0, lb, "", true) - X(8);
+      Prompt(cx - w * 0.5f - X(32) - lw, X(kTabsY - 1), lb, "");
+      Prompt(cx + w * 0.5f + X(32), X(kTabsY - 1), rb, "");
     }
 
     // Lines.
@@ -636,34 +655,29 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
         const ImU32 a = IM_COL32(218, 182, 98, int(70 * fade)), z = IM_COL32(218, 182, 98, 0);
         dl_->AddRectFilledMultiColor(box.Min, box.Max, a, z, z, a);
         dl_->AddRectFilled(box.Min, ImVec2(box.Min.x + std::max(1.0f, X(2)), box.Max.y), Alpha(kGold, fade));
-        Diamond(ImVec2(ox_ - X(8), cy), X(3.5f), Alpha(kGold, fade));
       }
       const ImU32 col = Alpha(cur ? kCream : kCreamDim, fade);
-      Text(ImVec2(ox_ + X(6), ty), kNormal, col, s.label);
+      const std::string val = detail::ValueText(s, values_[i]);
+      // The value's width decides whether the name fits at the normal size.
+      const float value_w = s.control == Control::kSlider ? X(kBar + 12) + TextW(val.c_str(), kNormal)
+                                                          : TextW(val.c_str(), kNormal) + X(30);
+      const float label_size = TextW(s.label, kNormal) + X(14) + value_w <= X(kWidth) ? kNormal : kSmall;
+      Text(ImVec2(ox_ + X(4), cy - X(label_size) * 0.52f), label_size, col, s.label);
       // Restart marker: gold once changed since the game started.
       if (s.when == When::kRestart) {
         const bool pending = values_[i] != at_launch_[i];
-        const float lx = ox_ + X(6) + TextW(s.label, kNormal) + X(12);
+        const float lx = ox_ + X(4) + TextW(s.label, label_size) + X(10);
         Text(ImVec2(lx, cy - X(kSmall) * 0.5f), kSmall, Alpha(pending ? kGold : kFaint, fade * (pending ? 1.0f : 0.8f)),
              pending ? "Restart to apply" : "Restart");
       }
-      const std::string val = detail::ValueText(s, values_[i]);
       switch (s.control) {
-        case Control::kToggle: {
-          const bool on = values_[i].b != s.inverted;
-          const float right = cur ? ValueRight() - X(16) : ValueRight();
-          TextRight(right, ty, kNormal, Alpha(on ? kGold : kCreamDim, fade), val.c_str());
-          if (cur) {
-            Chevron(ImVec2(right - TextW(val.c_str(), kNormal) - X(12), cy), X(5), false, Alpha(kGold, fade));
-            Chevron(ImVec2(ValueRight() - X(4), cy), X(5), true, Alpha(kGold, fade));
-          }
-          break;
-        }
+        case Control::kToggle:
         case Control::kChoice: {
-          const float right = cur ? ValueRight() - X(16) : ValueRight();
-          TextRight(right, ty, kNormal, col, val.c_str());
+          const bool gold = s.control == Control::kToggle && values_[i].b != s.inverted;
+          const float right = cur ? ValueRight() - X(14) : ValueRight();
+          TextRight(right, ty, kNormal, gold ? Alpha(kGold, fade) : col, val.c_str());
           if (cur) {
-            Chevron(ImVec2(right - TextW(val.c_str(), kNormal) - X(12), cy), X(5), false, Alpha(kGold, fade));
+            Chevron(ImVec2(right - TextW(val.c_str(), kNormal) - X(11), cy), X(5), false, Alpha(kGold, fade));
             Chevron(ImVec2(ValueRight() - X(4), cy), X(5), true, Alpha(kGold, fade));
           }
           break;
@@ -672,12 +686,12 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
           const float t = float(std::clamp((values_[i].Number() - s.lo) / (s.hi - s.lo), 0.0, 1.0));
           const float bh = std::max(2.0f, X(3));
           const float x0 = BarX0(), x1 = BarX1();
-          dl_->AddRectFilled(ImVec2(x0, cy - bh * 0.5f), ImVec2(x1, cy + bh * 0.5f), IM_COL32(255, 255, 255, int(40 * fade)),
-                             bh * 0.5f);
+          dl_->AddRectFilled(ImVec2(x0, cy - bh * 0.5f), ImVec2(x1, cy + bh * 0.5f),
+                             IM_COL32(255, 255, 255, int(40 * fade)), bh * 0.5f);
           dl_->AddRectFilled(ImVec2(x0, cy - bh * 0.5f), ImVec2(x0 + (x1 - x0) * t, cy + bh * 0.5f),
                              Alpha(cur ? kGold : kCreamDim, fade * (cur ? 1.0f : 0.7f)), bh * 0.5f);
           Diamond(ImVec2(x0 + (x1 - x0) * t, cy), X(cur ? 6.0f : 4.5f), Alpha(cur ? kGold : kCreamDim, fade));
-          TextRight(x0 - X(16), ty, kNormal, col, val.c_str());
+          TextRight(x0 - X(12), ty, kNormal, col, val.c_str());
           break;
         }
       }
@@ -688,23 +702,22 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
       Chevron(ImVec2(ox_ + X(kWidth * 0.5f), X(kListY + kRow * shown + 6)), X(5), true, Alpha(kGold, fade));
 
     // Description of the selected line, and when a change takes effect.
-    float y = X(kListY + kRow * VisibleRows() + 16);
-    Rule(ox_ - X(14), ox_ + X(kWidth + 14), y, 0.5f * fade);
-    y += X(12);
+    float y = X(kListY + kRow * VisibleRows() + 14);
+    Rule(ox_ - X(10), ox_ + X(kWidth + 10), y, 0.5f * fade);
+    y += X(10);
     if (!rows.empty()) {
       const int i = rows[std::clamp(sel_, 0, int(rows.size()) - 1)];
       const Setting& s = list_[i];
       y += TextWrapped(ImVec2(ox_, y), kSmall, X(kWidth), Alpha(kCreamDim, fade), s.desc);
       std::string when;
       if (s.when == When::kRestart) when = "Takes effect the next time the game starts.";
-      else if (s.when == When::kNextLoad) when = "Takes effect when a save is loaded.";
+      else if (s.when == When::kNextLoad) when = "Takes effect from the next save load.";
       else if (s.when == When::kAtStart) when = "Used when the game starts: the videos only play then.";
       else when = "Takes effect at once.";
-      if (s.has_recommended)
-        when = "Recommended: " + detail::PlainValueText(s, s.recommended) + ". " + when;
+      if (s.has_recommended) when = "Recommended: " + detail::PlainValueText(s, s.recommended) + ". " + when;
       if (i < int(pinned_.size()) && pinned_[i])
         when += " fable_2.toml or the command line also sets this, and wins when the game starts.";
-      y += X(4);
+      y += X(2);
       TextWrapped(ImVec2(ox_, y), kSmall, X(kWidth), Alpha(kFaint, fade), when);
     }
 
@@ -713,21 +726,25 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
     for (size_t i = 0; i < list_.size(); ++i)
       if (list_[i].when == When::kRestart && values_[i] != at_launch_[i])
         pending += std::string(pending.empty() ? "" : ", ") + list_[i].label;
-    const float by = H - X(118);
+    const float by = H - X(84);
     if (!file_error_.empty())
-      TextWrapped(ImVec2(ox_, by - X(24)), kSmall, X(kWidth), Alpha(IM_COL32(230, 120, 90, 255), fade), file_error_);
+      TextWrapped(ImVec2(ox_, by - X(26)), kSmall, X(kWidth), Alpha(IM_COL32(230, 120, 90, 255), fade), file_error_);
     else if (!pending.empty())
-      TextWrapped(ImVec2(ox_, by - X(24)), kSmall, X(kWidth), Alpha(kGold, fade), "Restart the game to apply: " + pending);
+      TextWrapped(ImVec2(ox_, by - X(26)), kSmall, X(kWidth), Alpha(kGold, fade), "Restart to apply: " + pending);
 
     DrawPrompts(io, fade);
   }
 
   void DrawPrompts(ImGuiIO& io, float fade) {
-    const float W = io.DisplaySize.x, H = io.DisplaySize.y;
-    struct P { const char* button; const char* label; };
+    const float H = io.DisplaySize.y;
+    struct P {
+      const char* button;
+      const char* label;
+    };
     std::vector<P> list;
     const std::vector<int> rows = Rows();
-    const bool slider = !rows.empty() && list_[rows[std::clamp(sel_, 0, int(rows.size()) - 1)]].control == Control::kSlider;
+    const bool slider =
+        !rows.empty() && list_[rows[std::clamp(sel_, 0, int(rows.size()) - 1)]].control == Control::kSlider;
     if (pad_prompts_) {
       list.push_back(slider ? P{"D-Pad", "Adjust"} : P{"A", "Change"});
       list.push_back({"Y", "Default"});
@@ -737,19 +754,13 @@ class PortSettingsDialog final : public rex::ui::ImGuiDialog {
       list.push_back({"Delete", "Default"});
       list.push_back({"Esc", "Back"});
     }
-    dl_->AddRectFilledMultiColor(ImVec2(0, H - X(90)), ImVec2(W, H), IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0),
-                                 IM_COL32(0, 0, 0, int(150 * fade)), IM_COL32(0, 0, 0, int(150 * fade)));
-    const float gap = X(30);
+    // Along the bottom of the page, right-aligned.
+    const float gap = X(20);
     float total = 0;
     for (const P& p : list) total += Prompt(0, 0, p.button, p.label, true) + gap;
     float x = ox_ + X(kWidth) - (total - gap);
-    const float y = H - X(56);
+    const float y = H - X(52);
     for (const P& p : list) x += Prompt(x, y, p.button, p.label) + gap;
-    if (!pad_prompts_) {
-      const char* keys = "Arrows Move and Change    Page Up / Down Page";
-      if (ox_ + TextW(keys, kSmall) + X(40) < ox_ + X(kWidth) - (total - gap))
-        Text(ImVec2(ox_, y + X(15) - X(kSmall) * 0.52f), kSmall, Alpha(kFaint, fade), keys);
-    }
   }
 
   void DrawToast(ImGuiIO& io) {
