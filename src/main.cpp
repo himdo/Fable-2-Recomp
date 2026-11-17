@@ -96,8 +96,9 @@ REXCVAR_DEFINE_BOOL(mouse_look_invert_y, false, "Input",
 REXCVAR_DEFINE_DOUBLE(mouse_look_direct_smoothing, 0.0, "Input",
                       "Direct mouse camera: share of the mouse movement held back at each "
                       "camera update for the following ones (0 = none, up to 0.9).");
-// Mouse aiming (src/input/mouse_aim.h). Console only for now (`f2 mouse aim`,
-// `aiminput`, `aimsens`, `aimscale`); no fable2_config.toml key yet.
+// Mouse aiming (src/input/mouse_aim.h). Seeded from fable2_config.toml
+// [input] (keys of the same names); `f2 mouse aim|aiminput|aimsens|aiminvert|
+// aimscale` change them live.
 REXCVAR_DEFINE_STRING(mouse_aim_mode, "both", "Input",
                       "When the mouse moves the ranged aim reticle instead of the camera: "
                       "\"off\", \"rmb\" (aim button held), \"detect\" (the game is aiming) "

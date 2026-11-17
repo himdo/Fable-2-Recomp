@@ -302,6 +302,26 @@
                              FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,0"
                              TextWrapping="Wrap" />
                 </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Text="AIM (RANGED WEAPONS)" Style="{StaticResource FieldLabel}" />
+                  <ComboBox x:Name="MouseAimModeCombo">
+                    <ComboBoxItem Tag="both">Aim button held and aiming</ComboBoxItem>
+                    <ComboBoxItem Tag="rmb">Aim button held</ComboBoxItem>
+                    <ComboBoxItem Tag="detect">Whenever the game is aiming</ComboBoxItem>
+                    <ComboBoxItem Tag="off">Off: the mouse never moves the reticle</ComboBoxItem>
+                  </ComboBox>
+                  <TextBlock Text="When the mouse moves the aim reticle instead of the camera. A controller aims as before."
+                             FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,0"
+                             TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Text="AIM SENSITIVITY" Style="{StaticResource FieldLabel}" />
+                  <TextBox x:Name="MouseAimSensBox" Width="96" HorizontalAlignment="Left" Text="0.0007"
+                           VerticalContentAlignment="Center" />
+                  <TextBlock Text="Sideways reticle movement per mouse count. Up/down follows the screen shape."
+                             FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,0"
+                             TextWrapping="Wrap" />
+                </StackPanel>
               </StackPanel>
             </Border>
           </StackPanel>

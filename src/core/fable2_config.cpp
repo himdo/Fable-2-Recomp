@@ -134,6 +134,37 @@ mouse_look_invert_y = false
 # Default: 0.0
 mouse_look_direct_smoothing = 0.0
 
+# When the mouse moves the ranged aim reticle instead of the camera (WASD then
+# stops moving it). "both": the aim button (any key bound to pad Y) is held
+# and the game is aiming. "rmb": the aim button alone. "detect": the game
+# aiming alone. "off": the mouse never moves the reticle. A real controller
+# aims as before in every mode.
+# Default: "both"
+mouse_aim_mode = "both"
+
+# How the mouse moves the reticle. "direct": the movement is added straight to
+# the game's aim cursor, so the reticle moves exactly as far as the mouse, with
+# no top speed, deadzone or smoothing. "stick": the mouse drives the left stick
+# through the game's own stick handling (about a 30% deadzone and a top speed).
+# Default: "direct"
+mouse_aim_input = "direct"
+
+# Direct aim: sideways reticle movement per count of mouse movement (the aim
+# box is about -0.8..0.8). Up/down is this times the game's aspect ratio times
+# mouse_aim_y_ratio, so both ways move at the same speed on screen at 1.
+# Default: 0.0007 and 1.0
+mouse_aim_sens = 0.0007
+mouse_aim_y_ratio = 1.0
+
+# Direct aim: true = moving the mouse up moves the reticle down.
+# Default: false
+mouse_aim_invert_y = false
+
+# Stick aim (mouse_aim_input = "stick"): sensitivity while the mouse drives the
+# left stick (1..4096; 256 = 1x, the same units as mouse_look_scale).
+# Default: 256
+mouse_aim_scale = 256
+
 # Direct mouse-to-camera look: apply mouse movement straight to the active
 # camera's orientation (desktop-FPS style, no stick rate cap) instead of
 # writing it into the pad's right stick. false = legacy right-stick mapping.
@@ -501,6 +532,28 @@ bool Load(const std::filesystem::path& path) {
     values.mouse_look_direct_smoothing =
         Read<double>(input_table, "input", "mouse_look_direct_smoothing", "number",
                      values.mouse_look_direct_smoothing);
+    {
+      std::string mode = Read<std::string>(input_table, "input", "mouse_aim_mode", "string",
+                                           values.mouse_aim_mode);
+      for (auto& c : mode) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if (mode == "off" || mode == "rmb" || mode == "detect" || mode == "both") {
+        values.mouse_aim_mode = mode;
+      }
+    }
+    {
+      std::string input = Read<std::string>(input_table, "input", "mouse_aim_input", "string",
+                                            values.mouse_aim_input);
+      for (auto& c : input) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if (input == "direct" || input == "stick") values.mouse_aim_input = input;
+    }
+    values.mouse_aim_sens = Read<double>(input_table, "input", "mouse_aim_sens", "number",
+                                         values.mouse_aim_sens);
+    values.mouse_aim_y_ratio = Read<double>(input_table, "input", "mouse_aim_y_ratio", "number",
+                                            values.mouse_aim_y_ratio);
+    values.mouse_aim_invert_y = Read<bool>(input_table, "input", "mouse_aim_invert_y", "boolean",
+                                           values.mouse_aim_invert_y);
+    values.mouse_aim_scale = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "mouse_aim_scale", "integer", values.mouse_aim_scale));
     values.direct_mouse_look =
         Read<bool>(input_table, "input", "direct_mouse_look", "boolean",
                    values.direct_mouse_look);

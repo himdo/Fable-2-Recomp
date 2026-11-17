@@ -443,6 +443,12 @@ class Fable2App : public rex::ReXApp {
     seed_cvar("mouse_look_sens_y", std::to_string(cfg.mouse_look_sens_y));
     seed_cvar("mouse_look_invert_y", cfg.mouse_look_invert_y ? "true" : "false");
     seed_cvar("mouse_look_direct_smoothing", std::to_string(cfg.mouse_look_direct_smoothing));
+    seed_cvar("mouse_aim_mode", cfg.mouse_aim_mode);
+    seed_cvar("mouse_aim_input", cfg.mouse_aim_input);
+    seed_cvar("mouse_aim_sens", std::to_string(cfg.mouse_aim_sens));
+    seed_cvar("mouse_aim_y_ratio", std::to_string(cfg.mouse_aim_y_ratio));
+    seed_cvar("mouse_aim_invert_y", cfg.mouse_aim_invert_y ? "true" : "false");
+    seed_cvar("mouse_aim_scale", std::to_string(cfg.mouse_aim_scale));
     // NOTE: the hero/dog readback fix (readback_resolve_force_addresses) is a
     // GPU-PLUGIN cvar, so it is seeded in OnPostSetup() (after the plugin is
     // loaded) rather than here - see plans/hero-dog-texture-readback.md.
