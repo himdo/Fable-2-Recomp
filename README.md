@@ -506,7 +506,7 @@ Everything the build needs is either in this repo or auto-fetched — **no
 hardcoded paths**. Prerequisites (all standard tools):
 
 - **CMake** ≥ 3.25 (on PATH)
-- **LLVM** (clang/clang++/lld) — on PATH or the default `C:\Program Files\LLVM` install
+- **LLVM** 22 or newer (clang/clang++/lld) — on PATH or the default `C:\Program Files\LLVM` install. The STL of MSVC 14.52 and later refuses older Clang (error STL1000)
 - **Ninja** (on PATH, `%USERPROFILE%\bin`, or the WinGet package dir)
 - **Internet** on first build — `build.cmd` fetches the
   [SDK fork](https://github.com/himdo/rexglue-sdk) and its submodules, then builds the
