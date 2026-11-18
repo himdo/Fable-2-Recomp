@@ -18,6 +18,7 @@ public static class UpdateChecker
     private const string DownloadPrefix = "https://github.com/himdo/Fable-2-Recomp/releases/download/";
     // Releases are about 100 MB. Anything far beyond that is not one of ours.
     public const long MaxPackageBytes = 1L << 30;
+    // TODO: pick the zip for the running OS once the launcher runs on more than Windows.
     private static readonly Regex PackageName = new(@"^Fable_2_recomp_v[0-9A-Za-z._-]+_windows\.zip$");
     private static readonly Regex Sha256Digest = new(@"^sha256:([0-9a-fA-F]{64})$");
     private static readonly HttpClient Downloads = CreateClient(Timeout.InfiniteTimeSpan);
