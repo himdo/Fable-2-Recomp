@@ -120,7 +120,9 @@ per count, when the mouse goes to the camera or the stick, the retries that
 start `mouse_direct.lua`, the numbers it returns to Lua, the fallback for a
 NaN or infinite setting, and the inject speed profiles), the RunScript gate
 (scripts only run inside the world-update service, per thread; see
-`src/core/world_thread.h`), and the version catalogue in each build profile.
+`src/core/world_thread.h`), the GUI bank file writes (a bank is replaced in
+full or left as it was; see `src/gui/bank_file.h`), and the version catalogue
+in each build profile.
 Test executables go under `out/tests`.
 
 They use [Catch2](https://github.com/catchorg/Catch2) v3, from the SDK's own
