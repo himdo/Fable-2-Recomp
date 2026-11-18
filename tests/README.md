@@ -165,7 +165,9 @@ git submodule update --init --depth 1 thirdparty/rexglue-sdk
 git -C thirdparty/rexglue-sdk submodule update --init --depth 1 thirdparty/fmt thirdparty/simde thirdparty/spdlog thirdparty/catch2
 ```
 
-Clang must be on `PATH` (for example `C:\Program Files\LLVM\bin`). A Visual
+Clang 22 or newer must be on `PATH` (for example `C:\Program Files\LLVM\bin`):
+the STL of MSVC 14.52 and later refuses older Clang with error STL1000. CI
+installs a pinned LLVM for this (see `.github/workflows/tests.yml`). A Visual
 Studio developer shell isn't needed.
 
 To see how much of the project's own code (`src/`, `constants/`) the native
