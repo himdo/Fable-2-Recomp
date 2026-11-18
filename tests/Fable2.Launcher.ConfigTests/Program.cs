@@ -257,6 +257,24 @@ try
             "Disc path escaped the output folder: " + unsafePath);
     }
     Console.WriteLine("Disc paths cannot escape the output folder passed.");
+
+    // A file that is not an Xbox 360 disc must be refused, not scanned forever.
+    // Each case runs with a time limit so a scan that never ends fails the test.
+    foreach (int size in new[] { 0, 10, 20, 21, 4096 })
+    {
+        string notADisc = Path.Combine(testDirectory, "not-a-disc-" + size + ".iso");
+        File.WriteAllBytes(notADisc, new byte[size]);
+        Exception? scanError = null;
+        var scan = Task.Run(() =>
+        {
+            try { X360Extract.X360Disc.Open(notADisc).Dispose(); }
+            catch (Exception ex) { scanError = ex; }
+        });
+        Require(scan.Wait(TimeSpan.FromSeconds(60)), "scanning a " + size + "-byte file without a disc header did not finish");
+        Require(scanError is InvalidDataException,
+            "a " + size + "-byte file without a disc header was not refused: " + (scanError?.GetType().Name ?? "no exception"));
+    }
+    Console.WriteLine("Files without a disc header are refused passed.");
     // A synthetic extra locale proves that no classifier branch needs adding.
     GameVersion extra = supported[0] with { Id = "synthetic-locale", Hash = new string('a', 64),
         Name = "Synthetic locale", Language = 6 };
