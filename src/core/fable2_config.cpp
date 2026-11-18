@@ -260,6 +260,15 @@ higher_hf_tick_rate = false
 # Default: false
 disable_motion_blur = false
 
+# Disable MSAA (override of sub_8238DE58, the render-settings setup): the game
+# sets up its main render targets with 2x multisample anti-aliasing (mode 2 at
+# +156, next to the 1120x720 render size). This sets mode 1, as the Xenia
+# "Disable MSAA" patch for this executable does (li r9,2 -> li r9,1 at
+# 0x8238DF3C). Much less GPU work on the emulated EDRAM; edges are jaggier.
+# Takes effect at start-up. false = original 2x MSAA.
+# Default: false
+disable_msaa = false
+
 # Realtime Texture Morphing (mid-asm hook fable2_hook_realtime_texture_morphing):
 # the hero's and dog's morphed skin textures are rendered straight into their
 # final texture on the GPU (the game's own RealTimeTextureMorphing mode)
@@ -577,6 +586,8 @@ bool Load(const std::filesystem::path& path) {
     values.disable_motion_blur =
         Read<bool>(patches_table, "patches", "disable_motion_blur", "boolean",
                    values.disable_motion_blur);
+    values.disable_msaa =
+        Read<bool>(patches_table, "patches", "disable_msaa", "boolean", values.disable_msaa);
     values.realtime_texture_morphing =
         Read<bool>(patches_table, "patches", "realtime_texture_morphing", "boolean",
                    values.realtime_texture_morphing);

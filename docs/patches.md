@@ -128,12 +128,18 @@ original `__imp__` entry). Enabled with `FABLE2_FPS_METER=1`.
 2. **Other Xenia patches** for this title (from
    `4D5307F1 - Fable II (GOTY).patch.toml`). Done as mid-asm hooks:
    **Unlock Website Items**, **Unlock CE Content** (all re-derived for THIS
-   build — see the recomp-level patches table above). Remaining (still to port,
-   each needs the same build-mismatch investigation — the stock ops target a
-   different revision): 1280x720 (be16 0x8238DF5A=0x0500), Disable MSAA
-   (be8 0x8238DF3F=0x01), Disable Texture Morphing (be16 0x8220EF10=0x4280),
-   21:9 / 32:9 widescreen — all .text/data-in-.text, so expect the same "applied
-   but inert" behavior for their code ops if applied to the guest image.
+   build — see the recomp-level patches table above). **Disable MSAA** is done
+   as a strong-symbol override of the render setup `sub_8238DE58`
+   (`src/core/hotfunc/render/DisableMsaa_8238DE58.cpp`, `[patches]
+   disable_msaa`): its ops do match this build — `0x8238DF3C` is `li r9,2`, the
+   MSAA mode stored at `+156` of the settings object in r3 (the patch makes it
+   `li r9,1`), next to the 1120x720 render size at `+148`/`+152` — but as
+   recompiled code it can't be patched in the image, so the override stores
+   mode 1 after the original runs. Remaining (still to port): 1280x720 (be16
+   0x8238DF5A=0x0500, the `li r11,1120` render width in the same function),
+   Disable Texture Morphing (be16 0x8220EF10=0x4280), 21:9 / 32:9 widescreen —
+   all .text/data-in-.text, so expect the same "applied but inert" behavior for
+   their code ops if applied to the guest image.
 3. **Oddity worth investigating (separate issue):** the recompiled C++ for
    `sub_8233AE50` (generated/default/fable_2_recomp.65.cpp:3211) was compiled
    from a word at 0x8233AEB4 of `0xD9009510` (stfd f0,0x9510(r8)), but the

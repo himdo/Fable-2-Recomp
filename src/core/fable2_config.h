@@ -193,6 +193,9 @@ struct Values {
   // camera passes to the renderer (hook fable2_hook_disable_motion_blur in
   // src/core/fable2_hooks.cpp). false = original.
   bool disable_motion_blur = false;
+  // [patches] disable_msaa: render without the game's multisample anti-aliasing
+  // (override of sub_8238DE58, src/core/hotfunc/render/DisableMsaa_8238DE58.cpp).
+  bool disable_msaa = false;
   // [patches] realtime_texture_morphing: build the hero/dog morphed skin
   // textures on the GPU (the game's own RealTimeTextureMorphing mode) instead
   // of CPU-compressing a resolved scratch texture, so they are not black on a
