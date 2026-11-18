@@ -251,6 +251,7 @@ public partial class MainWindow : Window
                 WorkingDirectory = plan.WorkingDirectory,
                 UseShellExecute = false
             };
+            foreach (string argument in plan.Arguments) startInfo.ArgumentList.Add(argument);
             Process.Start(startInfo);
             StatusText.Text = "Fable II launched.";
             ConfigStateText.Text = "Game running";
