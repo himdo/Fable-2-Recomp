@@ -79,7 +79,7 @@ namespace detail {
 // Test builds log the layout whatever fit_window_ui_log says, because L's
 // config file does not reach this cvar. Bump kBuild with each test zip.
 inline constexpr bool kAlwaysLogLayout = true;
-inline constexpr int kBuild = 56;
+inline constexpr int kBuild = 57;
 inline bool LogLayout() {
   return kAlwaysLogLayout || REXCVAR_GET(fit_window_ui_log);
 }
@@ -383,6 +383,11 @@ end
 -- frame with the current dx. cover/page/card are dx times a tuning factor
 -- (fixMenus sets them each frame; __fitwin_tune.cover/page/card).
 local cover, page, card, bookCover, paper = 0, 0, 0, 0, 0
+-- Menus only ever spread outward. On a window narrower than 16:9 (the Steam
+-- Deck's 16:10) dx is negative, and pulling the covers and pages inward made
+-- the menu column overlap the right-hand page; left as authored, only the
+-- outer edge of each cover is cut off (64 canvas units per side at 16:10).
+local mdx = 0
 local staticParts = { Buttons = true, KeyLight = true, MenuHighlight = true,
   Money = true }
 -- The covers and the character cards are keyframe-animated on their own
@@ -423,7 +428,7 @@ local function spreadMenu(menu)
         -- Build 13 also shifted g_MenuPositionSlots, but those slots are
         -- relative to Buttons, so items moved twice and their labels slid
         -- under the cover.
-        nudge(k[i], "ExpandableMenu/" .. n, "position.x", -dx)
+        nudge(k[i], "ExpandableMenu/" .. n, "position.x", -mdx)
       end
     end
   end
@@ -535,13 +540,14 @@ local function fixMenus()
   -- (dx), the paper stays under the right cover (1.2 dx: at dx a strip
   -- showed beside it on the Weapons screen), and the waiting
   -- cards, in a 0.75-scaled parent, stay off-screen (1.8 dx).
-  cover = dx * tk("cover", 1)
-  page = dx * tk("page", 1.2)
-  card = dx * tk("card", 1.8)
+  mdx = math.max(dx, 0)
+  cover = mdx * tk("cover", 1)
+  page = mdx * tk("page", 1.2)
+  card = mdx * tk("card", 1.8)
   -- Book screens' right cover (ws tune bookcover, 1.2): moves with the
   -- pages, so pages meet it as in vanilla (shop front page, Items).
-  bookCover = dx * tk("bookcover", 1.2)
-  paper = dx * tk("paper", 1.5)
+  bookCover = mdx * tk("bookcover", 1.2)
+  paper = mdx * tk("paper", 1.5)
   if screen == "title" then
     -- Title: left as authored. Its 16:9 box (White) is on the title's
     -- timeline: scale, position.z and the title camera are put back when it
