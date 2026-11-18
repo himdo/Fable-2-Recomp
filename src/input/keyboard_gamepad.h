@@ -36,6 +36,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <cstdlib>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -50,6 +51,7 @@
 
 #include "fable2_config.h"  // direct_mouse_look toggle
 #include "../core/fable2_keycap_swap.h"  // real-time keycap prompt swap
+#include "host_pad.h"       // XInput read of real controllers (controller priority)
 #include "mouse_diag.h"     // fable2_mouse.log + `f2 mouse inject` movement
 #include "mouse_direct.h"   // direct mouse camera (mouse_look_mode = "direct")
 #include "mouse_look.h"     // fable2::mouselook (accumulates the mouse delta)
@@ -63,6 +65,7 @@
 // Declared here, defined in main.cpp (REXCVAR_DEFINE_* must live in a .cpp).
 REXCVAR_DECLARE(std::string, keyboard_gamepad_map);
 REXCVAR_DECLARE(bool, mouse_look);
+REXCVAR_DECLARE(bool, mouse_controller_priority);
 REXCVAR_DECLARE(int32_t, mouse_look_scale);
 REXCVAR_DECLARE(bool, mouse_look_smoothing);
 REXCVAR_DECLARE(int32_t, mouse_look_window_ms);
@@ -421,6 +424,27 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
       mouse_centered_ = false;  // re-prime on (re)focus to avoid a jump
     }
 
+    // Controller priority: tools such as Steam's Desktop controller layout
+    // turn a controller's sticks into real cursor movement while the game
+    // isn't a Steam game, and the mouse camera then turns with them (walking
+    // forward tips the camera up). While a controller is in use, read straight
+    // from XInput (which such tools can't fake), and for a moment after, mouse
+    // movement is taken to come from it and dropped.
+    if (cursor_read && REXCVAR_GET(mouse_controller_priority)) {
+      const int64_t now_us = fable2::mousediag::NowUs();
+      const fable2::hostpad::State hs = fable2::hostpad::Poll();
+      const auto& hp = hs.pad;
+      const bool pad_in_use =
+          hs.connected && (hp.buttons != 0 || hp.lt > 30 || hp.rt > 30 ||
+                           std::abs(int(hp.lx)) > 7849 || std::abs(int(hp.ly)) > 7849 ||
+                           std::abs(int(hp.rx)) > 8689 || std::abs(int(hp.ry)) > 8689);
+      if (pad_in_use) pad_used_us_ = now_us;
+      if (pad_used_us_ != 0 && now_us - pad_used_us_ < kPadTailUs) {
+        cur_dx = cur_dy = 0;
+        cursor_read = false;
+      }
+    }
+
     // `f2 mouse inject` movement is added on top. It ignores focus so tests
     // can be driven from console\in.txt, but still respects mouse_look.
     int32_t inj_dx = 0;
@@ -650,6 +674,10 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
   fable2::mousestick::VelocityWindow window_;
   int64_t last_poll_us_ = 0;  // previous poll (smoothing path), for movement intervals
   bool routed_direct_prev_ = false;  // route of the previous poll, for log notes
+  // Controller-priority mouse gate (see GetDeviceState): last time a real
+  // controller was in use, and how long its use still drops mouse movement.
+  static constexpr int64_t kPadTailUs = 150000;
+  int64_t pad_used_us_ = 0;
   std::vector<input_detail::Mapping> bindings_;
   std::string cached_text_;
   uint32_t packet_number_ = 0;
