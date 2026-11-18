@@ -324,12 +324,12 @@ faster_render_targets = true
 # wait until the GPU has finished the previous one. Fixes flicker (blue distant
 # trees, the dog's texture, sun lighting) when the GPU falls behind, mostly at
 # higher internal resolutions. Costs a few FPS where the GPU is the limit.
-# false = let the GPU run up to three frames behind. On Linux (Vulkan) it stays
-# off: there it would make the CPU wait for the GPU at every frame start, and
-# the Steam Deck is limited by both. Leave commented out for the platform
-# default.
-# Default: true on Windows, false elsewhere
-# gpu_frame_sync = true
+# false = let the GPU run up to three frames behind. Without this line the
+# platform default applies: on, except on Linux (Vulkan), where it would make
+# the CPU wait for the GPU at every frame start and the Steam Deck is limited by
+# both; the Linux package and build ship this line commented out.
+# Default: true
+gpu_frame_sync = true
 
 [perf]
 # NtYieldExecution batching for the hot-function overrides (see
@@ -355,19 +355,20 @@ refresh_gpu_memory_each_frame = false
 # back to back with no work in between, it sleeps this long per yield
 # instead. The game's frame limiter, which busy-waits for the rest of every
 # frame, sleeps the same amount between polls. 0 = never sleep (original
-# behaviour). Leave commented out to use the platform default.
-# Default: 0 on Windows, 100 elsewhere
-# idle_yield_sleep_us = 100
+# behaviour). -1 = the platform default: 0 on Windows (no sub-millisecond
+# sleep there), 100 elsewhere.
+# Default: -1
+idle_yield_sleep_us = -1
 
 # Frame rate cap. The game normally locks itself to 30 fps by waiting for two
 # emulated 60 Hz vblanks per frame. Any other value lifts that lock and caps
 # the game at this many fps instead (SDK cvars frame_limit and
 # guest_vblank_pacing, the same as the Windows launcher's frame limit), while
 # presentation still follows vsync. 30 = the original lock, 0 = unlimited.
-# fable_2.toml and the command line still take priority. Leave commented out
-# to use the platform default (on Windows the launcher manages this instead).
-# Default: 30 on Windows, 60 elsewhere
-# fps_limit = 60
+# fable_2.toml and the command line still take priority. -1 = the platform
+# default: 30 on Windows (the launcher manages the cap there), 60 elsewhere.
+# Default: -1
+fps_limit = -1
 
 # Native Lua GC: run the game's Lua garbage collector (mark and sweep) as
 # native code instead of recompiled PowerPC code. It was about half of the main
@@ -454,7 +455,15 @@ bool Load(const std::filesystem::path& path) {
       REXSYS_ERROR("[fable2-config] could not create {}", path.string());
       return false;
     }
-    out << kTemplate;
+    std::string text = kTemplate;
+#ifndef _WIN32
+    // Off outside Windows unless set (see Values::gpu_frame_sync).
+    const std::string sync_line = "\ngpu_frame_sync = true\n";
+    if (const size_t at = text.find(sync_line); at != std::string::npos) {
+      text.replace(at, sync_line.size(), "\n# gpu_frame_sync = true\n");
+    }
+#endif
+    out << text;
     REXSYS_INFO("[fable2-config] {} not found; created with defaults",
                 path.string());
   }
@@ -491,6 +500,7 @@ bool Load(const std::filesystem::path& path) {
   }
 
   Values values;
+  bool gpu_frame_sync_set = false;
   const toml::path general_path{"general"};
   const auto general = root[general_path];
   if (general.is_table()) {
@@ -633,6 +643,7 @@ bool Load(const std::filesystem::path& path) {
     values.gpu_frame_sync =
         Read<bool>(patches_table, "patches", "gpu_frame_sync", "boolean",
                    values.gpu_frame_sync);
+    gpu_frame_sync_set = patches_table.contains("gpu_frame_sync");
     values.faster_render_targets =
         Read<bool>(patches_table, "patches", "faster_render_targets", "boolean",
                    values.faster_render_targets);
@@ -691,6 +702,27 @@ bool Load(const std::filesystem::path& path) {
     values.photo_mode_screenshot_folder =
         Read<std::string>(photo_table, "photo_mode", "screenshot_folder", "string",
                           values.photo_mode_screenshot_folder);
+  }
+
+  // Platform defaults the file leaves open.
+#ifndef _WIN32
+  if (!gpu_frame_sync_set) {
+    values.gpu_frame_sync = false;
+  }
+#endif
+  if (values.idle_yield_sleep_us < 0) {
+#ifdef _WIN32
+    values.idle_yield_sleep_us = 0;
+#else
+    values.idle_yield_sleep_us = 100;
+#endif
+  }
+  if (values.fps_limit < 0) {
+#ifdef _WIN32
+    values.fps_limit = 30;
+#else
+    values.fps_limit = 60;
+#endif
   }
 
   g_values = values;

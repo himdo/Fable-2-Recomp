@@ -33,6 +33,8 @@ cp "$BUILD/fable_2" "$BUILD/librexruntime.so" "$BUILD/librexgpu-xenos.so" \
    "$BUILD/fable2_build.json" "$PKG/"
 # Pristine defaults, not the build tree's copy (a test run may have edited it).
 cp "$ROOT/config/fable2_config.toml" "$PKG/"
+# GPU frame sync stays at its Linux default (off) unless a user sets it.
+sed -i 's/^gpu_frame_sync = true$/# gpu_frame_sync = true/' "$PKG/fable2_config.toml"
 cp "$ROOT/README.md" "$ROOT/Linux.md" "$PKG/"
 cp "$ROOT/thirdparty/XenosTiling/LICENSE.txt" "$PKG/licenses/XenosTiling-LICENSE.txt"
 cp "$ROOT/assets/app-icon.png" "$PKG/" 2>/dev/null || true

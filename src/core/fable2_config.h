@@ -226,11 +226,8 @@ struct Values {
   // [patches] faster_render_targets: Narrower EDRAM transfers (SDK cvars execute_unclipped_draw_vs_on_cpu, skip_depth_clear_transfers).
   bool faster_render_targets = true;
   // [patches] gpu_frame_sync: Keep the GPU at most one frame behind (SDK cvar gpu_sync_at_frame_start).
-#ifdef _WIN32
+  // Without the key: off except on Windows (resolved by Load).
   bool gpu_frame_sync = true;
-#else
-  bool gpu_frame_sync = false;
-#endif
   // [perf] - hot-function override tuning.
   // hotfunc_yield_every: NtYieldExecution batching factor for the hotfunc
   // overrides (see src/core/hotfunc/hotfunc_yield.h). Every Nth call does
@@ -245,21 +242,14 @@ struct Values {
   // back with no work in between (it is polling for another thread), sleep
   // this many microseconds per yield instead of spinning a core at 100%
   // (see src/core/hotfunc/hotfunc_yield.h). 0 = never sleep (original).
-  // Off by default on Windows, where a sub-millisecond sleep is not available.
-#ifdef _WIN32
-  int32_t idle_yield_sleep_us = 0;
-#else
-  int32_t idle_yield_sleep_us = 100;
-#endif
+  // -1 = the platform default, which Load resolves: 0 on Windows, where a
+  // sub-millisecond sleep is not available, 100 elsewhere.
+  int32_t idle_yield_sleep_us = -1;
   // [perf] fps_limit: 30 keeps the game's own 30 fps vblank lock; anything
   // else seeds frame_limit (0 = unlimited) and turns guest_vblank_pacing off,
-  // like the Windows launcher's frame limit. Windows keeps the original lock
-  // by default because the launcher manages it there.
-#ifdef _WIN32
-  int32_t fps_limit = 30;
-#else
-  int32_t fps_limit = 60;
-#endif
+  // like the Windows launcher's frame limit. -1 = the platform default, which
+  // Load resolves: 30 on Windows, where the launcher manages it, 60 elsewhere.
+  int32_t fps_limit = -1;
   // [perf] native_lua_gc: native Lua GC routines
   // (src/core/hotfunc/luagc/NativeLuaGC.cpp); false = recompiled originals.
   bool native_lua_gc = true;

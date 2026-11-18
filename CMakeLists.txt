@@ -332,6 +332,13 @@ target_include_directories(fable_2 SYSTEM PRIVATE
 if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/fable2_config.toml")
     file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/config/fable2_config.toml
          DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+    if(NOT WIN32)
+        # GPU frame sync stays at its default outside Windows (off) unless set.
+        file(READ "${CMAKE_CURRENT_BINARY_DIR}/fable2_config.toml" _fable2_config)
+        string(REPLACE "\ngpu_frame_sync = true\n" "\n# gpu_frame_sync = true\n"
+               _fable2_config "${_fable2_config}")
+        file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/fable2_config.toml" "${_fable2_config}")
+    endif()
 endif()
 
 # --- PDB for the Release build (crash debugging) --------------------------
