@@ -24,6 +24,12 @@
 #   --pgo-use <file> optimize the runtime libraries with a profile merged
 #                    from those files (llvm-profdata merge -o <file> ...)
 #   --lto            ThinLTO for the GPU plugin library (needs lld)
+#   --game-pgo-generate  instrument the game code itself (the recompiled code
+#                    and the app) too; it writes rex-pgo-*.profraw next to the
+#                    executable every 30 s of play and when quitting from the
+#                    console
+#   --game-pgo-use <file>  optimize the game code with a merged profile (the
+#                    same .profdata as --pgo-use works for both)
 #   --cpu <level>    code generation target (also: FABLE2_CPU=<level>):
 #                      generic  x86-64-v2, runs on any CPU from ~2009 on (default)
 #                      deck     Steam Deck (Zen 2: AVX2, FMA)
@@ -47,6 +53,8 @@ FUNC_TRACE=OFF
 PGO=OFF
 LTO=OFF
 PGO_PROFILE=
+GAME_PGO=OFF
+GAME_PGO_PROFILE=
 while [ $# -gt 0 ]; do
     case "$1" in
         -debug|-d) CONFIG=Debug ;;
@@ -59,6 +67,9 @@ while [ $# -gt 0 ]; do
         --trace) FUNC_TRACE=ON ;;
         --pgo-generate) PGO=GENERATE ;;
         --lto) LTO=ON ;;
+        --game-pgo-generate) GAME_PGO=GENERATE ;;
+        --game-pgo-use) shift; GAME_PGO=USE; GAME_PGO_PROFILE="$(readlink -f "${1:?--game-pgo-use needs a .profdata file}")" ;;
+        --game-pgo-use=*) GAME_PGO=USE; GAME_PGO_PROFILE="$(readlink -f "${1#--game-pgo-use=}")" ;;
         --pgo-use) shift; PGO=USE; PGO_PROFILE="$(readlink -f "${1:?--pgo-use needs a .profdata file}")" ;;
         --pgo-use=*) PGO=USE; PGO_PROFILE="$(readlink -f "${1#--pgo-use=}")" ;;
         -h|--help) sed -n '2,36p' "$0"; exit 0 ;;
@@ -145,7 +156,7 @@ configure() {
         -DREXGLUE_ENABLE_TRACY=OFF -DREXGLUE_BUILD_TESTS=OFF \
         -DFABLE2_FUNC_TRACE="$FUNC_TRACE" \
         -DREXGLUE_PGO="$PGO" -DREXGLUE_PGO_PROFILE="$PGO_PROFILE" \
-        -DREXGLUE_LTO="$LTO" -DREXGLUE_GPU_LINE_TABLES=ON \
+        -DREXGLUE_LTO="$LTO" -DREXGLUE_GPU_LINE_TABLES=ON         -DFABLE2_PGO="$GAME_PGO" -DFABLE2_PGO_PROFILE="$GAME_PGO_PROFILE" \
         "${SDL_ARGS[@]}"
 }
 

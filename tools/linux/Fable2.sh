@@ -43,6 +43,13 @@ if [ -d "$HERE/extras/scripts/recomp" ]; then
     cp -n "$HERE"/extras/scripts/recomp/* "$HERE/data/scripts/recomp/" 2>/dev/null
 fi
 
+# Optional extra settings for testing (environment variables such as
+# RADV_DEBUG, or a stderr redirect), one shell line each. Not part of the
+# package, so it survives installing a new one; delete it when done.
+if [ -f "$HERE/launch_env" ]; then
+    . "$HERE/launch_env"
+fi
+
 ./fable_2 "$@"
 status=$?
 if [ "$status" != 0 ] && [ "$status" != 130 ]; then
