@@ -2,7 +2,8 @@
 rem Build the SDK from the thirdparty\rexglue-sdk fork and stage it: runtime,
 rem D3D12 plugin, codegen tool and CMake package. Optional arg: Debug or Release.
 rem Debug needs the Release SDK too, because only that one ships the tool.
-rem Run in a VS x64 developer shell with LLVM 20+, Ninja, CMake and Python on PATH.
+rem Run in a VS x64 developer shell with LLVM 22+, Ninja, CMake and Python on PATH
+rem (the STL of MSVC 14.52 and later refuses older Clang).
 setlocal
 set "ROOT=%~dp0.."
 set "SOURCE=%ROOT%\thirdparty\rexglue-sdk"

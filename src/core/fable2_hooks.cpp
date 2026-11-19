@@ -561,8 +561,36 @@ void fable2_hook_realtime_texture_morphing(PPCRegister& r9) {
 }
 
 // ---------------------------------------------------------------------------
-// Interpolation ([patches] interpolation). Two places where the game shows
-// LF-tick state without blending it to the render time.
+// GUI every HF tick ([patches] gui_every_hf_tick).
+// ---------------------------------------------------------------------------
+namespace {
+
+bool GuiEveryHfTickEnabled() {
+  static const bool enabled = [] {
+    const bool on = fable2::config::Get().gui_every_hf_tick;
+    if (on) {
+      REXSYS_INFO("[gui-every-hf-tick] on: GUI updates every HF tick");
+    }
+    return on;
+  }();
+  return enabled;
+}
+
+}  // namespace
+
+// sub_82278C90 (run on every HF tick from ProcessGameFrame)
+// calls the front-end object's vtable[2] (sub_82286B40: GUI manager update,
+// subtitles, HUD) only when an LF boundary was crossed (r29) or a query says
+// so; the check starts with `clrlwi r10,r29,24` at 0x82278D1C. That update
+// measures its own elapsed time from the wall clock (sub_822B6D70), so running
+// it every HF tick does not speed anything up; it only updates text twice as
+// often (30 Hz instead of 15 Hz, or 60 Hz with higher_hf_tick_rate).
+// Returning true jumps to the call at 0x82278D40.
+bool fable2_hook_gui_every_tick() { return GuiEveryHfTickEnabled(); }
+
+// ---------------------------------------------------------------------------
+// Interpolation ([patches] interpolation). Cloth follows the body as drawn at
+// the render time instead of the LF-tick pose and the raw tick matrix.
 // ---------------------------------------------------------------------------
 namespace {
 
@@ -570,9 +598,8 @@ bool InterpolationEnabled() {
   static const bool enabled = [] {
     const bool on = fable2::config::Get().interpolation;
     if (on) {
-      REXSYS_INFO("[interpolation] on: GUI updates every HF tick, cloth "
-                  "colliders blended between poses, cloth moved with the drawn "
-                  "body");
+      REXSYS_INFO("[interpolation] on: cloth colliders blended between poses, "
+                  "cloth moved with the drawn body");
     }
     return on;
   }();
@@ -592,16 +619,6 @@ uint32_t LoadU32(uint32_t addr) {
 float LoadF32(uint32_t addr) { return std::bit_cast<float>(LoadU32(addr)); }
 
 }  // namespace
-
-// GUI every HF tick. sub_82278C90 (run on every HF tick from ProcessGameFrame)
-// calls the front-end object's vtable[2] (sub_82286B40: GUI manager update,
-// subtitles, HUD) only when an LF boundary was crossed (r29) or a query says
-// so; the check starts with `clrlwi r10,r29,24` at 0x82278D1C. That update
-// measures its own elapsed time from the wall clock (sub_822B6D70), so running
-// it every HF tick does not speed anything up; it only updates text twice as
-// often (30 Hz instead of 15 Hz, or 60 Hz with higher_hf_tick_rate).
-// Returning true jumps to the call at 0x82278D40.
-bool fable2_hook_gui_every_tick() { return InterpolationEnabled(); }
 
 // Cloth colliders blended to the render time. sub_82A895C0 builds the cloth's
 // collision shapes from the driving character's skeleton. Its four loops read

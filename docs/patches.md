@@ -43,20 +43,24 @@ patches don't** (a code patch here would mean editing the recompiled C++ at
 build time, which codegen would clobber on the next run), so every code op is
 a mid-asm hook.
 
-### Interpolation (`interpolation`, on by default)
+### GUI every HF tick (`gui_every_hf_tick`, on by default)
 
 The game updates gameplay, AI, scripts and the GUI only on LF ticks, which
-are every other HF tick. Characters are already drawn blended between their
-last two LF poses at the render time (the engine's own interpolator at
-instance+176, applied by `sub_8222E300`), and the camera is blended with the
-HF fraction. Three things were not, and this option fixes them:
+are every other HF tick. `sub_82278C90` calls the front-end GUI update
+(vtable[2], `sub_82286B40`: subtitles, HUD text) only when an LF boundary was
+crossed. The GUI measures its own elapsed time from the wall clock
+(`sub_822B6D70`), so the hook `fable2_hook_gui_every_tick` (0x82278D1C) runs
+it on every HF tick without changing its speed: text updates at 30 Hz instead
+of 15 Hz, or 60 Hz with `higher_hf_tick_rate`. This raises the update rate;
+it does not blend anything between ticks.
 
-- **Text (subtitles, HUD).** `sub_82278C90` calls the front-end GUI update
-  (vtable[2], `sub_82286B40`) only when an LF boundary was crossed. The GUI
-  measures its own elapsed time from the wall clock (`sub_822B6D70`), so the
-  hook `fable2_hook_gui_every_tick` (0x82278D1C) runs it on every HF tick
-  without changing its speed: 30 Hz instead of 15 Hz, or 60 Hz with
-  `higher_hf_tick_rate`.
+### Interpolation (`interpolation`, on by default)
+
+Characters are already drawn blended between their last two LF poses at the
+render time (the engine's own interpolator at instance+176, applied by
+`sub_8222E300`), and the camera is blended with the HF fraction. The cloth
+was not, and this option fixes it:
+
 - **Cloth colliders.** `sub_82A895C0` builds the cloth's collision shapes from
   the raw current pose, while the body is drawn blended, so the colliders ran
   up to one LF tick ahead and jumped every LF tick.
@@ -162,9 +166,11 @@ same key.
 
 `src/diagnostics/fps_meter.h` (included from main.cpp): strong override of the weak
 recompiled `MainRenderLoop_82B9CD68` (0x82B9CD68, main loop, one call per frame; renamed from `sub_82B9CD68`) that counts
-invocations in 5 s windows and appends `mainloop rate=NN.N/s` to
-`fps_meter.log` next to the exe. Forward-only (counts, then calls the
-original `__imp__` entry). Enabled with `FABLE2_FPS_METER=1`.
+invocations in 5 s windows and appends a line per window to `fps_meter.log`
+next to the exe: wall-clock time, seconds since start, `mainloop rate=NN.N/s`,
+the 1% low (`low1%`, the rate of the slowest 1% of frames), the longest frame
+(`worst`) and the number of frames over 50 ms (`hitches>50ms`). Forward-only
+(counts, then calls the original `__imp__` entry). Enabled with `FABLE2_FPS_METER=1`.
 
 ## Follow-ups
 

@@ -4,7 +4,19 @@ using Fable2Launcher.Constants;
 
 namespace Fable2Launcher;
 
-public sealed record GameLaunchPlan(string Executable, string WorkingDirectory, string GameRoot);
+public sealed record GameLaunchPlan(string Executable, string WorkingDirectory, string GameRoot)
+{
+    /// <summary>
+    /// Arguments for fable_2.exe. The game only looks for its content next to
+    /// itself, so a game folder anywhere else has to be passed to it.
+    /// </summary>
+    public IReadOnlyList<string> Arguments =>
+        SameFolder(WorkingDirectory, GameRoot) ? [] : ["--game_data_root=" + GameRoot];
+
+    private static bool SameFolder(string a, string b) =>
+        string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(a)),
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)), StringComparison.OrdinalIgnoreCase);
+}
 
 public static class GameLaunchPlanner
 {

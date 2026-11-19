@@ -252,16 +252,20 @@ high_tick_rate = false
 # Default: false
 higher_hf_tick_rate = false
 
-# Interpolation (smoothing): text and cloth follow the game's HF tick instead
-# of its slower LF tick (15 Hz in the original). Subtitles and HUD text update
-# on every HF tick (30 Hz, or 60 Hz with higher_hf_tick_rate; their timers
-# already use real time, so speed is unchanged), and the bodies that push cloth
-# around are blended between the last two animation poses at the moment being
-# drawn, the way the game already draws characters. Capes and coats also move
-# with the body as drawn instead of being jolted on every tick. The log shows
-# "[interpolation]".
-# false = text and cloth colliders update on LF ticks only, and cloth is
-# jolted on every tick (original).
+# GUI every HF tick: subtitles and HUD text update on every HF tick instead
+# of every LF tick (15 Hz in the original), so at 30 Hz, or 60 Hz with
+# higher_hf_tick_rate. Their timers already use real time, so speed is
+# unchanged. The log shows "[gui-every-hf-tick]".
+# false = text updates on LF ticks only (original).
+# Default: true
+gui_every_hf_tick = true
+# Interpolation (smoothing): cloth follows the body as it is drawn. The bodies
+# that push cloth around are blended between the last two animation poses at
+# the moment being drawn, the way the game already draws characters, instead
+# of jumping on every LF tick. Capes and coats also move with the body as drawn
+# instead of being jolted on every tick. The log shows "[interpolation]".
+# false = cloth colliders update on LF ticks only, and cloth is jolted on every
+# tick (original).
 # Default: true
 interpolation = true
 
@@ -352,6 +356,21 @@ hotfunc_yield_every = 1
 # FPS indoors with nothing missing on screen in testing.
 # false = trust the write tracking. Default: false
 refresh_gpu_memory_each_frame = false
+
+# Idle yield sleep, in microseconds. Some guest threads wait for each other
+# by calling NtYieldExecution in a tight loop, which pins a CPU core at 100%
+# even when the game is idle (menus, loading, videos). When a thread yields
+# back to back with no work in between, it sleeps this long per yield
+# instead. The game's frame limiter, which busy-waits for the rest of every
+# frame, sleeps the same amount between polls. 0 = never sleep (original
+# behaviour). -1 = the platform default: 0 (off) on Windows, 100 elsewhere.
+# On Windows (10 version 1803 and later) the sleep uses a high-resolution
+# timer whose shortest sleep is about 500 microseconds, so smaller values
+# behave like 500 there and the frame limiter can wake up to ~0.5 ms late;
+# that is why it is off by default on Windows. On older Windows it has no
+# effect.
+# Default: -1
+idle_yield_sleep_us = -1
 
 [photo_mode]
 # Photo mode: freeze the world, fly a free camera and take screenshots, with a
@@ -587,6 +606,9 @@ bool Load(const std::filesystem::path& path) {
     values.higher_hf_tick_rate =
         Read<bool>(patches_table, "patches", "higher_hf_tick_rate", "boolean",
                    values.higher_hf_tick_rate);
+    values.gui_every_hf_tick =
+        Read<bool>(patches_table, "patches", "gui_every_hf_tick", "boolean",
+                   values.gui_every_hf_tick);
     values.interpolation =
         Read<bool>(patches_table, "patches", "interpolation", "boolean",
                    values.interpolation);
@@ -625,6 +647,9 @@ bool Load(const std::filesystem::path& path) {
     values.refresh_gpu_memory_each_frame = Read<bool>(
         perf_table, "perf", "refresh_gpu_memory_each_frame", "boolean",
         values.refresh_gpu_memory_each_frame);
+    values.idle_yield_sleep_us = static_cast<int32_t>(Read<int64_t>(
+        perf_table, "perf", "idle_yield_sleep_us", "integer",
+        values.idle_yield_sleep_us));
   }
   const toml::path photo_path{"photo_mode"};
   const auto photo = root[photo_path];

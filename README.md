@@ -91,7 +91,7 @@ https://discord.gg/8TQUZpPNeR
 - **How to extract (external GUI tool):** alternatively, rip the disc to an ISO and open it with **[XboxImageExtractor](https://github.com/dromex1/XboxImageExtractor)** — a GUI tool for Xbox 360 game images. It lists the image's filesystem; select `default.xex` and `data` and extract them into the project root (`data` extract as folders).
 - **You must supply the game content yourself** (it is not in the repo): rip the Fable 2 GOTY (USA/EU) disc (see the hashes in [German GOTY support](docs/GERMAN_GOTY_SUPPORT.md)) and put `default.xex` and `data/` in the project root. The build does not copy this into the build directories   
 - **Saves live in `<build dir>\saves\`** — back that folder up to keep your progress, and copy it between build trees (Debug/Release) or machines to carry a save over.
-- The `--game_data_root <path>` override still points the content root at a different tree (e.g. to run from a shared content copy without staging); saves/cache still land next to the exe.
+- The `--game_data_root <path>` override still points the content root at a different tree (e.g. to run from a shared content copy without staging); saves/cache still land next to the exe. The recomp Lua scripts (`data/scripts/recomp`) are copied from next to the exe into that tree at each start, and the exe's copies win.
 - Although this was made for the US / Europe GOTY version I have been able to run the following regions: Germany, France, Italy, Russia, and Spain. Your milage may very if you use those regions.
 
 
@@ -140,10 +140,11 @@ game recreates it with defaults on launch if it is ever missing. Loaded in
   (`src/core/fable2_hooks.cpp`) — flip one and relaunch to A/B a patch with no
   rebuild. This includes `high_tick_rate` and `higher_hf_tick_rate` (Xenia
   "High Tick Rate" / "Higher HF Tick Rate"; turn both on together), which
-  also drive the guest-image data writes below, and `interpolation` (on by
-  default), which updates text every HF tick and keeps cloth in step with the
-  drawn body (`docs/patches.md`, "Interpolation"). There is no separate patch
-  file.
+  also drive the guest-image data writes below, and `gui_every_hf_tick` (on
+  by default), which updates subtitles and HUD text every HF tick
+  (`docs/patches.md`, "GUI every HF tick"), and `interpolation` (on by
+  default), which keeps cloth in step with the drawn body (`docs/patches.md`,
+  "Interpolation"). There is no separate patch file.
 
 
 
@@ -488,7 +489,7 @@ Everything the build needs is either in this repo or auto-fetched — **no
 hardcoded paths**. Prerequisites (all standard tools):
 
 - **CMake** ≥ 3.25 (on PATH)
-- **LLVM** (clang/clang++/lld) — on PATH or the default `C:\Program Files\LLVM` install
+- **LLVM** 22 or newer (clang/clang++/lld) — on PATH or the default `C:\Program Files\LLVM` install. The STL of MSVC 14.52 and later refuses older Clang (error STL1000)
 - **Ninja** (on PATH, `%USERPROFILE%\bin`, or the WinGet package dir)
 - **Internet** on first build — `build.cmd` fetches the
   [SDK fork](https://github.com/himdo/rexglue-sdk) and its submodules, then builds the

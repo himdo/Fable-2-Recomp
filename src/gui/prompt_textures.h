@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include "bank_file.h"
 #include "bank_rebuild.h"
 #include "gui_tex_codec.h"
 #include "gui_texture_bank.h"
@@ -148,29 +149,6 @@ inline std::optional<PromptImages> DrawPromptImages(const uint8_t* payload, size
 
 namespace prompt_detail {
 
-inline std::vector<uint8_t> ReadAllBytes(const std::filesystem::path& path) {
-  std::vector<uint8_t> out;
-  std::FILE* f = std::fopen(path.string().c_str(), "rb");
-  if (!f) return out;
-  std::fseek(f, 0, SEEK_END);
-  const long len = std::ftell(f);
-  std::fseek(f, 0, SEEK_SET);
-  if (len > 0) {
-    out.resize(size_t(len));
-    if (std::fread(out.data(), 1, out.size(), f) != out.size()) out.clear();
-  }
-  std::fclose(f);
-  return out;
-}
-
-inline bool WriteIfChanged(const std::filesystem::path& path, const std::vector<uint8_t>& data) {
-  if (ReadAllBytes(path) == data) return true;
-  std::FILE* f = std::fopen(path.string().c_str(), "wb");
-  if (!f) return false;
-  const bool wrote = data.empty() || std::fwrite(data.data(), 1, data.size(), f) == data.size();
-  return std::fclose(f) == 0 && wrote;
-}
-
 // The untouched bank: the backup kept when it was first rewritten, if any.
 inline std::filesystem::path Pristine(const std::filesystem::path& root, const char* bank) {
   std::error_code ec;
@@ -296,13 +274,17 @@ inline std::vector<PromptTexture> BuildPromptTextures(const std::filesystem::pat
   const bool rebuilt = RebuildBank(texture_bytes, replacements, new_textures, new_offsets) &&
                        RebuildHeaderBank(header_bytes, header_sizes, new_headers, raw_bc3);
   if (rebuilt) {
-    for (const char* bank : {kTextureBank, kHeaderBank}) {
-      const auto orig = root / (std::string(bank) + ".orig");
-      if (!std::filesystem::exists(orig, ec)) std::filesystem::copy_file(root / bank, orig, ec);
-    }
-    if (!WriteIfChanged(root / kTextureBank, new_textures) ||
-        !WriteIfChanged(root / kHeaderBank, new_headers))
+    // Never rewrite a bank whose untouched copy could not be kept.
+    if (!KeepOriginal(root / kTextureBank) || !KeepOriginal(root / kHeaderBank)) {
       new_offsets.clear();
+    } else {
+      const PairWrite written = WriteBothIfChanged(root / kTextureBank, new_textures,
+                                                   root / kHeaderBank, new_headers);
+      // A texture bank without its matching header bank is unreadable, so
+      // that one case goes back to the untouched pair.
+      if (written == PairWrite::kOnlyFirstWritten) RestoreBanks(root);
+      if (written != PairWrite::kDone) new_offsets.clear();
+    }
   }
   // A converted texture is only swappable where the rewritten bank holds it.
   std::vector<PromptTexture> out;

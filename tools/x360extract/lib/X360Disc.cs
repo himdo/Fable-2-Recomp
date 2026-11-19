@@ -203,6 +203,10 @@ public sealed class X360Disc : IDisposable
             int found = buffer.AsSpan(0, n).IndexOf(GdfxMagic);
             if (found >= 0)
                 return offset + found;
+            // This window reached the end of the image. Stepping back by the
+            // overlap from here would read the same tail forever.
+            if (offset + n >= iso.Length)
+                break;
             offset += n - GdfxMagic.Length; // overlap the window seam
             progress?.Invoke(DiscProgress.Header(offset, iso.Length));
         }
