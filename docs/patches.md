@@ -129,9 +129,11 @@ same key.
 
 `src/diagnostics/fps_meter.h` (included from main.cpp): strong override of the weak
 recompiled `MainRenderLoop_82B9CD68` (0x82B9CD68, main loop, one call per frame; renamed from `sub_82B9CD68`) that counts
-invocations in 5 s windows and appends `mainloop rate=NN.N/s` to
-`fps_meter.log` next to the exe. Forward-only (counts, then calls the
-original `__imp__` entry). Enabled with `FABLE2_FPS_METER=1`.
+invocations in 5 s windows and appends a line per window to `fps_meter.log`
+next to the exe: wall-clock time, seconds since start, `mainloop rate=NN.N/s`,
+the 1% low (`low1%`, the rate of the slowest 1% of frames), the longest frame
+(`worst`) and the number of frames over 50 ms (`hitches>50ms`). Forward-only
+(counts, then calls the original `__imp__` entry). Enabled with `FABLE2_FPS_METER=1`.
 
 ## Follow-ups
 
