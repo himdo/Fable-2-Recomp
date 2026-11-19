@@ -48,6 +48,7 @@ Checks that the generated files in `constants/` match
 | File | What it checks |
 |---|---|
 | `config/test_config_template.py` | The template in `src/core/fable2_config.cpp`, the launcher's default settings, and the game's own config reader and defaults all match `config/fable2_config.toml`. Each staged value is the kind the game accepts, and each setting is stored under its own name. Each cvar the game seeds from the config is seeded from the setting of the same name, and its default in `src/main.cpp` matches the staged value |
+| `core/test_recomp_scripts_startup.py` | The recomp Lua scripts are copied into a separate game folder (`--game_data_root`) from `OnPostInitLogging` and nowhere later. The SDK lists the game folder once, when it mounts it right after that hook, so a script copied later can't be opened by the game until the next start. Reads the C++ source |
 | `config/test_manifest_codegen_flags.py` | Codegen can see the eight register flags in `fable_2_manifest.toml`: they are keys of `[entrypoint]`, written above the first `[[entrypoint.midasm_hook]]`. Below a hook header they become keys of that hook and read as false without a warning. No hook or invalid-instruction entry carries a key codegen does not read |
 | `core/test_world_thread_runscript.py` | Every host RunScript (`f5lua::run_external`) is reached only from `console::service_world_thread`, which runs at the start of a world update on the world's own thread. That function is wired only to photo mode's world-update hook, inside the scope the runtime gate checks, and the MainRenderLoop hook `console::poll` starts no script. RunScript from any other thread corrupts the game's script engine (the 1.6 alt-tab crash, #189). Reads the C++ source and prints the call chain that breaks the rule |
 | `lua/test_recomp_scripts.py` | No recomp Lua script registers itself with the game's GeneralScriptManager, which writes its running scripts into save games, except the F5 menu, which ends itself when the menu closes. Only the F5 menu and the console's save cleanup touch the GeneralScriptManager |
@@ -126,6 +127,10 @@ full or left as it was; see `src/gui/bank_file.h`), and the version catalogue
 in each build profile.
 Test executables go under `out/tests`.
 
+`test_recomp_scripts.cpp` covers the copy of the recomp Lua scripts into a
+separate game folder (`src/core/recomp_scripts.h`), including the console's
+`console_run.lua`, which is only copied when the game folder has none.
+
 They use [Catch2](https://github.com/catchorg/Catch2) v3, from the SDK's own
 `thirdparty/catch2`, and read like the Python specs:
 
@@ -166,7 +171,9 @@ git submodule update --init --depth 1 thirdparty/rexglue-sdk
 git -C thirdparty/rexglue-sdk submodule update --init --depth 1 thirdparty/fmt thirdparty/simde thirdparty/spdlog thirdparty/catch2
 ```
 
-Clang must be on `PATH` (for example `C:\Program Files\LLVM\bin`). A Visual
+Clang 22 or newer must be on `PATH` (for example `C:\Program Files\LLVM\bin`):
+the STL of MSVC 14.52 and later refuses older Clang with error STL1000. CI
+installs a pinned LLVM for this (see `.github/workflows/tests.yml`). A Visual
 Studio developer shell isn't needed.
 
 To see how much of the project's own code (`src/`, `constants/`) the native

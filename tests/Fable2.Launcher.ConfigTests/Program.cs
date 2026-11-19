@@ -402,6 +402,7 @@ try
         SkipIntroVideos = true,
         HighTickRate = true,
         HigherHfTickRate = false,
+        GuiEveryHfTick = false,
         DisableMotionBlur = true,
         RealtimeTextureMorphing = true,
         HeroDogTextureReadback = false,
@@ -429,6 +430,7 @@ try
     Require(readBack.DisableMotionBlur, "disable_motion_blur roundtrip failed");
     Require(readBack.HighTickRate, "high_tick_rate roundtrip failed");
     Require(!readBack.HigherHfTickRate, "higher_hf_tick_rate roundtrip failed");
+    Require(!readBack.GuiEveryHfTick, "gui_every_hf_tick roundtrip failed");
     Require(readBack.HotFuncYieldEvery == 4, "hotfunc_yield_every roundtrip failed");
     Require(writtenAdv.Contains("[perf]"), "[perf] section was not written");
     Require(writtenAdv.Contains("[photo_mode]"), "[photo_mode] section was not written");
