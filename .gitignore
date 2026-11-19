@@ -1,7 +1,8 @@
-# --- Game content (ripped disc; see README "How to extract") ---------------
+# --- Game content (ripped disc; see README "How to extract"). nxeart is a raw
+#     STFS file by default (a directory only with x360extract --unpack-stfs). --
 default.xex
 /data/
-/nxeart/
+/nxeart
 /$SystemUpdate/
 /Gamefiles/
 
@@ -24,6 +25,10 @@ fable2_func_trace_prev.log
 fable2_func_summary.log
 fable2_func_summary_prev.log
 fps_probe.log
+/console/
+
+# --- Desktop launcher written by ./run.sh --make-shortcut (absolute paths) ---
+/Fable II.desktop
 
 # --- Desktop launcher written by ./run.sh --make-shortcut (absolute paths) ---
 /Fable II.desktop
@@ -53,6 +58,10 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# --- Root scripts tracked DESPITE the /*.sh rule above (Linux build) ----------
+!build.sh
+!run.sh
 
 # --- Fetched/external toolchain deps (created by tools/setup_sdk_src.cmd). -------
 # The tracked files in thirdparty/ (rexglue-sdk-local.patch,

@@ -1,3 +1,9 @@
 # Shell scripts run on Linux, where CRLF line endings break bash, even when
 # the tree was checked out on Windows with core.autocrlf.
 *.sh text eol=lf
+
+# Windows batch files must be checked out with CRLF line endings on every
+# platform: cmd.exe can mis-handle labels (goto / call :label) in LF-only
+# batch files. They stay LF in the repository.
+*.cmd text eol=crlf
+*.bat text eol=crlf

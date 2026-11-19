@@ -166,6 +166,16 @@ name = "fable2_hook_high_hf_tick_rate_skip_store"
 registers = []
 jump_address_on_true = 0x8233AE9C
 
+# GUI every HF tick ([patches] gui_every_hf_tick; hook in
+# src/core/fable2_hooks.cpp). sub_82278C90 calls the front-end GUI update (vtable[2] at
+# 0x82278D40) only on LF ticks; the check starts with `clrlwi r10,r29,24` at
+# 0x82278D1C. Returning true jumps straight to the call.
+[[entrypoint.midasm_hook]]
+address = 0x82278D1C
+name = "fable2_hook_gui_every_tick"
+registers = []
+jump_address_on_true = 0x82278D40
+
 # Address-space scan fix (src/core/fable2_address_scan.cpp). sub_82B4DDD8
 # finds an aligned block of address space by reserving one candidate address
 # after another (step r28, size r26, limit r27, candidate r31); each taken

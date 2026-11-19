@@ -26,9 +26,8 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
-#include <thread>
-
 #include "fable2_config.h"
+#include "hotfunc_idle_sleep.h"
 
 // Forward declaration resolved against the rexruntime.dll export
 // (.?MaybeYield@thread@rex@@YAXXZ = rex::thread::MaybeYield(), void() -
@@ -65,7 +64,9 @@ inline IdleSpinState& IdleSpin() {
   return state;
 }
 
-// Call before yielding. Returns true if it slept instead (no yield needed).
+// Call before yielding. Returns true if it slept instead (no yield needed);
+// false also when the host has no short sleep (see hotfunc_idle_sleep.h), in
+// which case the caller yields as it always did.
 inline bool IdleSpinBackoff(int32_t sleep_us) {
   using clock = std::chrono::steady_clock;
   constexpr auto kSpinGap = std::chrono::microseconds(3);
@@ -80,13 +81,13 @@ inline bool IdleSpinBackoff(int32_t sleep_us) {
     ++state.streak;
     return false;
   }
-  std::this_thread::sleep_for(std::chrono::microseconds(sleep_us));
+  const bool slept = IdleSleepMicros(sleep_us);
   state.last_end = clock::now();  // the sleep itself is not "work"
-  return true;
+  return slept;
 }
 
 inline void BatchedYield() {
-  const int32_t idle_sleep_us = fable2::config::Get().idle_yield_sleep_us;
+  const int32_t idle_sleep_us = fable2::hotfunc::IdleYieldSleepUs();
   if (idle_sleep_us > 0 && IdleSpinBackoff(idle_sleep_us)) {
     std::atomic_thread_fence(std::memory_order_seq_cst);
     return;

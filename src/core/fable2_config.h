@@ -189,6 +189,10 @@ struct Values {
   // Rate" by Ultra; data write in src/core/fable2_patches.cpp + hook
   // fable2_hook_high_hf_tick_rate_skip_store). Requires high_tick_rate.
   bool higher_hf_tick_rate = false;
+  // [patches] gui_every_hf_tick: update the GUI (subtitles, HUD text) on every HF
+  // tick instead of every LF tick (hook fable2_hook_gui_every_tick).
+  // false = original.
+  bool gui_every_hf_tick = true;
   // [patches] disable_motion_blur: zero the full-screen motion blur amount the
   // camera passes to the renderer (hook fable2_hook_disable_motion_blur in
   // src/core/fable2_hooks.cpp). false = original.
@@ -242,8 +246,8 @@ struct Values {
   // back with no work in between (it is polling for another thread), sleep
   // this many microseconds per yield instead of spinning a core at 100%
   // (see src/core/hotfunc/hotfunc_yield.h). 0 = never sleep (original).
-  // -1 = the platform default, which Load resolves: 0 on Windows, where a
-  // sub-millisecond sleep is not available, 100 elsewhere.
+  // -1 = the platform default, which Load resolves: 0 on Windows (see
+  // src/core/hotfunc/hotfunc_idle_sleep.h), 100 elsewhere.
   int32_t idle_yield_sleep_us = -1;
   // [perf] fps_limit: 30 keeps the game's own 30 fps vblank lock; anything
   // else seeds frame_limit (0 = unlimited) and turns guest_vblank_pacing off,

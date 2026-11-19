@@ -39,7 +39,10 @@
 #                    run folder + .tar.gz to out/dist/Fable2-Linux-<cpu>
 #                    (tools/package_linux.sh), to copy to another machine
 #
-# Needs default.xex in the project root (see Linux.md, "Add the game content").
+# Needs default.xex in the project root (see Linux.md, "Extract the game files").
+# Compilers are taken from PATH (clang++-20 / clang++), or from a local
+# unpacked toolchain under out/tooling/llvm20 when none is installed (see
+# Linux.md, "Building without root access").
 set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$PWD"
@@ -72,7 +75,7 @@ while [ $# -gt 0 ]; do
         --game-pgo-use=*) GAME_PGO=USE; GAME_PGO_PROFILE="$(readlink -f "${1#--game-pgo-use=}")" ;;
         --pgo-use) shift; PGO=USE; PGO_PROFILE="$(readlink -f "${1:?--pgo-use needs a .profdata file}")" ;;
         --pgo-use=*) PGO=USE; PGO_PROFILE="$(readlink -f "${1#--pgo-use=}")" ;;
-        -h|--help) sed -n '2,36p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,45p' "$0"; exit 0 ;;
         -*) echo "Error: unknown option $1 (see ./build.sh --help)" >&2; exit 1 ;;
         *) TARGET="$1" ;;
     esac
@@ -104,22 +107,38 @@ ARCH_FLAGS="$ARCH_FLAGS -ffp-contract=off"
 need() {
     command -v "$1" >/dev/null || { echo "Error: $1 not found. $2" >&2; exit 1; }
 }
-# Clang: prefer clang 20 by name, else whatever clang is on PATH.
+# Clang: prefer clang 20 by name, else whatever clang is on PATH, else the
+# local unpacked packages.
+LOCAL_LLVM="$ROOT/out/tooling/llvm20/usr"
 if command -v clang++-20 >/dev/null; then
     CC=clang-20 CXX=clang++-20
 elif command -v clang++ >/dev/null; then
     CC=clang CXX=clang++
+elif [ -x "$LOCAL_LLVM/lib/llvm-20/bin/clang++" ]; then
+    CC="$LOCAL_LLVM/lib/llvm-20/bin/clang" CXX="$LOCAL_LLVM/lib/llvm-20/bin/clang++"
+    export LD_LIBRARY_PATH="$LOCAL_LLVM/lib/x86_64-linux-gnu:$LOCAL_LLVM/lib/llvm-20/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 else
-    echo "Error: clang 20 not found (see Linux.md, \"Install the build tools\")." >&2
+    echo "Error: clang not found. Install clang 20 and lld"          "(Debian/Ubuntu: apt install clang-20 lld-20;"          "Fedora: dnf install clang20 lld20; Arch: pacman -S clang lld)." >&2
     exit 1
 fi
+if ! command -v ninja >/dev/null && [ -x "$ROOT/out/tooling/bin/ninja" ]; then
+    export PATH="$ROOT/out/tooling/bin:$PATH"
+fi
 need cmake "Install CMake 3.25 or newer."
-need ninja "Install Ninja (apt install ninja-build)."
+need ninja "Install Ninja (Debian/Ubuntu/Fedora: ninja-build; Arch: ninja)."
 need python3 "Install Python 3."
 need git "Install git."
 
+# Optional locally unpacked -dev packages (for machines without root access;
+# the normal route is installing the X11 xcb and XScrnSaver dev packages).
+LOCAL_PC="$ROOT/out/tooling/sysdeps/usr/lib/x86_64-linux-gnu/pkgconfig"
+if [ -d "$LOCAL_PC" ]; then
+    export PKG_CONFIG_PATH="$LOCAL_PC${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+    export LIBRARY_PATH="$(dirname "$LOCAL_PC")${LIBRARY_PATH:+:$LIBRARY_PATH}"
+fi
+
 if [ ! -f "$ROOT/default.xex" ]; then
-    echo "Error: default.xex not found in $ROOT (see Linux.md, \"Add the game content\")." >&2
+    echo "Error: default.xex not found in $ROOT (see Linux.md, \"Extract the game files\")." >&2
     exit 1
 fi
 
@@ -139,8 +158,8 @@ echo "CPU target:  $CPU ($ARCH_FLAGS)"
 python3 "$ROOT/tools/prepare_runtime_sdk.py" "$SDKSRC"
 
 # SDL3 treats the X11 screensaver extension as required when X11 is enabled;
-# it only inhibits the screensaver, so build without it when libxss-dev is
-# not installed instead of failing the configure.
+# it only inhibits the screensaver, so build without it when the XScrnSaver
+# headers are not installed instead of failing the configure.
 SDL_ARGS=()
 if [ ! -f /usr/include/X11/extensions/scrnsaver.h ]; then
     SDL_ARGS+=(-DSDL_X11_XSCRNSAVER=OFF)

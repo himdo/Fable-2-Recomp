@@ -94,6 +94,10 @@ REXCVAR_DEFINE_DOUBLE(mouse_look_sens_x, 0.06, "Input",
 REXCVAR_DEFINE_DOUBLE(mouse_look_sens_y, 0.06, "Input",
                       "Direct mouse camera: up/down sensitivity, as degrees per count "
                       "(moves the camera height; times mouse_look_scale / 256).");
+REXCVAR_DEFINE_BOOL(mouse_controller_priority, true, "Input",
+                    "Ignore mouse buttons and movement while a controller is in use, so tools\n"
+                    "that turn the controller into a mouse (Steam's Desktop layout: A = left\n"
+                    "click, B = right click, sticks = cursor) don't press X/Y or move the camera.");
 REXCVAR_DEFINE_BOOL(mouse_look_invert_y, false, "Input",
                     "Direct mouse camera: true = moving the mouse up makes the camera look down.");
 REXCVAR_DEFINE_DOUBLE(mouse_look_direct_smoothing, 0.0, "Input",

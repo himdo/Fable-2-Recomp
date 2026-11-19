@@ -51,7 +51,7 @@ fi
 BUILD="$ROOT/out/build/$PRESET"
 
 [ -x "$BUILD/fable_2" ] || fail "No build found at $BUILD/fable_2. Run ./build.sh first."
-[ -f "$ROOT/default.xex" ] || fail "default.xex not found in $ROOT (see Linux.md, \"Add the game content\")."
+[ -f "$ROOT/default.xex" ] || fail "default.xex not found in $ROOT (see Linux.md, \"Extract the game files\")."
 
 cd "$BUILD"
 ./fable_2 --game_data_root="$ROOT" "$@"
