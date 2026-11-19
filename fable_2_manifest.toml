@@ -50,10 +50,18 @@ setjmp_address = 0x83000200
 # checks the position. A build logs the values it was generated with at
 # start-up, at debug level: "Codegen config: skip_lr=... skip_msr=...".
 #
-# All false: that is how every release so far was built. Turn them on one at a
-# time and test each one. skip_msr removes the global lock the hand-written
-# function overrides still take, and skip_lr and non_volatile_as_local interact
-# with setjmp/longjmp and unwinding.
+# All false: that is how every release so far was built. Each flag was built
+# and tried on its own on Windows on 2026-11-19 (Release, on master 8661824):
+#   - non_argument_as_local hangs before the main menu, with nothing logged.
+#   - non_volatile_as_local crashes in CRT start-up with a guest access
+#     violation.
+#   - The other six pass a short play test, alone and together. Together they
+#     make fable_2.exe about 21 % smaller. No FPS change was measured.
+# A short play test does not reach rare paths. skip_msr removes the global lock
+# the hand-written function overrides still take, and skip_lr changes what
+# setjmp/longjmp and unwinding see, so give either one a long play test before
+# a release. Changing a flag rewrites fable_2_pch.h; if the build then stops on
+# a precompiled header that is out of date, run it again.
 skip_lr = false
 skip_msr = false
 ctr_as_local = false
