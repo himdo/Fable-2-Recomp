@@ -340,6 +340,21 @@ hotfunc_yield_every = 1
 # false = trust the write tracking. Default: false
 refresh_gpu_memory_each_frame = false
 
+# Idle yield sleep, in microseconds. Some guest threads wait for each other
+# by calling NtYieldExecution in a tight loop, which pins a CPU core at 100%
+# even when the game is idle (menus, loading, videos). When a thread yields
+# back to back with no work in between, it sleeps this long per yield
+# instead. The game's frame limiter, which busy-waits for the rest of every
+# frame, sleeps the same amount between polls. 0 = never sleep (original
+# behaviour). -1 = the platform default: 0 (off) on Windows, 100 elsewhere.
+# On Windows (10 version 1803 and later) the sleep uses a high-resolution
+# timer whose shortest sleep is about 500 microseconds, so smaller values
+# behave like 500 there and the frame limiter can wake up to ~0.5 ms late;
+# that is why it is off by default on Windows. On older Windows it has no
+# effect.
+# Default: -1
+idle_yield_sleep_us = -1
+
 [photo_mode]
 # Photo mode: freeze the world, fly a free camera and take screenshots, with a
 # settings panel for field of view, roll, depth of field, vignette, colour
@@ -609,6 +624,9 @@ bool Load(const std::filesystem::path& path) {
     values.refresh_gpu_memory_each_frame = Read<bool>(
         perf_table, "perf", "refresh_gpu_memory_each_frame", "boolean",
         values.refresh_gpu_memory_each_frame);
+    values.idle_yield_sleep_us = static_cast<int32_t>(Read<int64_t>(
+        perf_table, "perf", "idle_yield_sleep_us", "integer",
+        values.idle_yield_sleep_us));
   }
   const toml::path photo_path{"photo_mode"};
   const auto photo = root[photo_path];
