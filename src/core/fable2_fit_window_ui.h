@@ -63,9 +63,10 @@ REXCVAR_DEFINE_DOUBLE(fit_window_quad_power, 1.0, "Display",
 REXCVAR_DEFINE_DOUBLE(fit_window_text_power, 1.0, "Display",
                       "With fit_window_native_16x9: the game's own 2D text x "
                       "moves toward the centre by ((16/9)/aspect)^this");
-REXCVAR_DEFINE_BOOL(fit_window_ui_log, true, "Display",
+REXCVAR_DEFINE_BOOL(fit_window_ui_log, false, "Display",
                     "Log [ui-layout] lines: the element tree of each menu "
-                    "and HUD screen as it loads, plus Gameface script messages");
+                    "and HUD screen as it loads, plus Gameface script messages "
+                    "(slow: about 0.3-0.6 s per book menu on a Steam Deck)");
 
 namespace fable2::fitwindow {
 inline float CurrentAspect();
@@ -76,10 +77,13 @@ namespace fable2::fitwindow::ui {
 
 namespace detail {
 
-// Test builds log the layout whatever fit_window_ui_log says, because L's
-// config file does not reach this cvar. Bump kBuild with each test zip.
-inline constexpr bool kAlwaysLogLayout = true;
-inline constexpr int kBuild = 57;
+// Set true to log the layout whatever fit_window_ui_log says (for a test
+// build whose config file does not reach this cvar). Off by default: the tree
+// walk runs in the game's Lua on the game thread and held each book menu
+// (Items, Abilities, ...) back by 0.3-0.6 s on a Steam Deck, plus a 50-90 ms
+// freeze from the menu dump about 1.5 s later. Bump kBuild with each test zip.
+inline constexpr bool kAlwaysLogLayout = false;
+inline constexpr int kBuild = 58;
 inline bool LogLayout() {
   return kAlwaysLogLayout || REXCVAR_GET(fit_window_ui_log);
 }
@@ -534,6 +538,7 @@ local function pauseFade()
     pcall(setAttribute, fadeCam, "position.z", want)
   end
 end
+local everWide = false
 local function fixMenus()
   -- Tuned live against vanilla 16:9 (build 29 screenshots at 4:3, 2.39 and
   -- 32:9): the covers keep their vanilla visible width at the window edges
@@ -559,6 +564,13 @@ local function fixMenus()
     -- Tell the host a menu is open: menus play small Bink previews (the
     -- Abilities pages), which must not letterbox the whole screen.
     if fixTick % 10 == 0 then pcall(output, "[fitwin-menu]") end
+    -- At 16:9 or narrower (the Steam Deck's 16:10) menus keep their authored
+    -- layout, so every move below is 0 and the per-frame re-apply only reads
+    -- the element tree. Skip it until the window has been wider than 16:9 on
+    -- this screen; after that it keeps running, so a live change back to a
+    -- narrow window puts the moved parts back.
+    if mdx > 0 then everWide = true end
+    if not everWide then return end
     spreadMenu(menu)
     if not menu and leftFrame then childMove(leftFrame, "LeftFrame", "^frame_new", -cover) end
     -- Build 42-43 (shop, 2.39:1): the game positions each page's Contents
