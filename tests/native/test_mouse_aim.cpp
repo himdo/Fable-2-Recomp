@@ -13,6 +13,24 @@
 //     clock, and the RecentlyAimed grace that holds off restarting
 //     mouse_direct.lua;
 //   - the logged cursor: round trip of the floats and the update count;
+//   - the logged highlight state (Targeting): nothing noted at first, each
+//     flag alone, the age round trip and its saturation, last note wins;
+//   - the logged target position (TargetPos): NaN and "not computed" at
+//     first, an exact round trip in front of the camera, x/y dropped in
+//     every other state, NoteNoTarget;
+//   - mouse release: the ShouldRelease truth table, HoldPicks edges (never
+//     moved, off, inside/at/after kPickHoldUs, clock skew), the last movement
+//     and counters, and PickHere being neutral by default and per thread;
+//   - aim assist and the wheel hop: PickScale (on/off, mouse used, hop, bad
+//     values, clamping), NewAimSession edges, MouseUsedThisAim across aims,
+//     WheelHop (direction, one notch per Take, the pending cap, turning back,
+//     smooth-scroll fractions, stale dropped, Clear), HopDirection, HopReady
+//     and LockPull (holds within the stickiness, lets go with the whole pull,
+//     0/NaN/over-max stickiness, non-finite movement);
+//   - slow-movement magnetism: TickSpeed (clamped time, NaN never slow),
+//     SlowMove, NudgeStick (direction, just above the threshold, bad epsilon,
+//     cap), PackStick/UnpackStick/StickIsZero (word order, -0), and
+//     NudgeOvershoot (forward only, clamp and big moves left alone);
 //   - StickForAim: through the game's response (GameAimControl) it gives back
 //     the wanted input, in any direction; tiny inputs still move the stick;
 //     exactly 1 is full stick and not capped; magnitudes over 1 are capped;
@@ -150,6 +168,302 @@ static void TestCursor() {
   s.NoteCursor(std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN());
   s.Cursor(x, y, ticks);
   CHECK(std::isinf(x) && std::isnan(y) && ticks == 4);
+}
+
+static void TestTargeting() {
+  // Nothing noted yet: the log prints hl=-1.
+  ma::AimState s;
+  ma::Targeting t = s.LastTargeting();
+  CHECK(!t.noted && !t.handle_set && !t.flick && !t.held && !t.b234 && t.age == 0);
+
+  // Each flag on its own comes back alone, and "noted" is always set.
+  t = ma::UnpackTargeting(ma::PackTargeting(false, false, false, false, 0));
+  CHECK(t.noted && !t.handle_set && !t.flick && !t.held && !t.b234 && t.age == 0);
+  t = ma::UnpackTargeting(ma::PackTargeting(true, false, false, false, 0));
+  CHECK(t.handle_set && !t.flick && !t.held && !t.b234);
+  t = ma::UnpackTargeting(ma::PackTargeting(false, true, false, false, 0));
+  CHECK(!t.handle_set && t.flick && !t.held && !t.b234);
+  t = ma::UnpackTargeting(ma::PackTargeting(false, false, true, false, 0));
+  CHECK(!t.handle_set && !t.flick && t.held && !t.b234);
+  t = ma::UnpackTargeting(ma::PackTargeting(false, false, false, true, 0));
+  CHECK(!t.handle_set && !t.flick && !t.held && t.b234);
+
+  // The age round-trips, doesn't spill into the flags, and saturates.
+  t = ma::UnpackTargeting(ma::PackTargeting(true, true, true, true, 12345));
+  CHECK(t.handle_set && t.flick && t.held && t.b234 && t.age == 12345);
+  t = ma::UnpackTargeting(ma::PackTargeting(false, false, false, false, ma::kTargetingAgeMax));
+  CHECK(t.age == ma::kTargetingAgeMax && !t.handle_set && !t.b234);
+  t = ma::UnpackTargeting(ma::PackTargeting(false, false, false, false, 0xFFFFFFFFu));
+  CHECK(t.age == ma::kTargetingAgeMax && !t.handle_set && !t.flick);
+
+  // Through AimState: the last note wins.
+  s.NoteTargeting(ma::PackTargeting(true, false, false, false, 40));
+  s.NoteTargeting(ma::PackTargeting(false, true, false, false, 0));
+  t = s.LastTargeting();
+  CHECK(t.noted && !t.handle_set && t.flick && t.age == 0);
+}
+
+static void TestTargetPos() {
+  // Nothing noted yet: the log prints tgt=nan,nan tf=-1.
+  ma::AimState s;
+  ma::TargetPos p = s.Target();
+  CHECK(std::isnan(p.x) && std::isnan(p.y) && p.front == ma::kTargetNotComputed);
+
+  // In front: the position round-trips exactly, negative values included.
+  s.NoteTarget(0.3125f, -0.71875f, ma::kTargetInFront);
+  p = s.Target();
+  CHECK(p.x == 0.3125f && p.y == -0.71875f && p.front == ma::kTargetInFront);
+
+  // Behind the camera, no live target, not computed: x/y are dropped (NaN),
+  // even when the hook passes numbers.
+  for (const int32_t front : {ma::kTargetBehind, ma::kTargetInvalid, ma::kTargetNotComputed}) {
+    s.NoteTarget(0.5f, 0.5f, ma::kTargetInFront);
+    s.NoteTarget(0.25f, -0.25f, front);
+    p = s.Target();
+    CHECK(std::isnan(p.x) && std::isnan(p.y) && p.front == front);
+  }
+
+  // NoteNoTarget is the not-computed state.
+  s.NoteTarget(0.5f, 0.5f, ma::kTargetInFront);
+  s.NoteNoTarget();
+  p = s.Target();
+  CHECK(std::isnan(p.x) && std::isnan(p.y) && p.front == ma::kTargetNotComputed);
+}
+
+static void TestMouseRelease() {
+  // Lets go only with release on, mouse movement this tick, and a live target.
+  for (int bits = 0; bits < 8; ++bits) {
+    const bool on = bits & 1, moved = bits & 2, valid = bits & 4;
+    CHECK(ma::ShouldRelease(on, moved, valid) == (on && moved && valid));
+  }
+
+  // Picks are held while the mouse moved within kPickHoldUs, never when the
+  // mouse never moved or release is off.
+  const int64_t t = 5000000;
+  CHECK(!ma::HoldPicks(true, t, 0));
+  CHECK(!ma::HoldPicks(false, t, t));
+  CHECK(ma::HoldPicks(true, t, t));
+  CHECK(ma::HoldPicks(true, t + ma::kPickHoldUs - 1, t));
+  CHECK(!ma::HoldPicks(true, t + ma::kPickHoldUs, t));
+  CHECK(!ma::HoldPicks(true, t + 10 * ma::kPickHoldUs, t));
+  // A movement stamped just after the hook's clock read still holds.
+  CHECK(ma::HoldPicks(true, t - 100, t));
+
+  // The last movement and the counters, through AimState.
+  ma::AimState s;
+  CHECK(s.LastMoveUs() == 0 && s.Releases() == 0 && s.SuppressedPicks() == 0);
+  s.NoteMouseMove(0);  // time 0 still counts as moved
+  CHECK(s.LastMoveUs() != 0);
+  s.NoteMouseMove(t);
+  CHECK(s.LastMoveUs() == t);
+  s.NoteRelease();
+  s.NoteRelease();
+  s.NoteSuppressedPick();
+  CHECK(s.Releases() == 2 && s.SuppressedPicks() == 1);
+
+  // The pick mode is neutral by default and per thread: setting it on one
+  // thread never changes a search on another.
+  CHECK(!ma::PickHere().suppress && ma::PickHere().scale == 1.0);
+  ma::PickHere() = ma::PickMode{true, 3.0};
+  ma::PickMode other{true, 3.0};
+  std::thread([&] { other = ma::PickHere(); }).join();
+  CHECK(ma::PickHere().suppress && ma::PickHere().scale == 3.0);
+  CHECK(!other.suppress && other.scale == 1.0);
+  ma::PickHere() = ma::PickMode{};
+}
+
+static void TestAimAssistAndWheel() {
+  // The rest zone is scaled only with release on, for a mouse user, never on
+  // a hop; bad values give the game's own (1); good ones are clamped.
+  CHECK(ma::PickScale(true, true, false, 2.0) == 2.0);
+  CHECK(ma::PickScale(false, true, false, 2.0) == 1.0);
+  CHECK(ma::PickScale(true, false, false, 2.0) == 1.0);
+  CHECK(ma::PickScale(true, true, true, 2.0) == 1.0);
+  CHECK(ma::PickScale(true, true, false, std::numeric_limits<double>::quiet_NaN()) == 1.0);
+  CHECK(ma::PickScale(true, true, false, std::numeric_limits<double>::infinity()) == 1.0);
+  CHECK(ma::PickScale(true, true, false, 0.0) == 1.0);
+  CHECK(ma::PickScale(true, true, false, -2.0) == 1.0);
+  CHECK(ma::PickScale(true, true, false, 0.1) == ma::kAimAssistMin);
+  CHECK(ma::PickScale(true, true, false, 100.0) == ma::kAimAssistMax);
+
+  // A new aim: the first update, or a gap longer than kAimSessionGapUs.
+  const int64_t t = 9000000;
+  CHECK(ma::NewAimSession(0, t));
+  CHECK(!ma::NewAimSession(t, t + 33000));
+  CHECK(!ma::NewAimSession(t, t + ma::kAimSessionGapUs));
+  CHECK(ma::NewAimSession(t, t + ma::kAimSessionGapUs + 1));
+
+  // "The mouse moved during this aim".
+  ma::AimState s;
+  CHECK(!s.MouseUsedThisAim());
+  s.NoteAimSession(t);
+  CHECK(!s.MouseUsedThisAim());
+  s.NoteMouseMove(t - 1000);  // before this aim (an earlier one)
+  CHECK(!s.MouseUsedThisAim());
+  s.NoteMouseMove(t);  // the same update the aim began in
+  CHECK(s.MouseUsedThisAim());
+  s.NoteAimSession(t + 2000000);  // the next aim
+  CHECK(!s.MouseUsedThisAim());
+  CHECK(s.Hops() == 0 && s.LastHopUs() == 0);
+  s.NoteHop(t);
+  CHECK(s.Hops() == 1 && s.LastHopUs() == t);
+  s.NoteHop(0);  // time 0 still counts as a hop
+  CHECK(s.Hops() == 2 && s.LastHopUs() != 0);
+
+  // Wheel: up = right, down = left, one notch per Take.
+  const int32_t d = ma::kScrollPerDetent;
+  ma::WheelHop w;
+  CHECK(w.Take(t) == 0);
+  w.Feed(0, t);
+  CHECK(w.Take(t) == 0 && w.Pending() == 0);
+  w.Feed(d, t);
+  CHECK(w.Take(t + 1000) == 1);
+  CHECK(w.Take(t + 1000) == 0);  // taken
+  // Several notches wait their turn (capped), one per Take.
+  w.Feed(-2 * d, t);
+  CHECK(w.Pending() == -2);
+  CHECK(w.Take(t) == -1 && w.Take(t) == -1 && w.Take(t) == 0);
+  w.Feed(10 * d, t);
+  CHECK(w.Pending() == ma::kHopPendingMax);
+  w.Clear();
+  CHECK(w.Pending() == 0 && w.Take(t) == 0);
+  // Turning the wheel back replaces what was waiting.
+  w.Feed(2 * d, t);
+  w.Feed(-d, t + 10);
+  CHECK(w.Pending() == -1 && w.Take(t + 20) == -1 && w.Take(t + 20) == 0);
+  // A smooth-scrolling wheel's fractions add up to whole notches.
+  for (int i = 0; i < 9; ++i) w.Feed(d / 10, t);
+  CHECK(w.Pending() == 0);
+  w.Feed(d / 10, t);
+  CHECK(w.Pending() == 1);
+  w.Clear();
+  // ...and a fraction the other way starts the count again.
+  for (int i = 0; i < 9; ++i) w.Feed(d / 10, t);
+  w.Feed(-d / 10, t);
+  for (int i = 0; i < 9; ++i) w.Feed(-d / 10, t);
+  CHECK(w.Pending() == -1);
+  w.Clear();
+  // Nothing scrolled for kWheelFreshUs: everything waiting is dropped.
+  w.Feed(2 * d, t);
+  CHECK(w.Take(t + ma::kWheelFreshUs) == 1);
+  CHECK(w.Take(t + ma::kWheelFreshUs + 1) == 0 && w.Pending() == 0);
+  w.Feed(d, 0);  // time 0 still counts
+  CHECK(w.Take(100) == 1);
+
+  // Hops at most every mouse_aim_hop_ms.
+  CHECK(ma::HopReady(t, 0, 100));        // the first hop
+  CHECK(ma::HopReady(t, t, 0));          // no wait
+  CHECK(!ma::HopReady(t + 99999, t, 100));
+  CHECK(ma::HopReady(t + 100000, t, 100));
+  CHECK(!ma::HopReady(t + 999999, t, 5000));  // capped at kHopIntervalMaxMs
+  CHECK(ma::HopReady(t + 1000000, t, 5000));
+  CHECK(ma::kHopAge > 1000u);  // far above the game's flick gate (a few ticks)
+
+  // Stickiness: small pulls hold, a long one lets go with only the part of
+  // the pull beyond the stickiness (no jump by the whole pull).
+  ma::LockPull pull;
+  double mx = 9.0, my = 9.0;
+  CHECK(!pull.Add(0.02, 0.0, 0.05, mx, my) && mx == 0.0 && my == 0.0);
+  CHECK(!pull.Add(0.0, 0.03, 0.05, mx, my));  // |(0.02, 0.03)| = 0.036
+  CHECK(pull.Add(0.02, 0.01, 0.05, mx, my));  // |(0.04, 0.04)| = 0.0566
+  const double over = std::hypot(0.04, 0.04) - 0.05;
+  CHECK(std::abs(std::hypot(mx, my) - over) < 1e-12);
+  CHECK(std::abs(mx - my) < 1e-15 && mx > 0.0);  // in the pull's direction
+  CHECK(pull.X() == 0.0 && pull.Y() == 0.0);     // starts again
+  // A slow, steady pull: the release move is about one tick's movement.
+  for (int i = 0; i < 9; ++i) CHECK(!pull.Add(0.011, 0.0, 0.1, mx, my));  // 0.099
+  CHECK(pull.Add(0.011, 0.0, 0.1, mx, my) && std::abs(mx - 0.01) < 1e-12 && my == 0.0);
+  // Exactly the stickiness still holds; pulls in opposite ways cancel.
+  CHECK(!pull.Add(0.05, 0.0, 0.05, mx, my));
+  CHECK(!pull.Add(-0.05, 0.0, 0.05, mx, my));
+  CHECK(!pull.Add(0.05, 0.0, 0.05, mx, my));
+  pull.Reset();
+  // 0, negative or NaN stickiness: any movement lets go with just itself.
+  for (const double st : {0.0, -1.0, std::numeric_limits<double>::quiet_NaN()}) {
+    CHECK(pull.Add(0.001, -0.002, st, mx, my) && mx == 0.001 && my == -0.002);
+  }
+  // Over the maximum counts as the maximum.
+  CHECK(!pull.Add(0.4, 0.0, 100.0, mx, my));
+  CHECK(pull.Add(0.2, 0.0, 100.0, mx, my) && std::abs(mx - 0.1) < 1e-12);
+  // A non-finite movement never sticks, and never poisons the next pull.
+  CHECK(pull.Add(std::numeric_limits<double>::infinity(), 0.0, 0.05, mx, my));
+  CHECK(!pull.Add(0.01, 0.0, 0.05, mx, my));
+}
+
+static void TestMagnetism() {
+  const double inf = std::numeric_limits<double>::infinity();
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+
+  // Speed: units per second from the move and the time since the last update,
+  // the time clamped to 5..100 ms.
+  CHECK(std::abs(ma::TickSpeed(0.03, 0.04, 100000) - 0.5) < 1e-12);
+  CHECK(std::abs(ma::TickSpeed(0.01, 0.0, 33333) - 0.01 * 1e6 / 33333) < 1e-9);
+  CHECK(std::abs(ma::TickSpeed(0.01, 0.0, 0) - 2.0) < 1e-12);         // first tick: 5 ms
+  CHECK(std::abs(ma::TickSpeed(0.01, 0.0, 5000000) - 0.1) < 1e-12);   // a stall: 100 ms
+  CHECK(ma::TickSpeed(nan, 0.0, 33333) == inf);                       // never "slow"
+
+  // Slow only with release on, movement, a positive speed limit, under it.
+  CHECK(ma::SlowMove(true, true, 0.2, 0.5));
+  CHECK(!ma::SlowMove(true, true, 0.5, 0.5));
+  CHECK(!ma::SlowMove(false, true, 0.2, 0.5));
+  CHECK(!ma::SlowMove(true, false, 0.2, 0.5));
+  CHECK(!ma::SlowMove(true, true, 0.2, 0.0));   // off
+  CHECK(!ma::SlowMove(true, true, 0.2, nan));
+  CHECK(!ma::SlowMove(true, true, inf, 0.5));
+  CHECK(ma::SlowMove(true, true, 4.9, 100.0));  // capped at kMagnetSpeedMax
+  CHECK(!ma::SlowMove(true, true, 5.0, 100.0));
+
+  // The nudge: the move's direction, just above the idle threshold.
+  float sx = 0.0f, sy = 0.0f;
+  CHECK(ma::NudgeStick(0.03, -0.04, 0.1f, sx, sy));
+  CHECK(std::abs(std::hypot(sx, sy) - 0.105) < 1e-6);
+  CHECK(sx > 0.0f && sy < 0.0f && std::abs(sx / sy + 0.75) < 1e-5);
+  CHECK(std::hypot(sx, sy) > 0.1f);  // above the threshold: not idle
+  CHECK(!ma::NudgeStick(0.0, 0.0, 0.1f, sx, sy));
+  CHECK(!ma::NudgeStick(nan, 0.0, 0.1f, sx, sy));
+  CHECK(ma::NudgeStick(1.0, 0.0, std::numeric_limits<float>::quiet_NaN(), sx, sy));
+  CHECK(std::abs(sx - 0.0105f) < 1e-6 && sy == 0.0f);  // bad epsilon: 0.01
+  CHECK(ma::NudgeStick(0.0, 1.0, -1.0f, sx, sy) && std::abs(sy - 0.0105f) < 1e-6);
+  CHECK(ma::NudgeStick(1.0, 0.0, 10.0f, sx, sy) && sx == 0.25f);  // capped
+
+  // Packing: x in the high word, as the update reads it; round trip, and
+  // both zeros count as no stick.
+  const uint64_t p = ma::PackStick(0.5f, -0.25f);
+  CHECK(p == 0x3F000000BE800000ull);
+  float ux = 0.0f, uy = 0.0f;
+  ma::UnpackStick(p, ux, uy);
+  CHECK(ux == 0.5f && uy == -0.25f);
+  CHECK(ma::StickIsZero(0));
+  CHECK(ma::StickIsZero(ma::PackStick(-0.0f, 0.0f)));
+  CHECK(ma::StickIsZero(ma::PackStick(0.0f, -0.0f)));
+  CHECK(!ma::StickIsZero(p));
+  CHECK(!ma::StickIsZero(ma::PackStick(0.0f, 1e-9f)));
+
+  // Taking the nudge's own move back: only forward along it, up to the cap.
+  CHECK(std::abs(ma::NudgeOvershoot(0.002, 0.0, 1.0, 0.0, 0.05) - 0.002) < 1e-12);
+  CHECK(std::abs(ma::NudgeOvershoot(0.003, 0.004, 0.6, 0.8, 0.05) - 0.005) < 1e-12);
+  CHECK(ma::NudgeOvershoot(-0.002, 0.0, 1.0, 0.0, 0.05) == 0.0);  // the clamp: leave it
+  CHECK(ma::NudgeOvershoot(0.0, 0.002, 1.0, 0.0, 0.05) == 0.0);   // sideways only
+  CHECK(ma::NudgeOvershoot(0.06, 0.0, 1.0, 0.0, 0.05) == 0.0);    // too big: not the nudge
+  CHECK(ma::NudgeOvershoot(nan, 0.0, 1.0, 0.0, 0.05) == 0.0);
+
+  // Fast and slow movements are tracked apart (HoldPicks follows fast ones).
+  ma::AimState s;
+  CHECK(s.LastFastMoveUs() == 0 && s.MagnetTicks() == 0);
+  s.NoteFastMove(0);
+  CHECK(s.LastFastMoveUs() != 0);
+  s.NoteFastMove(1234);
+  s.NoteMouseMove(5678);
+  CHECK(s.LastFastMoveUs() == 1234 && s.LastMoveUs() == 5678);
+  s.NoteMagnetTick();
+  CHECK(s.MagnetTicks() == 1);
+
+  // A hop only with release on and a highlighted target.
+  CHECK(ma::HopDirection(true, 1, true) == 1);
+  CHECK(ma::HopDirection(true, -1, true) == -1);
+  CHECK(ma::HopDirection(true, 0, true) == 0);
+  CHECK(ma::HopDirection(false, 1, true) == 0);
+  CHECK(ma::HopDirection(true, 1, false) == 0);
 }
 
 // Stick (int16 units) back through the game's response.
@@ -457,6 +771,11 @@ int main() {
   TestSwapActive();
   TestAimState();
   TestCursor();
+  TestTargeting();
+  TestTargetPos();
+  TestMouseRelease();
+  TestAimAssistAndWheel();
+  TestMagnetism();
   TestStickForAim();
   TestTickRateInvariance();
   TestAimStick();

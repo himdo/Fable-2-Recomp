@@ -4,28 +4,95 @@
 //
 // Its only caller (sub_827B6228, the targeting update) calls it only while the
 // targeting object's "aiming" byte (+49) is set, so it running at all means
-// the player is aiming a ranged weapon. The wrapper (src/input/mouse_aim.h):
+// the player is aiming a ranged weapon. Just before, that caller re-projects
+// a world point into the cursor (+32/+36, loc_827B6304): the highlighted
+// target's position if one is set, else the stored aim point (+128). So while
+// something is highlighted, the cursor starts every tick on the target.
+//
+// The wrapper (src/input/mouse_aim.h):
 //   1. records when (the "detect" signal of the aim swap);
-//   2. direct aim input: adds the mouse movement collected since the last
-//      update to the cursor at this+32 (x) / this+36 (y), BEFORE the
-//      original runs. The original then adds the stick's movement as usual,
-//      picks targets with the new cursor, and clamps the cursor to its box at
-//      the end (loc_827B881C), so the box limits stay the game's own;
-//   3. records the cursor the update left, for fable2_mouse.log.
+//   2. mouse release (cvar mouse_aim_release): on a tick with mouse movement
+//      while a target is highlighted, lets go of it the game's own way, after
+//      pointing +128 at the target (so the next tick's re-projection starts
+//      where the reticle is). While the mouse moves (and kPickHoldUs after),
+//      the game's own pick is switched off for this call (PickHere().suppress,
+//      read by the sub_827B9CD0 hook), so a sweep doesn't snap onto everyone
+//      it passes. Once it rests, the pick's catch zone is scaled by
+//      mouse_aim_assist (PickHere().scale) for someone aiming with the mouse;
+//      Stickiness (mouse_aim_stickiness): while highlighted, movement adds up
+//      as a pull and the reticle stays on the target; it lets go only once
+//      the pull is longer than the stickiness (mouseaim::LockPull);
+//   2b. wheel hop: a wheel notch while highlighted sets the flick flag (+232),
+//      a right/left direction (+256) and an age past the game's flick gate
+//      (+160) for the original's flick re-pick (the pad's target hop), at most
+//      every mouse_aim_hop_ms, then puts them back;
+//   2c. slow-movement magnetism (mouse_aim_magnet_speed): with nothing
+//      highlighted and the mouse slower than that, the update gets a stick
+//      (r4) just above the game's idle threshold in the mouse's direction, so
+//      its own moving pick looks ahead in a narrow cone, as on the pad; the
+//      pick isn't held off then, and the stick's own small cursor move is
+//      taken back out afterwards;
+//   3. direct aim input: adds the mouse movement collected since the last
+//      update to the cursor, BEFORE the original runs. The original then adds
+//      the stick's movement as usual, picks targets with the new cursor, and
+//      clamps the cursor to its box at the end (loc_827B881C), so the box
+//      limits stay the game's own;
+//   4. records the cursor the update left, and the highlight state
+//      (mouseaim::Targeting: handle +60, the left-stick detector's flags
+//      +232/+233/+234 as the original saw them, highlight age +160), for
+//      fable2_mouse.log. While a target is highlighted the original skips the
+//      stick move (loc_827B8450) and only re-picks on those flags, which only
+//      the raw left stick sets (sub_827B5888): the highlight bug on PR #183;
+//   5. only while a highlight is set and the mouse log is on: where the
+//      highlighted target sits in cursor units (mouseaim::TargetPos), through
+//      the game's own projection, for the log.
 //
 // Hot path rules (from the direct mouse camera work): one clock read, relaxed
 // atomics, and a few guest loads/stores of the cursor floats; no locks,
-// logging or file I/O. Registers are untouched before the original runs.
+// logging or file I/O. Guest calls happen only on a release (step 2, a tick
+// with mouse movement while highlighted, after which the highlight is gone)
+// and behind the log switch (step 5), each with the whole context saved and
+// restored, so the original sees the registers it was called with, apart
+// from the stick argument r4 on a magnetism tick (step 2c).
 #include "fable_2_pch.h"
 
 #include <cstring>
+#include <type_traits>
+
+#include <rex/cvar.h>
 
 #include "mouse_aim.h"
 #include "mouse_diag.h"  // fable2::mousediag::NowUs, the input poll's clock
 
+// Defined in main.cpp; `f2 mouse aimrelease on|off`, `f2 mouse aimassist <x>`.
+REXCVAR_DECLARE(bool, mouse_aim_release);
+REXCVAR_DECLARE(double, mouse_aim_assist);
+REXCVAR_DECLARE(double, mouse_aim_stickiness);
+REXCVAR_DECLARE(int32_t, mouse_aim_hop_ms);
+REXCVAR_DECLARE(double, mouse_aim_magnet_speed);
+
 extern "C" void __imp__sub_827B80B0(PPCContext& ctx, uint8_t* base);  // original
+// Called through the dispatching symbols, so any override of them still applies.
+// sub_827BB550(r3 = target, r4 = 0): the target's world position in v1.
+extern "C" void sub_827BB550(PPCContext& ctx, uint8_t* base);
+// sub_827BB948(r3 = out, r4 = view or 0 for the game camera, v1 = world
+// position): out+0/+4 = the position in cursor units, r3 = 1 if it is in
+// front of the camera (out is only written then). The target search
+// (sub_827B9CD0) projects each candidate with this pair.
+extern "C" void sub_827BB948(PPCContext& ctx, uint8_t* base);
+// Ref-counted handle assign (r3 = destination handle, r4 = source handle) and
+// the temporary handle's release (r3 = handle), as the aim-start reset
+// sub_827B5F60 empties the highlight handle at +56.
+extern "C" void ProcessAndProcessAndProcess1712_82978470(PPCContext& ctx, uint8_t* base);
+extern "C" void ProcessAndProcessAndProcess1120_821940C8(PPCContext& ctx, uint8_t* base);
 
 namespace {
+// The empty handle's first word, as sub_827B5F60 builds it (lis -32241 + 5732).
+constexpr uint32_t kEmptyHandleTag = 0x820F1664u;
+// The float the update compares the stick's length with: shorter = idle
+// (r24 = 1: the wide pick cone), at loc_827B8124 (lis -32246, -25888).
+constexpr uint32_t kIdleStickEps = 0x82099AE0u;
+
 inline float LoadF(uint8_t* base, uint32_t addr) {
   const uint32_t b = REX_LOAD_U32(addr);
   float f = 0.0f;
@@ -37,29 +104,259 @@ inline void StoreF(uint8_t* base, uint32_t addr, float f) {
   std::memcpy(&b, &f, 4);
   REX_STORE_U32(addr, b);
 }
+
+static_assert(std::is_trivially_copyable_v<PPCContext>, "saved and restored by copy");
+
+// The highlighted target, or 0. The highlight handle is at self+56; its slot
+// pointer (+60) leads to the target, the inline form of
+// CheckValidPointer_825575C8. The game treats a target as valid when byte
+// +144 has bit 0x40 (sub_827B80B0 before its free move, sub_827B6228 before
+// its re-projection).
+uint32_t HighlightedTarget(uint8_t* base, uint32_t self, bool& handle_set) {
+  const uint32_t slot = REX_LOAD_U32(self + 60);
+  handle_set = slot != 0;
+  const uint32_t target = slot != 0 ? REX_LOAD_U32(slot) : 0;
+  if (target == 0 || (REX_LOAD_U8(target + 144) & 0x40) == 0) return 0;
+  return target;
+}
+
+// Guest calls below the current stack pointer, on a fresh 64-byte frame.
+// Everything below r1 is free at both points this is used (before the
+// original runs, and after it returned). The guest calls clobber volatile
+// registers, so the whole context goes back afterwards.
+class GuestFrame {
+ public:
+  GuestFrame(PPCContext& ctx, uint8_t* base) : ctx_(ctx), saved_(ctx) {
+    sp_ = (ctx.r1.u32 - 64) & ~15u;
+    REX_STORE_U32(sp_, ctx.r1.u32);  // back chain, as stwu would
+    ctx.r1.u64 = sp_;
+    (void)base;
+  }
+  ~GuestFrame() {
+    // fpscr caches the host's MXCSR (flush mode), which the guest code may
+    // have changed: keep the live one so the cache matches the CPU.
+    saved_.fpscr = ctx_.fpscr;
+    ctx_ = saved_;
+  }
+  uint32_t scratch() const { return sp_ + 16; }  // 48 bytes, 16-aligned
+
+ private:
+  PPCContext& ctx_;
+  PPCContext saved_;
+  uint32_t sp_ = 0;
+};
+
+// Step 2, before the original: let go of the highlight.
+void ReleaseHighlight(PPCContext& ctx, uint8_t* base, uint32_t self, uint32_t target) {
+  GuestFrame frame(ctx, base);
+
+  // +128 = the target's world position, the point sub_827B6228 projected
+  // into the cursor this tick: the next tick projects +128 instead, to the
+  // same place. A 16-byte vector store, in the generated code's byte order.
+  ctx.r3.u64 = target;
+  ctx.r4.u64 = 0;
+  sub_827BB550(ctx, base);  // v1 = world position
+  const uint32_t ea = (self + 128) & ~0xFu;
+  simde_mm_store_si128(
+      (simde__m128i*)REX_RAW_ADDR(ea),
+      simde_mm_shuffle_epi8(simde_mm_load_si128((simde__m128i*)ctx.v1.u8),
+                            simde_mm_load_si128((simde__m128i*)VectorMaskL)));
+
+  // Empty the handle exactly as sub_827B5F60 does: a temporary empty handle,
+  // released, assigned to +56, then released again.
+  const uint32_t tmp = frame.scratch();
+  REX_STORE_U32(tmp, kEmptyHandleTag);
+  REX_STORE_U32(tmp + 4, 0);
+  ctx.r3.u64 = tmp;
+  ProcessAndProcessAndProcess1120_821940C8(ctx, base);
+  ctx.r3.u64 = self + 56;
+  ctx.r4.u64 = tmp;
+  ProcessAndProcessAndProcess1712_82978470(ctx, base);
+  REX_STORE_U32(tmp, kEmptyHandleTag);
+  ctx.r3.u64 = tmp;
+  ProcessAndProcessAndProcess1120_821940C8(ctx, base);
+}
+
+// Step 5, after the original returned.
+void NoteTargetPosition(PPCContext& ctx, uint8_t* base, uint32_t self) {
+  namespace ma = fable2::mouseaim;
+  auto& aim = ma::State();
+  bool handle_set = false;
+  const uint32_t target = HighlightedTarget(base, self, handle_set);
+  if (target == 0) {
+    aim.NoteTarget(0.0f, 0.0f, ma::kTargetInvalid);  // the game drops it itself
+    return;
+  }
+
+  float x = 0.0f, y = 0.0f;
+  bool front = false;
+  {
+    GuestFrame frame(ctx, base);
+    const uint32_t out = frame.scratch();
+    ctx.r3.u64 = target;
+    ctx.r4.u64 = 0;
+    sub_827BB550(ctx, base);  // v1 = world position
+    ctx.r3.u64 = out;
+    ctx.r4.u64 = 0;  // the game camera
+    sub_827BB948(ctx, base);
+    front = (ctx.r3.u32 & 0xFF) != 0;
+    if (front) {
+      x = LoadF(base, out);
+      y = LoadF(base, out + 4);
+    }
+  }
+  aim.NoteTarget(x, y, front ? ma::kTargetInFront : ma::kTargetBehind);
+}
 }  // namespace
 
 extern "C" void sub_827B80B0(PPCContext& __restrict ctx, uint8_t* base) {
   namespace ma = fable2::mouseaim;
   auto& aim = ma::State();
-  aim.NoteAimTick(fable2::mousediag::NowUs());
+  const int64_t now = fable2::mousediag::NowUs();
+  auto& pull = ma::Pull();
+  const int64_t prev_tick = aim.LastTickUs();
+  if (ma::NewAimSession(prev_tick, now)) {
+    aim.NoteAimSession(now);
+    ma::Wheel().Clear();  // scrolled before this aim: never a hop
+    pull.Reset();
+  }
+  aim.NoteAimTick(now);
   const uint32_t self = ctx.r3.u32;  // the targeting object (r3 is not preserved)
+  const bool release_on = REXCVAR_GET(mouse_aim_release);
+
+  bool handle_set = false;
+  const uint32_t target = release_on ? HighlightedTarget(base, self, handle_set) : 0;
+  // Wheel hop (step 2b): the game's flick re-pick, right (+1) or left (-1), at
+  // most every mouse_aim_hop_ms (a notch waits for its turn).
+  const int32_t wheel =
+      ma::HopReady(now, aim.LastHopUs(), REXCVAR_GET(mouse_aim_hop_ms)) ? ma::Wheel().Take(now) : 0;
+  const int32_t hop = ma::HopDirection(release_on, wheel, target != 0);
 
   int64_t dx = 0, dy = 0;
-  if (ma::Direct().Take(dx, dy)) {
+  const bool moved = ma::Direct().Take(dx, dy);
+  // The stickiness pull starts again with no highlight, after a hop, and when
+  // the mouse has rested (LastMoveUs is still the previous movement here).
+  if (target == 0 || hop != 0 || (!moved && now - aim.LastMoveUs() >= ma::kPickHoldUs)) {
+    pull.Reset();
+  }
+  // Slow-movement magnetism (step 2c): a stick nudge in the mouse's direction.
+  bool nudge = false;
+  float nudge_x = 0.0f, nudge_y = 0.0f;
+  if (moved) {
+    aim.NoteMouseMove(now);
     double cx = 0.0, cy = 0.0;
     // Vertical follows the screen shape the game renders at (one atomic load).
     ma::ToCursor(static_cast<double>(dx), static_cast<double>(dy), ma::DirectSettings().Get(),
                  ma::GameAspect(), cx, cy);
+    const double speed = ma::TickSpeed(cx, cy, prev_tick != 0 ? now - prev_tick : 0);
+    const bool slow =
+        ma::SlowMove(release_on, moved, speed, REXCVAR_GET(mouse_aim_magnet_speed));
+    if (!slow) aim.NoteFastMove(now);
+    const double raw_cx = cx, raw_cy = cy;  // before the stickiness changes them
+    bool released = false;
+
+    // Highlighted: the movement pulls against the stickiness; the reticle
+    // stays on the target until the pull breaks the lock, then moves on by
+    // the part beyond the stickiness. A hop this tick wins over letting go.
+    if (hop == 0 && ma::ShouldRelease(release_on, moved, target != 0)) {
+      double mx = 0.0, my = 0.0;
+      if (pull.Add(cx, cy, REXCVAR_GET(mouse_aim_stickiness), mx, my)) {
+        ReleaseHighlight(ctx, base, self, target);
+        aim.NoteRelease();
+        released = true;
+      }
+      cx = mx;
+      cy = my;
+    }
+
+    // Nothing highlighted (now): a slow move lets the game's moving pick look
+    // ahead, as the pad's stick does. The raw mouse direction this tick.
+    // Only with no real stick in r4 (the pad's stick is never replaced).
+    if (slow && hop == 0 && (target == 0 || released) && ma::StickIsZero(ctx.r4.u64)) {
+      nudge = ma::NudgeStick(raw_cx, raw_cy, LoadF(base, kIdleStickEps), nudge_x, nudge_y);
+    }
+
     const float x = LoadF(base, self + 32);
     const float y = LoadF(base, self + 36);
     // A non-finite cursor (never seen) is left to the game.
-    if (std::isfinite(x) && std::isfinite(y)) {
+    if ((cx != 0.0 || cy != 0.0) && std::isfinite(x) && std::isfinite(y)) {
       StoreF(base, self + 32, static_cast<float>(x + cx));
       StoreF(base, self + 36, static_cast<float>(y + cy));
     }
   }
 
+  // The left-stick detector's flags, as the original is about to see them
+  // (it may clear +233 when the target changes). Plain loads for the log.
+  const bool flick = REX_LOAD_U8(self + 232) != 0;
+  const bool held = REX_LOAD_U8(self + 233) != 0;
+  const bool b234 = REX_LOAD_U8(self + 234) != 0;
+
+  // The flick flag, its direction and the highlight age, for the wheel hop.
+  // The original reads them (loc_827B82AC: highlighted, age +160 above its
+  // gate max(1, a few ticks), then +232 with the direction at +256). The age
+  // is lifted past the gate so wheel hops follow mouse_aim_hop_ms instead;
+  // both outcomes of the re-pick (a new target, or nobody: released) reset it
+  // to 0 (loc_827B87E0). All three are put back afterwards where the game
+  // left them alone, so the stick detector's own state is kept.
+  uint64_t saved_dir = 0;
+  uint32_t saved_age = 0;
+  if (hop != 0) {
+    saved_dir = REX_LOAD_U64(self + 256);
+    saved_age = REX_LOAD_U32(self + 160);
+    StoreF(base, self + 256, hop > 0 ? 1.0f : -1.0f);  // x: right / left
+    StoreF(base, self + 260, 0.0f);                    // y
+    REX_STORE_U8(self + 232, 1);
+    if (saved_age < ma::kHopAge) REX_STORE_U32(self + 160, ma::kHopAge);
+    aim.NoteHop(now);
+  }
+
+  // The stick argument (r4) for the nudge; the cursor before the update, to
+  // take the nudge's own small move back out afterwards.
+  float before_x = 0.0f, before_y = 0.0f;
+  if (nudge) {
+    ctx.r4.u64 = ma::PackStick(nudge_x, nudge_y);
+    before_x = LoadF(base, self + 32);
+    before_y = LoadF(base, self + 36);
+    aim.NoteMagnetTick();
+  }
+
+  ma::PickMode& pick = ma::PickHere();
+  pick.suppress = hop == 0 && !nudge && ma::HoldPicks(release_on, now, aim.LastFastMoveUs());
+  pick.scale = ma::PickScale(release_on, aim.MouseUsedThisAim(), hop != 0,
+                             REXCVAR_GET(mouse_aim_assist));
   __imp__sub_827B80B0(ctx, base);
+  pick = ma::PickMode{};
+
+  // Nudge, nobody picked: remove the forward part of the update's cursor
+  // move (the stick's), leaving the box clamp alone (NudgeOvershoot).
+  if (nudge && REX_LOAD_U32(self + 60) == 0) {
+    const double len = std::hypot(static_cast<double>(nudge_x), static_cast<double>(nudge_y));
+    const float ax = LoadF(base, self + 32);
+    const float ay = LoadF(base, self + 36);
+    if (len > 0.0 && std::isfinite(ax) && std::isfinite(ay) && std::isfinite(before_x) &&
+        std::isfinite(before_y)) {
+      const double ux = nudge_x / len, uy = nudge_y / len;
+      const double back = ma::NudgeOvershoot(static_cast<double>(ax) - before_x,
+                                             static_cast<double>(ay) - before_y, ux, uy, 0.05);
+      if (back > 0.0) {
+        StoreF(base, self + 32, static_cast<float>(ax - ux * back));
+        StoreF(base, self + 36, static_cast<float>(ay - uy * back));
+      }
+    }
+  }
+
+  if (hop != 0) {
+    REX_STORE_U8(self + 232, flick ? 1 : 0);
+    REX_STORE_U64(self + 256, saved_dir);
+    if (REX_LOAD_U32(self + 160) == ma::kHopAge) REX_STORE_U32(self + 160, saved_age);
+  }
+
   aim.NoteCursor(LoadF(base, self + 32), LoadF(base, self + 36));
+  const bool handle_after = REX_LOAD_U32(self + 60) != 0;
+  aim.NoteTargeting(ma::PackTargeting(handle_after, flick, held, b234, REX_LOAD_U32(self + 160)));
+  if (handle_after && fable2::mousediag::Enabled()) {
+    NoteTargetPosition(ctx, base, self);
+  } else {
+    aim.NoteNoTarget();
+  }
 }

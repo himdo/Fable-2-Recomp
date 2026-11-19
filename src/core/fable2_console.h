@@ -87,6 +87,11 @@ REXCVAR_DECLARE(std::string, mouse_aim_input);
 REXCVAR_DECLARE(double, mouse_aim_sens);
 REXCVAR_DECLARE(double, mouse_aim_y_ratio);
 REXCVAR_DECLARE(bool, mouse_aim_invert_y);
+REXCVAR_DECLARE(bool, mouse_aim_release);
+REXCVAR_DECLARE(double, mouse_aim_assist);
+REXCVAR_DECLARE(double, mouse_aim_stickiness);
+REXCVAR_DECLARE(int32_t, mouse_aim_hop_ms);
+REXCVAR_DECLARE(double, mouse_aim_magnet_speed);
 
 namespace fable2::console {
 
@@ -1299,6 +1304,17 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     //                              follows the screen shape, times ratio
     //                              (mouse_aim_y_ratio, default 1 = same speed)
     // mouse aiminvert on|off       direct aim: invert up/down (mouse_aim_invert_y)
+    // mouse aimrelease on|off      direct aim: moving the mouse lets go of a
+    //                              highlighted target (mouse_aim_release, on);
+    //                              the wheel hops to the next target right/left
+    // mouse aimassist <0.5..8>     direct aim: the resting pick's reach around
+    //                              the reticle, times the game's (mouse_aim_assist, 1)
+    // mouse aimsticky <0..0.5>     direct aim: how far the mouse pulls before a
+    //                              highlight lets go (mouse_aim_stickiness, 0.1)
+    // mouse aimmagnet <0..5>       direct aim: below this reticle speed (units/s)
+    //                              the game's moving pick runs (mouse_aim_magnet_speed, 0.35)
+    // mouse aimhop <0..1000>       direct aim: ms between wheel target hops
+    //                              (mouse_aim_hop_ms, 100)
     // mouse aimscale <1..4096>     stick aim sensitivity (mouse_aim_scale, 256 = 1x)
     // See src/input/mouse_diag.h and tools/mouse_stats.py.
     namespace md = fable2::mousediag;
@@ -1331,6 +1347,15 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
                          " (up/down " + std::to_string(AimVerticalSensNow()) + " at aspect " +
                          std::to_string(ma::AimAspect(fable2::fitwindow::CurrentAspect())) + ")" +
                          " invert_y=" + flag("mouse_aim_invert_y") +
+                         " release=" + flag("mouse_aim_release") +
+                         " (lets go " + std::to_string(ma::State().Releases()) + ", picks held " +
+                         std::to_string(ma::State().SuppressedPicks()) + ", wheel hops " +
+                         std::to_string(ma::State().Hops()) + ")" +
+                         " assist=" + flag("mouse_aim_assist") +
+                         " sticky=" + flag("mouse_aim_stickiness") +
+                         " hop_ms=" + flag("mouse_aim_hop_ms") +
+                         " magnet=" + flag("mouse_aim_magnet_speed") + " (" +
+                         std::to_string(ma::State().MagnetTicks()) + " ticks)" +
                          " stick_scale=" + flag("mouse_aim_scale") +
                          " aim_detected=" + (ma::State().Detected(now, ma::AimTimeoutUs(tick)) ? "yes" : "no") +
                          " aim_tick_age_ms=" + (last ? std::to_string((now - last) / 1000) : std::string("never")));
@@ -1491,6 +1516,62 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
       out("mouse", std::string("aim invert_y ") + (on ? "on" : "off"));
       return true;
     }
+    if (sub == "aimrelease") {
+      bool on = false;
+      if (!on_off(on)) return out("mouse", "usage: mouse aimrelease on|off", true), true;
+      rex::cvar::SetFlagByName("mouse_aim_release", on ? "true" : "false");
+      md::Diag::Get().Note(std::string("aimrelease ") + (on ? "on" : "off"));
+      out("mouse", on ? "aim release on: moving the mouse lets go of a highlighted target"
+                      : "aim release off: only the left stick lets go (the game's own behaviour)");
+      return true;
+    }
+    if (sub == "aimassist") {
+      namespace ma = fable2::mouseaim;
+      double v = 0.0;
+      if (W.size() < 3 || !parse_f(W[2], v) || !(v >= ma::kAimAssistMin && v <= ma::kAimAssistMax))
+        return out("mouse", "usage: mouse aimassist <0.5..8>  (1 = the game's reach, default 1)", true),
+               true;
+      rex::cvar::SetFlagByName("mouse_aim_assist", std::to_string(v));
+      md::Diag::Get().Note("aimassist " + std::to_string(v));
+      out("mouse", "aim assist " + std::to_string(v) + "x the game's resting pick reach");
+      return true;
+    }
+    if (sub == "aimsticky") {
+      namespace ma = fable2::mouseaim;
+      double v = 0.0;
+      if (W.size() < 3 || !parse_f(W[2], v) || !(v >= 0.0 && v <= ma::kStickinessMax))
+        return out("mouse", "usage: mouse aimsticky <0..0.5>  (cursor units the mouse pulls before a "
+                            "highlight lets go; 0 = any movement, default 0.1)", true),
+               true;
+      rex::cvar::SetFlagByName("mouse_aim_stickiness", std::to_string(v));
+      md::Diag::Get().Note("aimsticky " + std::to_string(v));
+      out("mouse", "aim stickiness " + std::to_string(v) + " (pull before letting go)");
+      return true;
+    }
+    if (sub == "aimmagnet") {
+      namespace ma = fable2::mouseaim;
+      double v = 0.0;
+      if (W.size() < 3 || !parse_f(W[2], v) || !(v >= 0.0 && v <= ma::kMagnetSpeedMax))
+        return out("mouse", "usage: mouse aimmagnet <0..5>  (reticle speed in aim units per second below "
+                            "which the game's moving pick runs; 0 = off, default 0.5)", true),
+               true;
+      rex::cvar::SetFlagByName("mouse_aim_magnet_speed", std::to_string(v));
+      md::Diag::Get().Note("aimmagnet " + std::to_string(v));
+      out("mouse", v > 0.0 ? "aim magnetism below " + std::to_string(v) + " units/s"
+                           : std::string("aim magnetism off"));
+      return true;
+    }
+    if (sub == "aimhop") {
+      uint64_t v = 0;
+      if (W.size() < 3 || !parse_u(W[2], v) || v > 1000)
+        return out("mouse", "usage: mouse aimhop <0..1000>  (ms between wheel target hops, default 100)",
+                   true),
+               true;
+      rex::cvar::SetFlagByName("mouse_aim_hop_ms", std::to_string(v));
+      md::Diag::Get().Note("aimhop " + std::to_string(v));
+      out("mouse", "wheel target hops at most every " + std::to_string(v) + " ms");
+      return true;
+    }
     if (sub == "aimscale") {
       uint64_t v = 0;
       if (W.size() < 3 || !parse_u(W[2], v) || v < 1 || v > 4096)
@@ -1510,7 +1591,9 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
                  "mouse smooth <0..0.9> | mouse smoothing on|off | mouse diag on|off | mouse trace on|off | "
                  "mouse inject <dx> <dy> [ms] [even|ramp|flick] | mouse stop | "
                  "mouse aim off|rmb|detect|both | mouse aiminput direct|stick | mouse aimsens <x> [ratio] | "
-                 "mouse aiminvert on|off | mouse aimscale <1..4096>", true);
+                 "mouse aiminvert on|off | mouse aimrelease on|off | mouse aimassist <0.5..8> | "
+                 "mouse aimsticky <0..0.5> | mouse aimmagnet <0..5> | mouse aimhop <0..1000> | "
+                 "mouse aimscale <1..4096>", true);
     return true;
   }
   if (name == "step") {

@@ -564,6 +564,22 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     rec.lx = lx;
     rec.ly = ly;
     ma::State().Cursor(rec.cur_x, rec.cur_y, rec.aim_ticks);
+    {
+      const ma::Targeting tg = ma::State().LastTargeting();
+      rec.hl = tg.noted ? (tg.handle_set ? 1 : 0) : -1;
+      rec.flick = tg.flick;
+      rec.held = tg.held;
+      rec.b234 = tg.b234;
+      rec.hage = tg.age;
+      const ma::TargetPos tp = ma::State().Target();
+      rec.tgt_x = tp.x;
+      rec.tgt_y = tp.y;
+      rec.tf = tp.front;
+      rec.releases = ma::State().Releases();
+      rec.suppressed = ma::State().SuppressedPicks();
+      rec.hops = ma::State().Hops();
+      rec.magnet = ma::State().MagnetTicks();
+    }
     fable2::mousediag::Diag::Get().OnPoll(rec);
 #endif
 

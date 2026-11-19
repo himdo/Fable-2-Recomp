@@ -98,7 +98,10 @@ def fill(fmt, samples):
 def poll_line():
     """A P line as OnPoll writes it, for a poll that moved and was clamped, with smoothing on."""
     samples = {"t": "123456", "dx": "-3", "dy": "2", "inj": "4,-1", "clamp": "1", "sm": "1", "w": "20,0",
-               "aim": "1", "lx": "1200", "ly": "-300", "cur": "0.25,-0.5", "atk": "42"}
+               "aim": "1", "lx": "1200", "ly": "-300", "cur": "0.25,-0.5", "atk": "42",
+               "hl": "1", "fl": "0,1", "f234": "0", "hage": "37",
+               "tgt": "0.3125,-0.125", "tf": "1", "mrel": "3", "msup": "41", "mhop": "2",
+               "mmag": "17"}
     return fill(poll_formats()[0], samples)
 
 
@@ -170,6 +173,53 @@ def describe_poll_line():
         record = mouse_stats.parse_line(poll_line())
 
         assert mouse_stats.number(record.fields.get("atk")) == 42.0
+
+    def test_should_carry_whether_a_target_is_highlighted():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert record.fields.get("hl") == "1"
+
+    def test_should_carry_the_left_stick_detectors_flick_and_held_flags():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert mouse_stats.pair(record.fields.get("fl")) == (0, 1)
+        assert record.fields.get("f234") == "0"
+
+    def test_should_carry_how_long_the_highlight_has_been_held():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert mouse_stats.number(record.fields.get("hage")) == 37.0
+
+    def test_should_carry_where_the_highlighted_target_sits_in_cursor_units():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert mouse_stats.float_pair(record.fields.get("tgt")) == (0.3125, -0.125)
+        assert record.fields.get("tf") == "1"
+
+    def test_should_read_a_target_with_no_position_as_missing():
+        # Behind the camera or not computed, C prints NaN as "nan".
+        record = mouse_stats.parse_line(poll_line().replace("tgt=0.3125,-0.125", "tgt=nan,nan"))
+
+        assert mouse_stats.float_pair(record.fields.get("tgt")) is None
+
+    def test_should_print_the_target_with_a_bounded_width():
+        assert "tgt=%.5g,%.5g" in poll_formats()[0]
+
+    def test_should_carry_how_often_the_mouse_let_go_and_held_the_pick():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert mouse_stats.number(record.fields.get("mrel")) == 3.0
+        assert mouse_stats.number(record.fields.get("msup")) == 41.0
+
+    def test_should_carry_how_many_wheel_hops_were_asked_for():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert mouse_stats.number(record.fields.get("mhop")) == 2.0
+
+    def test_should_carry_how_many_updates_got_the_magnetism_nudge():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert mouse_stats.number(record.fields.get("mmag")) == 17.0
 
     def test_should_print_the_reticle_with_a_bounded_width():
         # %g keeps a garbage float short, so the line (and its newline) fits the buffer.

@@ -120,6 +120,37 @@ REXCVAR_DEFINE_DOUBLE(mouse_aim_y_ratio, 1.0, "Input",
     .range(0.1, 10.0);
 REXCVAR_DEFINE_BOOL(mouse_aim_invert_y, false, "Input",
                     "Direct aim: true = moving the mouse up moves the reticle down.");
+// Console only (`f2 mouse aimrelease on|off`), not in fable2_config.toml.
+REXCVAR_DEFINE_BOOL(mouse_aim_release, true, "Input",
+                    "Direct aim: moving the mouse lets go of a highlighted target, and the "
+                    "game's target pick waits until the mouse rests (false = the game's own "
+                    "behaviour: only the left stick lets go). Also turns on the wheel target "
+                    "hop and mouse_aim_assist.");
+// Console only (`f2 mouse aimassist <x>`), not in fable2_config.toml.
+REXCVAR_DEFINE_DOUBLE(mouse_aim_assist, 1.0, "Input",
+                      "Direct aim with mouse_aim_release: how far the game's resting target "
+                      "pick reaches around the reticle, times the game's own (1 = the game's).")
+    .range(0.5, 8.0);
+// Console only (`f2 mouse aimsticky <x>`), not in fable2_config.toml.
+REXCVAR_DEFINE_DOUBLE(mouse_aim_stickiness, 0.1, "Input",
+                      "Direct aim with mouse_aim_release: how far (aim cursor units; the aim "
+                      "box is about -0.8..0.8) the mouse has to pull while a target is "
+                      "highlighted before it lets go. The reticle stays on the target until "
+                      "then. 0 = any movement lets go.")
+    .range(0.0, 0.5);
+// Console only (`f2 mouse aimhop <ms>`), not in fable2_config.toml.
+REXCVAR_DEFINE_INT32(mouse_aim_hop_ms, 100, "Input",
+                     "Direct aim with mouse_aim_release: the shortest time between two mouse "
+                     "wheel target hops, in ms (the game's own wait between stick flicks is "
+                     "skipped).")
+    .range(0, 1000);
+// Console only (`f2 mouse aimmagnet <x>`), not in fable2_config.toml.
+REXCVAR_DEFINE_DOUBLE(mouse_aim_magnet_speed, 0.35, "Input",
+                      "Direct aim with mouse_aim_release: below this reticle speed (aim cursor "
+                      "units per second; the aim box is about -0.8..0.8) the game's own "
+                      "moving pick runs while the mouse moves, looking ahead like the pad's "
+                      "stick (magnetism). Faster movement never snaps. 0 = off.")
+    .range(0.0, 5.0);
 REXCVAR_DEFINE_INT32(mouse_aim_scale, 256, "Input",
                      "Stick aim (mouse_aim_input = \"stick\"): sensitivity while the mouse "
                      "drives the left stick (same units as mouse_look_scale; larger = faster).")

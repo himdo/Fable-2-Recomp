@@ -38,6 +38,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <string_view>
 
@@ -262,6 +263,309 @@ inline AimDirectSettings& DirectSettings() {
 // restarted: it is about to report in by itself.
 constexpr int64_t kAimBootGraceUs = 1000000;
 
+// The targeting object's highlight state around one cursor update, for the
+// log (read from the generated code of sub_827B6228 / sub_827B80B0 /
+// sub_827B5888; field meanings not yet confirmed in game):
+//   handle_set  +60 != 0 after the update: a highlighted target's handle is
+//               set (the game also checks the target is still valid, which
+//               the hook doesn't, to stay clear of guest calls);
+//   flick       +232 before the update: the left-stick detector saw a flick;
+//   held        +233 before the update: the stick stayed pushed after it;
+//   b234        +234 before the update (meaning unknown, set by the same
+//               detector);
+//   age         +160 after the update: ticks the highlight has been held.
+// While a target is highlighted the game only re-picks (or lets go) on flick
+// or held, which only the raw left stick sets: the direct mouse never does.
+struct Targeting {
+  bool noted = false;  // false until the first cursor update
+  bool handle_set = false;
+  bool flick = false;
+  bool held = false;
+  bool b234 = false;
+  uint32_t age = 0;  // saturates at kTargetingAgeMax
+};
+constexpr uint32_t kTargetingAgeMax = 0xFFFFFFu;
+
+// Bits 0..4: noted, handle_set, flick, held, b234; bits 8..31: age.
+inline uint32_t PackTargeting(bool handle_set, bool flick, bool held, bool b234, uint32_t age) {
+  const uint32_t a = age > kTargetingAgeMax ? kTargetingAgeMax : age;
+  return 1u | (handle_set ? 2u : 0u) | (flick ? 4u : 0u) | (held ? 8u : 0u) | (b234 ? 16u : 0u) |
+         (a << 8);
+}
+inline Targeting UnpackTargeting(uint32_t bits) {
+  Targeting t;
+  t.noted = (bits & 1u) != 0;
+  t.handle_set = (bits & 2u) != 0;
+  t.flick = (bits & 4u) != 0;
+  t.held = (bits & 8u) != 0;
+  t.b234 = (bits & 16u) != 0;
+  t.age = bits >> 8;
+  return t;
+}
+
+// Where the highlighted target sits in cursor units (the +32/+36 space), for
+// the log (phase A of the highlight fix: is the reticle drawn there?). The
+// hook projects the target's world position (sub_827BB550) through the game
+// camera (sub_827BB948), only while a highlight is set and the mouse log is
+// on. `front`:
+constexpr int32_t kTargetNotComputed = -1;  // no highlight, or the log is off
+constexpr int32_t kTargetBehind = 0;        // behind the camera: no x/y
+constexpr int32_t kTargetInFront = 1;       // x/y valid
+constexpr int32_t kTargetInvalid = -2;      // handle set, but no live target
+struct TargetPos {
+  float x = std::numeric_limits<float>::quiet_NaN();
+  float y = std::numeric_limits<float>::quiet_NaN();
+  int32_t front = kTargetNotComputed;
+};
+
+// Letting go of a highlight with the mouse (cvar mouse_aim_release, PR #183
+// review). While a target is highlighted, the targeting update
+// (sub_827B6228) re-projects the target into the cursor every tick, so the
+// direct mouse add never builds up, and only the left stick's flick/held
+// flags let go. With release on, the cursor hook:
+//   - lets go of the highlight on any tick with mouse movement (the game's own
+//     empty-handle assign), after pointing the stored aim point (+128) at the
+//     target, so the next tick's re-projection starts where the reticle was;
+//   - keeps the game's own target pick (sub_827B9CD0) off while the mouse is
+//     moving and for kPickHoldUs after, so a sweep doesn't snap onto everyone
+//     it passes. Once the mouse rests, the pick (the game's aim assist) runs
+//     as usual.
+constexpr int64_t kPickHoldUs = 150000;
+
+inline bool ShouldRelease(bool enabled, bool moved, bool target_valid) {
+  return enabled && moved && target_valid;
+}
+// last_move_us 0 = the mouse never moved while aiming. A movement stamped
+// slightly after now_us (clock read order) still holds.
+inline bool HoldPicks(bool enabled, int64_t now_us, int64_t last_move_us) {
+  return enabled && last_move_us != 0 && now_us - last_move_us < kPickHoldUs;
+}
+
+// How the game's target search (sub_827B9CD0) behaves inside one cursor
+// update. Set by the cursor hook around the original update on its own
+// thread, read by the target-search hook: other callers of the search (other
+// threads, or outside the update) are never affected.
+//   suppress  answer "nobody" (the mouse is moving: HoldPicks);
+//   scale     multiply the search's reach (f2) and size weight (f3): a
+//             candidate is kept when distance - size x f3 <= f2, so scaling
+//             both scales the whole catch zone around the reticle (PickScale).
+struct PickMode {
+  bool suppress = false;
+  double scale = 1.0;
+};
+inline PickMode& PickHere() {
+  static thread_local PickMode mode;
+  return mode;
+}
+
+// Bigger rest zone (cvar mouse_aim_assist, `f2 mouse aimassist <x>`): only
+// for someone aiming with the mouse (it moved during this aim), never on a
+// wheel hop (the game's own hop reach), and 1 for anything not a positive
+// finite number.
+constexpr double kAimAssistMin = 0.5;
+constexpr double kAimAssistMax = 8.0;
+inline double PickScale(bool enabled, bool mouse_used, bool hop, double assist) {
+  if (!enabled || !mouse_used || hop || !std::isfinite(assist) || assist <= 0.0) return 1.0;
+  return std::clamp(assist, kAimAssistMin, kAimAssistMax);
+}
+
+// One aim = cursor updates without a gap longer than this (the game skips
+// ticks while aiming, so well above a tick).
+constexpr int64_t kAimSessionGapUs = 500000;
+inline bool NewAimSession(int64_t prev_tick_us, int64_t now_us) {
+  return prev_tick_us == 0 || now_us - prev_tick_us > kAimSessionGapUs;
+}
+
+// Wheel target hop: while a target is highlighted, a wheel notch hops to the
+// next target to the right (wheel up) or left (wheel down), through the game's
+// own flick re-pick (+232 with the direction at +256). The game only takes a
+// flick once the highlight is older than its own gate (a few ticks); wheel
+// hops skip that gate and use mouse_aim_hop_ms instead (HopReady).
+//
+// Notches come from the window's input thread as scroll amounts
+// (kScrollPerDetent per notch; smooth-scrolling wheels send fractions, which
+// add up). Up to kHopPendingMax notches wait, one hop per cursor update; all
+// of them are dropped when nothing was scrolled for kWheelFreshUs, and when a
+// new aim begins (Clear), so scrolling while not aiming never hops later.
+constexpr int32_t kScrollPerDetent = 120;  // rex::ui::MouseEvent, = WHEEL_DELTA
+constexpr int32_t kHopPendingMax = 3;
+constexpr int64_t kWheelFreshUs = 1000000;
+class WheelHop {
+ public:
+  // scroll_y: the window event's scroll amount (positive = wheel up).
+  // Single producer (the window's input thread).
+  void Feed(int32_t scroll_y, int64_t now_us) {
+    if (scroll_y == 0) return;
+    int32_t acc = acc_.load(std::memory_order_relaxed);
+    if ((acc > 0 && scroll_y < 0) || (acc < 0 && scroll_y > 0)) acc = 0;  // turned back
+    acc += scroll_y;
+    const int32_t steps = acc / kScrollPerDetent;  // toward zero
+    acc -= steps * kScrollPerDetent;
+    acc_.store(acc, std::memory_order_relaxed);
+    at_us_.store(now_us == 0 ? 1 : now_us, std::memory_order_relaxed);
+    if (steps == 0) return;
+    int32_t p = pending_.load(std::memory_order_relaxed);
+    int32_t next = 0;
+    do {
+      // A turn of the wheel the other way replaces what was waiting.
+      const int32_t base = (p > 0 && steps < 0) || (p < 0 && steps > 0) ? 0 : p;
+      next = std::clamp(base + steps, -kHopPendingMax, kHopPendingMax);
+    } while (!pending_.compare_exchange_weak(p, next, std::memory_order_relaxed));
+  }
+  // One waiting notch: +1 right, -1 left, 0 none. Stale notches are dropped.
+  int32_t Take(int64_t now_us) {
+    const int64_t at = at_us_.load(std::memory_order_relaxed);
+    if (at == 0 || now_us - at > kWheelFreshUs) {
+      pending_.store(0, std::memory_order_relaxed);
+      return 0;
+    }
+    int32_t p = pending_.load(std::memory_order_relaxed);
+    while (p != 0) {
+      const int32_t step = p > 0 ? 1 : -1;
+      if (pending_.compare_exchange_weak(p, p - step, std::memory_order_relaxed)) return step;
+    }
+    return 0;
+  }
+  int32_t Pending() const { return pending_.load(std::memory_order_relaxed); }
+  void Clear() { pending_.store(0, std::memory_order_relaxed); }
+
+ private:
+  std::atomic<int32_t> acc_{0};      // scroll not yet a whole notch
+  std::atomic<int32_t> pending_{0};  // notches waiting (sign = direction)
+  std::atomic<int64_t> at_us_{0};    // last scroll
+};
+
+// Wheel hops at most every mouse_aim_hop_ms; last_hop_us 0 = none yet.
+constexpr int32_t kHopIntervalMaxMs = 1000;
+inline bool HopReady(int64_t now_us, int64_t last_hop_us, int32_t interval_ms) {
+  if (last_hop_us == 0 || interval_ms <= 0) return true;
+  const int32_t ms = std::min(interval_ms, kHopIntervalMaxMs);
+  return now_us - last_hop_us >= static_cast<int64_t>(ms) * 1000;
+}
+// The highlight age the hook gives the game on a wheel hop tick, far above
+// its flick gate (+160 > gate, the gate being max(1, a few ticks)).
+constexpr uint32_t kHopAge = 0x10000u;
+
+// Stickiness (cvar mouse_aim_stickiness, `f2 mouse aimsticky <x>`): while a
+// target is highlighted, mouse movement (in cursor units) adds up as a pull,
+// and the reticle stays on the target. Once the pull is longer than the
+// stickiness, the lock breaks and the reticle moves on by the part beyond
+// it (so it leaves the target smoothly, at the hand's speed). The pull starts again when the mouse rests (kPickHoldUs) or
+// nothing is highlighted. Stickiness 0 = any movement lets go.
+constexpr double kStickinessMax = 0.5;
+class LockPull {
+ public:
+  // True when this movement breaks the lock; then (out_x, out_y) is the move
+  // to apply to the cursor: only the part of the pull beyond the stickiness,
+  // so the reticle leaves the target at the hand's speed instead of jumping
+  // by the whole pull (the B4 test: a 0.11 jump on every release). The pull
+  // starts again.
+  bool Add(double cx, double cy, double stickiness, double& out_x, double& out_y) {
+    x_ += cx;
+    y_ += cy;
+    const bool finite = std::isfinite(x_) && std::isfinite(y_);
+    const bool sticky = std::isfinite(stickiness) && stickiness > 0.0;
+    const double s = sticky ? std::min(stickiness, kStickinessMax) : 0.0;
+    const double len = finite ? std::hypot(x_, y_) : 0.0;
+    if (finite && sticky && len <= s) {
+      out_x = out_y = 0.0;
+      return false;
+    }
+    if (!finite) {
+      out_x = cx;
+      out_y = cy;
+    } else {
+      const double k = len > 0.0 ? (len - s) / len : 0.0;
+      out_x = x_ * k;
+      out_y = y_ * k;
+    }
+    Reset();
+    return true;
+  }
+  void Reset() { x_ = y_ = 0.0; }
+  double X() const { return x_; }
+  double Y() const { return y_; }
+
+ private:
+  double x_ = 0.0, y_ = 0.0;
+};
+// The cursor hook's pull (its thread only).
+inline LockPull& Pull() {
+  static LockPull p;
+  return p;
+}
+
+// Slow-movement magnetism (cvar mouse_aim_magnet_speed, `f2 mouse aimmagnet
+// <x>`): while nothing is highlighted and the mouse moves the reticle slower
+// than this (aim cursor units per second), the game's own moving-stick pick
+// runs, as on the pad: the hook hands the update a tiny stick in the mouse's
+// direction (NudgeStick), just above the game's idle threshold, so the pick
+// looks ahead in a narrow cone (the person just left behind is not grabbed
+// again). Faster movement keeps the pick off (HoldPicks). 0 = off.
+constexpr double kMagnetSpeedMax = 5.0;
+// The cursor's speed this update, from its move and the time since the last
+// update (clamped to 5..100 ms, so a stall or a first tick can't fake one).
+inline double TickSpeed(double cx, double cy, int64_t dt_us) {
+  const int64_t dt = std::clamp<int64_t>(dt_us, 5000, 100000);
+  const double v = std::hypot(cx, cy) * 1e6 / static_cast<double>(dt);
+  return std::isfinite(v) ? v : std::numeric_limits<double>::infinity();
+}
+inline bool SlowMove(bool enabled, bool moved, double speed, double magnet_speed) {
+  return enabled && moved && std::isfinite(magnet_speed) && magnet_speed > 0.0 &&
+         speed < std::min(magnet_speed, kMagnetSpeedMax);
+}
+// The stick to hand the update: the direction of (cx, cy) at length
+// idle_eps x 1.05 (the game treats a stick shorter than idle_eps, the float at
+// 0x82099AE0, as idle). False for no direction. A bad or missing epsilon
+// falls back to 0.01; the length is capped at 0.25.
+inline bool NudgeStick(double cx, double cy, float idle_eps, float& sx, float& sy) {
+  const double len = std::hypot(cx, cy);
+  if (!std::isfinite(len) || len <= 0.0) return false;
+  double eps = static_cast<double>(idle_eps);
+  if (!std::isfinite(eps) || eps <= 0.0) eps = 0.01;
+  const double m = std::min(eps * 1.05, 0.25);
+  sx = static_cast<float>(cx / len * m);
+  sy = static_cast<float>(cy / len * m);
+  return true;
+}
+// The update's stick argument (r4): two floats packed by value, x in the high
+// word (the update stores r4 with std and reads x at +0, y at +4).
+inline uint64_t PackStick(float x, float y) {
+  uint32_t bx = 0, by = 0;
+  std::memcpy(&bx, &x, 4);
+  std::memcpy(&by, &y, 4);
+  return (static_cast<uint64_t>(bx) << 32) | by;
+}
+inline void UnpackStick(uint64_t packed, float& x, float& y) {
+  const uint32_t bx = static_cast<uint32_t>(packed >> 32);
+  const uint32_t by = static_cast<uint32_t>(packed);
+  std::memcpy(&x, &bx, 4);
+  std::memcpy(&y, &by, 4);
+}
+// No real stick in the update's argument (+0 and -0 both count as zero).
+inline bool StickIsZero(uint64_t packed) {
+  float x = 0.0f, y = 0.0f;
+  UnpackStick(packed, x, y);
+  return x == 0.0f && y == 0.0f;
+}
+// After the update: the part of its cursor move (dx, dy) that went forward
+// along the nudge's unit direction (ux, uy), to take back out, so only the
+// pick changes. A move backwards (the box clamp) or longer than `cap` (not
+// the nudge) is left alone: returns 0.
+inline double NudgeOvershoot(double dx, double dy, double ux, double uy, double cap) {
+  const double along = dx * ux + dy * uy;
+  return std::isfinite(along) && along > 0.0 && along <= cap ? along : 0.0;
+}
+inline WheelHop& Wheel() {
+  static WheelHop w;
+  return w;
+}
+// The hop to ask the game for this update: 0 unless release is on and a
+// target is highlighted (the game's flick re-pick only runs then).
+inline int32_t HopDirection(bool enabled, int32_t wheel, bool target_valid) {
+  return enabled && target_valid ? wheel : 0;
+}
+
 // Written by the cursor-function hook on a guest thread, read by the input
 // poll on another, so only relaxed atomics (no lock in the game's hot path).
 // A torn read between the cursor's x/y and the tick count only affects the log.
@@ -298,10 +602,91 @@ class AimState {
     ticks = ticks_.load(std::memory_order_relaxed);
   }
 
+  // The highlight state of the last update (PackTargeting), for the log.
+  void NoteTargeting(uint32_t packed) { targeting_bits_.store(packed, std::memory_order_relaxed); }
+  Targeting LastTargeting() const {
+    return UnpackTargeting(targeting_bits_.load(std::memory_order_relaxed));
+  }
+
+  // The highlighted target's cursor position (TargetPos), for the log. x/y
+  // are only kept when front is kTargetInFront; otherwise they read as NaN.
+  // A torn read between x/y and front only affects the log.
+  void NoteTarget(float x, float y, int32_t front) {
+    if (front != kTargetInFront) x = y = std::numeric_limits<float>::quiet_NaN();
+    uint32_t bx = 0, by = 0;
+    std::memcpy(&bx, &x, 4);
+    std::memcpy(&by, &y, 4);
+    target_bits_.store((static_cast<uint64_t>(bx) << 32) | by, std::memory_order_relaxed);
+    target_front_.store(front, std::memory_order_relaxed);
+  }
+  void NoteNoTarget() { NoteTarget(0.0f, 0.0f, kTargetNotComputed); }
+  TargetPos Target() const {
+    TargetPos t;
+    const uint64_t bits = target_bits_.load(std::memory_order_relaxed);
+    const uint32_t bx = static_cast<uint32_t>(bits >> 32);
+    const uint32_t by = static_cast<uint32_t>(bits);
+    std::memcpy(&t.x, &bx, 4);
+    std::memcpy(&t.y, &by, 4);
+    t.front = target_front_.load(std::memory_order_relaxed);
+    return t;
+  }
+
+  // Mouse release (ShouldRelease / HoldPicks): when the mouse last moved the
+  // reticle (0 = never), and counts for the log.
+  void NoteMouseMove(int64_t now_us) {
+    last_move_us_.store(now_us == 0 ? 1 : now_us, std::memory_order_relaxed);
+  }
+  int64_t LastMoveUs() const { return last_move_us_.load(std::memory_order_relaxed); }
+  // The last movement faster than the magnet speed: HoldPicks follows only
+  // these (after slow movement the pick may run at once).
+  void NoteFastMove(int64_t now_us) {
+    last_fast_move_us_.store(now_us == 0 ? 1 : now_us, std::memory_order_relaxed);
+  }
+  int64_t LastFastMoveUs() const { return last_fast_move_us_.load(std::memory_order_relaxed); }
+  void NoteMagnetTick() { magnet_ticks_.fetch_add(1, std::memory_order_relaxed); }
+  uint64_t MagnetTicks() const { return magnet_ticks_.load(std::memory_order_relaxed); }
+  void NoteRelease() { releases_.fetch_add(1, std::memory_order_relaxed); }
+  void NoteSuppressedPick() { suppressed_picks_.fetch_add(1, std::memory_order_relaxed); }
+  void NoteHop(int64_t now_us) {
+    hops_.fetch_add(1, std::memory_order_relaxed);
+    last_hop_us_.store(now_us == 0 ? 1 : now_us, std::memory_order_relaxed);
+  }
+  int64_t LastHopUs() const { return last_hop_us_.load(std::memory_order_relaxed); }
+  uint64_t Releases() const { return releases_.load(std::memory_order_relaxed); }
+  uint64_t SuppressedPicks() const { return suppressed_picks_.load(std::memory_order_relaxed); }
+  uint64_t Hops() const { return hops_.load(std::memory_order_relaxed); }
+  // When this aim began (NewAimSession), so "the mouse moved during this aim"
+  // is LastMoveUs() >= AimSessionUs().
+  void NoteAimSession(int64_t now_us) {
+    aim_session_us_.store(now_us == 0 ? 1 : now_us, std::memory_order_relaxed);
+  }
+  int64_t AimSessionUs() const { return aim_session_us_.load(std::memory_order_relaxed); }
+  bool MouseUsedThisAim() const {
+    const int64_t m = LastMoveUs();
+    return m != 0 && m >= AimSessionUs();
+  }
+
  private:
+  static uint64_t NaNPairBits() {
+    const float n = std::numeric_limits<float>::quiet_NaN();
+    uint32_t b = 0;
+    std::memcpy(&b, &n, 4);
+    return (static_cast<uint64_t>(b) << 32) | b;
+  }
   std::atomic<int64_t> last_tick_us_{0};
   std::atomic<uint64_t> cursor_bits_{0};  // float x (high), float y (low); 0 = 0.0, 0.0
   std::atomic<uint64_t> ticks_{0};
+  std::atomic<uint32_t> targeting_bits_{0};  // PackTargeting; 0 = never noted
+  std::atomic<uint64_t> target_bits_{NaNPairBits()};  // float x (high), y (low)
+  std::atomic<int32_t> target_front_{kTargetNotComputed};
+  std::atomic<int64_t> last_move_us_{0};
+  std::atomic<int64_t> last_fast_move_us_{0};
+  std::atomic<uint64_t> magnet_ticks_{0};
+  std::atomic<uint64_t> releases_{0};
+  std::atomic<uint64_t> suppressed_picks_{0};
+  std::atomic<uint64_t> hops_{0};
+  std::atomic<int64_t> last_hop_us_{0};
+  std::atomic<int64_t> aim_session_us_{0};
 };
 
 inline AimState& State() {
