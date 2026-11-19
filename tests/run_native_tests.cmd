@@ -74,6 +74,9 @@ rem GUI bank files on disk: a write replaces a file in full or leaves it alone.
 rem The RunScript gate: host scripts only run inside the world-update service.
 %CXX% -I"%ROOT%" "%~dp0native\test_world_thread.cpp" %CATCH_MAIN% -o "%OUT%\world-thread.exe" || exit /b 1
 "%OUT%\world-thread.exe" %RUN% || exit /b 1
+rem Recomp Lua scripts copied into a separate game folder.
+%CXX% -I"%ROOT%\src" "%~dp0native\test_recomp_scripts.cpp" %CATCH_MAIN% -o "%OUT%\recomp-scripts.exe" || exit /b 1
+"%OUT%\recomp-scripts.exe" %RUN% || exit /b 1
 rem The version check, once per build profile. It has its own main (--xex).
 for %%P in (goty-compatible goty-us-eu goty-german) do (
   %CXX% -DFABLE2_BUILD_PROFILE=\"%%P\" "%~dp0native\test_xex_verify.cpp" %CATCH_OBJS% -o "%OUT%\xex-%%P.exe" || exit /b 1

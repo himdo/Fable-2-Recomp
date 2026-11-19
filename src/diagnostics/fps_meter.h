@@ -4,7 +4,13 @@
 // (0x82B9CD68; renamed from sub_82B9CD68 in fable_2_manifest.toml). One
 // call per frame; ~33 ms period at the 30 fps cap, see
 // docs/FPS_CAP_INVESTIGATION.md). Counts invocations over 5 s windows and
-// appends `mainloop rate=NN.N/s` lines to fps_meter.log (CWD = exe dir).
+// appends one line per window to fps_meter.log (CWD = exe dir):
+//   HH:MM:SS t=<s since start> mainloop rate=NN.N/s low1%=NN.N worst=NN.Nms
+//   hitches>50ms=N (total N)
+// low1% is the rate the slowest 1% of the window's frames ran at, worst the
+// longest frame and hitches the frames longer than 50 ms, so stutter shows
+// even when the average looks fine. The wall-clock time lines a window up
+// with the game log.
 // Forward-only: the override just counts, then calls the original
 // __imp__ entry point, so it is safe to leave compiled in.
 //
@@ -14,11 +20,14 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <fstream>
+#include <vector>
 
 #include <rex/ppc/func.h>
 
@@ -131,14 +140,48 @@ extern "C" void MainRenderLoop_82B9CD68(PPCContext& ctx, uint8_t* base) {
       if (window_start_us.compare_exchange_strong(start, now_us)) start = now_us;
     }
     const uint64_t n = window_calls.fetch_add(1, std::memory_order_relaxed) + 1;
+    // Per-frame times for the window (main loop runs on one thread), so each
+    // line can report the 1% low and hitches, not only the average.
+    static std::vector<int32_t> frame_us = [] {
+      std::vector<int32_t> v;
+      v.reserve(2048);
+      return v;
+    }();
+    static int64_t last_us = 0;
+    static const int64_t run_start_us = now_us;
+    if (last_us != 0) frame_us.push_back(static_cast<int32_t>(now_us - last_us));
+    last_us = now_us;
     if ((now_us - start) >= 5'000'000) {
       window_calls.store(0, std::memory_order_relaxed);
       window_start_us.store(now_us, std::memory_order_relaxed);
       const double secs = (now_us - start) / 1'000'000.0;
+      double low1 = 0.0, worst_ms = 0.0;
+      size_t hitches = 0;
+      if (!frame_us.empty()) {
+        std::vector<int32_t> sorted = frame_us;
+        std::sort(sorted.begin(), sorted.end());
+        const size_t i99 = std::min(sorted.size() - 1, (sorted.size() * 99) / 100);
+        low1 = sorted[i99] > 0 ? 1e6 / sorted[i99] : 0.0;
+        worst_ms = sorted.back() / 1000.0;
+        for (int32_t f : frame_us) hitches += f > 50'000;
+      }
+      frame_us.clear();
       if (logf) {
-        char buf[128];
-        std::snprintf(buf, sizeof(buf), "mainloop rate=%.1f/s (total %llu)\n",
-                      n / secs,
+        char clock[16] = "";
+        {
+          std::time_t tt = std::time(nullptr);
+          std::tm tmv{};
+#ifdef _WIN32
+          localtime_s(&tmv, &tt);
+#else
+          localtime_r(&tt, &tmv);
+#endif
+          std::strftime(clock, sizeof(clock), "%H:%M:%S", &tmv);
+        }
+        char buf[208];
+        std::snprintf(buf, sizeof(buf),
+                      "%s t=%6.0fs mainloop rate=%.1f/s low1%%=%.1f worst=%.1fms hitches>50ms=%zu (total %llu)\n",
+                      clock, (now_us - run_start_us) / 1e6, n / secs, low1, worst_ms, hitches,
                       (unsigned long long)calls.load(std::memory_order_relaxed));
         logf << buf;
         logf.flush();

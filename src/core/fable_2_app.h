@@ -29,6 +29,7 @@
 
 #include "alloc_watch.h"
 #include "dir_manifest_heal.h"
+#include "recomp_scripts.h"
 #include "fable2_address_scan.h"
 #include "fable2_config.h"
 #include "fable2_fit_window.h"
@@ -382,6 +383,8 @@ class Fable2App : public rex::ReXApp {
     // This describes the linked build, not a guarantee about DLLs replaced later.
     REXSYS_INFO("[native-build] configuration={} linked_sdk={}",
                 FABLE2_NATIVE_CONFIGURATION, FABLE2_NATIVE_SDK);
+    // Before anything mounts the game folder; see SyncRecompScripts.
+    SyncRecompScripts();
     const std::filesystem::path exe_dir =
         rex::filesystem::GetExecutableFolder();
     fable2::config::Load(exe_dir / "fable2_config.toml");
@@ -488,6 +491,32 @@ class Fable2App : public rex::ReXApp {
 #endif  // FABLE2_REMOTE_CONTROL
   }
 
+  // With the game files in another folder (--game_data_root), copies the
+  // recomp Lua scripts there: they ship next to the executable, but the guest
+  // loads them from the game folder (see src/core/recomp_scripts.h).
+  //
+  // Call it from OnPostInitLogging and nowhere later. The runtime lists the
+  // game folder once, when it mounts it (after this hook, before
+  // OnLoadXexImage), and the guest cannot open a file that appears after
+  // that: copied any later, the scripts only work from the next start.
+  void SyncRecompScripts() {
+    const std::filesystem::path loaded = game_data_root() / "data" / "scripts" / "recomp";
+    const fable2::recompscripts::SyncResult scripts =
+        fable2::recompscripts::Sync(rex::filesystem::GetExecutableFolder(), game_data_root());
+    if (scripts.source_missing) {
+      REXSYS_WARN("[recomp-scripts] no data/scripts/recomp folder next to the executable; F5, "
+                  "the console and the direct mouse camera need the scripts in {}",
+                  loaded.string());
+    }
+    if (scripts.copied > 0) {
+      REXSYS_INFO("[recomp-scripts] copied {} script(s) to {}", scripts.copied, loaded.string());
+    }
+    for (const std::string& name : scripts.failed) {
+      REXSYS_ERROR("[recomp-scripts] could not copy {} to {}; features that run it will not work",
+                   name, loaded.string());
+    }
+  }
+
   void OnShutdown() override {
     // The panel unregisters itself from the ImGui drawer, which the SDK
     // destroys right after this hook.
@@ -525,6 +554,8 @@ class Fable2App : public rex::ReXApp {
     // guest sees null (crashes at startup). Content migrated with an
     // mtime-respecting copy can leave a stale/truncated manifest in place;
     // this appends any file that is on disk but unlisted. Idempotent.
+    // This also lists the recomp Lua scripts that SyncRecompScripts copied
+    // into a separate game folder earlier in start-up.
     fable2::manifestheal::EnsureComplete(game_data_root());
     fable2::console::set_root(game_data_root());
     // Photo mode's pose cards run console lines (`pose`).
