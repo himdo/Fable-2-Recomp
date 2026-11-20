@@ -43,6 +43,56 @@ patches don't** (a code patch here would mean editing the recompiled C++ at
 build time, which codegen would clobber on the next run), so every code op is
 a mid-asm hook.
 
+### GUI every HF tick (`gui_every_hf_tick`, on by default)
+
+The game updates gameplay, AI, scripts and the GUI only on LF ticks, which
+are every other HF tick. `sub_82278C90` calls the front-end GUI update
+(vtable[2], `sub_82286B40`: subtitles, HUD text) only when an LF boundary was
+crossed. The GUI measures its own elapsed time from the wall clock
+(`sub_822B6D70`), so the hook `fable2_hook_gui_every_tick` (0x82278D1C) runs
+it on every HF tick without changing its speed: text updates at 30 Hz instead
+of 15 Hz, or 60 Hz with `higher_hf_tick_rate`. This raises the update rate;
+it does not blend anything between ticks.
+
+### Interpolation (`interpolation`, on by default)
+
+Characters are already drawn blended between their last two LF poses at the
+render time (the engine's own interpolator at instance+176, applied by
+`sub_8222E300`), and the camera is blended with the HF fraction. The cloth
+was not, and this option fixes it:
+
+- **Cloth colliders.** `sub_82A895C0` builds the cloth's collision shapes from
+  the raw current pose, while the body is drawn blended, so the colliders ran
+  up to one LF tick ahead and jumped every LF tick.
+  `fable2_hook_cloth_collider_bone` (four sites, after `add r11,r11,r9`)
+  points each read at the same bone blended the way the renderer blends it
+  (sign-corrected quaternion lerp, normalized; translation and scale lerped).
+  - It blends only when the previous and current pose share the skeleton id
+    (pose+8, which `sub_8222E300` checks) and bone count (pose+12) and the
+    bone index is below the count, so it never reads past the previous
+    pose's bones.
+  - The blended bone goes 256 bytes below the guest stack pointer. At all
+    four sites r11 is used only by the next four loads (+0, +8, +16, +32),
+    with no store or call in between, so nothing overwrites it first.
+- **Cloth movement (capes, coats).** The cloth itself is simulated every drawn
+  frame (the render traversal `sub_821E2D40` queues a step with the frame's
+  wall-clock dt) in the character's local space, and the solver turns the
+  change of the cloth's world matrix between steps into inertia.
+  `sub_8219ADD8` took that matrix from the entity matrix at inst+336, copied
+  before it is updated for the frame: one frame late, and on tick frames the
+  raw new tick position, up to a tick ahead of the drawn body. While walking
+  the cloth's position went back and forth (95.15, 95.03, 95.08, 95.29, 95.19,
+  95.43, ...), so the cloth was flung forward and back every tick and visibly
+  stepped while the body moved smoothly.
+  `fable2_hook_cloth_world_transform` (0x8219AEA0, after `addi r4,r1,80`,
+  before `bl 0x8218d730`) points r4 at owner+208 instead (owner =
+  `*(cloth+0)`): the drawn world matrix `sub_821E2D40` stores there just
+  before queueing the step (`sub_821E1C98`, the interpolator's matrix at the
+  render time). The matrix now moves steadily, and teleports still trigger
+  `sub_8218D730`'s own cloth reset.
+
+Split from himdo/Fable-2-Recomp PR 72 without its dynamic tick rate.
+
 ## Validation (2026-09-15)
 
 - Built (`build.cmd fable_2`, debug), launched the game (all ops applied,
@@ -116,9 +166,11 @@ same key.
 
 `src/diagnostics/fps_meter.h` (included from main.cpp): strong override of the weak
 recompiled `MainRenderLoop_82B9CD68` (0x82B9CD68, main loop, one call per frame; renamed from `sub_82B9CD68`) that counts
-invocations in 5 s windows and appends `mainloop rate=NN.N/s` to
-`fps_meter.log` next to the exe. Forward-only (counts, then calls the
-original `__imp__` entry). Enabled with `FABLE2_FPS_METER=1`.
+invocations in 5 s windows and appends a line per window to `fps_meter.log`
+next to the exe: wall-clock time, seconds since start, `mainloop rate=NN.N/s`,
+the 1% low (`low1%`, the rate of the slowest 1% of frames), the longest frame
+(`worst`) and the number of frames over 50 ms (`hitches>50ms`). Forward-only
+(counts, then calls the original `__imp__` entry). Enabled with `FABLE2_FPS_METER=1`.
 
 ## Follow-ups
 

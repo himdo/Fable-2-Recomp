@@ -35,6 +35,8 @@ public class Fable2ConfigValues
     public bool SkipIntroVideos { get; set; } = false;
     public bool HighTickRate { get; set; } = false;       // unstable
     public bool HigherHfTickRate { get; set; } = false;    // unstable
+    public bool GuiEveryHfTick { get; set; } = true;
+    public bool Interpolation { get; set; } = true;
     public bool DisableMotionBlur { get; set; } = false;
 
     // [perf]
@@ -143,6 +145,8 @@ public static class Fable2ConfigFile
                     else if (key == "skip_intro_videos") values.SkipIntroVideos = ParseBool(rawValue, values.SkipIntroVideos);
                     else if (key == "high_tick_rate") values.HighTickRate = ParseBool(rawValue, values.HighTickRate);
                     else if (key == "higher_hf_tick_rate") values.HigherHfTickRate = ParseBool(rawValue, values.HigherHfTickRate);
+                    else if (key == "gui_every_hf_tick") values.GuiEveryHfTick = ParseBool(rawValue, values.GuiEveryHfTick);
+                    else if (key == "interpolation") values.Interpolation = ParseBool(rawValue, values.Interpolation);
                     else if (key == "disable_motion_blur") values.DisableMotionBlur = ParseBool(rawValue, values.DisableMotionBlur);
                     break;
                 case "perf":
@@ -196,6 +200,8 @@ public static class Fable2ConfigFile
             ("patches", "skip_intro_videos", values.SkipIntroVideos ? "true" : "false"),
             ("patches", "high_tick_rate", values.HighTickRate ? "true" : "false"),
             ("patches", "higher_hf_tick_rate", values.HigherHfTickRate ? "true" : "false"),
+            ("patches", "gui_every_hf_tick", values.GuiEveryHfTick ? "true" : "false"),
+            ("patches", "interpolation", values.Interpolation ? "true" : "false"),
             ("patches", "disable_motion_blur", values.DisableMotionBlur ? "true" : "false"),
             ("perf", "hotfunc_yield_every", values.HotFuncYieldEvery.ToString(CultureInfo.InvariantCulture)),
             ("photo_mode", "enabled", values.PhotoModeEnabled ? "true" : "false"),

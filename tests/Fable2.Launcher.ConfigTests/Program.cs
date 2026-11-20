@@ -257,6 +257,24 @@ try
             "Disc path escaped the output folder: " + unsafePath);
     }
     Console.WriteLine("Disc paths cannot escape the output folder passed.");
+
+    // A file that is not an Xbox 360 disc must be refused, not scanned forever.
+    // Each case runs with a time limit so a scan that never ends fails the test.
+    foreach (int size in new[] { 0, 10, 20, 21, 4096 })
+    {
+        string notADisc = Path.Combine(testDirectory, "not-a-disc-" + size + ".iso");
+        File.WriteAllBytes(notADisc, new byte[size]);
+        Exception? scanError = null;
+        var scan = Task.Run(() =>
+        {
+            try { X360Extract.X360Disc.Open(notADisc).Dispose(); }
+            catch (Exception ex) { scanError = ex; }
+        });
+        Require(scan.Wait(TimeSpan.FromSeconds(60)), "scanning a " + size + "-byte file without a disc header did not finish");
+        Require(scanError is InvalidDataException,
+            "a " + size + "-byte file without a disc header was not refused: " + (scanError?.GetType().Name ?? "no exception"));
+    }
+    Console.WriteLine("Files without a disc header are refused passed.");
     // A synthetic extra locale proves that no classifier branch needs adding.
     GameVersion extra = supported[0] with { Id = "synthetic-locale", Hash = new string('a', 64),
         Name = "Synthetic locale", Language = 6 };
@@ -320,6 +338,12 @@ try
     Require(launchPlan.Executable == Path.Combine(Path.GetFullPath(buildFolder), "fable_2.exe"), "launch plan does not run the build folder's fable_2.exe");
     Require(launchPlan.WorkingDirectory == Path.GetFullPath(buildFolder), "launch plan does not start in the build folder");
     Require(launchPlan.GameRoot == Path.GetFullPath(gameFolder), "launch plan does not point at the game folder");
+    Require(launchPlan.Arguments.SequenceEqual(new[] { "--game_data_root=" + Path.GetFullPath(gameFolder) }),
+        "launch plan does not tell the game where a separate game folder is");
+    Require(GameLaunchPlanner.Create(buildFolder, buildFolder, defaultEdition).Arguments.Count == 0,
+        "launch plan passes a game folder although the game files are next to fable_2.exe");
+    Require(GameLaunchPlanner.Create(buildFolder, buildFolder + Path.DirectorySeparatorChar, defaultEdition).Arguments.Count == 0,
+        "a trailing separator made the launch plan treat the build folder as a separate game folder");
 
     // It has a profile, so only the Supported flag can stop it.
     var unsupportedGame = new GameCompatibility("Title update detected", "This title update is not supported.", false, GameVersions.DefaultProfile);
@@ -378,6 +402,8 @@ try
         SkipIntroVideos = true,
         HighTickRate = true,
         HigherHfTickRate = false,
+        GuiEveryHfTick = false,
+        Interpolation = false,
         DisableMotionBlur = true,
         HotFuncYieldEvery = 4,
         PhotoModeEnabled = false,
@@ -403,6 +429,8 @@ try
     Require(readBack.DisableMotionBlur, "disable_motion_blur roundtrip failed");
     Require(readBack.HighTickRate, "high_tick_rate roundtrip failed");
     Require(!readBack.HigherHfTickRate, "higher_hf_tick_rate roundtrip failed");
+    Require(!readBack.GuiEveryHfTick, "gui_every_hf_tick roundtrip failed");
+    Require(!readBack.Interpolation, "interpolation roundtrip failed");
     Require(readBack.HotFuncYieldEvery == 4, "hotfunc_yield_every roundtrip failed");
     Require(writtenAdv.Contains("[perf]"), "[perf] section was not written");
     Require(writtenAdv.Contains("[photo_mode]"), "[photo_mode] section was not written");

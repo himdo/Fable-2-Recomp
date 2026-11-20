@@ -122,14 +122,19 @@ inline void dump_threads(uint32_t render_tid) {
   const int64_t unix_ms = (int64_t)GetTickCount64();
   sline("# stall dump unix_ms=%lld render_tid=0x%08X", (long long)unix_ms,
         render_tid);
+  // Nothing to write to: don't suspend threads for a dump nobody will read.
+  if (!slog()) return;
   HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
   if (snap == INVALID_HANDLE_VALUE) return;
   const uint32_t pid = GetCurrentProcessId();
+  const uint32_t self_tid = GetCurrentThreadId();
   THREADENTRY32 te{};
   te.dwSize = sizeof(te);
   if (Thread32First(snap, &te)) {
     do {
       if (te.th32OwnerProcessID != pid) continue;
+      // Suspending this thread would stop the dump with no one to resume it.
+      if (te.th32ThreadID == self_tid) continue;
       uintptr_t rip = 0, rsp = 0;
       uint8_t st[64] = {};
       HANDLE th = OpenThread(THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME |
@@ -168,6 +173,8 @@ inline void dump_threads(uint32_t render_tid) {
 }
 
 inline void loop() {
+  // The log is turned off in this build, so there is nothing to watch for.
+  if (!slog()) return;
   Sleep(3000);
   sline("== stall dumper thread alive");
   int64_t last_dump_us = 0;

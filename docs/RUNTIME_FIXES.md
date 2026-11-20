@@ -13,8 +13,8 @@ to generate and run the game.
 
 ## Build
 
-Use a Visual Studio x64 developer shell with LLVM 20+, Ninja, CMake, Python
-and the .NET 8 SDK on PATH. From the repository root:
+Use a Visual Studio x64 developer shell with LLVM 22+ (the STL of MSVC 14.52
+and later refuses older Clang), Ninja, CMake, Python and the .NET 8 SDK on PATH. From the repository root:
 
 ```cmd
 build.cmd -release fable_2
