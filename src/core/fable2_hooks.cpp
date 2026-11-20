@@ -578,14 +578,15 @@ bool GuiEveryHfTickEnabled() {
 
 }  // namespace
 
-// sub_82278C90 (run on every HF tick from ProcessGameFrame)
-// calls the front-end object's vtable[2] (sub_82286B40: GUI manager update,
-// subtitles, HUD) only when an LF boundary was crossed (r29) or a query says
-// so; the check starts with `clrlwi r10,r29,24` at 0x82278D1C. That update
-// measures its own elapsed time from the wall clock (sub_822B6D70), so running
-// it every HF tick does not speed anything up; it only updates text twice as
-// often (30 Hz instead of 15 Hz, or 60 Hz with higher_hf_tick_rate).
-// Returning true jumps to the call at 0x82278D40.
+// GameFrame_HfTickUpdate_82278C90 (run on every HF tick from ProcessGameFrame)
+// calls the front-end object's vtable[2] (GuiManager_Update_82286B40: GUI
+// manager update, subtitles, HUD) only when an LF boundary was crossed (r29) or
+// a query says so; the check starts with `clrlwi r10,r29,24` at 0x82278D1C.
+// That update measures its own elapsed time from the wall clock
+// (Timer_GetElapsed_822B6D70), so running it every HF tick does not speed
+// anything up; it only updates text twice as often (30 Hz instead of 15 Hz, or
+// 60 Hz with higher_hf_tick_rate). Returning true jumps to the call at
+// 0x82278D40.
 bool fable2_hook_gui_every_tick() { return GuiEveryHfTickEnabled(); }
 
 // ---------------------------------------------------------------------------
@@ -620,22 +621,23 @@ float LoadF32(uint32_t addr) { return std::bit_cast<float>(LoadU32(addr)); }
 
 }  // namespace
 
-// Cloth colliders blended to the render time. sub_82A895C0 builds the cloth's
-// collision shapes from the driving character's skeleton. Its four loops read
-// a bone straight from the CURRENT pose (*(inst+512)+16, 48-byte bones: quat,
-// translation, scale) right after `add r11,r11,r9`, while the skin it collides
-// with is drawn blended between the previous pose (*(inst+516)) and the
-// current one with the alpha at *(inst+176)+16 (sub_8222E300, using
-// sub_8222E5D0). So the colliders run up to one LF tick ahead of the drawn
-// body and jump on every LF tick. Here r11 is pointed at the same bone blended
-// the way sub_8222E5D0 + sub_8222E300 blend it (quaternion sign-corrected
-// lerp, then normalized; translation and scale lerped).
+// Cloth colliders blended to the render time. Cloth_BuildColliders_82A895C0
+// builds the cloth's collision shapes from the driving character's skeleton.
+// Its four loops read a bone straight from the CURRENT pose (*(inst+512)+16,
+// 48-byte bones: quat, translation, scale) right after `add r11,r11,r9`, while
+// the skin it collides with is drawn blended between the previous pose
+// (*(inst+516)) and the current one with the alpha at *(inst+176)+16
+// (Pose_BlendForDraw_8222E300, using Pose_BlendBone_8222E5D0). So the colliders
+// run up to one LF tick ahead of the drawn body and jump on every LF tick. Here
+// r11 is pointed at the same bone blended the way Pose_BlendBone_8222E5D0 +
+// Pose_BlendForDraw_8222E300 blend it (quaternion sign-corrected lerp, then
+// normalized; translation and scale lerped).
 //
-// Bounds: a pose holds its skeleton id at pose+8 (sub_8222E300 checks it
-// against the skeleton's +20 before blending) and its bone count at pose+12
-// (160 for the hero, same as the skeleton's +36). The hook blends only when
-// both poses share the skeleton id and count and the bone index is below the
-// count, so it never reads past the end of the previous pose's bones;
+// Bounds: a pose holds its skeleton id at pose+8 (Pose_BlendForDraw_8222E300
+// checks it against the skeleton's +20 before blending) and its bone count at
+// pose+12 (160 for the hero, same as the skeleton's +36). The hook blends only
+// when both poses share the skeleton id and count and the bone index is below
+// the count, so it never reads past the end of the previous pose's bones;
 // otherwise the game's own read is left alone.
 //
 // Scratch: the blended bone is written 256 bytes below the stack pointer. At
@@ -655,8 +657,8 @@ void fable2_hook_cloth_collider_bone(PPCRegister& r1, PPCRegister& r11,
   if (cur_pose == 0 || prev_pose == 0 || interp == 0 || prev_pose == cur_pose) {
     return;
   }
-  // Same skeleton (pose+8, the id sub_8222E300 checks against the
-  // skeleton's +20) and same bone count (pose+12).
+  // Same skeleton (pose+8, the id Pose_BlendForDraw_8222E300 checks against
+  // the skeleton's +20) and same bone count (pose+12).
   const uint32_t cur_count = LoadU32(cur_pose + 12);
   const uint32_t prev_count = LoadU32(prev_pose + 12);
   if (LoadU32(cur_pose + 8) != LoadU32(prev_pose + 8) || cur_count == 0 ||
@@ -703,26 +705,29 @@ void fable2_hook_cloth_collider_bone(PPCRegister& r1, PPCRegister& r11,
 }
 
 // Cloth world transform. The cloth is simulated every drawn frame (the render
-// traversal sub_821E2D40 queues a step through sub_821AC058 with the frame's
-// wall-clock dt) in the character's local space; the solver turns the change
-// of the cloth's world matrix between steps (cloth+128 -> cloth+192, set by
-// sub_8218D730) into inertia. sub_8219ADD8 copies that matrix from the entity
-// matrix at inst+336 first thing, before sub_822222D8 rewrites inst+336 for
-// this frame. So the copy is the previous frame's drawn matrix (one frame
+// traversal Cloth_UpdateAll_821E2D40 queues a step through
+// Cloth_RunStep_821AC058 with the frame's wall-clock dt) in the character's
+// local space; the solver turns the change of the cloth's world matrix between
+// steps (cloth+128 -> cloth+192, set by Cloth_SetWorldTransform_8218D730) into
+// inertia. Cloth_Step_8219ADD8 copies that matrix from the entity matrix at
+// inst+336 first thing, before Instance_UpdateMatrix_822222D8 rewrites inst+336
+// for this frame. So the copy is the previous frame's drawn matrix (one frame
 // late), except on tick frames, where the game update has just stored the new
-// tick position, up to a tick ahead of the drawn body; the next frame it
-// falls back. Measured while walking: the cloth's
-// translation went 95.15, 95.03, 95.08, 95.29, 95.19, 95.43, 95.30, ... So
-// every tick the cloth was flung forward and back while the body moved
-// smoothly: the cape and coat "stepped" at the tick rate.
+// tick position, up to a tick ahead of the drawn body; the next frame it falls
+// back. Measured while walking: the cloth's translation went 95.15, 95.03,
+// 95.08, 95.29, 95.19, 95.43, 95.30, ... So every tick the cloth was flung
+// forward and back while the body moved smoothly: the cape and coat "stepped"
+// at the tick rate.
 //
-// Right before queueing the step, sub_821E2D40 stores the owner's drawn world
-// matrix (sub_821E1C98: the instance interpolator's matrix at the render
-// time, or inst+336 when the instance has no interpolator) at owner+208, with
-// owner = *(cloth+0), the same layout sub_8220B5C8 produces. The hook (after
-// `addi r4,r1,80` at 0x8219AEA0, before `bl 0x8218d730`) points r4 there, so
-// the cloth follows the body exactly as drawn. Big moves still reach
-// sub_8218D730's own reset check (teleports reset the cloth as before).
+// Right before queueing the step, Cloth_UpdateAll_821E2D40 stores the owner's
+// drawn world matrix (Instance_GetDrawnMatrix_821E1C98: the instance
+// interpolator's matrix at the render time, or inst+336 when the instance has
+// no interpolator) at owner+208, with owner = *(cloth+0), the same layout
+// Matrix_3x4ToTransposed4x4_8220B5C8 produces. The hook (after `addi r4,r1,80`
+// at 0x8219AEA0, before `bl 0x8218d730`) points r4 there, so the cloth follows
+// the body exactly as drawn. Big moves still reach
+// Cloth_SetWorldTransform_8218D730's own reset check (teleports reset the cloth
+// as before).
 void fable2_hook_cloth_world_transform(PPCRegister& r4, PPCRegister& r30) {
   if (!InterpolationEnabled()) return;
   if (fable2::patches::GuestBase() == nullptr) return;
