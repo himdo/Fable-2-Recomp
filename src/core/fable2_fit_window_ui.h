@@ -137,11 +137,11 @@ inline bool ReadGuestString(uint32_t address, std::string& out) {
 
 // The Lua run in each presentation, after a first line that sets A (window
 // aspect), dx (extra canvas units per side), moveHud, logTree and the menu
-// timing settings menuRepeat, menuAnim, menuQuick and menuAccel. Lua 5.1; every Gameface call is wrapped in pcall so a missing element or
+// timing settings menuDelay, menuAnim, menuQuick and menuAccel. Lua 5.1; every Gameface call is wrapped in pcall so a missing element or
 // attribute cannot stop the rest of the presentation's scripts.
 inline constexpr const char kScript[] = R"lua(
 local function out(s) if logTree then pcall(output, "[fitwin] " .. s) end end
--- Menu timing ([patches] menu_instant_repeat / menu_animation_speed), set
+-- Menu timing ([patches] menu_repeat_delay / menu_animation_speed), set
 -- once per screen. The game's menus (scripts/gameface/guiinput.lua) step at
 -- once on a press, wait FIRST_NAVIGATE_INTERVAL (0.25 s) before the second
 -- step of a held direction and SUBSEQUENT_NAVIGATE_INTERVAL (0.14 s) after
@@ -150,8 +150,8 @@ local function out(s) if logTree then pcall(output, "[fitwin] " .. s) end end
 -- ANIMATE_TIME (0.225 s).
 pcall(function()
   local t = type(GUI) == "table" and GUI.Timing
-  if menuRepeat and type(t) == "table" and type(t.SUBSEQUENT_NAVIGATE_INTERVAL) == "number" then
-    t.FIRST_NAVIGATE_INTERVAL = t.SUBSEQUENT_NAVIGATE_INTERVAL
+  if menuDelay and menuDelay > 0 and type(t) == "table" then
+    t.FIRST_NAVIGATE_INTERVAL = menuDelay
   end
   if not menuAnim or menuAnim <= 0 or menuAnim == 1 or rawget(_G, "__f2menuAnim") then return end
   rawset(_G, "__f2menuAnim", menuAnim)  -- once per screen
@@ -810,10 +810,10 @@ inline std::string BuildScript(float aspect, bool move_hud, bool log_tree) {
   const auto& cfg = fable2::config::Get();
   char header[256];
   std::snprintf(header, sizeof(header),
-                "local A, dx, moveHud, logTree, menuRepeat, menuAnim, menuQuick, menuAccel = "
-                "%.4f, %.4f, %s, %s, %s, %.4f, %s, %.4f",
+                "local A, dx, moveHud, logTree, menuDelay, menuAnim, menuQuick, menuAccel = "
+                "%.4f, %.4f, %s, %s, %.4f, %.4f, %s, %.4f",
                 aspect, 360.0 * aspect - 640.0, move_hud ? "true" : "false",
-                log_tree ? "true" : "false", cfg.menu_instant_repeat ? "true" : "false",
+                log_tree ? "true" : "false", cfg.menu_repeat_delay,
                 cfg.menu_animation_speed, cfg.menu_instant_response ? "true" : "false",
                 cfg.menu_scroll_acceleration);
   return std::string(header) + kScript;
@@ -844,7 +844,7 @@ inline void OnPresentationLoaded(PPCContext& ctx, uint8_t* base,
   float aspect = fable2::fitwindow::CurrentAspect();
   if (aspect <= 0.0f) aspect = 16.0f / 9.0f;
   const auto& cfg = fable2::config::Get();
-  const bool menu_timing = cfg.menu_instant_repeat || cfg.menu_animation_speed != 1.0 ||
+  const bool menu_timing = cfg.menu_repeat_delay > 0.0 || cfg.menu_animation_speed != 1.0 ||
                            cfg.menu_instant_response || cfg.menu_scroll_acceleration > 1.0;
   if (!move_hud && !log_tree && !menu_timing) return;
 

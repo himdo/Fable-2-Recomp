@@ -196,10 +196,11 @@ struct Values {
   // tick instead of every LF tick (hook fable2_hook_gui_every_tick).
   // false = original.
   bool gui_every_hf_tick = true;
-  // [patches] menu_instant_repeat / menu_animation_speed: menu timing, set in
+  // [patches] menu_repeat_delay / menu_animation_speed: menu timing, set in
   // every Gameface menu by the fit-window script (src/core/fable2_fit_window_ui.h):
-  // no ramp-up before a held direction repeats, and faster menu animations.
-  bool menu_instant_repeat = true;
+  // the wait before a held direction repeats (0.25 s in the original), and
+  // faster menu animations.
+  double menu_repeat_delay = 0.18;
   double menu_animation_speed = 2.5;  // 1 = original
   bool menu_instant_response = true;     // start a step in the update of the press
   double menu_scroll_acceleration = 1.5;  // held-scroll speed-up; 1 = steady

@@ -268,12 +268,12 @@ L2/R2, View/Menu, ...) in the game's own style. `deck_button_prompts` under
 buttons, or `"off"` for the game's original Xbox 360 icons.
 
 **Menus:** menus respond faster than in the original game. A press moves the
-selection at once, holding a direction scrolls without the initial pause and
-speeds up to 1.5 times the game's rate, and menu animations run 2.5 times
-faster. Under `[patches]` in `fable2_config.toml`, `menu_instant_response` and
-`menu_instant_repeat` (`false` for the original behaviour),
-`menu_scroll_acceleration` and `menu_animation_speed` (`1` for the original)
-control this.
+selection at once, holding a direction starts repeating after 0.18 s instead
+of 0.25 s and speeds up to 1.5 times the game's rate, and menu animations run
+2.5 times faster. Under `[patches]` in `fable2_config.toml`,
+`menu_instant_response` (`false` for the original behaviour),
+`menu_repeat_delay` (`0.25` for the original), `menu_scroll_acceleration` and
+`menu_animation_speed` (`1` for the original) control this.
 
 **Skip the intro videos:** set `skip_intro_videos = true` under `[patches]`
 in `fable2_config.toml`.

@@ -269,11 +269,12 @@ higher_hf_tick_rate = false
 # Default: true
 gui_every_hf_tick = true
 
-# Faster menus. Instant menu repeat: holding a direction in a menu steps at
-# the game's steady repeat rate (every 0.14 s) from the first step, instead of
-# waiting 0.25 s before the second one. false = the original ramp-up.
-# Default: true
-menu_instant_repeat = true
+# Faster menus. Menu repeat delay: when a direction is held in a menu, the
+# wait in seconds before the second step (later steps follow at the game's
+# repeat rate, every 0.14 s). Long enough that a quick tap counts as one step.
+# 0.25 = the original game.
+# Default: 0.18
+menu_repeat_delay = 0.18
 
 # Menu animation speed: the menus' slide and fade animations (the list moving
 # to the new selection, items fading in) run this many times faster, so a
@@ -673,9 +674,9 @@ bool Load(const std::filesystem::path& path) {
     values.gui_every_hf_tick =
         Read<bool>(patches_table, "patches", "gui_every_hf_tick", "boolean",
                    values.gui_every_hf_tick);
-    values.menu_instant_repeat =
-        Read<bool>(patches_table, "patches", "menu_instant_repeat", "boolean",
-                   values.menu_instant_repeat);
+    values.menu_repeat_delay =
+        Read<double>(patches_table, "patches", "menu_repeat_delay", "number",
+                     values.menu_repeat_delay);
     values.menu_animation_speed =
         Read<double>(patches_table, "patches", "menu_animation_speed", "number",
                      values.menu_animation_speed);
