@@ -103,6 +103,65 @@ REXCVAR_DEFINE_BOOL(mouse_look_invert_y, false, "Input",
 REXCVAR_DEFINE_DOUBLE(mouse_look_direct_smoothing, 0.0, "Input",
                       "Direct mouse camera: share of the mouse movement held back at each "
                       "camera update for the following ones (0 = none, up to 0.9).");
+// Mouse aiming (src/input/mouse_aim.h). Seeded from fable2_config.toml
+// [input] (keys of the same names); `f2 mouse aim|aiminput|aimsens|aiminvert|
+// aimscale` change them live.
+REXCVAR_DEFINE_STRING(mouse_aim_mode, "both", "Input",
+                      "When the mouse moves the ranged aim reticle instead of the camera: "
+                      "\"off\", \"rmb\" (aim button held), \"detect\" (the game is aiming) "
+                      "or \"both\" (held and aiming).")
+    .allowed({"off", "rmb", "detect", "both"});
+REXCVAR_DEFINE_STRING(mouse_aim_input, "direct", "Input",
+                      "How the mouse moves the aim reticle: \"direct\" (added straight to the "
+                      "game's aim cursor: no top speed, deadzone or stick smoothing) or "
+                      "\"stick\" (drives the left stick, through the game's stick handling).")
+    .allowed({"direct", "stick"});
+REXCVAR_DEFINE_DOUBLE(mouse_aim_sens, 0.0007, "Input",
+                      "Direct aim: sideways reticle movement per count of mouse movement "
+                      "(the game's aim box is about -0.8..0.8). Up/down follows the screen "
+                      "shape (see mouse_aim_y_ratio).")
+    .range(0.000001, 1.0);
+REXCVAR_DEFINE_DOUBLE(mouse_aim_y_ratio, 1.0, "Input",
+                      "Direct aim: up/down speed on screen against sideways (1 = the same). "
+                      "Up/down per count = mouse_aim_sens x the game's aspect ratio x this.")
+    .range(0.1, 10.0);
+REXCVAR_DEFINE_BOOL(mouse_aim_invert_y, false, "Input",
+                    "Direct aim: true = moving the mouse up moves the reticle down.");
+// Console only (`f2 mouse aimrelease on|off`), not in fable2_config.toml.
+REXCVAR_DEFINE_BOOL(mouse_aim_release, true, "Input",
+                    "Direct aim: moving the mouse lets go of a highlighted target, and the "
+                    "game's target pick waits until the mouse rests (false = the game's own "
+                    "behaviour: only the left stick lets go). Also turns on the wheel target "
+                    "hop and mouse_aim_assist.");
+// Console only (`f2 mouse aimassist <x>`), not in fable2_config.toml.
+REXCVAR_DEFINE_DOUBLE(mouse_aim_assist, 1.0, "Input",
+                      "Direct aim with mouse_aim_release: how far the game's resting target "
+                      "pick reaches around the reticle, times the game's own (1 = the game's).")
+    .range(0.5, 8.0);
+// Console only (`f2 mouse aimsticky <x>`), not in fable2_config.toml.
+REXCVAR_DEFINE_DOUBLE(mouse_aim_stickiness, 0.1, "Input",
+                      "Direct aim with mouse_aim_release: how far (aim cursor units; the aim "
+                      "box is about -0.8..0.8) the mouse has to pull while a target is "
+                      "highlighted before it lets go. The reticle stays on the target until "
+                      "then. 0 = any movement lets go.")
+    .range(0.0, 0.5);
+// Console only (`f2 mouse aimhop <ms>`), not in fable2_config.toml.
+REXCVAR_DEFINE_INT32(mouse_aim_hop_ms, 100, "Input",
+                     "Direct aim with mouse_aim_release: the shortest time between two mouse "
+                     "wheel target hops, in ms (the game's own wait between stick flicks is "
+                     "skipped).")
+    .range(0, 1000);
+// Console only (`f2 mouse aimmagnet <x>`), not in fable2_config.toml.
+REXCVAR_DEFINE_DOUBLE(mouse_aim_magnet_speed, 0.35, "Input",
+                      "Direct aim with mouse_aim_release: below this reticle speed (aim cursor "
+                      "units per second; the aim box is about -0.8..0.8) the game's own "
+                      "moving pick runs while the mouse moves, looking ahead like the pad's "
+                      "stick (magnetism). Faster movement never snaps. 0 = off.")
+    .range(0.0, 5.0);
+REXCVAR_DEFINE_INT32(mouse_aim_scale, 256, "Input",
+                     "Stick aim (mouse_aim_input = \"stick\"): sensitivity while the mouse "
+                     "drives the left stick (same units as mouse_look_scale; larger = faster).")
+    .range(1, 4096);
 
 // Key that toggles the debug menu (F4). While the menu is open the mouse lock
 // is released (free cursor); closing it re-locks. This key is excluded from

@@ -43,6 +43,7 @@
 // #include "fps_probe.h"
 #include "keyboard_gamepad.h"
 #include "menu_items.h"
+#include "mouse_wheel_listener.h"
 // The console pad (f2 pad) uses the remote-pad driver in every build.
 #include "remote_gamepad_driver.h"
 #include "fable2_crash_log.h"  // host crash report (fable2_crash.log)
@@ -170,6 +171,11 @@ class Fable2App : public rex::ReXApp {
     });
     // Render at the window's aspect ratio (src/core/fable2_fit_window.h).
     fable2::fitwindow::Install(runtime()->memory(), window());
+    // Direct mouse aim's up/down sensitivity follows that aspect
+    // (src/input/mouse_aim.h).
+    fable2::mouseaim::AspectSource().store(&fable2::fitwindow::CurrentAspect);
+    // The wheel target hop of direct mouse aim (src/input/mouse_wheel_listener.h).
+    fable2::mouseaim::InstallWheelListener(window());
     // Hero/dog black-texture fix (see plans/hero-dog-texture-readback.md).
     // Approach + guest base 0x12704000 credit just-harry's Unofficial Xenia
     // femtofork for Fable II. readback_resolve_force_addresses is defined in the
@@ -443,6 +449,12 @@ class Fable2App : public rex::ReXApp {
     seed_cvar("mouse_look_sens_y", std::to_string(cfg.mouse_look_sens_y));
     seed_cvar("mouse_look_invert_y", cfg.mouse_look_invert_y ? "true" : "false");
     seed_cvar("mouse_look_direct_smoothing", std::to_string(cfg.mouse_look_direct_smoothing));
+    seed_cvar("mouse_aim_mode", cfg.mouse_aim_mode);
+    seed_cvar("mouse_aim_input", cfg.mouse_aim_input);
+    seed_cvar("mouse_aim_sens", std::to_string(cfg.mouse_aim_sens));
+    seed_cvar("mouse_aim_y_ratio", std::to_string(cfg.mouse_aim_y_ratio));
+    seed_cvar("mouse_aim_invert_y", cfg.mouse_aim_invert_y ? "true" : "false");
+    seed_cvar("mouse_aim_scale", std::to_string(cfg.mouse_aim_scale));
     // NOTE: the hero/dog readback fix (readback_resolve_force_addresses) is a
     // GPU-PLUGIN cvar, so it is seeded in OnPostSetup() (after the plugin is
     // loaded) rather than here - see plans/hero-dog-texture-readback.md.

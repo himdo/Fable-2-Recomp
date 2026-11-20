@@ -677,6 +677,8 @@ public partial class MainWindow : Window
             SelectByTag(MouseLookModeCombo, Fable2ConfigFile.NormalizeMouseLookMode(_advanced.MouseLookMode));
             MouseSensitivitySlider.Value = _advanced.MouseLookScale;
             MouseSensitivityBox.Text = _advanced.MouseLookScale.ToString(CultureInfo.InvariantCulture);
+            SelectByTag(MouseAimModeCombo, Fable2ConfigFile.NormalizeMouseAimMode(_advanced.MouseAimMode));
+            MouseAimSensBox.Text = Fable2ConfigFile.FormatDouble(_advanced.MouseAimSens);
             HotFuncYieldSlider.Value = Math.Clamp(_advanced.HotFuncYieldEvery, 0, 16);
             HotFuncYieldBox.Text = _advanced.HotFuncYieldEvery.ToString(CultureInfo.InvariantCulture);
             LoadPhotoMode();
@@ -1154,6 +1156,9 @@ public partial class MainWindow : Window
         _advanced.MouseLook = MouseLookCheck.IsChecked == true;
         _advanced.MouseLookMode = Fable2ConfigFile.NormalizeMouseLookMode(SelectedTag(MouseLookModeCombo));
         _advanced.MouseLookScale = (int)MouseSensitivitySlider.Value;
+        _advanced.MouseAimMode = Fable2ConfigFile.NormalizeMouseAimMode(SelectedTag(MouseAimModeCombo));
+        _advanced.MouseAimSens = ReadDoubleBox(MouseAimSensBox, _advanced.MouseAimSens,
+            Fable2ConfigFile.MouseAimSensMin, Fable2ConfigFile.MouseAimSensMax);
         _advanced.HotFuncYieldEvery = int.TryParse(HotFuncYieldBox.Text, NumberStyles.Integer,
             CultureInfo.InvariantCulture, out int yieldEvery)
             ? Math.Clamp(yieldEvery, 0, 4096) : (int)HotFuncYieldSlider.Value;

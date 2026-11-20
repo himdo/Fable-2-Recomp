@@ -41736,8 +41736,15 @@ name = "ProcessAndProcessAndProcess1118_8237A710"
 name = "ProcessAndProcessAndProcess1119_82A3D4A0"
 
 # Free size-bucketed memory (seven hundred and one hundred and one hundred and one hundred and one hundred and twentieth form). It takes a structure and frees size-bucketed memory (Free_SizeBucketed). This is the single most-called function in the entire recompiled binary, invoked from across the codebase. 62 lines. 1 callee. 2320 callers.
+# (Named 2026-11 for the mouse aim work; it was ProcessAndProcessAndProcess1120.)
+# Releases a weak-reference handle. r3 = the handle, an 8-byte {tag, block}
+# pair. When block (+4) is set it drops the block's count (block+4) by one;
+# when the count reaches 0 and the block no longer points at an object
+# (block+0 == 0) the block is freed (sub_8221BE68). Then it clears the
+# handle's block pointer. The auto-generated description above calls it a
+# free; it only frees the shared control block once nothing refers to it.
 [entrypoint.functions."0x821940C8"]
-name = "ProcessAndProcessAndProcess1120_821940C8"
+name = "WeakHandleRelease_821940C8"
 
 # Process a structure by wrapping a sub-operation (seven hundred and one hundred and one hundred and one hundred and one hundred and twenty-first form). It takes a structure and drives a sub-operation (sub_82A734D0). This is a frequently-called helper in the 0x829FD process cluster. 83 lines. 1 callee. 36 callers.
 [entrypoint.functions."0x829FD4B8"]
@@ -44144,8 +44151,15 @@ name = "ProcessAndProcessAndProcess1710_82B45420"
 name = "ProcessAndProcessAndProcess1711_82B454C0"
 
 # Process a structure by wrapping sub-operations (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and twelfth form). It takes a structure, checks its state, and drives sub-operations (ProcessAndProcessAndProcess1120, ProcessAndProcessAndProcess1621) based on the result. This is a very frequently-called helper in the 0x82978 process cluster. 60 lines. 2 callees. 384 callers.
+# (Named 2026-11 for the mouse aim work; it was ProcessAndProcessAndProcess1712.)
+# Assigns one weak-reference handle from another: r3 = destination handle,
+# r4 = source handle. If the source's object is still alive (block+0 != 0)
+# it is pointed at that object; otherwise the source is released
+# (WeakHandleRelease_821940C8) and the destination is set to nothing. The
+# set itself is sub_822149C8 (r3 = destination, r4 = object or 0). Assigning
+# from an empty handle is how AimTargetingReset_827B5F60 clears a target.
 [entrypoint.functions."0x82978470"]
-name = "ProcessAndProcessAndProcess1712_82978470"
+name = "WeakHandleAssign_82978470"
 
 # Process a structure (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and thirteenth form). It takes a structure and checks its state, with no external sub-operations. Part of the 0x82B56 process cluster. 47 lines. 0 callees. 0 callers.
 [entrypoint.functions."0x82B568C8"]
@@ -46106,8 +46120,13 @@ name = "ProcessAndProcessAndProcess2200_8322A890"
 name = "ProcessAndProcessAndProcess2201_82A7C710"
 
 # Process a structure (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and five hundred and second form). It takes a structure and checks its state, with no external sub-operations. This is a frequently-called helper in the 0x822A8 process cluster. 81 lines. 0 callees. 25 callers.
+# (Named 2026-11 for the mouse aim work; it was ProcessAndProcessAndProcess2202.)
+# Normalises a 2D float vector in place and returns its length. r3 = the
+# vector {x, y}; f1 = sqrt(x*x + y*y). When the length is below a small
+# epsilon the vector is set to (0, 0) and 0 is returned. The aim stick curve
+# (AimStickShape_827B60C8) uses it to split the stick into direction and size.
 [entrypoint.functions."0x822A8EF8"]
-name = "ProcessAndProcessAndProcess2202_822A8EF8"
+name = "Vec2NormalizeGetLength_822A8EF8"
 
 # Process a structure (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and five hundred and third form). It takes a structure and checks its state, with no external sub-operations. Part of the 0x82C0C process cluster. 51 lines. 0 callees. 1 caller (ProcessAndProcessAndProcess1959).
 [entrypoint.functions."0x82C0CF68"]
@@ -49344,6 +49363,100 @@ name = "UpdateCamerasTimebase_821B9320"
 # PDB: __imp__sub_824246F0, 8869 bytes.
 [entrypoint.functions."0x824246F0"]
 name = "UpdateCamerasGlobalDt_824246F0"
+
+# =====================================================================
+# Ranged aim targeting (the reticle shown while aiming a gun or crossbow)
+# =====================================================================
+#
+# Named 2026-11 while adding mouse aiming (src/input/mouse_aim.h and the two
+# hooks in src/core/hotfunc/camera/). They all work on one "targeting object"
+# (r3 below). Fields used by the mouse aim code (read from the generated code):
+#   +32/+36  the reticle (cursor) position, in cursor units
+#   +49      "aiming" byte; the cursor update only runs while it is set
+#   +56      handle of the highlighted target (+60 = its control block)
+#   +128     the stored aim point in the world, used when nothing is
+#            highlighted
+#   +160     how long the current highlight has lasted
+#   +208     the left-stick flick detector's state; its flags are +232
+#            (flick) and +233 (held); +234 is a settle flag the cursor
+#            update re-picks on
+#
+# Per tick, AimTargetingUpdate re-projects the highlighted target (or +128)
+# into the reticle, runs the stick through AimStickShape and
+# AimStickFlickDetect, then calls AimCursorUpdate, which moves the reticle
+# and re-picks targets with AimTargetSearch.
+
+# Per-tick targeting update for ranged aim. r3 = the targeting object. Before
+# the cursor update it re-projects a world point into the reticle (+32/+36,
+# loc_827B6304): the highlighted target's position if one is set
+# (AimTargetGetWorldPos + AimProjectToCursor), else the stored aim point
+# (+128). It then runs the stick through AimStickShape_827B60C8 and
+# AimStickFlickDetect_827B5888 and, only while the "aiming" byte (+49) is set,
+# calls AimCursorUpdate_827B80B0. Sole caller: sub_827B4450.
+[entrypoint.functions."0x827B6228"]
+name = "AimTargetingUpdate_827B6228"
+
+# Moves the ranged aim reticle and keeps the highlighted target. r3 = the
+# targeting object, r4 = the stick input. With nothing highlighted it moves
+# the cursor by the stick and picks a target near it (AimTargetSearch); while
+# a target is highlighted it skips the stick move (loc_827B8450) and only
+# re-picks when the left-stick flick/held flags (+232/+233) are set, which is
+# the pad's "flick to the next target". It clamps the cursor to its box at the
+# end (loc_827B881C). Hooked by src/core/hotfunc/camera/AimCursorUpdate_827B80B0.cpp
+# (mouse aim). Sole caller: AimTargetingUpdate_827B6228.
+[entrypoint.functions."0x827B80B0"]
+name = "AimCursorUpdate_827B80B0"
+
+# Picks the best target near the reticle. r3 = targeting object, r4 = cursor,
+# r5 = direction, r9 = a target to skip, f1 = angle limit, f2 = max distance,
+# f3 = size weight. Projects each candidate with AimTargetGetWorldPos +
+# AimProjectToCursor and keeps one when (its distance from the cursor - its
+# size x f3) <= f2. Returns the best candidate in r3, or 0. Hooked by
+# src/core/hotfunc/camera/AimTargetSearch_827B9CD0.cpp (mouse aim).
+[entrypoint.functions."0x827B9CD0"]
+name = "AimTargetSearch_827B9CD0"
+
+# Returns a game object's world position in v1. r3 = the object, r4 = a point
+# index. It starts from the object's transform (vtable +64 on the object at
+# +124); when the object has a component of type 23 with a list of 44-byte
+# points (+48/+52), r4 picks one of them (clamped to the list) through
+# sub_82399078. The aim code calls it with r4 = 0. 19 calling files, so not
+# aim-only.
+[entrypoint.functions."0x827BB550"]
+name = "AimTargetGetWorldPos_827BB550"
+
+# Projects a world position onto the aim reticle's plane. r3 = output (two
+# floats, cursor units), r4 = a view, or 0 for the game camera, v1 = the world
+# position. Returns r3 = 1 when the point is in front of the camera (the output
+# is only written then), else 0. AimTargetSearch projects every candidate with
+# this.
+[entrypoint.functions."0x827BB948"]
+name = "AimProjectToCursor_827BB948"
+
+# Resets the targeting object at the start of aiming. r3 = the targeting
+# object. Zeroes the reticle (+24..+36), sets the "aiming" byte (+49) from
+# sub_827B1FB0, empties both target handles (+56 and +64) by assigning an empty
+# weak handle (WeakHandleAssign_82978470), and clears the timers and state at
+# +72..+200 (including the highlight age +160). The mouse aim release copies
+# its handle-emptying steps. Sole caller: sub_827B5E90.
+[entrypoint.functions."0x827B5F60"]
+name = "AimTargetingReset_827B5F60"
+
+# Left-stick flick detector for ranged aim. Called by AimTargetingUpdate with
+# r3 = targeting object + 208 (the detector's state) and the raw left stick.
+# Sets +232 when the stick is flicked (a quick push to nearly full: about
+# 32700 trips it in testing, 30000 doesn't) and +233 while it is held.
+# AimCursorUpdate uses these to hop to the next target (flick) or let go of
+# the current one (held).
+[entrypoint.functions."0x827B5888"]
+name = "AimStickFlickDetect_827B5888"
+
+# The ranged aim's stick curve. Splits the stick into a direction and a size
+# (Vec2NormalizeGetLength_822A8EF8), cubes the size (|s|^3, so small pushes
+# move the reticle slowly) and rebuilds the vector, before the update smooths
+# it. Sole caller: AimTargetingUpdate_827B6228.
+[entrypoint.functions."0x827B60C8"]
+name = "AimStickShape_827B60C8"
 
 # =====================================================================
 # Texture morph system (per-appearance skin texture build: hero/dog age,
