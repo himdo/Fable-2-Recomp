@@ -51,6 +51,7 @@ public partial class MainWindow : Window
         DetectGameDirectory();
         _loading = false;
         RefreshSummary();
+        VersionText.Text = $"Version {UpdateChecker.ReadInstalledVersion(AppContext.BaseDirectory) ?? "???"}";
         Loaded += async (_, _) => await ShowAvailableUpdateAsync();
     }
 
