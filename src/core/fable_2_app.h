@@ -165,9 +165,11 @@ class Fable2App : public rex::ReXApp {
 
     // Keyboard keycap prompts (src/gui/prompt_textures.h). Needs the config and
     // game_data_root, and must rewrite the GUI banks before the game reads them.
+    // Steam Deck button icons (src/gui/deck_prompts.h) go through the same swap.
+    const std::string& deck_set = fable2::config::Get().deck_button_prompts;
     fable2::keycap::Instance().SetTextures(fable2::gui::BuildPromptTextures(
         game_data_root(), fable2::config::Get().keyboard_gamepad_map,
-        fable2::config::Get().mouse_look));
+        fable2::config::Get().mouse_look, deck_set == "off" ? std::string{} : deck_set));
   }
 
   void OnPostSetup() override {

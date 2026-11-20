@@ -39,6 +39,15 @@ config_version = 1
 #   Up:Up,Down:Down,Left:Left,Right:Right
 keyboard_gamepad_map = "LMB:X,RMB:Y,MMB:B,Shift:A,E:A,Q:LT,Tab:RB,R:RT,Z:LB,B:B,W:StickUp,S:StickDown,A:StickLeft,D:StickRight,Escape:Pause,M:Select,Up:Up,Down:Down,Left:Left,Right:Right"
 
+# Steam Deck button icons: the game's Xbox 360 button prompts (A/B/X/Y, LB/RB,
+# LT/RT, Back/Start, sticks, D-pad) show the Steam Deck's buttons instead, in
+# the game's own style (shaded orbs, the green medallion). "dark" uses dark
+# grey buttons, "light" white ones (glyphs in assets/deck_prompts/ next to the
+# executable). "off" shows the game's original Xbox 360 icons. Keyboard
+# keycaps still replace them while you play with keyboard and mouse.
+# Default: "dark"
+deck_button_prompts = "dark"
+
 # Map mouse movement to the guest right stick (camera look): sweep to look,
 # stop to stop. false disables mouse look entirely.
 # Default: true

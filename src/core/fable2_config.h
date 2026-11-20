@@ -37,6 +37,9 @@ struct Values {
   int32_t config_version = 1;
   // [input]
   std::string keyboard_gamepad_map{std::string{kDefaultKeyboardGamepadMap}};
+  // Steam Deck button icons instead of the Xbox 360 ones (src/gui/deck_prompts.h):
+  // the glyph set "dark" (dark grey) or "light", or "off".
+  std::string deck_button_prompts = "dark";
   // Keep in sync with the cvar defaults in main.cpp (mouse_look,
   // mouse_look_scale); the cvar keeps its compiled default as a fallback so
   // an empty/missing config can never wedge input.

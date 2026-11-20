@@ -75,6 +75,15 @@ config_version = 1
 #   Up:Up,Down:Down,Left:Left,Right:Right
 keyboard_gamepad_map = "LMB:X,RMB:Y,MMB:B,Shift:A,E:A,Q:LT,Tab:RB,R:RT,Z:LB,B:B,W:StickUp,S:StickDown,A:StickLeft,D:StickRight,Escape:Pause,M:Select,Up:Up,Down:Down,Left:Left,Right:Right"
 
+# Steam Deck button icons: the game's Xbox 360 button prompts (A/B/X/Y, LB/RB,
+# LT/RT, Back/Start, sticks, D-pad) show the Steam Deck's buttons instead, in
+# the game's own style (shaded orbs, the green medallion). "dark" uses dark
+# grey buttons, "light" white ones (glyphs in assets/deck_prompts/ next to the
+# executable). "off" shows the game's original Xbox 360 icons. Keyboard
+# keycaps still replace them while you play with keyboard and mouse.
+# Default: "dark"
+deck_button_prompts = "dark"
+
 # Map mouse movement to the guest right stick (camera look): sweep to look,
 # stop to stop. false disables mouse look entirely.
 # Default: true
@@ -527,6 +536,12 @@ bool Load(const std::filesystem::path& path) {
     values.keyboard_gamepad_map = Read<std::string>(
         input_table, "input", "keyboard_gamepad_map", "string",
         std::string{kDefaultKeyboardGamepadMap});
+    {
+      std::string set = Read<std::string>(input_table, "input", "deck_button_prompts", "string",
+                                          values.deck_button_prompts);
+      for (auto& c : set) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if (set == "light" || set == "dark" || set == "off") values.deck_button_prompts = set;
+    }
     // Defaults come from Values itself (single source of truth).
     values.mouse_look =
         Read<bool>(input_table, "input", "mouse_look", "boolean",

@@ -432,6 +432,14 @@ add_custom_command(TARGET fable_2 POST_BUILD
             "$<TARGET_FILE_DIR:fable_2>/assets/fonts/Google Sans/OFL.txt"
     COMMENT "Staging bundled keycap font (Google Sans + OFL license) next to fable_2.exe")
 
+# Stage the Steam Deck button glyphs (light and dark sets) next to the exe.
+# Loaded by src/gui/deck_prompts.h when deck_button_prompts is on.
+add_custom_command(TARGET fable_2 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/deck_prompts"
+            "$<TARGET_FILE_DIR:fable_2>/assets/deck_prompts"
+    COMMENT "Staging Steam Deck button glyphs next to fable_2")
+
 # --- Vulkan renderer: Stage 2 (source-built plugin, swappable at launch) --
 # The prebuilt plugin above (GPU_PLUGINS xenos) is D3D12-only. The Vulkan
 # backend is built from the (unmodified) SDK source via

@@ -38,6 +38,11 @@ sed -i 's/^gpu_frame_sync = true$/# gpu_frame_sync = true/' "$PKG/fable2_config.
 cp "$ROOT/README.md" "$ROOT/Linux.md" "$PKG/"
 cp "$ROOT/thirdparty/XenosTiling/LICENSE.txt" "$PKG/licenses/XenosTiling-LICENSE.txt"
 cp "$ROOT/assets/app-icon.png" "$PKG/" 2>/dev/null || true
+# The keycap font and the Steam Deck button glyphs (src/gui/keycap_render.cpp,
+# src/gui/deck_prompts.h) are loaded from assets/ next to the executable.
+mkdir -p "$PKG/assets/fonts"
+cp -r "$ROOT/assets/fonts/Google Sans" "$PKG/assets/fonts/"
+cp -r "$ROOT/assets/deck_prompts" "$PKG/assets/"
 cp "$ROOT"/src/lua/*.lua "$PKG/extras/scripts/recomp/"
 sed "s/@FABLE2_NEED_GLIBC@/$NEED_GLIBC/" "$ROOT/tools/linux/Fable2.sh" > "$PKG/Fable2.sh"
 chmod 755 "$PKG/Fable2.sh" "$PKG/fable_2"
