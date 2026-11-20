@@ -16,8 +16,18 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, string> _values = new(StringComparer.OrdinalIgnoreCase);
     private string? _gameDirectory;
     private string? _executableDirectory;
-    private string? _updatePage;
     private bool _loading = true;
+
+    // In-place upgrade state. _updating: an upgrade is running. _updateInstalling: it is
+    // switching files and can no longer be stopped. _updated: it is done, and this old
+    // launcher must only restart into the new one.
+    private AvailableUpdate? _update;
+    private string? _installedVersion;
+    private CancellationTokenSource? _updateCancel;
+    private bool _updating;
+    private bool _updateInstalling;
+    private bool _updated;
+    private bool _closeAfterUpdate;
 
     // Advanced Options page state.
     private Fable2ConfigValues _advanced = new();
@@ -48,28 +58,241 @@ public partial class MainWindow : Window
         InitializeComponent();
         PreviewKeyDown += MainWindow_PreviewKeyDown;
         SetDefaults();
+        // Before anything reads the folder: an upgrade that was cut short is undone here.
+        UpgradeRecovery recovery = ReleaseUpgrader.Recover(AppContext.BaseDirectory);
         DetectGameDirectory();
         _loading = false;
         RefreshSummary();
-        Loaded += async (_, _) => await ShowAvailableUpdateAsync();
+        if (recovery == UpgradeRecovery.RolledBack)
+            StatusText.Text = "An update was interrupted, so the previous version was put back. You can update again.";
+        Loaded += async (_, _) =>
+        {
+            if (recovery == UpgradeRecovery.Failed)
+                MessageBox.Show(this,
+                    "An earlier update did not finish and could not be undone automatically.\n\n" +
+                    $"Your previous files are in \"{UpgradePaths.WorkFolder}\\backup\" in the launcher's folder. " +
+                    "Close the game and every other launcher window, then start the launcher again. " +
+                    "If this message stays, copy those files back over the launcher's folder.",
+                    "Update not finished", MessageBoxButton.OK, MessageBoxImage.Warning);
+            await ShowAvailableUpdateAsync();
+        };
     }
+
+    // ---- Update check and in-place upgrade ----
 
     private async Task ShowAvailableUpdateAsync()
     {
         string? installed = UpdateChecker.ReadInstalledVersion(AppContext.BaseDirectory);
         if (installed is null) return;
         AvailableUpdate? update = await UpdateChecker.CheckAsync(installed);
+        // The launcher that ran the last upgrade may still have been closing when this one
+        // started, and it can't delete its own exe. By now it is gone.
+        if (Directory.Exists(Path.Combine(AppContext.BaseDirectory, UpgradePaths.WorkFolder)))
+            await Task.Run(() => ReleaseUpgrader.Recover(AppContext.BaseDirectory));
         if (update is null) return;
-        _updatePage = update.PageUrl;
-        UpdateButton.Content = $"Update available: {update.Version}";
-        UpdateButton.ToolTip = "Open the release page";
+        _update = update;
+        _installedVersion = installed;
+        // Without a zip that can be checked, the button opens the release page as before.
+        UpdateButton.Content = update.Package is null
+            ? $"Update available: {update.Version}" : $"Update to {update.Version}";
+        UpdateButton.ToolTip = update.Package is null
+            ? "Open the release page" : "Download this release and install it in this folder";
         UpdateButton.Visibility = Visibility.Visible;
+    }
+
+    private void OpenUpdatePage()
+    {
+        if (_update is not null)
+            Process.Start(new ProcessStartInfo(_update.PageUrl) { UseShellExecute = true });
     }
 
     private void UpdateClicked(object sender, RoutedEventArgs e)
     {
-        if (_updatePage is not null)
-            Process.Start(new ProcessStartInfo(_updatePage) { UseShellExecute = true });
+        if (_update is null || _extracting) return;
+        if (_update.Package is null)
+        {
+            OpenUpdatePage();
+            return;
+        }
+        UpdateTitleText.Text = $"Update to {_update.Version}";
+        UpdatePhaseText.Text = $"Installed: {_installedVersion}";
+        UpdateDetailText.Text =
+            $"The launcher downloads the release from GitHub ({DiscExtraction.FormatSize(_update.Package.Size)}), " +
+            "checks it, and replaces the program files in this folder.\n\n" +
+            "Your saves, settings and extracted game files stay as they are.\n\n" +
+            "Close Fable II first if it is running.";
+        UpdateProgressPanel.Visibility = Visibility.Collapsed;
+        ShowUpdateButtons("Update now", "Release notes", "Not now");
+        UpdateOverlay.Visibility = Visibility.Visible;
+        UpdateStartButton.Focus();
+    }
+
+    // null hides a button.
+    private void ShowUpdateButtons(string? start, string? page, string? close)
+    {
+        foreach ((Button button, string? label) in new[]
+                 {
+                     (UpdateStartButton, start), (UpdatePageButton, page), (UpdateCloseButton, close),
+                 })
+        {
+            button.Visibility = label is null ? Visibility.Collapsed : Visibility.Visible;
+            button.IsEnabled = true;
+            if (label is not null) button.Content = label;
+        }
+    }
+
+    private void UpdatePageClicked(object sender, RoutedEventArgs e) => OpenUpdatePage();
+
+    private async void UpdateStartClicked(object sender, RoutedEventArgs e)
+    {
+        if (_updated)
+        {
+            RestartLauncher();
+            return;
+        }
+        if (_updating || _update is null) return;
+
+        _updating = true;
+        _updateInstalling = false;
+        _updateCancel = new CancellationTokenSource();
+        UpdatePhaseText.Text = "Connecting to GitHub…";
+        UpdateDetailText.Text = "Nothing in this folder changes until the download has been checked.";
+        UpdateProgressBar.IsIndeterminate = true;
+        UpdatePercentText.Text = "";
+        UpdateBytesText.Text = "";
+        UpdateProgressPanel.Visibility = Visibility.Visible;
+        ShowUpdateButtons(null, null, "Cancel");
+        try
+        {
+            UpgradeResult result = await new ReleaseUpgrader(AppContext.BaseDirectory).RunAsync(
+                _update, UpdateChecker.OpenDownloadAsync, new Progress<UpgradeProgress>(ShowUpdateProgress),
+                _updateCancel.Token);
+            _updated = true;
+            ShowUpdateDone(result);
+        }
+        catch (OperationCanceledException)
+        {
+            UpdateOverlay.Visibility = Visibility.Collapsed;
+            StatusText.Text = "Update cancelled. Nothing was changed.";
+        }
+        catch (UpgradeException exception)
+        {
+            ShowUpdateFailed(exception.Message);
+        }
+        catch (Exception exception)
+        {
+            // An async void handler must not throw: that would take the launcher down.
+            ShowUpdateFailed(exception.Message);
+        }
+        finally
+        {
+            _updating = false;
+            _updateInstalling = false;
+            _updateCancel.Dispose();
+            _updateCancel = null;
+            if (_closeAfterUpdate) Close();
+        }
+    }
+
+    private void ShowUpdateProgress(UpgradeProgress progress)
+    {
+        if (!_updating) return;   // a late report must not overwrite the result
+        if (progress.Phase == UpgradePhase.Installing)
+        {
+            _updateInstalling = true;
+            UpdateCloseButton.IsEnabled = false;
+        }
+        UpdatePhaseText.Text = progress.Phase switch
+        {
+            UpgradePhase.Downloading => "Downloading…",
+            UpgradePhase.Verifying => "Checking the download…",
+            UpgradePhase.Extracting => "Unpacking…",
+            UpgradePhase.Checking => "Checking the installed files…",
+            _ => "Installing…",
+        };
+        UpdateProgressBar.IsIndeterminate = progress.Total <= 0;
+        if (progress.Total <= 0)
+        {
+            UpdatePercentText.Text = "";
+            UpdateBytesText.Text = "";
+            return;
+        }
+        double percent = 100.0 * progress.Done / progress.Total;
+        UpdateProgressBar.Value = percent;
+        UpdatePercentText.Text = $"{percent:0}%";
+        UpdateBytesText.Text =
+            $"{DiscExtraction.FormatSize(progress.Done)} / {DiscExtraction.FormatSize(progress.Total)}";
+    }
+
+    private void ShowUpdateDone(UpgradeResult result)
+    {
+        UpdateTitleText.Text = $"Updated to {result.Version}";
+        UpdatePhaseText.Text = "Your saves, settings and game files were left as they were.";
+        UpdateProgressPanel.Visibility = Visibility.Collapsed;
+        int edited = result.Files.Count(file => file.Modified);
+        UpdateDetailText.Text = result.KeptFolder is null
+            ? "Restart the launcher to finish."
+            : $"You had changed {edited} of the previous version's files. They were replaced; your copies are in\n" +
+              $"{result.KeptFolder}\n\nRestart the launcher to finish.";
+        ShowUpdateButtons("Restart launcher", null, null);
+        UpdateStartButton.Focus();
+    }
+
+    private void ShowUpdateFailed(string reason)
+    {
+        UpdateTitleText.Text = "Update not installed";
+        UpdatePhaseText.Text = "";
+        UpdateProgressPanel.Visibility = Visibility.Collapsed;
+        UpdateDetailText.Text = reason + "\n\nYou can try again, or download the release from its page and install it by hand.";
+        ShowUpdateButtons("Try again", "Open release page", "Close");
+    }
+
+    private void UpdateCloseClicked(object sender, RoutedEventArgs e)
+    {
+        if (!_updating)
+        {
+            UpdateOverlay.Visibility = Visibility.Collapsed;
+            return;
+        }
+        if (_updateInstalling) return;
+        _updateCancel?.Cancel();
+        UpdateCloseButton.IsEnabled = false;
+        UpdatePhaseText.Text = "Stopping…";
+    }
+
+    // The new launcher takes over. This one is the previous version, already renamed aside.
+    private void RestartLauncher()
+    {
+        string launcher = Path.Combine(AppContext.BaseDirectory, UpgradePaths.Launcher);
+        try
+        {
+            Process.Start(new ProcessStartInfo(launcher)
+            {
+                WorkingDirectory = AppContext.BaseDirectory,
+                UseShellExecute = false,
+            });
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception
+                                              or InvalidOperationException or IOException)
+        {
+            MessageBox.Show(this, $"The update is installed, but the launcher could not restart itself ({exception.Message}).\n\n" +
+                                  $"Start {UpgradePaths.Launcher} again yourself.",
+                "Restart the launcher", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        Application.Current.Shutdown();
+    }
+
+    // Closing while files are being switched would leave the next start to undo it, so
+    // the window waits: the switch takes about a second. Before that, closing cancels.
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        if (_updating)
+        {
+            e.Cancel = true;
+            _closeAfterUpdate = true;
+            if (!_updateInstalling) _updateCancel?.Cancel();
+        }
+        base.OnClosing(e);
     }
 
     private void SetDefaults()
@@ -237,7 +460,8 @@ public partial class MainWindow : Window
 
     private void LaunchGame()
     {
-        if (_extracting) return;
+        // The update overlay covers the window, but Enter could still reach this button.
+        if (_extracting || _updating || _updated) return;
         if (_gameDirectory is null || _executableDirectory is null) return;
 
         try
@@ -366,7 +590,7 @@ public partial class MainWindow : Window
 
     private void ExtractClicked(object sender, RoutedEventArgs e)
     {
-        if (_extracting) return;
+        if (_extracting || _updating || _updated) return;
 
         var isoDialog = new OpenFileDialog
         {

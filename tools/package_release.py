@@ -13,8 +13,15 @@ import subprocess
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-BUILD_FILES = ("fable_2.exe", "rexruntime.dll", "rexgpu-xenos.dll", "fable2_build.json")
+BUILD_INFO = "fable2_build.json"
+BUILD_FILES = ("fable_2.exe", "rexruntime.dll", "rexgpu-xenos.dll", BUILD_INFO)
 SYMBOL_FILES = ("fable_2.pdb", "rexruntime.pdb", "rexgpu-xenos.pdb")
+# The layout the launcher's in-place upgrade understands. Launchers already installed
+# refuse a number they don't know and send the player to the release page instead, so
+# bump it whenever an older launcher could no longer install the zip correctly.
+UPGRADE_FORMAT = 1
+# Files the player edits. An upgrade installs them only when they are missing.
+USER_FILES = ("fable2_config.toml",)
 
 
 def require(path):
@@ -64,12 +71,6 @@ def write_zip(path, folder, files):
                 archive.write(source, f"{folder}/{name}")
 
 
-def stamped_build_info(source, version):
-    info = json.loads(source.read_text(encoding="utf8"))
-    info["version"] = version
-    return json.dumps(info, indent=2) + "\n"
-
-
 def sha256(path):
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -78,9 +79,24 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def stamped_build_info(source, version, files):
+    """The build info as it ships: the version, plus what the launcher's in-place upgrade
+    needs to check a download and to tell this release's files from the player's own.
+    The file can't hold its own hash, so it is the one file left out of the list.
+    """
+    info = json.loads(source.read_text(encoding="utf8"))
+    info["version"] = version
+    info["release"] = {
+        "format": UPGRADE_FORMAT,
+        "user_files": [name for name in USER_FILES if name in files],
+        "files": {name: sha256(path) for name, path in sorted(files.items()) if name != BUILD_INFO},
+    }
+    return json.dumps(info, indent=2) + "\n"
+
+
 def package(root, build, launcher, output, version):
     files = release_files(root, build, launcher)
-    files["fable2_build.json"] = stamped_build_info(files["fable2_build.json"], version)
+    files[BUILD_INFO] = stamped_build_info(files[BUILD_INFO], version, files)
     symbols = {name: require(build / name) for name in SYMBOL_FILES}
     shutil.rmtree(output, ignore_errors=True)
     output.mkdir(parents=True)

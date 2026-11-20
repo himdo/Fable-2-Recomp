@@ -63,7 +63,8 @@ Checks that the generated files in `constants/` match
 | `tools/test_manifest_collisions.py` | The check for manifest names that clash with DLL exports reports every clash, ignores commented-out names, rejects a missing, unreadable or empty DLL, and the real manifest avoids the kernel wait names that once broke audio. One known issue is marked as an expected failure |
 | `tools/test_mouse_log_format.py` | The lines the game writes to `fable2_mouse.log` (poll lines from `src/input/mouse_diag.h`, camera updates from `mouse_diag.lua` with the direct mouse camera's turn, and the `f2 mouse inject` and `f2 mouse mode` notes) are read the way `mouse_stats.py` expects. Reads the format strings from the source, so a renamed field fails here |
 | `tools/test_mouse_stats.py` | The `fable2_mouse.log` summariser splits the log into one run per `f2 mouse inject`, counts polls and camera updates, works out how much movement the camera saw with and without smoothing, scores the steady yaw per update while leaving out the ends of a run, adds up the total turn (stick and direct mouse camera) with the share that coasted on after the input stopped and how fast the turn got going, labels each run with its speed profile and mouse mode, ends a run early at its `f2 mouse stop` note, and prints the text and JSON reports |
-| `tools/test_package_release.py` | The release zip holds only the listed files, its build info is stamped with the version while the build folder's copy stays unstamped, symbols stay separate, checksums match, files from an earlier package are removed, and a missing file, symbol file or recomp Lua script stops packaging before anything is written |
+| `tools/test_make_upgrade_test_zip.py` | The tool that turns a published release zip into a test release for the in-place upgrade keeps the files, stamps the new version, adds the file list with checksums, swaps in or leaves out the files it is told to, and stops on a file that isn't there or a zip that isn't a release |
+| `tools/test_package_release.py` | The release zip holds only the listed files, its build info is stamped with the version while the build folder's copy stays unstamped, and lists every other file with its checksum, the settings file as the player's own and the package layout the launcher accepts. Symbols stay separate, checksums match, files from an earlier package are removed, and a missing file, symbol file or recomp Lua script stops packaging before anything is written |
 | `tools/test_prepare_renderer_mspack.py` | The libmspack fallback replaces symlinks that Windows checked out as text files with their targets' contents, and reports how many it replaced. It leaves ordinary files and real symlinks alone, and also works on a second run, a deleted file or a trailing newline. It stops when the checkout isn't at the public pin, a target is missing or outside the checkout, or a file has local edits. Uses small throwaway git repos |
 | `tools/test_prepare_runtime_sdk.py` | The SDK prepare step rejects a missing or non-git folder and a checkout without libmspack, skips setup with `--skip-dependencies`, marks libmspack stored as plain files as set up (also on a second run), repins libmspack stored as a submodule, and says a failed submodule update needs network access. Uses small throwaway git repos. Two known issues are marked as expected failures |
 | `tools/test_runtime_staging.py` | Debug and Release builds stage the SDK files, and staging fails before copying if an input is missing |
@@ -111,6 +112,27 @@ graphics and FPS options, dropdown styling, game version checks, the game
 folder check, the executable and folders a launch uses, update checks and ISO
 extraction from a synthetic disc image. It prints a line for each group
 that passes. The project targets plain .NET 8, but CI only runs it on Windows.
+
+`Fable2.Launcher.ConfigTests/ReleaseUpgradeTests.cs` covers the in-place
+upgrade with small made-up releases served from memory:
+
+- The update check only offers an upgrade for a single release zip from this
+  repo with a size and SHA-256.
+- An upgrade replaces, adds and removes the release's files, and leaves
+  saves, settings, the extracted game and the player's own files as they
+  were. Edited release files are copied to `launcher-update-backup` first.
+- A download that is cut short, has another checksum, does not match its own
+  file list, has no list or an unknown layout, is another version than
+  announced, or holds unsafe paths is refused.
+- A full disk, a running game, a second upgrade at the same time, a folder in
+  the way and a cancelled or stalled download are refused.
+- A switch that fails half-way is undone, and one that is interrupted is
+  undone on the next start.
+
+After each refusal or failure the test compares the whole folder with how it
+was before. These tests can't cover what only Windows does: replacing the exe
+of the running launcher, and noticing a running game. See
+[trying the in-place upgrade by hand](#optional-trying-the-in-place-upgrade-by-hand).
 
 ### Native tests
 
@@ -201,3 +223,50 @@ out\tests\runtime-unit-tests\xex-goty-compatible.exe --xex <path to default.xex>
 ```
 
 Run `tests\run_native_tests.cmd` first to build the second one.
+
+## Optional: trying the in-place upgrade by hand
+
+The launcher's upgrade can be tried on Windows without publishing a release.
+A Debug build of the launcher offers a local zip as the update when
+`FABLE2_TEST_UPDATE_ZIP` points at one; Release builds don't have this.
+`tools/make_upgrade_test_zip.py` makes such a zip from a release zip
+downloaded from GitHub.
+
+```cmd
+rem Two launchers that differ, so the upgrade has to replace the one that is running.
+dotnet publish launcher\Fable2.Launcher\Fable2.Launcher.csproj -c Debug -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o out\tests\launcher-debug
+build.cmd launcher
+
+rem The release to start from (9.0.0, with the Debug launcher) and the one to upgrade to (9.0.1).
+python tools\make_upgrade_test_zip.py Fable_2_recomp_v1.6.1_windows.zip --version 9.0.0 --replace Fable2Launcher.exe=out\tests\launcher-debug\Fable2Launcher.exe
+python tools\make_upgrade_test_zip.py Fable_2_recomp_v1.6.1_windows.zip --version 9.0.1 --replace Fable2Launcher.exe=out\tests\launcher-build\Fable2Launcher.exe --drop data/scripts/recomp/stress_noop.lua
+```
+
+Unzip `out\upgrade-test\Fable_2_recomp_v9.0.0_windows.zip` somewhere, extract
+your disc into it or copy a `saves` folder in, and change a setting so that
+`fable2_config.toml` differs from the default. Then start its launcher with
+the variable set and click **Update to 9.0.1**:
+
+```cmd
+set FABLE2_TEST_UPDATE_ZIP=%CD%\out\upgrade-test\Fable_2_recomp_v9.0.1_windows.zip
+"C:\path\to\Fable 2 9.0.0\Fable2Launcher.exe"
+```
+
+What to check:
+
+- The launcher restarts by itself, and `fable2_build.json` says 9.0.1.
+- Saves, `fable2_config.toml`, `fable_2.toml` and the extracted game are
+  unchanged, and the game starts and loads a save.
+- `data\scripts\recomp\stress_noop.lua` is gone, and the `launcher-update`
+  folder is gone a few seconds after the new launcher opened.
+- With the game running, the update is refused and says `fable_2.exe` is in
+  use. Nothing in the folder changes.
+- With an edited `data\scripts\recomp\F5.lua`, your version ends up in
+  `launcher-update-backup\9.0.0`.
+- From a folder Windows protects (under `C:\Program Files`), the update is
+  refused with a message about the folder, not a crash.
+- Closing the window during the download cancels the update and leaves no
+  `launcher-update` folder after the next start.
+- Windows Defender or SmartScreen does not block the new files.
+
+Unzip 9.0.0 again for each run: after an upgrade the folder is 9.0.1.

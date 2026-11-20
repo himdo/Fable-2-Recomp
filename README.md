@@ -15,7 +15,7 @@ You need your own Fable 2 GOTY disc image (`.iso`) and about 7 GB of free space.
 3. Click **Extract from ISO** and pick your `.iso`. The game files go into the launcher's folder.
 4. Click **Play Fable II**.
 
-**Updating:** unzip the new release into its own folder, copy your `saves` folder across and extract your `.iso` again.
+**Updating:** when the launcher shows **Update to x.y.z**, click it. It downloads the release, checks it and replaces the program files in place; your saves, settings and extracted game files stay as they are. To update by hand instead, unzip the new release into its own folder, copy your `saves` folder across and extract your `.iso` again.
 
 **Need help?** Ask on the [Discord](https://discord.gg/8TQUZpPNeR). To compile the game yourself, see [Building](#building).
 
@@ -70,8 +70,12 @@ matches the `x360extract` tool byte for byte — making the launcher the simples
 way to get the game files in place, with no separate extractor tool.
 
 Packaged releases check GitHub for a newer release when the launcher opens and
-show a button that opens its page. Local builds don't check, and a failed check
-is ignored.
+show an **Update to x.y.z** button. It downloads the release, checks it against
+the checksums GitHub and the release itself state, and replaces the program
+files in the launcher's folder. Saves, settings and the extracted game files
+are never overwritten, and a failed or interrupted update is undone. See
+[updating in place](launcher/README.md#updating-in-place). Local builds don't
+check, and a failed check is ignored.
 
 The game-folder selection defaults to the launcher's own folder on first launch
 and then remembers the user's saved location. Game files can live separately;
@@ -547,6 +551,13 @@ This builds the Release game and the launcher, then writes the player zip, a
 separate zip of debug symbols and `SHA256SUMS` to `out\dist`. The version comes
 from `git describe --tags`, so build from a release tag. Only the files listed
 in `tools/package_release.py` are packaged, so game files, saves and logs stay out.
+
+Attach the `windows` zip to the GitHub release as it is. Launchers that are
+already installed upgrade themselves from it: they need exactly one
+`Fable_2_recomp_v*_windows.zip` on the release, and the list of files and
+checksums that packaging writes into the zip's `fable2_build.json`. A zip that
+was repacked by hand, or a release with a second `windows` zip, still works
+for a manual download, but the launcher then only links to the release page.
 
 ## Vulkan renderer
 
