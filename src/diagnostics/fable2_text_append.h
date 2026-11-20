@@ -221,12 +221,20 @@ inline bool rdable(uint64_t h, size_t n) {
 #endif
 }
 
+// Guest addresses below 64 KB are never mapped. Off Windows rdable()/wr()
+// cannot query the host mapping and always answer yes, so a null-based guest
+// pointer (e.g. 0 + 16 when a Lua argument is not a string) would fault the
+// host; reject those here on every platform.
+inline bool guest_range_ok(uint32_t a, size_t n) {
+  return a >= 0x10000u && uint64_t(a) + n <= 0x100000000ull;
+}
+
 inline bool rdable2(const uint8_t* base, uint32_t a, size_t n) {
-  return rdable(host_addr(base, a), n);
+  return guest_range_ok(a, n) && rdable(host_addr(base, a), n);
 }
 
 inline bool wr2(const uint8_t* base, uint32_t a, size_t n) {
-  return wr(host_addr(base, a), n);
+  return guest_range_ok(a, n) && wr(host_addr(base, a), n);
 }
 
 inline uint32_t load_be(const uint8_t* base, uint32_t a) {

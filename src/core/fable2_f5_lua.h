@@ -96,6 +96,11 @@ inline std::atomic<uint32_t> g_method{0}; // member fn (CScriptManager::RunScrip
 // stale-`this` case even when the new first word happens to be a plausible
 // pointer.
 inline std::atomic<uint32_t> g_expected_head{0};
+// The capture probe (LuaBind_RunScript_82806168 below) calls a guest function
+// on every Lua->C++ method call while armed. It is armed until the first
+// capture, and again when run_external finds the manager moved; otherwise
+// every call goes straight to the game's dispatcher.
+inline std::atomic<bool> g_probe_armed{true};
 
 // Monotonic F5 run counter: the crash log (fable2_f5_lua.log is flushed per
 // line) always shows the last run number before a hard crash.
@@ -198,6 +203,7 @@ inline bool run_external(PPCContext& ctx, uint8_t* base, const std::string* path
   }
   const uint32_t expected_head = g_expected_head.load();
   if (expected_head != 0 && head != expected_head) {
+    g_probe_armed.store(true, std::memory_order_relaxed);  // re-capture
     logline("[f5] this=0x%08X head=0x%08X != expected 0x%08X (manager moved or "
             "freed); skipping\n",
             this_ptr, head, expected_head);
@@ -293,6 +299,10 @@ inline void poll_world(PPCContext& ctx, uint8_t* base) {
 // ".lua" — that is the real CScriptManager::RunScript callable.
 extern "C" void LuaBind_RunScript_82806168(PPCContext& ctx, uint8_t* base) {
   using namespace fable2::f5lua;
+  if (!g_probe_armed.load(std::memory_order_relaxed)) {
+    __imp__LuaBind_RunScript_82806168(ctx, base);
+    return;
+  }
   const uint32_t bound = ctx.r3.u32;  // bound-object for this method call
 
   if (bound != 0 && bound != 0xFFFFFFFF && ta::rdable2(base, bound, 16)) {
@@ -348,6 +358,7 @@ extern "C" void LuaBind_RunScript_82806168(PPCContext& ctx, uint8_t* base) {
         const uint32_t head_now =
             ta::rdable2(base, this_ptr, 4) ? ta::load_be(base, this_ptr) : 0;
         g_expected_head.store(head_now, std::memory_order_relaxed);
+        g_probe_armed.store(false, std::memory_order_relaxed);
         logline("[f5] RunScript callable (re)captured this=0x%08X method=0x%08X "
                 "head=0x%08X path='%s'\n",
                 this_ptr, method, head_now, pathbuf);
