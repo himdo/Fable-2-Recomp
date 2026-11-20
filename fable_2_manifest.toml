@@ -39,12 +39,16 @@ setjmp_address = 0x83000200
 
 # Register optimisations for the recompiled code (keep them above the first
 # [[entrypoint.midasm_hook]]: below it they belong to that hook and codegen
-# never sees them). EXPERIMENTAL Deck build: four of the six that passed
-# himdo's Windows play test (fix-manifest-codegen-flags, 2026-11-19) are on.
-# skip_lr and skip_msr (risky on rare paths) are off after a Deck crash in a
-# guard fight; the two that hang or crash stay off too.
+# never sees them). Deck build: five of the six that passed himdo's Windows
+# play test (fix-manifest-codegen-flags, 2026-11-19) are on. skip_msr drops
+# the global lock around guest interrupt-off sections; every such section in
+# this game is a single lwarx/stwcx. atomic update, which is atomic without
+# it. skip_lr stays off: the game uses LR as data (a blrl call, longjmp's
+# unwind, hooks that identify their caller by LR). The two that hang or
+# crash stay off too. (The guard-fight crash first blamed on these flags was
+# the F5 Lua probe's null read, fixed in src/core/fable2_f5_lua.h.)
 skip_lr = false
-skip_msr = false
+skip_msr = true
 ctr_as_local = true
 xer_as_local = true
 reserved_as_local = true
