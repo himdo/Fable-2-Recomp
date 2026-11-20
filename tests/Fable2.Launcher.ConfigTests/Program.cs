@@ -405,8 +405,6 @@ try
         GuiEveryHfTick = false,
         Interpolation = false,
         DisableMotionBlur = true,
-        RealtimeTextureMorphing = true,
-        HeroDogTextureReadback = false,
         HotFuncYieldEvery = 4,
         PhotoModeEnabled = false,
         PhotoModeToggleKey = "F7",

@@ -38,8 +38,6 @@ public class Fable2ConfigValues
     public bool GuiEveryHfTick { get; set; } = true;
     public bool Interpolation { get; set; } = true;
     public bool DisableMotionBlur { get; set; } = false;
-    public bool RealtimeTextureMorphing { get; set; } = true;
-    public bool HeroDogTextureReadback { get; set; } = false;
 
     // [perf]
     public int HotFuncYieldEvery { get; set; } = 1;  // 1 = original, 0 = never yield
@@ -150,8 +148,6 @@ public static class Fable2ConfigFile
                     else if (key == "gui_every_hf_tick") values.GuiEveryHfTick = ParseBool(rawValue, values.GuiEveryHfTick);
                     else if (key == "interpolation") values.Interpolation = ParseBool(rawValue, values.Interpolation);
                     else if (key == "disable_motion_blur") values.DisableMotionBlur = ParseBool(rawValue, values.DisableMotionBlur);
-                    else if (key == "realtime_texture_morphing") values.RealtimeTextureMorphing = ParseBool(rawValue, values.RealtimeTextureMorphing);
-                    else if (key == "hero_dog_texture_readback") values.HeroDogTextureReadback = ParseBool(rawValue, values.HeroDogTextureReadback);
                     break;
                 case "perf":
                     if (key == "hotfunc_yield_every") values.HotFuncYieldEvery = ParseInt(rawValue, values.HotFuncYieldEvery);
@@ -207,8 +203,6 @@ public static class Fable2ConfigFile
             ("patches", "gui_every_hf_tick", values.GuiEveryHfTick ? "true" : "false"),
             ("patches", "interpolation", values.Interpolation ? "true" : "false"),
             ("patches", "disable_motion_blur", values.DisableMotionBlur ? "true" : "false"),
-            ("patches", "realtime_texture_morphing", values.RealtimeTextureMorphing ? "true" : "false"),
-            ("patches", "hero_dog_texture_readback", values.HeroDogTextureReadback ? "true" : "false"),
             ("perf", "hotfunc_yield_every", values.HotFuncYieldEvery.ToString(CultureInfo.InvariantCulture)),
             ("photo_mode", "enabled", values.PhotoModeEnabled ? "true" : "false"),
             ("photo_mode", "toggle_key", Quote(values.PhotoModeToggleKey)),

@@ -1,4 +1,4 @@
-// With realtime_texture_morphing on, the render loop's morph release
+// Realtime texture morphing is always on, so the render loop's morph release
 // (8235E0D8 at 0x8236C7E8) flushes the pending morph jobs after the final
 // pass, and their EDRAM draws clobber the frame Present resolves (a band on
 // the last loading-screen frame). Run it right after Present instead.
@@ -7,8 +7,6 @@
 #include <cstdint>
 
 #include <rex/ppc/context.h>
-
-#include "fable2_config.h"
 
 namespace fable2::morph_release_defer {
 
@@ -25,8 +23,7 @@ inline thread_local Pending g_pending;
 extern "C" void ProcessAndProcessAndProcess1410_8235E0D8(PPCContext& ctx,
                                                          uint8_t* base) {
   auto& p = fable2::morph_release_defer::g_pending;
-  if (uint32_t(ctx.lr) == 0x8236C7E8 && !p.set &&
-      fable2::config::Get().realtime_texture_morphing) {
+  if (uint32_t(ctx.lr) == 0x8236C7E8 && !p.set) {
     p = {true, ctx.r3.u32, ctx.r4.u32};
     return;
   }

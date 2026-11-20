@@ -2,7 +2,8 @@
 
 **STATUS: IMPLEMENTED, verified in game** (hero face and dog no longer black
 with `hero_dog_texture_readback = false`). Supersedes the targeted readback in
-`hero-dog-texture-readback.md`, which stays available as a fallback.
+`hero-dog-texture-readback.md`, which has since been removed. The fix is now
+always on; there is no config toggle.
 
 ## Root cause (from the XEX)
 
@@ -44,9 +45,8 @@ Both end up in `sub_82A76018`, which copies the request byte with
 
 One mid-asm hook, `fable2_hook_realtime_texture_morphing` at `0x82A7607C`
 (after the load), sets `r9 = 1` so every morph job runs in realtime mode.
-Toggle: `[patches] realtime_texture_morphing` (default `true`).
-`hero_dog_texture_readback` now defaults to `false`; it only matters with the
-new toggle off.
+Always on. (It was the `[patches] realtime_texture_morphing` toggle, default
+`true`; the toggle and the old `hero_dog_texture_readback` fallback were removed.)
 
 Cost: the morphed textures are uncompressed (a few MB more guest memory). The
 morphs are still only rebuilt when the appearance changes (a burst at load,
