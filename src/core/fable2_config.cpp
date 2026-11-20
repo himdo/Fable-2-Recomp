@@ -277,12 +277,13 @@ interpolation = true
 # Default: false
 disable_motion_blur = false
 
-# Disable MSAA (override of sub_8238DE58, the render-settings setup): the game
-# sets up its main render targets with 2x multisample anti-aliasing (mode 2 at
-# +156, next to the 1120x720 render size). This sets mode 1, as the Xenia
-# "Disable MSAA" patch for this executable does (li r9,2 -> li r9,1 at
-# 0x8238DF3C). Much less GPU work on the emulated EDRAM; edges are jaggier.
-# Takes effect at start-up. false = original 2x MSAA.
+# Disable MSAA (override of InitRenderSettings_8238DE58, the render settings
+# setup): the game sets up its main render targets with 2x multisample
+# anti-aliasing (mode 2 at +156, next to the 1120x720 render size). This sets
+# mode 1, as the Xenia "Disable MSAA" patch for this executable does
+# (li r9,2 -> li r9,1 at 0x8238DF3C). Much less GPU work on the emulated EDRAM;
+# edges are jaggier. Takes effect at start-up. Also in the F4 settings menu
+# (Patches). false = original 2x MSAA.
 # Default: false
 disable_msaa = false
 
@@ -709,8 +710,7 @@ bool Load(const std::filesystem::path& path) {
 
 const Values& Get() { return g_values; }
 
-bool SavePhotoModeGamepadToggle(const std::string& combo) {
-  g_values.photo_mode_gamepad_toggle = combo;
+bool SaveSetting(std::string_view section, std::string_view key, std::string_view toml_value) {
   if (g_path.empty()) return false;
   std::string text;
   {
@@ -718,14 +718,15 @@ bool SavePhotoModeGamepadToggle(const std::string& combo) {
     if (!in) return false;
     text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
   }
-  const std::string line = "gamepad_toggle = \"" + combo + "\"";
+  const std::string header = "[" + std::string(section) + "]";
+  const std::string line = std::string(key) + " = " + std::string(toml_value);
   const std::string eol = text.find("\r\n") != std::string::npos ? "\r\n" : "\n";
-  // Find the [photo_mode] section and, inside it, the gamepad_toggle line.
-  size_t sec = text.find("\n[photo_mode]");
-  if (sec == std::string::npos && text.rfind("[photo_mode]", 0) == 0) sec = 0;
+  // Find the section and, inside it, the key's line.
+  size_t sec = text.find("\n" + header);
+  if (sec == std::string::npos && text.rfind(header, 0) == 0) sec = 0;
   if (sec == std::string::npos) {
     if (!text.empty() && text.back() != '\n') text += eol;
-    text += eol + "[photo_mode]" + eol + line + eol;
+    text += eol + header + eol + line + eol;
   } else {
     const size_t body = text.find('\n', sec + 1);
     size_t end = body == std::string::npos ? text.size() : text.find("\n[", body);
@@ -737,11 +738,16 @@ bool SavePhotoModeGamepadToggle(const std::string& combo) {
       if (le == std::string::npos) le = text.size();
       const std::string_view l(text.data() + pos, le - pos);
       const size_t k = l.find_first_not_of(" \t");
-      if (k != std::string_view::npos && l.substr(k).rfind("gamepad_toggle", 0) == 0) {
-        const size_t cut = (le > pos && text[le - 1] == '\r') ? le - 1 : le;
-        text.replace(pos, cut - pos, line);
-        replaced = true;
-        break;
+      if (k != std::string_view::npos) {
+        // The key itself, not a longer key that starts with it.
+        const std::string_view rest = l.substr(k);
+        const size_t after = rest.find_first_not_of(" \t", key.size());
+        if (rest.rfind(key, 0) == 0 && after != std::string_view::npos && rest[after] == '=') {
+          const size_t cut = (le > pos && text[le - 1] == '\r') ? le - 1 : le;
+          text.replace(pos, cut - pos, line);
+          replaced = true;
+          break;
+        }
       }
       pos = le + 1;
     }
@@ -753,8 +759,18 @@ bool SavePhotoModeGamepadToggle(const std::string& combo) {
   std::ofstream out(g_path, std::ios::binary | std::ios::trunc);
   if (!out) return false;
   out << text;
-  REXSYS_INFO("[fable2-config] photo_mode.gamepad_toggle = \"{}\" saved to {}", combo, g_path.string());
+  REXSYS_INFO("[fable2-config] {}.{} = {} saved to {}", section, key, toml_value, g_path.string());
   return bool(out);
+}
+
+bool SavePhotoModeGamepadToggle(const std::string& combo) {
+  g_values.photo_mode_gamepad_toggle = combo;
+  return SaveSetting("photo_mode", "gamepad_toggle", "\"" + combo + "\"");
+}
+
+bool SaveDisableMsaa(bool disable) {
+  g_values.disable_msaa = disable;
+  return SaveSetting("patches", "disable_msaa", disable ? "true" : "false");
 }
 
 const char* DefaultTemplate() { return kTemplate; }

@@ -203,7 +203,7 @@ struct Values {
   // src/core/fable2_hooks.cpp). false = original.
   bool disable_motion_blur = false;
   // [patches] disable_msaa: render without the game's multisample anti-aliasing
-  // (override of sub_8238DE58, src/core/hotfunc/render/DisableMsaa_8238DE58.cpp).
+  // (override of InitRenderSettings_8238DE58, src/core/hotfunc/render/InitRenderSettings_8238DE58.cpp).
   bool disable_msaa = false;
   // [patches] realtime_texture_morphing: build the hero/dog morphed skin
   // textures on the GPU (the game's own RealTimeTextureMorphing mode) instead
@@ -279,7 +279,13 @@ const Values& Get();
 
 // Change [photo_mode] gamepad_toggle in memory and in the file Load() read
 // (only that line is rewritten; comments and the rest are kept).
+// Rewrite one `key = value` line of fable2_config.toml in place (adding the
+// line, or the section, when missing), keeping the rest of the file and its
+// line endings. toml_value is written as given (quote strings yourself).
+bool SaveSetting(std::string_view section, std::string_view key, std::string_view toml_value);
 bool SavePhotoModeGamepadToggle(const std::string& combo);
+// [patches] disable_msaa, written back when the F4 settings menu changes it.
+bool SaveDisableMsaa(bool disable);
 
 // The default template written when the file is missing. Must match
 // config/fable2_config.toml in the repo (staged next to the exe by the build).

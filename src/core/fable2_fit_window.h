@@ -9,7 +9,7 @@
 // is_widescreen flag (0x83360158 + 12) and then loads two .rdata floats:
 //   0x8209FE7C = 16/9  the projection aspect ratio (widescreen path)
 //   0x8209FDF4 =  4/3  the 4:3 reference the FOV is widened from (Hor+)
-// The scene is drawn into a fixed 1120x720 buffer (sub_8238DE58) and the
+// The scene is drawn into a fixed 1120x720 buffer (InitRenderSettings_8238DE58) and the
 // presenter scales it to the display, so the buffer is already anamorphic.
 // Pepper's Xenia "21:9 Widescreen" patch sets these two floats to 21/9 and
 // 16/9; this keeps the same 4:3 ratio between them for any window shape:

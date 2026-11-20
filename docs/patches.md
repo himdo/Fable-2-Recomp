@@ -181,8 +181,8 @@ the 1% low (`low1%`, the rate of the slowest 1% of frames), the longest frame
    `4D5307F1 - Fable II (GOTY).patch.toml`). Done as mid-asm hooks:
    **Unlock Website Items**, **Unlock CE Content** (all re-derived for THIS
    build — see the recomp-level patches table above). **Disable MSAA** is done
-   as a strong-symbol override of the render setup `sub_8238DE58`
-   (`src/core/hotfunc/render/DisableMsaa_8238DE58.cpp`, `[patches]
+   as a strong-symbol override of the render setup `InitRenderSettings_8238DE58` (was `sub_8238DE58`)
+   (`src/core/hotfunc/render/InitRenderSettings_8238DE58.cpp`, `[patches]
    disable_msaa`): its ops do match this build — `0x8238DF3C` is `li r9,2`, the
    MSAA mode stored at `+156` of the settings object in r3 (the patch makes it
    `li r9,1`), next to the 1120x720 render size at `+148`/`+152` — but as
