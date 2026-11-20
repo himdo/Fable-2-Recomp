@@ -53,7 +53,7 @@ are hand-written readable C++ rewrites (see
 | `entity/ProcessGameStateUpdate_821C9008.cpp` | **hand-tuned** (was nv (34)) |
 | `yield/Yield_82CBD098.cpp` | nv (3) + batched yield |
 | `vblank/FrameLimiterWait_82242628.cpp` | **hand-tuned** (goto-free rewrite, volatile guest access; see below) |
-| `camera/AimCursorUpdate_827B80B0.cpp` | **wrapper**, not a copy: records "aiming now" for the mouse aim stick swap (`src/input/mouse_aim.h`), then calls `__imp__sub_827B80B0`. Not in the generator's table. |
+| `camera/AimCursorUpdate_827B80B0.cpp` | **wrapper**, not a copy: records "aiming now" for the mouse aim stick swap (`src/input/mouse_aim.h`), then calls `__imp__AimCursorUpdate_827B80B0`. Not in the generator's table. |
 
 Transforms:
 - **nv** — non-volatile `GV*/SV*` guest-RAM access (rules below).

@@ -20,8 +20,8 @@
 // When to swap (cvar mouse_aim_mode, `f2 mouse aim <mode>`):
 //   off     never
 //   rmb     while the aim button (any key bound to pad Y) is held
-//   detect  while the game is aiming: sub_827B80B0, which only runs while
-//           aiming, reported in within AimTimeoutUs
+//   detect  while the game is aiming: AimCursorUpdate_827B80B0, which only
+//           runs while aiming, reported in within AimTimeoutUs
 //           (src/core/hotfunc/camera/AimCursorUpdate_827B80B0.cpp)
 //   both    both of the above (the default): releasing the button stops the
 //           swap at once, and holding it before aim begins doesn't walk the
@@ -264,8 +264,9 @@ inline AimDirectSettings& DirectSettings() {
 constexpr int64_t kAimBootGraceUs = 1000000;
 
 // The targeting object's highlight state around one cursor update, for the
-// log (read from the generated code of sub_827B6228 / sub_827B80B0 /
-// sub_827B5888; field meanings not yet confirmed in game):
+// log (read from the generated code of AimTargetingUpdate_827B6228 /
+// AimCursorUpdate_827B80B0 / AimStickFlickDetect_827B5888; field meanings
+// not yet confirmed in game):
 //   handle_set  +60 != 0 after the update: a highlighted target's handle is
 //               set (the game also checks the target is still valid, which
 //               the hook doesn't, to stay clear of guest calls);
@@ -305,9 +306,9 @@ inline Targeting UnpackTargeting(uint32_t bits) {
 
 // Where the highlighted target sits in cursor units (the +32/+36 space), for
 // the log (phase A of the highlight fix: is the reticle drawn there?). The
-// hook projects the target's world position (sub_827BB550) through the game
-// camera (sub_827BB948), only while a highlight is set and the mouse log is
-// on. `front`:
+// hook projects the target's world position (AimTargetGetWorldPos_827BB550)
+// through the game camera (AimProjectToCursor_827BB948), only while a
+// highlight is set and the mouse log is on. `front`:
 constexpr int32_t kTargetNotComputed = -1;  // no highlight, or the log is off
 constexpr int32_t kTargetBehind = 0;        // behind the camera: no x/y
 constexpr int32_t kTargetInFront = 1;       // x/y valid
@@ -320,16 +321,16 @@ struct TargetPos {
 
 // Letting go of a highlight with the mouse (cvar mouse_aim_release, PR #183
 // review). While a target is highlighted, the targeting update
-// (sub_827B6228) re-projects the target into the cursor every tick, so the
-// direct mouse add never builds up, and only the left stick's flick/held
-// flags let go. With release on, the cursor hook:
+// (AimTargetingUpdate_827B6228) re-projects the target into the cursor every
+// tick, so the direct mouse add never builds up, and only the left stick's
+// flick/held flags let go. With release on, the cursor hook:
 //   - lets go of the highlight on any tick with mouse movement (the game's own
 //     empty-handle assign), after pointing the stored aim point (+128) at the
 //     target, so the next tick's re-projection starts where the reticle was;
-//   - keeps the game's own target pick (sub_827B9CD0) off while the mouse is
-//     moving and for kPickHoldUs after, so a sweep doesn't snap onto everyone
-//     it passes. Once the mouse rests, the pick (the game's aim assist) runs
-//     as usual.
+//   - keeps the game's own target pick (AimTargetSearch_827B9CD0) off while
+//     the mouse is moving and for kPickHoldUs after, so a sweep doesn't snap
+//     onto everyone it passes. Once the mouse rests, the pick (the game's aim
+//     assist) runs as usual.
 constexpr int64_t kPickHoldUs = 150000;
 
 inline bool ShouldRelease(bool enabled, bool moved, bool target_valid) {
@@ -341,8 +342,8 @@ inline bool HoldPicks(bool enabled, int64_t now_us, int64_t last_move_us) {
   return enabled && last_move_us != 0 && now_us - last_move_us < kPickHoldUs;
 }
 
-// How the game's target search (sub_827B9CD0) behaves inside one cursor
-// update. Set by the cursor hook around the original update on its own
+// How the game's target search (AimTargetSearch_827B9CD0) behaves inside one
+// cursor update. Set by the cursor hook around the original update on its own
 // thread, read by the target-search hook: other callers of the search (other
 // threads, or outside the update) are never affected.
 //   suppress  answer "nobody" (the mouse is moving: HoldPicks);
@@ -694,9 +695,10 @@ inline AimState& State() {
   return s;
 }
 
-// The aim chain (sub_827B60C8) maps the stick s to |s|³ in the same direction
-// before smoothing: sub_822A8EF8 normalises the vector and returns its length,
-// which is then cubed (read from the generated code; not yet measured in game).
+// The aim chain (AimStickShape_827B60C8) maps the stick s to |s|³ in the same
+// direction before smoothing: Vec2NormalizeGetLength_822A8EF8 normalises the
+// vector and returns its length, which is then cubed (read from the generated
+// code; not yet measured in game).
 // Where the left stick becomes the aim action isn't located, so any deadzone
 // there is unknown; 0 until measured with `f2 pad stick` (context/mouse
 // aiming/, test 3).
