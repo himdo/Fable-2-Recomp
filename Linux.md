@@ -263,7 +263,9 @@ guest_vblank_pacing = false
 ```
 
 **Button icons:** the button prompts show the Steam Deck's buttons (L1/R1,
-L2/R2, View/Menu, ...) in the game's own style. `deck_button_prompts` under
+L2/R2, View/Menu, ...) in the game's own style, in the pub games too (their
+movies are rewritten at start-up; the untouched copy is kept as
+`data/pubgames/<game>/game.swf.orig`). `deck_button_prompts` under
 `[input]` in `fable2_config.toml` picks `"dark"` (the default) or `"light"`
 buttons, or `"off"` for the game's original Xbox 360 icons.
 

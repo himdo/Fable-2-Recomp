@@ -36,6 +36,7 @@
 #include "fable2_keycap_swap.h"
 #include "fable2_patches.h"
 #include "prompt_textures.h"
+#include "pubgame_prompts.h"
 // #include "fable2_deadbeef_overlay.h"
 // 30fps-cap instrumentation (writes fps_probe.log next to the exe). Disabled
 // now that the cap is lifted via REX_VSYNC=0 (see tools/fable2-uncapped.cmd).
@@ -170,6 +171,11 @@ class Fable2App : public rex::ReXApp {
     fable2::keycap::Instance().SetTextures(fable2::gui::BuildPromptTextures(
         game_data_root(), fable2::config::Get().keyboard_gamepad_map,
         fable2::config::Get().mouse_look, deck_set == "off" ? std::string{} : deck_set));
+    // The pub games (Scaleform movies) draw their own buttons: rewrite their
+    // button clip too (src/gui/pubgame_prompts.h), or put the originals back.
+    for (const std::string& line : fable2::gui::BuildPubGamePrompts(
+             game_data_root(), deck_set == "off" ? std::string{} : deck_set))
+      REXSYS_INFO("[pubgame-prompts] {}", line);
   }
 
   void OnPostSetup() override {

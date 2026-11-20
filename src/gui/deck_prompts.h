@@ -268,6 +268,23 @@ inline Image OnMedallion(const std::vector<uint8_t>& medallion, int size, const 
   return out;
 }
 
+// A glyph scaled to fit a w x h box (keeping its shape, centred) with a thin
+// dark edge, drawn over `im` at (x0, y0) after clearing the box.
+inline void FitInto(Image& im, const Image& glyph, int x0, int y0, int w, int h) {
+  for (int y = y0; y < y0 + h; ++y)
+    for (int x = x0; x < x0 + w; ++x)
+      if (x >= 0 && y >= 0 && x < im.w && y < im.h) std::fill_n(im.at(x, y), 4, uint8_t(0));
+  const float edge = std::fmax(0.8f, std::fmin(w, h) / 32.0f);
+  const int pad = int(std::ceil(edge)) + 1;
+  const float s = std::fmin(float(w - 2 * pad) / glyph.w, float(h - 2 * pad) / glyph.h);
+  const int gw = std::max(1, int(std::lround(glyph.w * s)));
+  const int gh = std::max(1, int(std::lround(glyph.h * s)));
+  const Image g = Scaled(glyph, gw, gh);
+  const int ox = x0 + (w - gw) / 2, oy = y0 + (h - gh) / 2;
+  Over(im, Outline(g, edge, 20, 15, 10, 0.9f), ox - pad, oy - pad);
+  Over(im, g, ox, oy);
+}
+
 // The glyph for a controller icon, by lowercase bank entry name; "" when the
 // icon isn't a button prompt.
 inline std::string GlyphFor(const std::string& name) {
@@ -299,6 +316,10 @@ inline bool IsFaceGlyph(const std::string& stem) { return stem.rfind("shared_but
 
 inline constexpr const char* kFaceAtlas = "art\\gui\\persistant\\abyx.tex";
 inline constexpr const char* kFramesAtlas = "art\\gui\\frames\\frames_elements.tex";
+// Small leftovers: the HUD sheet's Back and Start ovals, and frames_04's
+// D-pad and coloured A/B/X/Y cluster.
+inline constexpr const char* kHudAtlas = "art\\gui\\persistant\\hud.tex";
+inline constexpr const char* kFrames04 = "art\\gui\\frames\\frames_04.tex";
 
 }  // namespace deck_detail
 
@@ -310,7 +331,8 @@ inline constexpr const char* kDeckMedallion32 = "art\\gui\\controller\\24x24\\ba
 // True for the prompt textures the Steam Deck prompts replace.
 inline bool HasDeckStyle(const std::string& lower_name) {
   using namespace deck_detail;
-  return lower_name == kFaceAtlas || lower_name == kFramesAtlas || !GlyphFor(lower_name).empty();
+  return lower_name == kFaceAtlas || lower_name == kFramesAtlas || lower_name == kHudAtlas ||
+         lower_name == kFrames04 || !GlyphFor(lower_name).empty();
 }
 
 // Puts the Steam Deck prompt into one texture (full-RGBA tiled payload, w x h).
@@ -351,6 +373,86 @@ inline bool ApplyDeckStyle(const std::string& lower_name, std::vector<uint8_t>& 
       const int d = int(std::lround(s.r * 2.0f)) - 2, m = 2;
       const Image orb = Orb(*glyph(s.stem), d, m);
       Over(im, orb, int(std::lround(s.cx - orb.w / 2.0f)), int(std::lround(s.cy - orb.h / 2.0f)));
+    }
+    ToTiled(im, tiled, w);
+    return true;
+  }
+  if (lower_name == kHudAtlas) {
+    // Back and Start: small grey ovals with an arrow.
+    if (w != 512 || h != 512 || !glyph("sd_button_view") || !glyph("sd_button_menu")) return false;
+    Image im = FromTiled(tiled, w, h);
+    FitInto(im, *glyph("sd_button_view"), 394, 162, 46, 37);
+    FitInto(im, *glyph("sd_button_menu"), 393, 202, 46, 38);
+    ToTiled(im, tiled, w);
+    return true;
+  }
+  if (lower_name == kFrames04) {
+    // A D-pad, and the four coloured face buttons on a gold four-lobed plate.
+    // The plate stays: its coloured dots are painted over with the plate
+    // around them, and a small Deck button goes in each lobe.
+    if (w != 512 || h != 512 || !glyph("shared_dpad")) return false;
+    Image im = FromTiled(tiled, w, h);
+    FitInto(im, *glyph("shared_dpad"), 10, 10, 45, 45);
+    // The dots are fully saturated and bright; the plate is a darker gold
+    // (hue 20-30 degrees).
+    const int px0 = 70, px1 = 122, py0 = 5, py1 = 60;
+    auto is_dot = [&](const uint8_t* p) {
+      const float r = p[1] / 255.0f, g = p[2] / 255.0f, b = p[3] / 255.0f;
+      const float mx = std::fmax(r, std::fmax(g, b)), mn = std::fmin(r, std::fmin(g, b));
+      if (p[0] < 32 || mx < 0.7f || mx <= 0.0f || (mx - mn) / mx < 0.8f) return false;
+      float hue = mx == r ? 60.0f * std::fmod((g - b) / (mx - mn), 6.0f)
+                  : mx == g ? 60.0f * ((b - r) / (mx - mn) + 2.0f)
+                            : 60.0f * ((r - g) / (mx - mn) + 4.0f);
+      if (hue < 0) hue += 360.0f;
+      return hue < 15.0f || hue >= 35.0f;
+    };
+    std::vector<uint8_t> mask(size_t(px1 - px0) * (py1 - py0), 0);
+    auto m = [&](int x, int y) -> uint8_t& { return mask[size_t(y - py0) * (px1 - px0) + (x - px0)]; };
+    int left = 0;
+    for (int y = py0; y < py1; ++y)
+      for (int x = px0; x < px1; ++x)
+        if (is_dot(im.at(x, y))) m(x, y) = 1, ++left;
+    // Fill from the edges inwards with the average of the plate pixels around.
+    for (int pass = 0; pass < 16 && left > 0; ++pass) {
+      std::vector<std::pair<int, int>> done;
+      for (int y = py0; y < py1; ++y)
+        for (int x = px0; x < px1; ++x) {
+          if (!m(x, y)) continue;
+          float sum[3] = {0, 0, 0};
+          int n = 0;
+          for (int dy = -1; dy <= 1; ++dy)
+            for (int dx = -1; dx <= 1; ++dx) {
+              const int nx = x + dx, ny = y + dy;
+              if (nx < px0 || ny < py0 || nx >= px1 || ny >= py1 || m(nx, ny)) continue;
+              const uint8_t* q = im.at(nx, ny);
+              if (q[0] < 128) continue;
+              for (int c = 0; c < 3; ++c) sum[c] += q[1 + c];
+              ++n;
+            }
+          if (n == 0) continue;
+          uint8_t* p = im.at(x, y);
+          for (int c = 0; c < 3; ++c) p[1 + c] = Clamp8(sum[c] / n);
+          done.push_back({x, y});
+        }
+      for (const auto& [x, y] : done) m(x, y) = 0;
+      left -= int(done.size());
+    }
+    // The plate spans x 73..118, y 9..55 (centre 96, 32.5). Each button sits on
+    // a lobe's axis, 5.5 pixels in from the plate's outer edge (radius 7).
+    struct Lobe { const char* stem; float cx, cy; };
+    const Lobe lobes[4] = {{"shared_button_y", 96.0f, 21.5f}, {"shared_button_a", 96.0f, 43.5f},
+                           {"shared_button_x", 85.5f, 32.5f}, {"shared_button_b", 106.5f, 32.5f}};
+    for (const Lobe& l : lobes) {
+      if (!glyph(l.stem)) return false;
+      // Drawn at 4x and placed to a quarter pixel, since the centres fall
+      // between pixels.
+      const Image big = Orb(*glyph(l.stem), 56, 4);  // 64 x 64: a 14-pixel button
+      const float x = l.cx - big.w / 8.0f, y = l.cy - big.h / 8.0f;
+      const int ix = int(std::floor(x)), iy = int(std::floor(y));
+      const int fx = int(std::lround((x - ix) * 4)), fy = int(std::lround((y - iy) * 4));
+      Image padded((big.w + fx + 3) / 4 * 4, (big.h + fy + 3) / 4 * 4);
+      Over(padded, big, fx, fy);
+      Over(im, Scaled(padded, padded.w / 4, padded.h / 4), ix, iy);
     }
     ToTiled(im, tiled, w);
     return true;
