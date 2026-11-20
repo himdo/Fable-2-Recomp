@@ -216,6 +216,23 @@ high_tick_rate = false
 # Default: false
 higher_hf_tick_rate = false
 
+# GUI every HF tick: subtitles and HUD text update on every HF tick instead
+# of every LF tick (15 Hz in the original), so at 30 Hz, or 60 Hz with
+# higher_hf_tick_rate. Their timers already use real time, so speed is
+# unchanged. The log shows "[gui-every-hf-tick]".
+# false = text updates on LF ticks only (original).
+# Default: true
+gui_every_hf_tick = true
+# Interpolation (smoothing): cloth follows the body as it is drawn. The bodies
+# that push cloth around are blended between the last two animation poses at
+# the moment being drawn, the way the game already draws characters, instead
+# of jumping on every LF tick. Capes and coats also move with the body as drawn
+# instead of being jolted on every tick. The log shows "[interpolation]".
+# false = cloth colliders update on LF ticks only, and cloth is jolted on every
+# tick (original).
+# Default: true
+interpolation = true
+
 # Disable Motion Blur (mid-asm hook fable2_hook_disable_motion_blur): the
 # camera's full-screen motion blur amount (what scripts set via Camera.SetBlur)
 # is zeroed on its way to the renderer each frame. The camera's own value is
@@ -312,6 +329,21 @@ hotfunc_yield_every = 1
 # FPS indoors with nothing missing on screen in testing.
 # false = trust the write tracking. Default: false
 refresh_gpu_memory_each_frame = false
+
+# Idle yield sleep, in microseconds. Some guest threads wait for each other
+# by calling NtYieldExecution in a tight loop, which pins a CPU core at 100%
+# even when the game is idle (menus, loading, videos). When a thread yields
+# back to back with no work in between, it sleeps this long per yield
+# instead. The game's frame limiter, which busy-waits for the rest of every
+# frame, sleeps the same amount between polls. 0 = never sleep (original
+# behaviour). -1 = the platform default: 0 (off) on Windows, 100 elsewhere.
+# On Windows (10 version 1803 and later) the sleep uses a high-resolution
+# timer whose shortest sleep is about 500 microseconds, so smaller values
+# behave like 500 there and the frame limiter can wake up to ~0.5 ms late;
+# that is why it is off by default on Windows. On older Windows it has no
+# effect.
+# Default: -1
+idle_yield_sleep_us = -1
 
 [photo_mode]
 # Photo mode: freeze the world, fly a free camera and take screenshots, with a

@@ -51,6 +51,7 @@ public partial class MainWindow : Window
         DetectGameDirectory();
         _loading = false;
         RefreshSummary();
+        VersionText.Text = $"Version {UpdateChecker.ReadInstalledVersion(AppContext.BaseDirectory) ?? "???"}";
         Loaded += async (_, _) => await ShowAvailableUpdateAsync();
     }
 
@@ -1011,6 +1012,12 @@ public partial class MainWindow : Window
             "Double the HF tick from 30 to 60 Hz (Xenia \"Higher HF Tick Rate\"). Requires High Tick Rate.",
             _advanced.HigherHfTickRate, unstable: true,
             onChecked: () => SetPatchChecked("high_tick_rate", true));
+        AddPatchRow("GUI Every HF Tick", "gui_every_hf_tick",
+            "Update subtitles and HUD text every HF tick instead of every LF tick.",
+            _advanced.GuiEveryHfTick);
+        AddPatchRow("Interpolation", "interpolation",
+            "Keep cloth (capes, coats) in step with the drawn body.",
+            _advanced.Interpolation);
         AddPatchRow("Disable Motion Blur", "disable_motion_blur",
             "Zero the camera's full-screen motion blur amount each frame.", _advanced.DisableMotionBlur);
         AddPatchRow("Realtime Texture Morphing", "realtime_texture_morphing",
@@ -1033,6 +1040,8 @@ public partial class MainWindow : Window
                 case "skip_intro_videos": _advanced.SkipIntroVideos = value; break;
                 case "high_tick_rate": _advanced.HighTickRate = value; break;
                 case "higher_hf_tick_rate": _advanced.HigherHfTickRate = value; break;
+                case "gui_every_hf_tick": _advanced.GuiEveryHfTick = value; break;
+                case "interpolation": _advanced.Interpolation = value; break;
                 case "disable_motion_blur": _advanced.DisableMotionBlur = value; break;
                 case "realtime_texture_morphing": _advanced.RealtimeTextureMorphing = value; break;
                 case "hero_dog_texture_readback": _advanced.HeroDogTextureReadback = value; break;
