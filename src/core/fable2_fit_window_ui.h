@@ -32,6 +32,7 @@
 
 #pragma once
 
+#include "fable2_config.h"
 #include "fable2_ui_events.h"
 #include <rex/cvar.h>
 #include <rex/logging.h>
@@ -90,7 +91,7 @@ inline bool LogLayout() {
 
 inline std::atomic<rex::memory::Memory*> g_memory{nullptr};
 inline uint32_t g_script_buffer = 0;  // guest address, kScriptBufferSize bytes
-inline constexpr uint32_t kScriptBufferSize = 32 * 1024;  // build 24 script was 16.1 KB and silently never ran
+inline constexpr uint32_t kScriptBufferSize = 48 * 1024;  // build 24 script was 16.1 KB and silently never ran
 inline std::atomic<uint32_t> g_presentations{0};
 
 inline constexpr uint32_t kGamefaceCodeBegin = 0x82BA0000;
@@ -135,10 +136,110 @@ inline bool ReadGuestString(uint32_t address, std::string& out) {
 }
 
 // The Lua run in each presentation, after a first line that sets A (window
-// aspect), dx (extra canvas units per side), moveHud and logTree. Lua 5.1; every Gameface call is wrapped in pcall so a missing element or
+// aspect), dx (extra canvas units per side), moveHud, logTree and the menu
+// timing settings menuRepeat, menuAnim, menuQuick and menuAccel. Lua 5.1; every Gameface call is wrapped in pcall so a missing element or
 // attribute cannot stop the rest of the presentation's scripts.
 inline constexpr const char kScript[] = R"lua(
 local function out(s) if logTree then pcall(output, "[fitwin] " .. s) end end
+-- Menu timing ([patches] menu_instant_repeat / menu_animation_speed), set
+-- once per screen. The game's menus (scripts/gameface/guiinput.lua) step at
+-- once on a press, wait FIRST_NAVIGATE_INTERVAL (0.25 s) before the second
+-- step of a held direction and SUBSEQUENT_NAVIGATE_INTERVAL (0.14 s) after
+-- that; the list then slides to the new selection over ANIMATE_TIME (0.15 s,
+-- a global of the menu formatter), and menu fades take g_Menu.Timing's
+-- ANIMATE_TIME (0.225 s).
+pcall(function()
+  local t = type(GUI) == "table" and GUI.Timing
+  if menuRepeat and type(t) == "table" and type(t.SUBSEQUENT_NAVIGATE_INTERVAL) == "number" then
+    t.FIRST_NAVIGATE_INTERVAL = t.SUBSEQUENT_NAVIGATE_INTERVAL
+  end
+  if not menuAnim or menuAnim <= 0 or menuAnim == 1 or rawget(_G, "__f2menuAnim") then return end
+  rawset(_G, "__f2menuAnim", menuAnim)  -- once per screen
+  local a = rawget(_G, "ANIMATE_TIME")
+  if type(a) == "number" then rawset(_G, "ANIMATE_TIME", a / menuAnim) end
+  local mt = type(g_Menu) == "table" and g_Menu.Timing
+  if type(mt) == "table" and type(mt.ANIMATE_TIME) == "number" then
+    mt.ANIMATE_TIME = mt.ANIMATE_TIME / menuAnim
+    mt.OPACITY_FADE_SPEED = 1 / mt.ANIMATE_TIME
+  end
+end)
+-- Menu response and scroll acceleration ([patches] menu_instant_response /
+-- menu_scroll_acceleration), wrapped once per screen.
+pcall(function()
+  if type(GUI) ~= "table" or rawget(_G, "__f2menuWrap") then return end
+  rawset(_G, "__f2menuWrap", true)
+  -- Holding a direction: each step sets the wait before the next one
+  -- (GUI.Timing.NavigateInterval). From the second step on, shorten it from
+  -- the game's rate (SUBSEQUENT_NAVIGATE_INTERVAL, rounded up to whole GUI
+  -- updates as the game runs it) to menuAccel times as fast over 1.5 s, and
+  -- keep the time a step overshot so the rate isn't rounded to whole updates.
+  if menuAccel and menuAccel > 1 and type(GUI.DoNavigate) == "function" and
+      type(GUI.Timing) == "table" then
+    local navigate, holdStart = GUI.DoNavigate, 0
+    GUI.DoNavigate = function(...)
+      local t, inp = GUI.Timing, GUI.Input
+      local over = (t.TimeSinceLastNavigate or 0) - (t.NavigateInterval or 0)
+      navigate(...)
+      local n = type(inp) == "table" and inp.NavigationCount or 0
+      local now = getElapsedTime()
+      if n <= 1 then holdStart = now return end
+      local base = t.SUBSEQUENT_NAVIGATE_INTERVAL
+      if type(base) ~= "number" then return end
+      local dt = type(GUI.State) == "table" and GUI.State.TimeElapsed or 0
+      if type(dt) == "number" and dt > 0 then base = math.ceil(base / dt - 0.001) * dt end
+      local k = math.min((now - holdStart) / 1.5, 1)
+      local interval = base / (1 + (menuAccel - 1) * k) - 0.002
+      t.NavigateInterval = interval
+      if over > 0 then t.TimeSinceLastNavigate = math.min(over, interval * 0.9) end
+    end
+  end
+  if not menuQuick then return end
+  -- A press arrives after the menu's own per-update check (g_Menu.onUpdate)
+  -- has run, so the step waited for the next GUI update: run the check as
+  -- soon as a direction goes down.
+  if type(GUI.SetDirectionToHeld) == "function" then
+    local held = GUI.SetDirectionToHeld
+    GUI.SetDirectionToHeld = function(...)
+      local inp = GUI.Input
+      local was = type(inp) == "table" and (inp.PushingUpHeld or inp.PushingDownHeld)
+      held(...)
+      local m = rawget(_G, "g_Menu")
+      if not was and type(m) == "table" and type(m.onUpdate) == "function" then
+        pcall(m.onUpdate, m)
+      end
+    end
+  end
+  -- The slide to the new selection then started on the next update, and its
+  -- first frame showed no movement: start it at once, one update in.
+  local f = rawget(_G, "g_MenuFormatter")
+  if type(f) == "table" and type(f.ProcessAnimationList) == "function" and
+      type(f.UpdateAnimations) == "function" then
+    local function kick(scroll)
+      return function(self, ...)
+        scroll(self, ...)
+        pcall(function()
+          local now = getElapsedTime()
+          self:ProcessAnimationList()
+          local lead = type(GUI.State) == "table" and GUI.State.TimeElapsed or 0.033
+          local at = rawget(_G, "g_AnimateTable")
+          if type(at) == "table" and type(at.Animations) == "table" then
+            for _, list in pairs(at.Animations) do
+              for _, a in ipairs(list) do
+                if type(a.start_time) == "number" and type(a.duration) == "number" and
+                    a.start_time >= now - 0.0001 then
+                  a.start_time = a.start_time - math.min(lead, a.duration * 0.6)
+                end
+              end
+            end
+          end
+          self:UpdateAnimations()
+        end)
+      end
+    end
+    if type(f.onScrollUp) == "function" then f.onScrollUp = kick(f.onScrollUp) end
+    if type(f.onScrollDown) == "function" then f.onScrollDown = kick(f.onScrollDown) end
+  end
+end)
 local ok, scene = pcall(getElement, "Scene")
 if not ok or not scene then scene = SCENE end
 if not scene then out("no Scene element") return end
@@ -706,11 +807,15 @@ end
 )lua";
 
 inline std::string BuildScript(float aspect, bool move_hud, bool log_tree) {
-  char header[160];
+  const auto& cfg = fable2::config::Get();
+  char header[256];
   std::snprintf(header, sizeof(header),
-                "local A, dx, moveHud, logTree = %.4f, %.4f, %s, %s",
+                "local A, dx, moveHud, logTree, menuRepeat, menuAnim, menuQuick, menuAccel = "
+                "%.4f, %.4f, %s, %s, %s, %.4f, %s, %.4f",
                 aspect, 360.0 * aspect - 640.0, move_hud ? "true" : "false",
-                log_tree ? "true" : "false");
+                log_tree ? "true" : "false", cfg.menu_instant_repeat ? "true" : "false",
+                cfg.menu_animation_speed, cfg.menu_instant_response ? "true" : "false",
+                cfg.menu_scroll_acceleration);
   return std::string(header) + kScript;
 }
 
@@ -738,7 +843,10 @@ inline void OnPresentationLoaded(PPCContext& ctx, uint8_t* base,
   // the screen still follows a later `ws on` or `ws aspect`.
   float aspect = fable2::fitwindow::CurrentAspect();
   if (aspect <= 0.0f) aspect = 16.0f / 9.0f;
-  if (!move_hud && !log_tree) return;
+  const auto& cfg = fable2::config::Get();
+  const bool menu_timing = cfg.menu_instant_repeat || cfg.menu_animation_speed != 1.0 ||
+                           cfg.menu_instant_response || cfg.menu_scroll_acceleration > 1.0;
+  if (!move_hud && !log_tree && !menu_timing) return;
 
   const uint32_t index = detail::g_presentations.fetch_add(1) + 1;
   REXSYS_INFO("[fit-window] UI screen #{} loaded (0x{:08X}): running the HUD "

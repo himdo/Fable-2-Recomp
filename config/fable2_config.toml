@@ -233,6 +233,30 @@ higher_hf_tick_rate = false
 # Default: true
 gui_every_hf_tick = true
 
+# Faster menus. Instant menu repeat: holding a direction in a menu steps at
+# the game's steady repeat rate (every 0.14 s) from the first step, instead of
+# waiting 0.25 s before the second one. false = the original ramp-up.
+# Default: true
+menu_instant_repeat = true
+
+# Menu animation speed: the menus' slide and fade animations (the list moving
+# to the new selection, items fading in) run this many times faster, so a
+# single press shows its result sooner. 1 = original (0.15 s for a step);
+# 2.5 makes a step 0.06 s.
+# Default: 2.5
+menu_animation_speed = 2.5
+
+# Instant menu response: a step in a menu starts in the same GUI update as the
+# press, about 0.1 s sooner (the game handled the press one update later and
+# began the slide another update after that). false = the original timing.
+# Default: true
+menu_instant_response = true
+
+# Menu scroll acceleration: while a direction is held, scrolling speeds up
+# over 1.5 s to this many times the game's repeat rate. 1 = steady speed.
+# Default: 1.5
+menu_scroll_acceleration = 1.5
+
 # Disable Motion Blur (mid-asm hook fable2_hook_disable_motion_blur): the
 # camera's full-screen motion blur amount (what scripts set via Camera.SetBlur)
 # is zeroed on its way to the renderer each frame. The camera's own value is
