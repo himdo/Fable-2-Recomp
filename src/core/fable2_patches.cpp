@@ -10,6 +10,7 @@
 
 #include "fable2_patches.h"
 
+#include <atomic>
 #include <format>
 
 #include <rex/logging.h>
@@ -161,11 +162,18 @@ const std::vector<Patch>& Patches() {
   return patches;
 }
 
+namespace {
+std::atomic<uint8_t*> g_guest_base{nullptr};
+}  // namespace
+
+uint8_t* GuestBase() { return g_guest_base.load(std::memory_order_acquire); }
+
 size_t ApplyAll(rex::memory::Memory* memory, const rex::PPCImageInfo& image) {
   if (!memory) {
     REXSYS_ERROR("[patches] no guest memory available; not applying patches");
     return 0;
   }
+  g_guest_base.store(memory->virtual_membase(), std::memory_order_release);
 
   size_t applied = 0;
   size_t skipped = 0;

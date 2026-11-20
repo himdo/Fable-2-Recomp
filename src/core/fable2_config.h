@@ -204,6 +204,11 @@ struct Values {
   double menu_animation_speed = 2.5;  // 1 = original
   bool menu_instant_response = true;     // start a step in the update of the press
   double menu_scroll_acceleration = 1.5;  // held-scroll speed-up; 1 = steady
+  // [patches] interpolation: blend cloth colliders between the last two
+  // animation poses at the render time, and move cloth with the drawn world
+  // matrix (hooks fable2_hook_cloth_collider_bone and
+  // fable2_hook_cloth_world_transform). false = original.
+  bool interpolation = true;
   // [patches] disable_motion_blur: zero the full-screen motion blur amount the
   // camera passes to the renderer (hook fable2_hook_disable_motion_blur in
   // src/core/fable2_hooks.cpp). false = original.

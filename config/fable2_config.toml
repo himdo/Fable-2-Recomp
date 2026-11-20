@@ -232,6 +232,15 @@ higher_hf_tick_rate = false
 # false = text updates on LF ticks only (original).
 # Default: true
 gui_every_hf_tick = true
+# Interpolation (smoothing): cloth follows the body as it is drawn. The bodies
+# that push cloth around are blended between the last two animation poses at
+# the moment being drawn, the way the game already draws characters, instead
+# of jumping on every LF tick. Capes and coats also move with the body as drawn
+# instead of being jolted on every tick. The log shows "[interpolation]".
+# false = cloth colliders update on LF ticks only, and cloth is jolted on every
+# tick (original).
+# Default: true
+interpolation = true
 
 # Faster menus. Menu repeat delay: when a direction is held in a menu, the
 # wait in seconds before the second step (later steps follow at the game's

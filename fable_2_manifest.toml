@@ -37,6 +37,21 @@ includes = ["fable2_switch_tables.toml"]
 longjmp_address = 0x82CA9260
 setjmp_address = 0x83000200
 
+# Register optimisations for the recompiled code (keep them above the first
+# [[entrypoint.midasm_hook]]: below it they belong to that hook and codegen
+# never sees them). EXPERIMENTAL Deck build: four of the six that passed
+# himdo's Windows play test (fix-manifest-codegen-flags, 2026-11-19) are on.
+# skip_lr and skip_msr (risky on rare paths) are off after a Deck crash in a
+# guard fight; the two that hang or crash stay off too.
+skip_lr = false
+skip_msr = false
+ctr_as_local = true
+xer_as_local = true
+reserved_as_local = true
+cr_as_local = true
+non_argument_as_local = false
+non_volatile_as_local = false
+
 # --- Recomp-level patches via mid-asm hooks (see docs/patches.md) ---------
 # Code-region Xenia patches are inert at runtime in this recomp (guest .text
 # is never executed), so they are applied to the RECOMPILED code instead: a
@@ -176,6 +191,42 @@ name = "fable2_hook_gui_every_tick"
 registers = []
 jump_address_on_true = 0x82278D40
 
+# Interpolation ([patches] interpolation; hooks in src/core/fable2_hooks.cpp).
+# Cloth colliders: sub_82A895C0 reads each collider bone from the current
+# animation pose right after `add r11,r11,r9` (four loops). The hook points r11
+# at that bone blended between the previous and current pose at the render
+# time.
+[[entrypoint.midasm_hook]]
+address = 0x82A8965C
+name = "fable2_hook_cloth_collider_bone"
+registers = ["r1", "r11", "r30"]
+after_instruction = true
+[[entrypoint.midasm_hook]]
+address = 0x82A89770
+name = "fable2_hook_cloth_collider_bone"
+registers = ["r1", "r11", "r30"]
+after_instruction = true
+[[entrypoint.midasm_hook]]
+address = 0x82A898A8
+name = "fable2_hook_cloth_collider_bone"
+registers = ["r1", "r11", "r30"]
+after_instruction = true
+[[entrypoint.midasm_hook]]
+address = 0x82A899E4
+name = "fable2_hook_cloth_collider_bone"
+registers = ["r1", "r11", "r30"]
+after_instruction = true
+
+# Cloth world transform: sub_8219ADD8 hands the cloth (r30) its world matrix
+# for the step in r4 (`addi r4,r1,80`, the raw entity matrix at inst+336, which
+# jumps ahead on tick frames). The hook points r4 at the owner's interpolated
+# render matrix (owner+208) instead.
+[[entrypoint.midasm_hook]]
+address = 0x8219AEA0
+name = "fable2_hook_cloth_world_transform"
+registers = ["r4", "r30"]
+after_instruction = true
+
 # Address-space scan fix (src/core/fable2_address_scan.cpp). sub_82B4DDD8
 # finds an aligned block of address space by reserving one candidate address
 # after another (step r28, size r26, limit r27, candidate r31); each taken
@@ -223,16 +274,6 @@ address = 0x82A7607C
 name = "fable2_hook_realtime_texture_morphing"
 registers = ["r9"]
 after_instruction = true
-
-# Conservative settings: no register optimizations
-skip_lr = true
-skip_msr = true
-ctr_as_local = true
-xer_as_local = true
-reserved_as_local = true
-cr_as_local = true
-non_argument_as_local = true
-non_volatile_as_local = true
 
 # Invalid instruction skips: 32-bit values (big-endian) the recompiler skips
 # over during its linear .text walk instead of analyzing them as functions.
