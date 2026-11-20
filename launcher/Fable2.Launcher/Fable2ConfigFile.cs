@@ -42,6 +42,7 @@ public class Fable2ConfigValues
     public bool HighTickRate { get; set; } = false;       // unstable
     public bool HigherHfTickRate { get; set; } = false;    // unstable
     public bool GuiEveryHfTick { get; set; } = true;
+    public bool Interpolation { get; set; } = true;
     public bool DisableMotionBlur { get; set; } = false;
     public bool RealtimeTextureMorphing { get; set; } = true;
     public bool HeroDogTextureReadback { get; set; } = false;
@@ -169,6 +170,7 @@ public static class Fable2ConfigFile
                     else if (key == "high_tick_rate") values.HighTickRate = ParseBool(rawValue, values.HighTickRate);
                     else if (key == "higher_hf_tick_rate") values.HigherHfTickRate = ParseBool(rawValue, values.HigherHfTickRate);
                     else if (key == "gui_every_hf_tick") values.GuiEveryHfTick = ParseBool(rawValue, values.GuiEveryHfTick);
+                    else if (key == "interpolation") values.Interpolation = ParseBool(rawValue, values.Interpolation);
                     else if (key == "disable_motion_blur") values.DisableMotionBlur = ParseBool(rawValue, values.DisableMotionBlur);
                     else if (key == "realtime_texture_morphing") values.RealtimeTextureMorphing = ParseBool(rawValue, values.RealtimeTextureMorphing);
                     else if (key == "hero_dog_texture_readback") values.HeroDogTextureReadback = ParseBool(rawValue, values.HeroDogTextureReadback);
@@ -227,6 +229,7 @@ public static class Fable2ConfigFile
             ("patches", "high_tick_rate", values.HighTickRate ? "true" : "false"),
             ("patches", "higher_hf_tick_rate", values.HigherHfTickRate ? "true" : "false"),
             ("patches", "gui_every_hf_tick", values.GuiEveryHfTick ? "true" : "false"),
+            ("patches", "interpolation", values.Interpolation ? "true" : "false"),
             ("patches", "disable_motion_blur", values.DisableMotionBlur ? "true" : "false"),
             ("patches", "realtime_texture_morphing", values.RealtimeTextureMorphing ? "true" : "false"),
             ("patches", "hero_dog_texture_readback", values.HeroDogTextureReadback ? "true" : "false"),

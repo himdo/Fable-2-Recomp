@@ -53,6 +53,7 @@
                    Foreground="#FFFFD888" />
         <TextBlock Text="RECOMP LAUNCHER" FontSize="13" FontWeight="SemiBold"
                    Foreground="#FFC69A46" Margin="2,3,0,0" />
+        <TextBlock x:Name="VersionText" FontSize="11" Foreground="#99C69A46" Margin="2,2,0,0" />
       </StackPanel>
       <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
         <Border Background="#332A3D36" BorderBrush="#556B887B"

@@ -142,8 +142,9 @@ game recreates it with defaults on launch if it is ever missing. Loaded in
   "High Tick Rate" / "Higher HF Tick Rate"; turn both on together), which
   also drive the guest-image data writes below, and `gui_every_hf_tick` (on
   by default), which updates subtitles and HUD text every HF tick
-  (`docs/patches.md`, "GUI every HF tick"). There is no separate patch
-  file.
+  (`docs/patches.md`, "GUI every HF tick"), and `interpolation` (on by
+  default), which keeps cloth in step with the drawn body (`docs/patches.md`,
+  "Interpolation"). There is no separate patch file.
 
 
 

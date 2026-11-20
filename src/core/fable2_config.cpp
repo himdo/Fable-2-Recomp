@@ -290,6 +290,15 @@ higher_hf_tick_rate = false
 # false = text updates on LF ticks only (original).
 # Default: true
 gui_every_hf_tick = true
+# Interpolation (smoothing): cloth follows the body as it is drawn. The bodies
+# that push cloth around are blended between the last two animation poses at
+# the moment being drawn, the way the game already draws characters, instead
+# of jumping on every LF tick. Capes and coats also move with the body as drawn
+# instead of being jolted on every tick. The log shows "[interpolation]".
+# false = cloth colliders update on LF ticks only, and cloth is jolted on every
+# tick (original).
+# Default: true
+interpolation = true
 
 # Disable Motion Blur (mid-asm hook fable2_hook_disable_motion_blur): the
 # camera's full-screen motion blur amount (what scripts set via Camera.SetBlur)
@@ -653,6 +662,9 @@ bool Load(const std::filesystem::path& path) {
     values.gui_every_hf_tick =
         Read<bool>(patches_table, "patches", "gui_every_hf_tick", "boolean",
                    values.gui_every_hf_tick);
+    values.interpolation =
+        Read<bool>(patches_table, "patches", "interpolation", "boolean",
+                   values.interpolation);
     values.disable_motion_blur =
         Read<bool>(patches_table, "patches", "disable_motion_blur", "boolean",
                    values.disable_motion_blur);
