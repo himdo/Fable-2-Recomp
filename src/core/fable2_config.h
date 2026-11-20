@@ -37,6 +37,9 @@ struct Values {
   int32_t config_version = 1;
   // [input]
   std::string keyboard_gamepad_map{std::string{kDefaultKeyboardGamepadMap}};
+  // Steam Deck button icons instead of the Xbox 360 ones (src/gui/deck_prompts.h):
+  // the glyph set "dark" (dark grey) or "light", or "off".
+  std::string deck_button_prompts = "dark";
   // Keep in sync with the cvar defaults in main.cpp (mouse_look,
   // mouse_look_scale); the cvar keeps its compiled default as a fallback so
   // an empty/missing config can never wedge input.
@@ -217,6 +220,10 @@ struct Values {
   // Fable2App; readback then happens only for that resolve, not every frame.
   // Superseded by realtime_texture_morphing (only takes effect with that off).
   bool hero_dog_texture_readback = false;
+  // [patches] vulkan_texture_morph_fallback: while the Vulkan renderer is in
+  // use, ApplyVulkanRendererOverrides() can swap realtime texture morphing
+  // for baked textures with CPU readback as an opt-in compatibility mode.
+  bool vulkan_texture_morph_fallback = false;
   // Give the dog's shell-fur layers (pixel shader 014F8A02DB7B19CA) a small
   // extra depth bias so they don't Z-fight with the body and with each other.
   // The fur relies on exact depth ties in the Xbox 360's 24-bit float depth
@@ -231,6 +238,7 @@ struct Values {
   // [patches] faster_render_targets: Narrower EDRAM transfers (SDK cvars execute_unclipped_draw_vs_on_cpu, skip_depth_clear_transfers).
   bool faster_render_targets = true;
   // [patches] gpu_frame_sync: Keep the GPU at most one frame behind (SDK cvar gpu_sync_at_frame_start).
+  // Without the key: off except on Windows (resolved by Load).
   bool gpu_frame_sync = true;
   // [perf] - hot-function override tuning.
   // hotfunc_yield_every: NtYieldExecution batching factor for the hotfunc
@@ -242,6 +250,21 @@ struct Values {
   // [perf] refresh_gpu_memory_each_frame: false seeds the SDK cvar
   // clear_memory_page_state off (see the config file).
   bool refresh_gpu_memory_each_frame = false;
+  // idle_yield_sleep_us: when a guest thread calls NtYieldExecution back to
+  // back with no work in between (it is polling for another thread), sleep
+  // this many microseconds per yield instead of spinning a core at 100%
+  // (see src/core/hotfunc/hotfunc_yield.h). 0 = never sleep (original).
+  // -1 = the platform default, which Load resolves: 0 on Windows (see
+  // src/core/hotfunc/hotfunc_idle_sleep.h), 100 elsewhere.
+  int32_t idle_yield_sleep_us = -1;
+  // [perf] fps_limit: 30 keeps the game's own 30 fps vblank lock; anything
+  // else seeds frame_limit (0 = unlimited) and turns guest_vblank_pacing off,
+  // like the Windows launcher's frame limit. -1 = the platform default, which
+  // Load resolves: 30 on Windows, where the launcher manages it, 60 elsewhere.
+  int32_t fps_limit = -1;
+  // [perf] native_lua_gc: native Lua GC routines
+  // (src/core/hotfunc/luagc/NativeLuaGC.cpp); false = recompiled originals.
+  bool native_lua_gc = true;
   // [photo_mode] (src/core/fable2_photo_mode.h): free camera + settings panel.
   bool photo_mode_enabled = true;
   std::string photo_mode_toggle_key = "F6";
@@ -253,13 +276,6 @@ struct Values {
   float photo_mode_mouse_sensitivity = 0.0025f;  // radians per mouse pixel
   float photo_mode_max_distance = 0.0f;   // 0 = no limit
   std::string photo_mode_screenshot_folder = "screenshots";
-  // idle_yield_sleep_us: when a guest thread calls NtYieldExecution back to
-  // back with no work in between (it is polling for another thread), sleep
-  // this many microseconds per yield instead of spinning a core at 100%
-  // (see src/core/hotfunc/hotfunc_yield.h). 0 = never sleep (original).
-  // -1 = the platform default (see IdleYieldSleepUs() in
-  // src/core/hotfunc/hotfunc_idle_sleep.h).
-  int32_t idle_yield_sleep_us = -1;
 };
 
 // Load the config from `path`.
@@ -274,6 +290,9 @@ bool Load(const std::filesystem::path& path);
 // Parsed values (in-memory defaults until Load() succeeds).
 const Values& Get();
 
+// Called once the GPU backend is known to be Vulkan, before the GPU plugin's
+// cvars are seeded: applies vulkan_texture_morph_fallback.
+void ApplyVulkanRendererOverrides();
 // Change [photo_mode] gamepad_toggle in memory and in the file Load() read
 // (only that line is rewritten; comments and the rest are kept).
 bool SavePhotoModeGamepadToggle(const std::string& combo);

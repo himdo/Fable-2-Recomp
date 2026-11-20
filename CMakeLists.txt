@@ -98,6 +98,35 @@ set(FABLE2_HEADER_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/menu
     ${CMAKE_CURRENT_SOURCE_DIR}/src/gui)
 target_include_directories(fable_2 PRIVATE ${FABLE2_HEADER_DIRS})
+# Profile-guided optimization of the game code (clang, non-Windows; the SDK's
+# REXGLUE_PGO covers only its libraries). GENERATE instruments the recompiled
+# code and the app; the console writes the counters (rex-pgo-%m.profraw next
+# to the executable) every 30 s and before quitting. USE optimizes with a
+# merged .profdata (llvm-profdata merge), which may be the SDK's as well.
+set(FABLE2_PGO "OFF" CACHE STRING "Profile-guided optimization of the game code: OFF, GENERATE or USE")
+set_property(CACHE FABLE2_PGO PROPERTY STRINGS OFF GENERATE USE)
+set(FABLE2_PGO_PROFILE "" CACHE FILEPATH "Merged .profdata file for FABLE2_PGO=USE")
+if(NOT FABLE2_PGO STREQUAL "OFF")
+    if(WIN32 OR NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "FABLE2_PGO needs clang on a non-Windows platform")
+    endif()
+    if(FABLE2_PGO STREQUAL "GENERATE")
+        set(_fable2_pgo_compile -fprofile-generate)
+        set(_fable2_pgo_link -fprofile-generate)
+        target_compile_definitions(fable_2 PRIVATE FABLE2_PGO_GENERATE)
+    elseif(FABLE2_PGO STREQUAL "USE")
+        if(NOT EXISTS "${FABLE2_PGO_PROFILE}")
+            message(FATAL_ERROR "FABLE2_PGO=USE needs FABLE2_PGO_PROFILE (a .profdata file)")
+        endif()
+        set(_fable2_pgo_compile "-fprofile-use=${FABLE2_PGO_PROFILE}"
+            -Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date -Wno-backend-plugin)
+        set(_fable2_pgo_link "-fprofile-use=${FABLE2_PGO_PROFILE}")
+    else()
+        message(FATAL_ERROR "FABLE2_PGO must be OFF, GENERATE or USE")
+    endif()
+    message(STATUS "Game code PGO: ${FABLE2_PGO} ${FABLE2_PGO_PROFILE}")
+endif()
+
 if(TARGET fable_2_recomp)
     target_include_directories(fable_2_recomp PRIVATE ${FABLE2_HEADER_DIRS})
 endif()
@@ -111,6 +140,17 @@ target_include_directories(fable_2 PRIVATE
 # per-configuration variant: rexgpu-xenosd.dll for Debug, rexgpu-xenos.dll
 # for Release). Without it the game runs with no GPU emulation.
 rexglue_setup_target(fable_2 GPU_PLUGINS xenos)
+# Game code PGO flags (FABLE2_PGO above); the recompiled code's target only
+# exists from here on.
+if(NOT FABLE2_PGO STREQUAL "OFF")
+    foreach(_fable2_pgo_target fable_2 fable_2_recomp)
+        if(NOT TARGET ${_fable2_pgo_target})
+            message(FATAL_ERROR "FABLE2_PGO: no target ${_fable2_pgo_target}")
+        endif()
+        target_compile_options(${_fable2_pgo_target} PRIVATE ${_fable2_pgo_compile})
+        target_link_options(${_fable2_pgo_target} PRIVATE ${_fable2_pgo_link})
+    endforeach()
+endif()
 # In-tree SDK build (REXSDK_DIR, the Linux path): rex/rex_app.h includes
 # <imgui.h>, which an installed SDK ships in its include dir but the in-tree
 # rex::runtime target does not propagate.
@@ -195,7 +235,10 @@ endif()
 # bottom of fable2_func_trace.h (which redefines REX_FUNC_PROLOGUE) runs with
 # the generated pch already loaded, and the patched macro is baked into the
 # PCH used by every recompiled TU.
-if(TARGET fable_2_recomp)
+# FABLE2_FUNC_TRACE=OFF leaves the hook out: even when tracing is off, it costs
+# a flag load and branch at every guest function entry (millions per second).
+option(FABLE2_FUNC_TRACE "Hook every guest function entry for fable2_func_trace.log" ON)
+if(TARGET fable_2_recomp AND FABLE2_FUNC_TRACE)
     target_precompile_headers(fable_2_recomp PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core/fable2_func_trace.h)
 endif()
@@ -289,6 +332,13 @@ target_include_directories(fable_2 SYSTEM PRIVATE
 if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/fable2_config.toml")
     file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/config/fable2_config.toml
          DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+    if(NOT WIN32)
+        # GPU frame sync stays at its default outside Windows (off) unless set.
+        file(READ "${CMAKE_CURRENT_BINARY_DIR}/fable2_config.toml" _fable2_config)
+        string(REPLACE "\ngpu_frame_sync = true\n" "\n# gpu_frame_sync = true\n"
+               _fable2_config "${_fable2_config}")
+        file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/fable2_config.toml" "${_fable2_config}")
+    endif()
 endif()
 
 # --- PDB for the Release build (crash debugging) --------------------------
@@ -381,6 +431,14 @@ add_custom_command(TARGET fable_2 POST_BUILD
             "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Google Sans/OFL.txt"
             "$<TARGET_FILE_DIR:fable_2>/assets/fonts/Google Sans/OFL.txt"
     COMMENT "Staging bundled keycap font (Google Sans + OFL license) next to fable_2.exe")
+
+# Stage the Steam Deck button glyphs (light and dark sets) next to the exe.
+# Loaded by src/gui/deck_prompts.h when deck_button_prompts is on.
+add_custom_command(TARGET fable_2 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/deck_prompts"
+            "$<TARGET_FILE_DIR:fable_2>/assets/deck_prompts"
+    COMMENT "Staging Steam Deck button glyphs next to fable_2")
 
 # --- Vulkan renderer: Stage 2 (source-built plugin, swappable at launch) --
 # The prebuilt plugin above (GPU_PLUGINS xenos) is D3D12-only. The Vulkan

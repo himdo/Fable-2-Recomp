@@ -724,6 +724,9 @@ inline void enter(PPCContext& ctx, uint8_t* base) {
   g.theme_out = 0;
 
   active_flag().store(true, std::memory_order_release);
+  if (void (*hook)() = entered_hook().load(std::memory_order_acquire)) {
+    hook();
+  }
   set_status("");
   log_line("entered (draw_gui=" + std::to_string(g.saved_draw_gui) +
            " icons=" + std::to_string(g.saved_icons) + " tod=" + std::to_string(g.saved_tod) + ")");

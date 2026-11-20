@@ -39,6 +39,15 @@ config_version = 1
 #   Up:Up,Down:Down,Left:Left,Right:Right
 keyboard_gamepad_map = "LMB:X,RMB:Y,MMB:B,Shift:A,E:A,Q:LT,Tab:RB,R:RT,Z:LB,B:B,W:StickUp,S:StickDown,A:StickLeft,D:StickRight,Escape:Pause,M:Select,Up:Up,Down:Down,Left:Left,Right:Right"
 
+# Steam Deck button icons: the game's Xbox 360 button prompts (A/B/X/Y, LB/RB,
+# LT/RT, Back/Start, sticks, D-pad) show the Steam Deck's buttons instead, in
+# the game's own style (shaded orbs, the green medallion). "dark" uses dark
+# grey buttons, "light" white ones (glyphs in assets/deck_prompts/ next to the
+# executable). "off" shows the game's original Xbox 360 icons. Keyboard
+# keycaps still replace them while you play with keyboard and mouse.
+# Default: "dark"
+deck_button_prompts = "dark"
+
 # Map mouse movement to the guest right stick (camera look): sweep to look,
 # stop to stop. false disables mouse look entirely.
 # Default: true
@@ -262,6 +271,12 @@ realtime_texture_morphing = true
 # Default: false
 hero_dog_texture_readback = false
 
+# Vulkan Texture Morph Fallback: true uses baked textures with targeted CPU
+# readback if realtime morphing was requested. This is an opt-in compatibility
+# mode for Vulkan. By default, use the realtime and readback settings above.
+# Default: false
+vulkan_texture_morph_fallback = false
+
 # Dog Fur Depth Bias: the dog's fur is drawn as 15 thin layers over its body
 # that rely on exact depth ties in the Xbox 360's 24-bit depth buffer. The PC's
 # 32-bit depth breaks those ties at random, which shows as flickering, blocky
@@ -299,7 +314,10 @@ faster_render_targets = true
 # wait until the GPU has finished the previous one. Fixes flicker (blue distant
 # trees, the dog's texture, sun lighting) when the GPU falls behind, mostly at
 # higher internal resolutions. Costs a few FPS where the GPU is the limit.
-# D3D12 only. false = let the GPU run up to three frames behind.
+# false = let the GPU run up to three frames behind. Without this line the
+# platform default applies: on, except on Linux (Vulkan), where it would make
+# the CPU wait for the GPU at every frame start and the Steam Deck is limited by
+# both; the Linux package and build ship this line commented out.
 # Default: true
 gpu_frame_sync = true
 
@@ -335,6 +353,22 @@ refresh_gpu_memory_each_frame = false
 # effect.
 # Default: -1
 idle_yield_sleep_us = -1
+
+# Frame rate cap. The game normally locks itself to 30 fps by waiting for two
+# emulated 60 Hz vblanks per frame. Any other value lifts that lock and caps
+# the game at this many fps instead (SDK cvars frame_limit and
+# guest_vblank_pacing, the same as the Windows launcher's frame limit), while
+# presentation still follows vsync. 30 = the original lock, 0 = unlimited.
+# fable_2.toml and the command line still take priority. -1 = the platform
+# default: 30 on Windows (the launcher manages the cap there), 60 elsewhere.
+# Default: -1
+fps_limit = -1
+
+# Native Lua GC: run the game's Lua garbage collector (mark and sweep) as
+# native code instead of recompiled PowerPC code. It was about half of the main
+# game thread's time in busy areas. Same algorithm and results, only faster.
+# false = the original recompiled code. Default: true
+native_lua_gc = true
 
 [photo_mode]
 # Photo mode: freeze the world, fly a free camera and take screenshots, with a

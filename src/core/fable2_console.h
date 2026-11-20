@@ -22,7 +22,7 @@
 // freeze, unfreeze, trace, status, hosthelp, cvars, dumpmem; v6 adds cvar,
 // history, again, repeat, every, autoexec, peekf, pokef, freezef, peekstr,
 // findstr, findf, fill, scan; v11 adds widescreen (ws), pause and step; v12 adds mouse
-// (diag, trace, inject) and pad rstick. Addresses are Xbox 360 guest
+// (diag, trace, inject) and pad rstick; later: screenshot, quit. Addresses are Xbox 360 guest
 // virtual addresses (hex, with or without 0x); values are big-endian as in the game.
 
 #pragma once
@@ -55,6 +55,11 @@
 #include "remote_input_state.h"
 #include "photo_mode_state.h"
 #include "fable2_ui_events.h"
+#include "fable2_frame_capture.h"
+#include "menu_items.h"
+#ifdef FABLE2_PGO_GENERATE
+#include <rex/pgo.h>  // game-code PGO counters (build.sh --game-pgo-generate)
+#endif
 
 // The SDK's `~` console (ImGui overlay) logs through REXLOG_* and can register
 // commands with REXCVAR_DEFINE_COMMAND_ARGS (rex/cvar.h). Both are optional here
@@ -634,14 +639,14 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
   }
   if (name == "help") {
     out("help", "host commands: wait waitfor exec echo peek poke expect find <number> freeze unfreeze trace status cvars dumpmem "
-                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad mouse boot waitui photo traceworld. "
+                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad mouse boot waitui photo screenshot quit traceworld. "
                 "Chain with ';'. Lua commands follow (their text appears in the log).");
     return false;  // Lua prints its own command list too
   }
   if (name == "hosthelp") {
     out("help",
         "host commands: wait waitfor exec echo peek poke expect find freeze unfreeze trace status cvars dumpmem "
-        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad mouse boot waitui photo traceworld. "
+        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad mouse boot waitui photo screenshot quit traceworld. "
         "Everything else (warp, god, gold, giveall, ...) runs in Lua: type help. "
         "Separate commands with ';'. Addresses are hex guest addresses.");
     return true;
@@ -697,6 +702,58 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     return true;
   }
   // Photo mode from the console (research sessions run without keys).
+  // quit: close the game the way the main menu's Quit item does (unattended
+  // runs such as benchmarks end with it).
+  if (name == "quit") {
+    out("quit", "closing the game");
+#ifdef FABLE2_PGO_GENERATE
+    rex::pgo::WriteModuleProfile();
+#endif
+    fable2::menu::QuitGame();
+    return true;
+  }
+  // screenshot [path]: save the game's current frame as a PNG (read back from
+  // the renderer's output, so nothing on the host screen gets in the way).
+  // Relative paths are under the game folder; default
+  // screenshots/console_<date>_<time>.png. Reported in out.txt when written.
+  if (name == "screenshot") {
+    namespace pm = fable2::photomode;
+    auto provider = pm::presenter_provider();
+    rex::ui::Presenter* presenter = provider ? provider() : nullptr;
+    if (!presenter) {
+      out("screenshot", "no renderer output to capture", true);
+      return true;
+    }
+    fs::path file;
+    if (W.size() > 1) {
+      file = W[1];
+    } else {
+      const std::time_t now = std::time(nullptr);
+      std::tm tm{};
+#ifdef _WIN32
+      localtime_s(&tm, &now);
+#else
+      localtime_r(&now, &tm);
+#endif
+      char name_buf[64];
+      std::strftime(name_buf, sizeof(name_buf), "screenshots/console_%Y%m%d_%H%M%S.png", &tm);
+      file = name_buf;
+    }
+    if (file.is_relative()) file = s.root / file;
+    std::error_code ec;
+    fs::create_directories(file.parent_path(), ec);
+    // The capture waits for a GPU readback: keep it off the game thread.
+    std::thread([presenter, file]() {
+      const auto r = fable2::framecapture::CaptureGuestOutputToPng(presenter, file.string());
+      if (r.ok) {
+        out("screenshot", "saved " + file.string() + " " + std::to_string(r.width) + "x" +
+                              std::to_string(r.height) + " avg_luma " + std::to_string(r.avg_luma));
+      } else {
+        out("screenshot", "failed: " + r.error, true);
+      }
+    }).detach();
+    return true;
+  }
   if (name == "photo") {
     namespace pm = fable2::photomode;
     const std::string m = W.size() > 1 ? W[1] : "toggle";
@@ -1926,20 +1983,24 @@ inline void run_lua_line(const std::string& line, PPCContext& ctx, uint8_t* base
 // F9 (game window focused) toggles pause, so the moment to stop can be picked
 // by hand. Edge-detected; checked every frame and while paused.
 inline void poll_pause_key() {
-#ifdef _WIN32
   static bool prev = false;
-  const bool down = (GetAsyncKeyState(0x78 /* VK_F9 */) & 0x8000) != 0;
+  const bool down = fable2::hostinput::IsKeyDown(0x78 /* VK_F9 */);
   const bool edge = down && !prev;
   prev = down;
   if (!edge) return;
+#ifdef _WIN32
   DWORD pid = 0;
   GetWindowThreadProcessId(GetForegroundWindow(), &pid);
   if (pid != GetCurrentProcessId()) return;
+#else
+  // Key state only comes from the game window's own events, so a held key
+  // already means it is focused.
+  if (!fable2::hostinput::T().HasFocus()) return;
+#endif
   State& s = S();
   s.paused = !s.paused;
   s.step_frames = 0;
   out("pause", s.paused ? "paused (F9)" : "running (F9)");
-#endif
 }
 
 // Host commands that work while the game thread is held: they only read or
@@ -2187,6 +2248,13 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
       if (s.queue.size() < 256) s.queue.push_back(e.cmd);
     }
   }
+
+#ifdef FABLE2_PGO_GENERATE
+  // Instrumented game code: save the profile counters every 30 s (60 fps).
+  if ((s.frames % 1800) == 0) {
+    rex::pgo::WriteModuleProfile();
+  }
+#endif
 
   // New input file (checked every 10 frames; cheap).
   if (file_mode && (s.frames % 10) == 0) {

@@ -54,8 +54,9 @@ inline uint32_t guest_alloc(PPCContext& ctx, uint8_t* base, size_t size);
 #ifdef _WIN32
 #include <windows.h>
 #include <share.h>
-#define FABLE2_F5_VK 0x74  // VK_F5
 #endif
+#include "host_input.h"  // fable2::hostinput::IsKeyDown (all platforms)
+#define FABLE2_F5_VK 0x74  // VK_F5
 
 // External Lua file to run on F5. Path is resolved by CScriptManager::RunScript
 // relative to the VFS root (data/). Default lands at
@@ -136,12 +137,10 @@ inline void logline(const char* fmt, ...) {
 
 // Per-frame F5 edge detector. Call from the host input poll (per frame).
 inline void poll_f5(bool focused) {
-#ifdef _WIN32
-  const bool down = focused && (GetAsyncKeyState(FABLE2_F5_VK) & 0x8000) != 0;
+  const bool down = focused && fable2::hostinput::IsKeyDown(FABLE2_F5_VK);
   const bool edge = down && !g_f5_down_prev;
   g_f5_down_prev = down;
   if (edge) g_f5_pending.store(true);
-#endif
 }
 
 // Run the external Lua file via the captured CScriptManager::RunScript.

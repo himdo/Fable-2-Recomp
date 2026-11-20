@@ -75,6 +75,15 @@ config_version = 1
 #   Up:Up,Down:Down,Left:Left,Right:Right
 keyboard_gamepad_map = "LMB:X,RMB:Y,MMB:B,Shift:A,E:A,Q:LT,Tab:RB,R:RT,Z:LB,B:B,W:StickUp,S:StickDown,A:StickLeft,D:StickRight,Escape:Pause,M:Select,Up:Up,Down:Down,Left:Left,Right:Right"
 
+# Steam Deck button icons: the game's Xbox 360 button prompts (A/B/X/Y, LB/RB,
+# LT/RT, Back/Start, sticks, D-pad) show the Steam Deck's buttons instead, in
+# the game's own style (shaded orbs, the green medallion). "dark" uses dark
+# grey buttons, "light" white ones (glyphs in assets/deck_prompts/ next to the
+# executable). "off" shows the game's original Xbox 360 icons. Keyboard
+# keycaps still replace them while you play with keyboard and mouse.
+# Default: "dark"
+deck_button_prompts = "dark"
+
 # Map mouse movement to the guest right stick (camera look): sweep to look,
 # stop to stop. false disables mouse look entirely.
 # Default: true
@@ -298,6 +307,12 @@ realtime_texture_morphing = true
 # Default: false
 hero_dog_texture_readback = false
 
+# Vulkan Texture Morph Fallback: true uses baked textures with targeted CPU
+# readback if realtime morphing was requested. This is an opt-in compatibility
+# mode for Vulkan. By default, use the realtime and readback settings above.
+# Default: false
+vulkan_texture_morph_fallback = false
+
 # Dog Fur Depth Bias: the dog's fur is drawn as 15 thin layers over its body
 # that rely on exact depth ties in the Xbox 360's 24-bit depth buffer. The PC's
 # 32-bit depth breaks those ties at random, which shows as flickering, blocky
@@ -335,7 +350,10 @@ faster_render_targets = true
 # wait until the GPU has finished the previous one. Fixes flicker (blue distant
 # trees, the dog's texture, sun lighting) when the GPU falls behind, mostly at
 # higher internal resolutions. Costs a few FPS where the GPU is the limit.
-# D3D12 only. false = let the GPU run up to three frames behind.
+# false = let the GPU run up to three frames behind. Without this line the
+# platform default applies: on, except on Linux (Vulkan), where it would make
+# the CPU wait for the GPU at every frame start and the Steam Deck is limited by
+# both; the Linux package and build ship this line commented out.
 # Default: true
 gpu_frame_sync = true
 
@@ -371,6 +389,22 @@ refresh_gpu_memory_each_frame = false
 # effect.
 # Default: -1
 idle_yield_sleep_us = -1
+
+# Frame rate cap. The game normally locks itself to 30 fps by waiting for two
+# emulated 60 Hz vblanks per frame. Any other value lifts that lock and caps
+# the game at this many fps instead (SDK cvars frame_limit and
+# guest_vblank_pacing, the same as the Windows launcher's frame limit), while
+# presentation still follows vsync. 30 = the original lock, 0 = unlimited.
+# fable_2.toml and the command line still take priority. -1 = the platform
+# default: 30 on Windows (the launcher manages the cap there), 60 elsewhere.
+# Default: -1
+fps_limit = -1
+
+# Native Lua GC: run the game's Lua garbage collector (mark and sweep) as
+# native code instead of recompiled PowerPC code. It was about half of the main
+# game thread's time in busy areas. Same algorithm and results, only faster.
+# false = the original recompiled code. Default: true
+native_lua_gc = true
 
 [photo_mode]
 # Photo mode: freeze the world, fly a free camera and take screenshots, with a
@@ -451,7 +485,15 @@ bool Load(const std::filesystem::path& path) {
       REXSYS_ERROR("[fable2-config] could not create {}", path.string());
       return false;
     }
-    out << kTemplate;
+    std::string text = kTemplate;
+#ifndef _WIN32
+    // Off outside Windows unless set (see Values::gpu_frame_sync).
+    const std::string sync_line = "\ngpu_frame_sync = true\n";
+    if (const size_t at = text.find(sync_line); at != std::string::npos) {
+      text.replace(at, sync_line.size(), "\n# gpu_frame_sync = true\n");
+    }
+#endif
+    out << text;
     REXSYS_INFO("[fable2-config] {} not found; created with defaults",
                 path.string());
   }
@@ -488,6 +530,7 @@ bool Load(const std::filesystem::path& path) {
   }
 
   Values values;
+  bool gpu_frame_sync_set = false;
   const toml::path general_path{"general"};
   const auto general = root[general_path];
   if (general.is_table()) {
@@ -502,6 +545,12 @@ bool Load(const std::filesystem::path& path) {
     values.keyboard_gamepad_map = Read<std::string>(
         input_table, "input", "keyboard_gamepad_map", "string",
         std::string{kDefaultKeyboardGamepadMap});
+    {
+      std::string set = Read<std::string>(input_table, "input", "deck_button_prompts", "string",
+                                          values.deck_button_prompts);
+      for (auto& c : set) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if (set == "light" || set == "dark" || set == "off") values.deck_button_prompts = set;
+    }
     // Defaults come from Values itself (single source of truth).
     values.mouse_look =
         Read<bool>(input_table, "input", "mouse_look", "boolean",
@@ -621,6 +670,9 @@ bool Load(const std::filesystem::path& path) {
     values.hero_dog_texture_readback =
         Read<bool>(patches_table, "patches", "hero_dog_texture_readback", "boolean",
                    values.hero_dog_texture_readback);
+    values.vulkan_texture_morph_fallback =
+        Read<bool>(patches_table, "patches", "vulkan_texture_morph_fallback", "boolean",
+                   values.vulkan_texture_morph_fallback);
     values.dog_fur_depth_bias =
         Read<bool>(patches_table, "patches", "dog_fur_depth_bias", "boolean",
                    values.dog_fur_depth_bias);
@@ -633,6 +685,7 @@ bool Load(const std::filesystem::path& path) {
     values.gpu_frame_sync =
         Read<bool>(patches_table, "patches", "gpu_frame_sync", "boolean",
                    values.gpu_frame_sync);
+    gpu_frame_sync_set = patches_table.contains("gpu_frame_sync");
     values.faster_render_targets =
         Read<bool>(patches_table, "patches", "faster_render_targets", "boolean",
                    values.faster_render_targets);
@@ -650,6 +703,10 @@ bool Load(const std::filesystem::path& path) {
     values.idle_yield_sleep_us = static_cast<int32_t>(Read<int64_t>(
         perf_table, "perf", "idle_yield_sleep_us", "integer",
         values.idle_yield_sleep_us));
+    values.fps_limit = static_cast<int32_t>(Read<int64_t>(
+        perf_table, "perf", "fps_limit", "integer", values.fps_limit));
+    values.native_lua_gc = Read<bool>(perf_table, "perf", "native_lua_gc", "boolean",
+                                      values.native_lua_gc);
   }
   const toml::path photo_path{"photo_mode"};
   const auto photo = root[photo_path];
@@ -689,6 +746,27 @@ bool Load(const std::filesystem::path& path) {
                           values.photo_mode_screenshot_folder);
   }
 
+  // Platform defaults the file leaves open.
+#ifndef _WIN32
+  if (!gpu_frame_sync_set) {
+    values.gpu_frame_sync = false;
+  }
+#endif
+  if (values.idle_yield_sleep_us < 0) {
+#ifdef _WIN32
+    values.idle_yield_sleep_us = 0;
+#else
+    values.idle_yield_sleep_us = 100;
+#endif
+  }
+  if (values.fps_limit < 0) {
+#ifdef _WIN32
+    values.fps_limit = 30;
+#else
+    values.fps_limit = 60;
+#endif
+  }
+
   g_values = values;
   g_path = path;
   REXSYS_INFO("[fable2-config] loaded {} (config_version={})", path.string(),
@@ -697,6 +775,17 @@ bool Load(const std::filesystem::path& path) {
 }
 
 const Values& Get() { return g_values; }
+
+void ApplyVulkanRendererOverrides() {
+  if (!g_values.vulkan_texture_morph_fallback || !g_values.realtime_texture_morphing) {
+    return;
+  }
+  g_values.realtime_texture_morphing = false;
+  g_values.hero_dog_texture_readback = true;
+  REXSYS_INFO(
+      "[fable2-config] Vulkan texture morph fallback enabled: using baked textures "
+      "with targeted CPU readback");
+}
 
 bool SavePhotoModeGamepadToggle(const std::string& combo) {
   g_values.photo_mode_gamepad_toggle = combo;

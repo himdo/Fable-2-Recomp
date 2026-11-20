@@ -30,6 +30,9 @@ fps_probe.log
 # --- Desktop launcher written by ./run.sh --make-shortcut (absolute paths) ---
 /Fable II.desktop
 
+# --- Desktop launcher written by ./run.sh --make-shortcut (absolute paths) ---
+/Fable II.desktop
+
 # --- SDK / runtime artifacts ------------------------------------------------
 .fable2_image.bin
 

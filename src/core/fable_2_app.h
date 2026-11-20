@@ -127,7 +127,16 @@ class Fable2App : public rex::ReXApp {
       config.graphics = rex::system::LoadGpuPlugin("xenos-vulkan", "vulkan");
     }
     // Otherwise leave config.graphics null so ReXApp loads
-    // LoadGpuPlugin("xenos") -> the prebuilt D3D12 plugin.
+    // LoadGpuPlugin("xenos") -> the prebuilt D3D12 plugin on Windows. Off
+    // Windows the SDK is built without D3D12, so "xenos" is Vulkan too.
+#ifdef _WIN32
+    const bool vulkan_renderer = plugin == "xenos-vulkan";
+#else
+    const bool vulkan_renderer = true;
+#endif
+    if (vulkan_renderer) {
+      fable2::config::ApplyVulkanRendererOverrides();
+    }
 
     // Build on top of the default input system (SDL gamepad + NOP) and add a
     // synthetic "keyboard gamepad" driver so host keys/mouse buttons can drive
@@ -156,9 +165,11 @@ class Fable2App : public rex::ReXApp {
 
     // Keyboard keycap prompts (src/gui/prompt_textures.h). Needs the config and
     // game_data_root, and must rewrite the GUI banks before the game reads them.
+    // Steam Deck button icons (src/gui/deck_prompts.h) go through the same swap.
+    const std::string& deck_set = fable2::config::Get().deck_button_prompts;
     fable2::keycap::Instance().SetTextures(fable2::gui::BuildPromptTextures(
         game_data_root(), fable2::config::Get().keyboard_gamepad_map,
-        fable2::config::Get().mouse_look));
+        fable2::config::Get().mouse_look, deck_set == "off" ? std::string{} : deck_set));
   }
 
   void OnPostSetup() override {
@@ -232,6 +243,25 @@ class Fable2App : public rex::ReXApp {
         if (rex::cvar::GetFlagSource(cvar) == rex::cvar::Source::kDefault &&
             !rex::cvar::SetFlagByName(cvar, value)) {
           REXSYS_WARN("[fable2-config] {} cvar missing (SDK without it?)", cvar);
+        }
+      }
+    }
+    // [perf] fps_limit: lift the game's 30 fps vblank lock and cap at the
+    // configured rate instead, exactly like the launcher's frame limit (both are
+    // GPU-plugin cvars, so seeded here). Skipped when either cvar was set by a
+    // higher-priority source (fable_2.toml, REX_* env, command line).
+    {
+      const int32_t fps = fable2::config::Get().fps_limit;
+      if (fps != 30 &&
+          rex::cvar::GetFlagSource("frame_limit") == rex::cvar::Source::kDefault &&
+          rex::cvar::GetFlagSource("guest_vblank_pacing") == rex::cvar::Source::kDefault) {
+        const std::string limit = std::to_string(std::clamp(fps, 0, 240));
+        if (rex::cvar::SetFlagByName("frame_limit", limit) &&
+            rex::cvar::SetFlagByName("guest_vblank_pacing", "false")) {
+          REXSYS_INFO("[fable2-config] frame rate cap {} fps (fps_limit; 30 = original lock)",
+                      limit);
+        } else {
+          REXSYS_WARN("[fable2-config] frame_limit / guest_vblank_pacing cvars missing");
         }
       }
     }

@@ -63,9 +63,10 @@ REXCVAR_DEFINE_DOUBLE(fit_window_quad_power, 1.0, "Display",
 REXCVAR_DEFINE_DOUBLE(fit_window_text_power, 1.0, "Display",
                       "With fit_window_native_16x9: the game's own 2D text x "
                       "moves toward the centre by ((16/9)/aspect)^this");
-REXCVAR_DEFINE_BOOL(fit_window_ui_log, true, "Display",
+REXCVAR_DEFINE_BOOL(fit_window_ui_log, false, "Display",
                     "Log [ui-layout] lines: the element tree of each menu "
-                    "and HUD screen as it loads, plus Gameface script messages");
+                    "and HUD screen as it loads, plus Gameface script messages "
+                    "(slow: about 0.3-0.6 s per book menu on a Steam Deck)");
 
 namespace fable2::fitwindow {
 inline float CurrentAspect();
@@ -76,10 +77,13 @@ namespace fable2::fitwindow::ui {
 
 namespace detail {
 
-// Test builds log the layout whatever fit_window_ui_log says, because L's
-// config file does not reach this cvar. Bump kBuild with each test zip.
-inline constexpr bool kAlwaysLogLayout = true;
-inline constexpr int kBuild = 56;
+// Set true to log the layout whatever fit_window_ui_log says (for a test
+// build whose config file does not reach this cvar). Off by default: the tree
+// walk runs in the game's Lua on the game thread and held each book menu
+// (Items, Abilities, ...) back by 0.3-0.6 s on a Steam Deck, plus a 50-90 ms
+// freeze from the menu dump about 1.5 s later. Bump kBuild with each test zip.
+inline constexpr bool kAlwaysLogLayout = false;
+inline constexpr int kBuild = 58;
 inline bool LogLayout() {
   return kAlwaysLogLayout || REXCVAR_GET(fit_window_ui_log);
 }
@@ -383,6 +387,11 @@ end
 -- frame with the current dx. cover/page/card are dx times a tuning factor
 -- (fixMenus sets them each frame; __fitwin_tune.cover/page/card).
 local cover, page, card, bookCover, paper = 0, 0, 0, 0, 0
+-- Menus only ever spread outward. On a window narrower than 16:9 (the Steam
+-- Deck's 16:10) dx is negative, and pulling the covers and pages inward made
+-- the menu column overlap the right-hand page; left as authored, only the
+-- outer edge of each cover is cut off (64 canvas units per side at 16:10).
+local mdx = 0
 local staticParts = { Buttons = true, KeyLight = true, MenuHighlight = true,
   Money = true }
 -- The covers and the character cards are keyframe-animated on their own
@@ -423,7 +432,7 @@ local function spreadMenu(menu)
         -- Build 13 also shifted g_MenuPositionSlots, but those slots are
         -- relative to Buttons, so items moved twice and their labels slid
         -- under the cover.
-        nudge(k[i], "ExpandableMenu/" .. n, "position.x", -dx)
+        nudge(k[i], "ExpandableMenu/" .. n, "position.x", -mdx)
       end
     end
   end
@@ -529,19 +538,21 @@ local function pauseFade()
     pcall(setAttribute, fadeCam, "position.z", want)
   end
 end
+local everWide = false
 local function fixMenus()
   -- Tuned live against vanilla 16:9 (build 29 screenshots at 4:3, 2.39 and
   -- 32:9): the covers keep their vanilla visible width at the window edges
   -- (dx), the paper stays under the right cover (1.2 dx: at dx a strip
   -- showed beside it on the Weapons screen), and the waiting
   -- cards, in a 0.75-scaled parent, stay off-screen (1.8 dx).
-  cover = dx * tk("cover", 1)
-  page = dx * tk("page", 1.2)
-  card = dx * tk("card", 1.8)
+  mdx = math.max(dx, 0)
+  cover = mdx * tk("cover", 1)
+  page = mdx * tk("page", 1.2)
+  card = mdx * tk("card", 1.8)
   -- Book screens' right cover (ws tune bookcover, 1.2): moves with the
   -- pages, so pages meet it as in vanilla (shop front page, Items).
-  bookCover = dx * tk("bookcover", 1.2)
-  paper = dx * tk("paper", 1.5)
+  bookCover = mdx * tk("bookcover", 1.2)
+  paper = mdx * tk("paper", 1.5)
   if screen == "title" then
     -- Title: left as authored. Its 16:9 box (White) is on the title's
     -- timeline: scale, position.z and the title camera are put back when it
@@ -553,6 +564,13 @@ local function fixMenus()
     -- Tell the host a menu is open: menus play small Bink previews (the
     -- Abilities pages), which must not letterbox the whole screen.
     if fixTick % 10 == 0 then pcall(output, "[fitwin-menu]") end
+    -- At 16:9 or narrower (the Steam Deck's 16:10) menus keep their authored
+    -- layout, so every move below is 0 and the per-frame re-apply only reads
+    -- the element tree. Skip it until the window has been wider than 16:9 on
+    -- this screen; after that it keeps running, so a live change back to a
+    -- narrow window puts the moved parts back.
+    if mdx > 0 then everWide = true end
+    if not everWide then return end
     spreadMenu(menu)
     if not menu and leftFrame then childMove(leftFrame, "LeftFrame", "^frame_new", -cover) end
     -- Build 42-43 (shop, 2.39:1): the game positions each page's Contents

@@ -5,6 +5,10 @@
 // Which textures get keycaps: every controller icon IconLabel knows (the whole
 // icon becomes a keycap), plus the atlases in Atlases() (keycaps drawn into
 // regions of a larger sheet). Adding a prompt means adding a row there.
+//
+// With Steam Deck prompts on (src/gui/deck_prompts.h), the controller version
+// shows Steam Deck glyphs instead of the Xbox 360 buttons, and the keycaps are
+// drawn over that.
 #ifndef FABLE2_GUI_PROMPT_TEXTURES_H
 #define FABLE2_GUI_PROMPT_TEXTURES_H
 
@@ -21,6 +25,7 @@
 
 #include "bank_file.h"
 #include "bank_rebuild.h"
+#include "deck_prompts.h"
 #include "gui_tex_codec.h"
 #include "gui_texture_bank.h"
 #include "keycap_compose.h"
@@ -79,11 +84,18 @@ inline std::optional<TextureHeader> ReadHeader(const GuiTextureBank& headers,
 
 using Keycaps = std::vector<std::pair<KeycapRegion, std::string>>;
 
-// The keycaps each prompt texture gets, by lowercase entry name.
+// The keycaps each prompt texture gets, by lowercase entry name. With `deck`,
+// the textures the Steam Deck glyphs replace are in the plan too, with or
+// without keycaps.
 inline std::unordered_map<std::string, Keycaps> PlanKeycaps(
     const GuiTextureBank& textures, const GuiTextureBank& headers,
-    const std::unordered_map<std::string, std::string>& labels, bool mouse_look) {
+    const std::unordered_map<std::string, std::string>& labels, bool mouse_look,
+    bool deck = false) {
   std::unordered_map<std::string, Keycaps> plan;
+  if (deck) {
+    for (const auto& [name, entry] : textures.entries())
+      if (HasDeckStyle(name) && ReadHeader(headers, name)) plan[name];
+  }
   for (const auto& [name, entry] : textures.entries()) {
     const auto label = IconLabel(entry.name, labels, mouse_look);
     const auto h = ReadHeader(headers, name);
@@ -122,26 +134,61 @@ inline void DrawKeycap(std::vector<uint8_t>& rgba, const TextureHeader& h,
   }
 }
 
+// A texture as a full RGBA payload (size prefix, then A,R,G,B in Xenos tile
+// order), whichever way the bank stores it.
+inline bool DecodeToTile(const uint8_t* payload, size_t len, const TextureHeader& h,
+                         std::vector<uint8_t>& out) {
+  const size_t rgba_size = 4 + size_t(h.width) * h.height * 4;
+  if (h.format == 0xA2) {
+    if (len != rgba_size) return false;
+    out.assign(payload, payload + len);
+    return true;
+  }
+  return DecodeCompressedIconToTile(payload, len, h.width, h.height, out) &&
+         out.size() == rgba_size;
+}
+
+// What the Steam Deck prompts of glyph set `set` are made from: the glyphs, and
+// the game's medallion taken from its Back icons.
+inline DeckArt MakeDeckArt(const GuiTextureBank& textures, const GuiTextureBank& headers,
+                           const std::string& set) {
+  DeckArt art;
+  art.set = set;
+  auto medallion = [&](const char* name, int size) -> std::vector<uint8_t> {
+    auto entry = textures.entries().find(name);
+    const auto h = ReadHeader(headers, name);
+    std::vector<uint8_t> tile;
+    if (entry == textures.entries().end() || !h || h->width != size || h->height != size ||
+        !DecodeToTile(textures.Payload(entry->second), size_t(entry->second.length), *h, tile))
+      return {};
+    return deck_detail::MakeMedallion(tile, size);
+  };
+  art.medallion64 = medallion(kDeckMedallion64, 64);
+  art.medallion32 = medallion(kDeckMedallion32, 32);
+  return art;
+}
+
 // Both versions of a prompt texture as full RGBA payloads (size prefix, then
-// A,R,G,B in Xenos tile order): [0] the game's art, [1] with the keycaps.
+// A,R,G,B in Xenos tile order): [0] the controller version (the game's art,
+// or with `deck` the Steam Deck prompts), [1] that with the keycaps.
+// `original` is the game's art.
 struct PromptImages {
+  std::vector<uint8_t> original;
   std::vector<uint8_t> rgba[2];
 };
 
 inline std::optional<PromptImages> DrawPromptImages(const uint8_t* payload, size_t len,
                                                     const TextureHeader& h,
-                                                    const Keycaps& keycaps) {
+                                                    const Keycaps& keycaps,
+                                                    const std::string& name = {},
+                                                    const DeckArt* deck = nullptr) {
   const size_t rgba_size = 4 + size_t(h.width) * h.height * 4;
   PromptImages images;
-  auto& original = images.rgba[0];
-  if (h.format == 0xA2) {
-    if (len != rgba_size) return std::nullopt;
-    original.assign(payload, payload + len);
-  } else if (!DecodeCompressedIconToTile(payload, len, h.width, h.height, original) ||
-             original.size() != rgba_size) {
-    return std::nullopt;
-  }
-  images.rgba[1] = original;
+  auto& original = images.original;
+  if (!DecodeToTile(payload, len, h, original)) return std::nullopt;
+  images.rgba[0] = original;
+  if (deck) ApplyDeckStyle(name, images.rgba[0], h.width, h.height, *deck);
+  images.rgba[1] = images.rgba[0];
   for (const auto& [region, label] : keycaps) DrawKeycap(images.rgba[1], h, region, label);
   if (images.rgba[1].size() != rgba_size) return std::nullopt;
   return images;
@@ -189,10 +236,11 @@ inline std::vector<uint8_t> ReencodeChangedBlocks(const std::vector<uint8_t>& bc
 inline std::optional<PromptTexture> BuildTexture(const GuiTextureBank& bank,
                                                  const GuiTextureBank::Entry& entry,
                                                  const std::string& name, const TextureHeader& h,
-                                                 const Keycaps& keycaps) {
+                                                 const Keycaps& keycaps,
+                                                 const DeckArt* deck) {
   const uint8_t* src = bank.Payload(entry);
   const size_t len = size_t(entry.length);
-  auto images = DrawPromptImages(src, len, h, keycaps);
+  auto images = DrawPromptImages(src, len, h, keycaps, name, deck);
   if (!images) return std::nullopt;
   PromptTexture t;
   t.name = name;
@@ -201,9 +249,9 @@ inline std::optional<PromptTexture> BuildTexture(const GuiTextureBank& bank,
     std::vector<uint8_t> bc3;
     if (!DecodeCompressedToBc3(src, len, h.width, h.height, bc3)) return std::nullopt;
     t.raw_bc3 = true;
-    t.payload[0] = BuildRawBc3Body(bc3);
-    t.payload[1] = BuildRawBc3Body(
-        ReencodeChangedBlocks(bc3, images->rgba[0], images->rgba[1], h.width, h.height));
+    for (int m = 0; m < 2; ++m)
+      t.payload[m] = BuildRawBc3Body(
+          ReencodeChangedBlocks(bc3, images->original, images->rgba[m], h.width, h.height));
     for (int m = 0; m < 2; ++m) t.live[m] = RawBc3LiveSurface(t.payload[m], h.width);
   } else {
     for (int m = 0; m < 2; ++m) {
@@ -227,16 +275,19 @@ inline void RestoreBanks(const std::filesystem::path& root) {
 
 // Builds every prompt texture for this key map and rewrites the banks to hold
 // them. Returns nothing (and puts the untouched banks back) when no key is
-// bound and mouse look is off.
+// bound, mouse look is off and Steam Deck prompts are off. `deck_set` is the
+// Steam Deck glyph set ("light" or "dark"), "" for the game's Xbox 360 icons.
 inline std::vector<PromptTexture> BuildPromptTextures(const std::filesystem::path& root,
                                                       const std::string& key_map,
-                                                      bool mouse_look) {
+                                                      bool mouse_look,
+                                                      const std::string& deck_set = {}) {
+  const bool deck = !deck_set.empty();
   using namespace prompt_detail;
   std::error_code ec;
   std::filesystem::remove(root / "keyboard_prompts.bin", ec);  // written by 1.6.0
 
   const auto labels = ResolveLabels(key_map, "");
-  if (labels.empty() && !mouse_look) {
+  if (labels.empty() && !mouse_look && !deck) {
     RestoreBanks(root);
     return {};
   }
@@ -249,13 +300,15 @@ inline std::vector<PromptTexture> BuildPromptTextures(const std::filesystem::pat
       !headers.Parse(header_bytes.data(), header_bytes.size()))
     return {};
 
+  const DeckArt deck_art = deck ? MakeDeckArt(textures, headers, deck_set) : DeckArt{};
   std::vector<PromptTexture> built;
   std::unordered_map<std::string, std::vector<uint8_t>> replacements;
   std::unordered_map<std::string, uint32_t> header_sizes;
   std::unordered_set<std::string> raw_bc3;
-  for (const auto& [name, keycaps] : PlanKeycaps(textures, headers, labels, mouse_look)) {
+  for (const auto& [name, keycaps] : PlanKeycaps(textures, headers, labels, mouse_look, deck)) {
     const auto h = ReadHeader(headers, name);
-    auto t = BuildTexture(textures, textures.entries().at(name), name, *h, keycaps);
+    auto t = BuildTexture(textures, textures.entries().at(name), name, *h, keycaps,
+                          deck ? &deck_art : nullptr);
     if (!t) continue;
     if (h->format != 0xA2) {  // stored differently from the original
       replacements[name] = t->payload[0];

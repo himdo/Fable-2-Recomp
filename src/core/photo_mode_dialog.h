@@ -16,6 +16,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -28,6 +29,10 @@
 #include <rex/logging/macros.h>
 #include <rex/ui/imgui_dialog.h>
 #include <rex/ui/imgui_drawer.h>
+#ifndef _WIN32
+#include <rex/ui/window.h>
+#include <rex/ui/windowed_app_context.h>
+#endif
 
 #include "fable2_config.h"
 #include "photo_mode_font.h"
@@ -401,7 +406,27 @@ inline std::vector<Page> BuildPages() {
 class PhotoModeDialog final : public rex::ui::ImGuiDialog {
  public:
   explicit PhotoModeDialog(rex::ui::ImGuiDrawer* drawer)
-      : rex::ui::ImGuiDialog(drawer), pages_(menu::BuildPages()) {}
+      : rex::ui::ImGuiDialog(drawer), pages_(menu::BuildPages()) {
+#ifndef _WIN32
+    // A registered dialog makes the presenter repaint the window on the UI
+    // thread at the display refresh rate instead of presenting once per game
+    // frame (FPS overlays then show the refresh rate, 90 on the Steam Deck
+    // OLED, and every frame is presented twice). Stay unregistered until photo
+    // mode starts; OnDraw unregisters again when it ends. (Windows keeps the
+    // dialog registered: the drawer's AddDialog / RemoveDialog aren't
+    // exported from rexruntime.dll there.)
+    imgui_drawer()->RemoveDialog(this);
+    instance_.store(this, std::memory_order_release);
+    entered_hook().store(&OnPhotoModeEntered, std::memory_order_release);
+#endif
+  }
+#ifndef _WIN32
+  ~PhotoModeDialog() override {
+    entered_hook().store(nullptr, std::memory_order_release);
+    instance_.store(nullptr, std::memory_order_release);
+    // ~ImGuiDialog then removes it from the drawer, harmless if unregistered.
+  }
+#endif
 
  protected:
   void OnDraw(ImGuiIO& io) override {
@@ -423,6 +448,13 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
     if (!on) {
       ui_wants_mouse().store(false, std::memory_order_relaxed);
       ui_wants_keyboard().store(false, std::memory_order_relaxed);
+#ifndef _WIN32
+      // Photo mode is over: stop the continuous repaints (see the constructor).
+      if (registered_) {
+        registered_ = false;
+        imgui_drawer()->RemoveDialog(this);
+      }
+#endif
       return;
     }
     k_ = std::max(0.5f, io.DisplaySize.y / 720.0f);
@@ -466,6 +498,29 @@ class PhotoModeDialog final : public rex::ui::ImGuiDialog {
   }
 
  private:
+#ifndef _WIN32
+  // World thread: photo mode just started - register the dialog on the UI
+  // thread so it's drawn.
+  static void OnPhotoModeEntered() {
+    PhotoModeDialog* dialog = instance_.load(std::memory_order_acquire);
+    if (!dialog) {
+      return;
+    }
+    rex::ui::Window* window = dialog->imgui_drawer()->window();
+    if (!window) {
+      return;
+    }
+    window->app_context().CallInUIThreadDeferred([] {
+      PhotoModeDialog* dialog = instance_.load(std::memory_order_acquire);
+      if (dialog && !dialog->registered_) {
+        dialog->registered_ = true;
+        dialog->imgui_drawer()->AddDialog(dialog);
+      }
+    });
+  }
+  static inline std::atomic<PhotoModeDialog*> instance_{nullptr};
+  bool registered_ = false;  // UI thread only.
+#endif
   std::vector<menu::Page> pages_;
   int page_ = 0;
   int sel_ = 0;  // index into the page's visible items
