@@ -13,8 +13,12 @@ When you finish a fix or a feature, add or update its folder and its row below. 
 
 | Fix | Status | Commits | Summary |
 | --- | --- | --- | --- |
+| [alt_tab_script_crash](fix/alt_tab_script_crash/overview.md) | merged | c5c80ff (#189), 266f181 (#195) | Crash after alt-tab: the direct mouse camera started a game script from the render thread |
+| [amd_gpu_hang](fix/amd_gpu_hang/overview.md) | merged | SDK 0fe6654 (rexglue-sdk#29), pin in 2df8825 (#158) | RX 7000/9000 GPU hang in Wraithmarsh: negative relative constant index read 4 GB away |
 | [fps_cap](fix/fps_cap/overview.md) | merged | 73d89b0, d28da25 (#143), e0c69c0 (#135) | The game's 30 FPS lock, and vsync presenting at refresh + 30 |
+| [integrated_graphics_crash](fix/integrated_graphics_crash/overview.md) | merged (hybrid laptops); iGPU-only open | 4d58a5f (#55) | Crash after the opening cutscene on integrated graphics |
 | [main_menu_crash](fix/main_menu_crash/overview.md) | merged | afebcc5 | Source builds crashed at the main menu; repeated memory reserves must fail |
+| [rendering_and_performance](fix/rendering_and_performance/overview.md) | merged | #143, #148–#151, #158, SDK #25–#28 | 1.6 speed-ups and the tree flicker and logo flash they exposed |
 | [runtime_fixes](fix/runtime_fixes/overview.md) | merged | 724495a, 359d3a1 (#148), e0c69c0 (#135) | Audio fallback, frame limits, async pipeline wait, dog fur depth bias, and how the SDK is built |
 | [two_controller_black_menu](fix/two_controller_black_menu/overview.md) | merged | a4b0274 | Black main menu when a second controller pressed A |
 
@@ -24,8 +28,12 @@ When you finish a fix or a feature, add or update its folder and its row below. 
 | --- | --- | --- | --- |
 | [console_commands](feature/console_commands/overview.md) | merged | 4f0afe5 (#127) | The `f2` developer console and its command reference |
 | [fit_window](feature/fit_window/overview.md) | merged | 4f0afe5 (#127) | Render at the window's aspect ratio, with the HUD and menus following |
+| [function_naming](feature/function_naming/overview.md) | merged | f451b72 (#238) | Manifest names for the 22 functions recent PRs relied on |
 | [german_goty_support](feature/german_goty_support/overview.md) | merged | bfcc5d6, 77059af | Accept the German GOTY XEX alongside USA/Europe |
 | [guest_patches](feature/guest_patches/overview.md) | merged | cab738b, #208, #210, #226, #228 | Xenia-style guest patches, mid-asm hook patches and their `[patches]` switches |
+| [mouse_aim](feature/mouse_aim/overview.md) | merged | 49c70ab (#183) | The mouse moves the ranged aim reticle; highlight release |
+| [mouse_camera](feature/mouse_camera/overview.md) | merged | 80e8361 (#177) | Direct mouse camera: a fixed angle per count, no stick top speed or coast |
+| [test_suite](feature/test_suite/overview.md) | merged | 8957735 (#166), be11165 (#174), 5cc6513 (#229) | Known bugs (strict xfails), coverage gaps and quirks of the test suite |
 
 ## Reference
 
