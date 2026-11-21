@@ -37,6 +37,40 @@ includes = ["fable2_switch_tables.toml"]
 longjmp_address = 0x82CA9260
 setjmp_address = 0x83000200
 
+# Register optimisations for the recompiled code. Each one makes codegen keep
+# a guest register in a C++ local instead of the context structure, or drop
+# bookkeeping the game does not need.
+#
+# KEEP THESE ABOVE THE FIRST [[entrypoint.midasm_hook]]. In TOML a key written
+# after an array-of-tables header belongs to that table. Further down the file
+# these lines become keys of a hook, codegen does not see them, and it falls
+# back to false without a warning. That is where they were from the first hook
+# (2026-09-15) on: under the last hook, set to true from 2026-10-06, while
+# every build ran with all eight off. tests/config/test_manifest_codegen_flags.py
+# checks the position. A build logs the values it was generated with at
+# start-up, at debug level: "Codegen config: skip_lr=... skip_msr=...".
+#
+# All false: that is how every release so far was built. Each flag was built
+# and tried on its own on Windows on 2026-11-19 (Release, on master 8661824):
+#   - non_argument_as_local hangs before the main menu, with nothing logged.
+#   - non_volatile_as_local crashes in CRT start-up with a guest access
+#     violation.
+#   - The other six pass a short play test, alone and together. Together they
+#     make fable_2.exe about 21 % smaller. No FPS change was measured.
+# A short play test does not reach rare paths. skip_msr removes the global lock
+# the hand-written function overrides still take, and skip_lr changes what
+# setjmp/longjmp and unwinding see, so give either one a long play test before
+# a release. Changing a flag rewrites fable_2_pch.h; if the build then stops on
+# a precompiled header that is out of date, run it again.
+skip_lr = false
+skip_msr = false
+ctr_as_local = false
+xer_as_local = false
+reserved_as_local = false
+cr_as_local = false
+non_argument_as_local = false
+non_volatile_as_local = false
+
 # --- Recomp-level patches via mid-asm hooks (see docs/patches.md) ---------
 # Code-region Xenia patches are inert at runtime in this recomp (guest .text
 # is never executed), so they are applied to the RECOMPILED code instead: a
@@ -260,16 +294,6 @@ address = 0x82A7607C
 name = "fable2_hook_realtime_texture_morphing"
 registers = ["r9"]
 after_instruction = true
-
-# Conservative settings: no register optimizations
-skip_lr = true
-skip_msr = true
-ctr_as_local = true
-xer_as_local = true
-reserved_as_local = true
-cr_as_local = true
-non_argument_as_local = true
-non_volatile_as_local = true
 
 # Invalid instruction skips: 32-bit values (big-endian) the recompiler skips
 # over during its linear .text walk instead of analyzing them as functions.
