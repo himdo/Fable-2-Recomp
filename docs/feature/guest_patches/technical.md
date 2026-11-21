@@ -1,5 +1,7 @@
 # Guest-image patch system (Xenia patch format)
 
+**Status:** merged · **Commits:** cab738b, f146b02 (#208), bfe422d (#210), 8446622 (#228), 5f5f55f (#226) · **Last checked against:** 5f5f55f
+
 Runtime patching of the loaded `default.xex` guest image, using the op shape
 of Xenia's game-patches (`patch.toml`) format.
 
@@ -155,8 +157,8 @@ Currently **empty**.
 
 | Patch | Mechanism | Change | Measured effect |
 |---|---|---|---|
-| Unlock Website Items (Guy) | mid-asm hook `fable2_hook_unlock_website` @ 0x8256E384 (after `rlwinm r9,r10,0,25,25`); toggle: `[patches] unlock_website` | Forces `r9 = 0x40` (bit 6) in `sub_8256E368`, so the website/Guild-chest item lookup reads as unlocked and runs the real lookup. Re-derives the Xenia "Unlock Website Items" intent for THIS build (the stock ops target a different revision's bytes). | Hook confirmed in generated code + clean startup; in-game chest unlock pending manual test |
-| Unlock CE Content (Guy) | mid-asm hook `fable2_hook_unlock_ce` @ 0x824B3540 (after `rlwinm r10,r11,0,25,25`); toggle: `[patches] unlock_ce` | Forces `r10 = 0x40` (bit 6) in `sub_824B3528`, so the Collectors-Edition chest item lookup reads as unlocked and runs the real lookup. Same re-derivation approach. | Hook confirmed in generated code + clean startup; in-game chest unlock pending manual test |
+| Unlock Website Items (Guy) | mid-asm hooks `fable2_hook_website_g1` @ 0x8256E384 (r9, after the GATE-1 `rlwinm`), `fable2_hook_website_g1b` @ 0x8256E3AC (r8, after the GATE-1b `clrlwi`) and `fable2_hook_website_grantnew` @ 0x8256D9E4 (r3, the grant method's return); toggle: `[patches] unlock_website` | Forces both registration gate results in `sub_8256E368` to 1 and the grant method's return to 1, so the website/Guild-chest getter treats the player as registered, finds the item and reports it as granted. The getters run at save load, so the chest inventory is filled on load. Re-derives the Xenia "Unlock Website Items" intent for THIS build (the stock ops target a different revision's bytes). | Hook confirmed in generated code + clean startup; in-game chest unlock pending manual test |
+| Unlock CE Content (Guy) | mid-asm hooks `fable2_hook_ce_g1` @ 0x824B3540 (r10), `fable2_hook_ce_g1b` @ 0x824B3568 (r9) and `fable2_hook_ce_grantavail` @ 0x824ACAE0 (r3); toggle: `[patches] unlock_ce` | Same shape for the Collectors Edition chest in `sub_824B3528`: both gate results forced to 1, and the grant method's return forced to 1. | Hook confirmed in generated code + clean startup; in-game chest unlock pending manual test |
 
 To add a new code patch: a `[[entrypoint.midasm_hook]]` entry + hook
 function gated on a `[patches]` config key (preferred), or an

@@ -1,5 +1,7 @@
 # Fix: D3D12 / Vulkan source builds crashed at the main menu
 
+**Status:** merged · **Commits:** afebcc5 · **Last checked against:** 5f5f55f
+
 **Date:** 2026-09-05
 **Symptom:** `fable2.cmd d3d12` and `fable2.cmd vulkan` (the source-built
 rexglue runtime + plugin) crashed as soon as the game reached the main menu,
