@@ -163,10 +163,43 @@ to the window), F4 for the debug menu, F5 for Lua and F9 to pause.
 
 builds the Release game and writes `out/dist/Fable2-Linux-<cpu>/` plus a
 `.tar.gz` of it (about 40 MB). The package holds no game content: extract it
-on the target machine, copy `default.xex` and `data/` next to `Fable2.sh`, and
-run `Fable2.sh`. Saves, settings, logs and the shader cache are kept in that
-folder. The binaries need glibc 2.38 or newer (Ubuntu 24.04, SteamOS 3.6 and
+on the target machine and run `Fable2.sh`. On the first start, when
+`default.xex` and `data/` are not there yet, it extracts them from your disc
+image (see [First start](#first-start-the-game-files)); copying them next to
+`Fable2.sh` by hand works too. Saves, settings, logs and the shader cache are
+kept in that folder. The binaries need glibc 2.38 or newer (Ubuntu 24.04, SteamOS 3.6 and
 later); `Fable2.sh` checks and says so if the system is too old.
+
+### First start: the game files
+
+When `default.xex` or `data/` is missing, `Fable2.sh` extracts them from your
+Fable II GOTY disc image with `extras/x360extract.py` (a Python port of
+`tools/x360extract`, byte-for-byte the same output; it needs only `python3`):
+
+1. It looks for the image (`*.iso`, over 6 GB) in the package folder, the
+   folder above it, `~/Downloads`, `~/Desktop`, `~/Games`, your home folder and
+   mounted drives and SD cards (`/run/media`), and keeps only images whose
+   `default.xex` is a supported version (`extras/game_versions.json`). If it
+   finds one, it asks to extract from it; otherwise it opens a file picker.
+   An image with an unknown or unsupported `default.xex` can still be
+   extracted after a warning.
+2. It checks the free space, extracts `default.xex` and `data/` (about
+   6.7 GB, a few minutes) with a progress window, and starts the game. The
+   files are written to `.fable2-extract/` first and moved into place at the
+   end, so a cancelled run leaves nothing half-extracted. The image is not
+   changed and is not needed afterwards.
+3. On SteamOS, while Steam is running, it then offers to add the game to the
+   Steam library (with `steamos-add-to-steam`, through a link named
+   `Fable II` next to `Fable2.sh`, so the library shows that name), so it
+   shows up in Gaming Mode.
+
+The dialogs use `zenity` (or `kdialog`); started from a terminal, it asks in
+the terminal instead. The extractor also works on its own:
+
+```bash
+python3 extras/x360extract.py probe "/path/to/Fable II.iso"
+python3 extras/x360extract.py extract "/path/to/Fable II.iso" .
+```
 
 ## Steam Deck
 
@@ -176,20 +209,21 @@ game is only needed to start it from Gaming Mode.
 ### With a package built on another PC (recommended)
 
 1. On the PC, build the package (`./build.sh --cpu deck package`, for example
-   in WSL2 on Windows) and copy `Fable2-Linux-deck.tar.gz`, `default.xex` and
-   the `data` folder to a USB drive or SD card.
+   in WSL2 on Windows) and copy `Fable2-Linux-deck.tar.gz` and your Fable II
+   disc image (`.iso`) to the Deck (or to a USB drive or SD card).
 2. On the Deck, in Desktop Mode, copy the archive to `~/Games/` and extract it
    there (right-click → Extract → Extract archive here). Extracting on the Deck
    keeps the executable flags, which a copy from a FAT32/exFAT drive would lose.
-3. Copy `default.xex` and the whole `data` folder into
-   `~/Games/Fable2-Linux-deck/`, next to `Fable2.sh`.
-4. **Desktop Mode:** double-click `Fable2.sh` (choose *Execute*), or run it
-   from Konsole.
-5. **Gaming Mode:** still in Desktop Mode, open Steam, choose *Games → Add a
-   Non-Steam Game to My Library*, browse to `Fable2.sh` (set the file filter
-   to *All files*) and add it. In the shortcut's *Properties → Compatibility*,
-   make sure no compatibility tool (Proton) is forced. It then shows up in
-   the library in Gaming Mode.
+3. Double-click `Fable2.sh` (choose *Execute*). On the first start it finds
+   the disc image (for example in `~/Downloads` or on the SD card), extracts
+   the game files and offers to add the game to Steam for Gaming Mode (see
+   [First start](#first-start-the-game-files)). Instead of the image you can
+   also copy `default.xex` and the whole `data` folder next to `Fable2.sh`.
+4. **Gaming Mode by hand** (if you skipped the offer): still in Desktop Mode,
+   open Steam, choose *Games → Add a Non-Steam Game to My Library*, browse to
+   `Fable2.sh` (set the file filter to *All files*) and add it. In the
+   shortcut's *Properties → Compatibility*, make sure no compatibility tool
+   (Proton) is forced. It then shows up in the library in Gaming Mode.
 
 ### Building on the Deck itself
 

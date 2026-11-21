@@ -44,20 +44,31 @@ mkdir -p "$PKG/assets/fonts"
 cp -r "$ROOT/assets/fonts/Google Sans" "$PKG/assets/fonts/"
 cp -r "$ROOT/assets/deck_prompts" "$PKG/assets/"
 cp "$ROOT"/src/lua/*.lua "$PKG/extras/scripts/recomp/"
+# First-start extraction of the game files from the user's disc image
+# (Fable2.sh runs it when default.xex or data/ is missing).
+cp "$ROOT/tools/linux/x360extract.py" "$ROOT/constants/game_versions.json" "$PKG/extras/"
 sed "s/@FABLE2_NEED_GLIBC@/$NEED_GLIBC/" "$ROOT/tools/linux/Fable2.sh" > "$PKG/Fable2.sh"
-chmod 755 "$PKG/Fable2.sh" "$PKG/fable_2"
+chmod 755 "$PKG/Fable2.sh" "$PKG/fable_2" "$PKG/extras/x360extract.py"
 # Strip debug info from the shipped copies (line tables only, but large).
 strip --strip-debug "$PKG/fable_2" "$PKG/librexruntime.so" "$PKG/librexgpu-xenos.so"
 
 cat > "$PKG/PUT_GAME_FILES_HERE.txt" <<EOF
-Copy these two items from your own Fable II Game of the Year disc into this
-folder, next to Fable2.sh:
+The game files come from your own Fable II Game of the Year disc image (.iso).
+
+Easiest: run Fable2.sh. On the first start it looks for the disc image (in
+this folder, the one above it, Downloads, Desktop, Games, your home folder
+and SD cards), or asks you to pick it, and extracts default.xex and the data
+folder (about 6.7 GB) into this folder. The disc image is not changed. On a
+Steam Deck, do this in Desktop Mode; it then offers to add the game to Steam.
+
+By hand: copy these two items from the disc into this folder, next to
+Fable2.sh:
 
   default.xex
   data/          (the whole folder, about 6.5 GB)
 
-Then run Fable2.sh. On a Steam Deck, add Fable2.sh to Steam as a non-Steam
-game (file type "All files") and do not force a compatibility tool (Proton).
+To add it to Steam yourself, add Fable2.sh as a non-Steam game (file type
+"All files") and do not force a compatibility tool (Proton).
 Needs glibc $NEED_GLIBC or newer (SteamOS 3.6+). Built for CPU level: $CPU.
 See Linux.md for settings.
 EOF
