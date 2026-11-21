@@ -1,5 +1,7 @@
 # Fable 2 Developer Console: Command Reference
 
+**Status:** merged · **Commits:** 4f0afe5 (#127); later commands in #169, #177, #183, #184 · **Last checked against:** 5f5f55f
+
 Build: **console-v9**. Source: `src/core/fable2_console.h` (host commands) and `src/lua/console_cmds.lua` (Lua commands).
 
 ## How the console works
@@ -17,7 +19,7 @@ Build: **console-v9**. Source: `src/core/fable2_console.h` (host commands) and `
 - **Name clashes:** a line whose first word is a command runs that command, even if you meant Lua. For example, `level = 3` runs `level`. Write `lua level = 3` instead.
 - `help` lists commands by group; `help <group>` shows the usage of every command in a group; `help <command>` shows one.
 
-**Argument shapes** (console-v7) come from the game's own compiled scripts: `tools/lua_callshapes.py` reads every call in `gamescripts.bnk`/`guiscripts.bnk` and records how many arguments it passes; the result is in [LUA-CALL-SHAPES.md](LUA-CALL-SHAPES.md). A command is only marked **args unconfirmed** when no shipped script calls that function. Many of these use *shape probing*: the console tries `(entity, args)` first and then `(args)`, and the reply ends in `[shape 1]` or `[shape 2]` to say which one the game accepted. Please send those lines back; they turn guesses into facts.
+**Argument shapes** (console-v7) come from the game's own compiled scripts: `tools/lua_callshapes.py` reads every call in `gamescripts.bnk`/`guiscripts.bnk` and records how many arguments it passes; the result is in [lua_call_shapes.md](../../reference/lua_call_shapes.md). A command is only marked **args unconfirmed** when no shipped script calls that function. Many of these use *shape probing*: the console tries `(entity, args)` first and then `(args)`, and the reply ends in `[shape 1]` or `[shape 2]` to say which one the game accepted. Please send those lines back; they turn guesses into facts.
 
 **Who:** commands that take `[who]` accept `hero` (or `me`), `target` (what the hero is targeting), `dog`, `henchman`, or an entity name (looked up with `Debug.GetEntityWithName`).
 
@@ -531,7 +533,7 @@ The game-side `GUI` table reaches HUD elements **by name**. Names come from `art
 
 #### Position, scale, rotation, opacity, tint, free text (console-v9)
 
-These edit element attributes directly inside the GameFace GUI Lua state, through the bridge described in [GUI-LUA-BRIDGE.md](GUI-LUA-BRIDGE.md). Replies come back as `[gui]` lines (they may arrive a frame later). An element is found by path (`Scene.Layer.Minimap`) or by name anywhere in the tree (`Minimap`).
+These edit element attributes directly inside the GameFace GUI Lua state, through the bridge described in [gui_lua_bridge.md](../../reference/gui_lua_bridge.md). Replies come back as `[gui]` lines (they may arrive a frame later). An element is found by path (`Scene.Layer.Minimap`) or by name anywhere in the tree (`Minimap`).
 
 | Sub-command | What it does |
 |---|---|

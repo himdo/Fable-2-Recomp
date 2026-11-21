@@ -25,7 +25,7 @@
       "executableVersion": "0.0.0.28",
       "payloadOffset": 16384,
       "payloadHash": "84651650d00ccd62021847a39fad6e63da0f7c49ef587a733e215e5ec5a23a4a",
-      "evidence": "docs/GERMAN_GOTY_SUPPORT.md",
+      "evidence": "docs/feature/german_goty_support/technical.md",
       "hash": "3f36e7870a06e04b3702760e93c61b1c7fded321b94021da6bfa120b424e6eb4",
       "name": "German GOTY",
       "compatible": true,

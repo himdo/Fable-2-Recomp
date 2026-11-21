@@ -1,5 +1,7 @@
 # Fix: Black main menu when a second controller presses a button
 
+**Status:** merged · **Commits:** a4b0274 (code in the SDK fork, `thirdparty/rexglue-sdk/src/kernel/xam/xam_input.cpp`) · **Last checked against:** 5f5f55f
+
 **Date:** 2026-10-21
 **Symptom:** With 2 controllers plugged in at launch, pressing **A on the
 second controller** on the front-end (title / main menu) turned the menu

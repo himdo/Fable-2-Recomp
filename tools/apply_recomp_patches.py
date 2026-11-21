@@ -4,7 +4,7 @@
 Recomps run NATIVE code, so a Xenia code-region patch (a guest .text byte
 change) has no runtime effect on its own. PREFERRED mechanism: the SDK's
 mid-asm hooks ([[entrypoint.midasm_hook]] in fable_2_manifest.toml + a hook
-function in src/fable2_hooks.cpp) - see docs/patches.md. This script is the
+function in src/fable2_hooks.cpp) - see docs/feature/guest_patches/technical.md. This script is the
 fallback for patches that cannot be expressed as hooks (e.g. constants
 baked into memory operands). It runs as a build step between codegen and
 compiling fable_2_recomp (wired in CMakeLists.txt), keyed on
@@ -26,7 +26,7 @@ GENERATED_DIR = sys.argv[1] if len(sys.argv) > 1 else "generated/default"
 # per generated file that contains the target function. The replacement ends
 # with the patch's marker comment, which is the idempotency check.
 # Patches that cannot be expressed as a [[entrypoint.midasm_hook]] (see
-# docs/patches.md).
+# docs/feature/guest_patches/technical.md).
 PATCHES = []
 
 MARKER = "// [recomp-patch: "

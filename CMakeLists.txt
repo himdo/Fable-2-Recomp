@@ -467,7 +467,7 @@ if(WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Release")
     # Prefer the source-built runtime/plugin pair over the prebuilt 0.10.0
     # pair (Release only): the source tree carries local fixes the prebuilt
     # SDK lacks (e.g. the vsync present gate in the UI presenter, see
-    # docs/FPS_CAP_INVESTIGATION.md). The source plugin is dual-backend, so a
+    # docs/fix/fps_cap/technical.md). The source plugin is dual-backend, so a
     # plain `fable_2.exe` launch stays D3D12 ("any" picks D3D12).
     if(FABLE2_VULKAN_PLUGIN AND FABLE2_VULKAN_RUNTIME)
         add_custom_command(TARGET fable_2 POST_BUILD
