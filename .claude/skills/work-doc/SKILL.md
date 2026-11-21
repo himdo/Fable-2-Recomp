@@ -30,8 +30,8 @@ Every fix or feature has a folder `docs/fix/<slug>/` or `docs/feature/<slug>/` h
 Sections, in this order. Leave out a section only if it really doesn't apply.
 
 1. **Symptom** (fix) or **Goal** (feature): what happened or what was wanted, and how to reproduce it.
-2. **Root cause** (fix) or **Design** (feature): function names and addresses, hooks, overrides, cvars, config keys. Label claims as **Verified** (read in code, logs or git), **Reported** (someone said it) or **Inference** (reasoned, not tested).
-3. **What changed:** with file paths.
+2. **Root cause** (fix) or **Design** (feature): function names and addresses, hooks, overrides, cvars, config keys. Refer to functions by their manifest names (`Cloth_Step_8219ADD8`), not `sub_` names or raw addresses. If one still has a generic name, name it first with `/name-functions`. Label claims as **Verified** (read in code, logs or git), **Reported** (someone said it) or **Inference** (reasoned, not tested).
+3. **What changed:** with file paths, plus the functions named or renamed in the manifest (`address  name  (was …)`).
 4. **Verification:** the commands run, before and after (see `/run-tests`), and what was checked in the game.
 5. **Not tested:** be explicit.
 6. **Follow-ups** (optional).
@@ -58,6 +58,7 @@ Keep each table sorted by slug.
 
 ## 6. Checks before finishing
 
+- Every game function the doc mentions has a real manifest name. List any that still don't, so they can be named before the PR.
 - No game text, dialogue, script code or asset data pasted in. Paraphrase instead.
 - No local paths (`C:\Users\…`, `/Users/…`, `D:\…`), personal names beyond GitHub handles, chat quotes, or links to private pages.
 - Relative links resolve. Paths in docs are repo-relative, e.g. `docs/fix/<slug>/`.
