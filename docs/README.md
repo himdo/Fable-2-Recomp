@@ -7,7 +7,7 @@ Every fix and feature has its own folder with two files:
 
 Both files start with the same header: `Status` (merged / open PR / no commit yet), `Commits` (short hash and PR number of the work on master) and `Last checked against` (the master commit the doc was last checked against). Fixes live in `fix/`, features in `feature/`. Guides and reference material that aren't tied to one change live in `reference/` and don't need a pair.
 
-When you finish a fix or a feature, add or update its folder and its row below. Claude Code users can run `/work-doc`. Never paste game text, dialogue, scripts or asset data into a doc; paraphrase instead.
+When you finish a fix or a feature, add or update its folder and its row below. Refer to game functions by their names in `fable_2_manifest.toml`, and name any you worked out that still have a generic `sub_` or `ProcessAndProcessAndProcessN_` name: the long-term goal is a readable decompilation that supports modding, so what you discover belongs in the manifest. Claude Code users can run `/work-doc`. Never paste game text, dialogue, scripts or asset data into a doc; paraphrase instead.
 
 ## Fixes
 

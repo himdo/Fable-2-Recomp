@@ -655,6 +655,14 @@ Migrated from the XenonRecomp config (`XenonRecomp/fable2.toml`):
 
 ## Function naming rule (important)
 
+**Name what you discover.** The long-term goal is a readable decompilation
+that supports modding. When a PR calls, hooks, overrides or explains a game
+function, give it a real name in `fable_2_manifest.toml` in the same PR
+(`Subsystem_WhatItDoes_ADDRESS`, e.g. `Cloth_Step_8219ADD8`), with a comment
+saying what it does and how you know. Rename generic `sub_` /
+`ProcessAndProcessAndProcessN_` names and wrong ones. `CLAUDE.md` has the
+details, and Claude Code users can run `/name-functions`.
+
 A manifest `name` becomes a C symbol: codegen emits the function body as
 `__imp__<name>` (extern "C"). A name must therefore NOT equal an XAPI export
 of `rexruntimed.dll` (the DLL exports `__imp__<XAPI name>` for every

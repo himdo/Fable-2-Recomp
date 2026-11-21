@@ -8,6 +8,8 @@ A static recompilation of Fable II (Xbox 360) on the ReXGlue SDK. `rexglue codeg
 
 Game content (`default.xex`, `data/`) is supplied by the user and never committed. `generated/` (except `generated/rexglue.cmake`) and `out/` are build output.
 
+**The long-term goal is a readable decompilation that supports modding.** Every function, global and structure field someone works out is progress towards that, but only if it is written down. So the rule is: **name what you discover** (see Workflow step 3). Thousands of functions still have generic names (`sub_XXXXXXXX`, `ProcessAndProcessAndProcessN_XXXXXXXX`), so most PRs will touch at least one.
+
 ## Layout
 
 | Path | What |
@@ -44,9 +46,10 @@ None of the tests need game files. CI (`.github/workflows/tests.yml`) runs all f
 
 1. **Branch.** All work goes on a branch named `fix/<short-name>` or `feature/<short-name>`, made from an up-to-date `master`. If the current branch doesn't follow this (for example `master` or `my-thing`), say so and suggest a name and the rename (`git branch -m <new-name>`) before changing anything.
 2. **Run the tests before you change anything** and note the result (the baseline). Run the same commands after the change and compare, so a regression can't hide behind an already-failing test. Use `/run-tests`.
-3. **Document the work.** Every fix or feature gets a folder `docs/fix/<slug>/` or `docs/feature/<slug>/` with a `technical.md` and an `overview.md`, plus a row in `docs/README.md`. Update an existing folder rather than creating a duplicate. Fill in the commit hash and PR number once the work is merged. Use `/work-doc`. Do this before reporting the work as done.
-4. **Open the PR** against `master` on `origin` (`himdo/Fable-2-Recomp`; contributors push branches there directly). Merge `master` into the branch first if it is behind. In the description, say what was tested, on which machine, and what wasn't tested.
-5. **Keep PRs small and focused.** The maintainer reviews each one by hand.
+3. **Name what you discover.** Every game function the change calls, hooks, overrides or mentions in a comment gets a real name in `fable_2_manifest.toml` in the same PR, with a comment above the entry saying what it does and how you know. Rename generic and wrong names too. Record what you learned about globals and structure offsets in that comment and in the docs. Use the names (not raw addresses or `sub_` names) in code, comments and docs. Use `/name-functions`, and list the new names in the PR description. This is part of every fix and feature, not a separate clean-up.
+4. **Document the work.** Every fix or feature gets a folder `docs/fix/<slug>/` or `docs/feature/<slug>/` with a `technical.md` and an `overview.md`, plus a row in `docs/README.md`. Update an existing folder rather than creating a duplicate. Fill in the commit hash and PR number once the work is merged. Use `/work-doc`. Do this before reporting the work as done.
+5. **Open the PR** against `master` on `origin` (`himdo/Fable-2-Recomp`; contributors push branches there directly). Merge `master` into the branch first if it is behind. In the description, say what was tested, on which machine, and what wasn't tested, and list the functions you named.
+6. **Keep PRs small and focused.** The maintainer reviews each one by hand.
 
 Commit subjects are sentence case and imperative, e.g. "Add a Disable MSAA option ([patches] disable_msaa)". PRs are squash-merged with `(#N)` appended.
 
@@ -61,7 +64,12 @@ Commit subjects are sentence case and imperative, e.g. "Add a Disable MSAA optio
 
 **Adding a setting.** A new key goes in four places that must agree: `config/fable2_config.toml`, the `kTemplate` string in `src/core/fable2_config.cpp` (plus its `Values` member and `Load()` read), `launcher/Fable2.Launcher/Fable2ConfigFile.cs`, and the cvar default in `src/main.cpp`. `tests/config/test_config_template.py` checks they match.
 
-**Naming functions.** When work relies on a recompiled function, give it a real name in `fable_2_manifest.toml` in the same PR: `Descriptive_ADDRESS`, e.g. `FrameLimiterWait_82242628`. A name must not equal an XAPI export of the runtime (it would shadow the kernel import; such functions get a `_Guest` suffix). Run `python tools/check_manifest_collisions.py`.
+**Naming functions** (details in the `/name-functions` skill):
+
+- **Format:** `Subsystem_WhatItDoes_ADDRESS`, e.g. `Cloth_Step_8219ADD8`, `TextureMorph_ReleaseJobs_8235E0D8`. For a Lua binding, use its Lua name: `LuaDebug_SetDrawGUI_823AC520`.
+- **Entry:** a comment block (what it does, its arguments such as `r3 = the timer`, who calls it, and whether that was read in the generated code or inferred), then `[entrypoint.functions."0xADDRESS"]` and `name = "..."`. If the address already has an entry, rename it in place: TOML keys must stay unique.
+- **After renaming,** update every use of the old name (`git grep` in `src/`, `tools/`, `docs/` and the manifest's own comments). The next build reruns codegen.
+- **No clashes with the runtime:** a name must not equal an XAPI export of the runtime, or it silently shadows the kernel import (such functions get a `_Guest` suffix). Check with `python tools/check_manifest_collisions.py fable_2_manifest.toml out/tooling/runtime-sdk/win-amd64/bin/rexruntime.dll`. Pass the DLL path: the default search folders are out of date.
 
 **Game versions.** After editing `constants/game_versions.json`, run `python tools/generate_game_versions.py` and commit the regenerated files in the same commit.
 
