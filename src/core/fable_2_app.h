@@ -201,7 +201,7 @@ class Fable2App : public rex::ReXApp {
         }
       }
     }
-    // Dog fur Z-fighting fix (docs/RUNTIME_FIXES.md): the shell-fur pixel shader
+    // Dog fur Z-fighting fix (docs/fix/runtime_fixes/technical.md): the shell-fur pixel shader
     // relies on exact 24-bit depth ties; a small host depth bias restores them.
     // depth_bias_shader is a GPU-plugin cvar, so it is seeded here too.
     if (fable2::config::Get().dog_fur_depth_bias &&
@@ -449,6 +449,22 @@ class Fable2App : public rex::ReXApp {
     seed_cvar("mouse_look_sens_y", std::to_string(cfg.mouse_look_sens_y));
     seed_cvar("mouse_look_invert_y", cfg.mouse_look_invert_y ? "true" : "false");
     seed_cvar("mouse_look_direct_smoothing", std::to_string(cfg.mouse_look_direct_smoothing));
+    // disable_msaa lives in fable2_config.toml ([patches], also written by the
+    // launcher), unlike the settings above: the F4 settings menu saves only
+    // values that differ from the default to fable_2.toml, so turning the
+    // option off there would not stick, and a value it saved once would hide
+    // later launcher changes. So the config value applies over fable_2.toml
+    // (the command line and REX_* environment variables still win), and a
+    // change in the menu is written back to fable2_config.toml.
+    {
+      const auto source = rex::cvar::GetFlagSource("disable_msaa");
+      if (source != rex::cvar::Source::kCommandLine && source != rex::cvar::Source::kEnvironment) {
+        rex::cvar::SetFlagByName("disable_msaa", cfg.disable_msaa ? "true" : "false");
+      }
+      rex::cvar::RegisterChangeCallback("disable_msaa", [](std::string_view, std::string_view value) {
+        fable2::config::SaveDisableMsaa(value == "true" || value == "1");
+      });
+    }
     seed_cvar("mouse_aim_mode", cfg.mouse_aim_mode);
     seed_cvar("mouse_aim_input", cfg.mouse_aim_input);
     seed_cvar("mouse_aim_sens", std::to_string(cfg.mouse_aim_sens));

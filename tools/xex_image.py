@@ -1,5 +1,5 @@
 """Decrypt + expand default.xex (XEX2, AES-CBC NORMAL, BASIC compression) into the
-raw guest image at base 0x82000000. Layout per docs/patches.md. Needs pycryptodome.
+raw guest image at base 0x82000000. Layout per docs/feature/guest_patches/technical.md. Needs pycryptodome.
 
 usage: xex_image.py <default.xex> <out.bin>
 """

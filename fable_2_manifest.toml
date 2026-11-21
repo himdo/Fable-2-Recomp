@@ -37,7 +37,7 @@ includes = ["fable2_switch_tables.toml"]
 longjmp_address = 0x82CA9260
 setjmp_address = 0x83000200
 
-# --- Recomp-level patches via mid-asm hooks (see docs/patches.md) ---------
+# --- Recomp-level patches via mid-asm hooks (see docs/feature/guest_patches/technical.md) ---------
 # Code-region Xenia patches are inert at runtime in this recomp (guest .text
 # is never executed), so they are applied to the RECOMPILED code instead: a
 # hook is injected at a specific guest instruction address and a C++ function
@@ -167,9 +167,10 @@ registers = []
 jump_address_on_true = 0x8233AE9C
 
 # GUI every HF tick ([patches] gui_every_hf_tick; hook in
-# src/core/fable2_hooks.cpp). sub_82278C90 calls the front-end GUI update (vtable[2] at
-# 0x82278D40) only on LF ticks; the check starts with `clrlwi r10,r29,24` at
-# 0x82278D1C. Returning true jumps straight to the call.
+# src/core/fable2_hooks.cpp). GameFrame_HfTickUpdate_82278C90 calls the
+# front-end GUI update (vtable[2] at 0x82278D40) only on LF ticks; the check
+# starts with `clrlwi r10,r29,24` at 0x82278D1C. Returning true jumps straight
+# to the call.
 [[entrypoint.midasm_hook]]
 address = 0x82278D1C
 name = "fable2_hook_gui_every_tick"
@@ -177,10 +178,10 @@ registers = []
 jump_address_on_true = 0x82278D40
 
 # Interpolation ([patches] interpolation; hooks in src/core/fable2_hooks.cpp).
-# Cloth colliders: sub_82A895C0 reads each collider bone from the current
-# animation pose right after `add r11,r11,r9` (four loops). The hook points r11
-# at that bone blended between the previous and current pose at the render
-# time.
+# Cloth colliders: Cloth_BuildColliders_82A895C0 reads each collider bone from
+# the current animation pose right after `add r11,r11,r9` (four loops). The
+# hook points r11 at that bone blended between the previous and current pose at
+# the render time.
 [[entrypoint.midasm_hook]]
 address = 0x82A8965C
 name = "fable2_hook_cloth_collider_bone"
@@ -202,10 +203,10 @@ name = "fable2_hook_cloth_collider_bone"
 registers = ["r1", "r11", "r30"]
 after_instruction = true
 
-# Cloth world transform: sub_8219ADD8 hands the cloth (r30) its world matrix
-# for the step in r4 (`addi r4,r1,80`, the raw entity matrix at inst+336, which
-# jumps ahead on tick frames). The hook points r4 at the owner's interpolated
-# render matrix (owner+208) instead.
+# Cloth world transform: Cloth_Step_8219ADD8 hands the cloth (r30) its world
+# matrix for the step in r4 (`addi r4,r1,80`, the raw entity matrix at
+# inst+336, which jumps ahead on tick frames). The hook points r4 at the
+# owner's interpolated render matrix (owner+208) instead.
 [[entrypoint.midasm_hook]]
 address = 0x8219AEA0
 name = "fable2_hook_cloth_world_transform"
@@ -381,7 +382,7 @@ name = "LoadPubGames_831465C8"
 # Collectors Edition content. An unregistered player who clicks it sees
 # "Go to www.fable2.com for information on how to access the gold and items
 # your heroic ancestors left behind." These are the functions on the
-# chest-click path (see docs/patches.md). Names are best-effort from runtime
+# chest-click path (see docs/feature/guest_patches/technical.md). Names are best-effort from runtime
 # tracing; refine them as behaviour is confirmed.
 
 # Website-item getter. The Xenia "Unlock Website Items" patch targets its
@@ -7667,29 +7668,14 @@ name = "FindSizeBucket_83231518"
 # particular set of magic constants, a vector of constants), and perform a vector hash/computation (vector permutes,
 # a vector XOR, a SIMD computation, a particular hash / a particular comparison, a particular vector operation).
 
-# Args: obj (r3, an object), a (r4, a value), b (r5, a value), c (v2, a vector, a particular value), (more). It loads
-# vector constants (from a fixed .data address, a set of vector constants, a particular set of magic constants, a
-# vector of constants: lvx128 v0, r11, a vector constant, and vpermwi128 v6, v0, 228, a vector permute, a particular
-# permutation, and vpermwi128 v5, v0, 177, a vector permute, a particular permutation, and vpermwi128 v4, v0, 78, a
-# vector permute, a particular permutation). It loads another vector constant (lvx128 v0, r8, a vector constant, a
-# particular value). It performs a vector hash/computation (a vector XOR, vxor v2, v6, v0, a vector XOR, a particular
-# operation, a particular hash / a particular comparison, and vxor v31, v5, v0, a vector XOR, a particular operation, a
-# particular hash / a particular comparison, and vxor v30, v4, v0, a vector XOR, a particular operation, a particular
-# hash / a particular comparison, a SIMD computation, a particular vector operation). So it's a "process (a vector
-# hash/computation: load vector constants (from a fixed .data address, a set of vector constants, a particular set of
-# magic constants, a vector of constants), and perform a vector hash/computation (vector permutes, a vector XOR, a
-# SIMD computation, a particular hash / a particular comparison, a particular vector operation))" routine (a vector
-# hash/computation, part of the 0x8222E cluster, a sibling of ProcessVector2_8223BD98). 150 lines, no direct callees
-# (pure data manipulation, with vector operations). 10+ callers: sub_8223BB38, sub_829BEB18, sub_82A0B288, sub
-# _826EBE68, sub_826E8078, sub_821D3000, sub_82A9C2F8, sub_829BEFA8, sub_8223D148, sub_822AA498 (a widely-called
-# vector hash/computation, part of the game's vector/SIMD subsystem). The object's class (obj, an object, a particular
-# structure, a hash / a value object) and the vector's meaning (a vector, a particular value, a particular quantity)
-# aren't resolvable, so the name states the mechanism: a vector hash/computation (load vector constants (from a fixed
-# .data address, a set of vector constants, a particular set of magic constants, a vector of constants), and perform a
-# vector hash/computation (vector permutes, a vector XOR, a SIMD computation, a particular hash / a particular
-# comparison)).
+# (Renamed 2026-11; was ComputeVectorHash, from an automatic description.) Not
+# a hash: r4/r5 = a quaternion (two u64), v2 = a scale vector. Splats q and the
+# scale, flips signs with constant masks and sums the products (vmsum4fp128):
+# the usual quaternion-to-rotation-matrix expansion, scaled. Result at r3. The
+# cloth collider build (Cloth_BuildColliders_82A895C0) calls it right after
+# each bone read. Inference from the instruction shape; 29 calling files.
 [entrypoint.functions."0x8222E6C0"]
-name = "ComputeVectorHash_8222E6C0"
+name = "QuatScaleToMatrix_8222E6C0"
 
 # A process (a size computation, with a special case, the caller of sub_822F1F00 / the sibling of ComputeClamped_83230
 # A48): (if a size is 0, a null state) take one path, and (otherwise) perform a special case check (a divide, -1 / size
@@ -41399,9 +41385,13 @@ name = "ProcessAndProcessAndProcess1034_8228E3A0"
 [entrypoint.functions."0x82293DA8"]
 name = "ProcessAndProcessAndProcess1035_82293DA8"
 
-# Process a frequently-used structure (seven hundred and one hundred and one hundred and one hundred and thirty-sixth form). It takes a structure and checks its state, with no external sub-operations. This is a frequently-called helper in the 0x8220B process cluster. 128 lines. 0 callees. 13 callers.
+# (Named 2026-11; was ProcessAndProcessAndProcess1036.) r3 = out, r4 = a 3x4
+# matrix (three 16-byte rows). Adds a fourth row from constants (0, 0, 0, 1)
+# and writes the transposed 4x4 matrix to r3. No calls. Used by
+# Instance_GetDrawnMatrix_821E1C98 for an instance without an interpolator
+# (its matrix at inst+336).
 [entrypoint.functions."0x8220B5C8"]
-name = "ProcessAndProcessAndProcess1036_8220B5C8"
+name = "Matrix_3x4ToTransposed4x4_8220B5C8"
 
 # Process a structure by wrapping a sub-operation (seven hundred and one hundred and one hundred and one hundred and thirty-seventh form). It takes a structure and drives a sub-operation (ProcessAndProcessAndProcess1036). Part of the 0x82A60 process cluster. 72 lines. 1 callee. 1 caller (sub_8228B290).
 [entrypoint.functions."0x82A602D8"]
@@ -42070,9 +42060,13 @@ name = "ProcessAndProcessAndProcess1200_82AAB860"
 [entrypoint.functions."0x821B4D60"]
 name = "ProcessAndProcessAndProcess1201_821B4D60"
 
-# Process a structure (seven hundred and one hundred and one hundred and one hundred and one hundred and two hundred and second form). It takes a structure and checks its state, with no external sub-operations. Part of the 0x8222E process cluster. 136 lines. 0 callees. 4 callers (sub_8222E300, ProcessAndProcessAndProcess1203, sub_82B1AD00, sub_82B71388).
+# (Named 2026-11; was ProcessAndProcessAndProcess1202.) Builds a bone's 3x4
+# matrix [R(q) * diag(scale) | t]: r4/r5 = the quaternion (two u64), v2 = the
+# scale, v1 = the translation, result at r3. The same quaternion-to-matrix
+# shape as QuatScaleToMatrix_8222E6C0, plus the translation. Pose_BlendForDraw
+# calls it for each blended bone (notes from Locme's interp-presets branch).
 [entrypoint.functions."0x8222E208"]
-name = "ProcessAndProcessAndProcess1202_8222E208"
+name = "Bone_BuildMatrix_8222E208"
 
 # Process a large structure by wrapping a sub-operation (seven hundred and one hundred and one hundred and one hundred and one hundred and two hundred and third form). It takes a structure and drives a sub-operation (ProcessAndProcessAndProcess1202) based on the result. Part of the 0x82233 process cluster. 237 lines. 1 callee. 2 callers (sub_822333B8 and ProcessAndProcessAndProcess1205).
 [entrypoint.functions."0x82233428"]
@@ -42327,9 +42321,16 @@ name = "ProcessAndProcessAndProcess1263_82BA8350"
 [entrypoint.functions."0x83004BB0"]
 name = "ProcessAndProcessAndProcess1264_83004BB0"
 
-# Orchestrate a render-loop frame (seven hundred and one hundred and one hundred and one hundred and one hundred and two hundred and sixty-fifth form). It takes a structure, enters a critical section (CriticalSection_EnterOrTry), queries the timebase (GetTimebase), increments an atomic reference count (IncrementRefcountAtomic), calls the main render loop (MainRenderLoop), checks a yield threshold (Yield), and drives many sub-operations (ProcessAndProcessAndProcess1017, ProcessAndProcessAndProcess1107, ProcessAndProcessAndProcess792, ProcessAndProcessAndProcess805, ProcessAndProcessAndProcess806, ProcessAndProcessAndProcess905, ProcessAndProcessAndProcess907, FastHelper, ProcessAndProcessAndProcess952, ProcessAndProcessAndProcess1258) based on the result. This is the main render-loop orchestrator in the 0x82B69 cluster. 426 lines. 15 callees. 3 callers (sub_8236C520, sub_8236D0A8, sub_82A393A8).
+# (Named 2026-11; was ProcessAndProcessAndProcess1265.) The render loop's
+# present step for one frame. Reads the timebase (GetTimebase_8221EB58) at the
+# start, bumps a frame counter, clears with the clear colour (sub_822069C0,
+# flags 256), waits with Yield_82CBD098 until the frame counter read through
+# sub_82B89960 has moved on by more than one, then calls MainRenderLoop_82B9CD68
+# on the D3D device, which issues VdSwap. At the end it stores the frame's
+# duration (global +28408). src/core/fable2_morph_release_defer.h (#188) runs
+# the deferred morph release right after this returns (the zone-load band fix).
 [entrypoint.functions."0x82B69488"]
-name = "ProcessAndProcessAndProcess1265_82B69488"
+name = "PresentFrame_82B69488"
 
 # Process a large structure (seven hundred and one hundred and one hundred and one hundred and one hundred and two hundred and sixty-sixth form). It takes a structure and checks its state, with no external sub-operations. Part of the 0x82B9C process cluster. 238 lines. 0 callees. 0 callers.
 [entrypoint.functions."0x82B9C648"]
@@ -42914,9 +42915,14 @@ name = "ProcessAndProcessAndProcess1408_822E0508"
 [entrypoint.functions."0x822CCDB0"]
 name = "ProcessAndProcessAndProcess1409_822CCDB0"
 
-# Process a structure by entering a critical section (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and fiftieth form). It takes a structure, enters or tries a critical section (CriticalSection_EnterOrTry), and drives a sub-operation (sub_8235ABA0) based on the result. Part of the 0x8235E process cluster. 66 lines. 2 callees. 1 caller (ProcessAndProcessAndProcess1389).
+# (Named 2026-11; was ProcessAndProcessAndProcess1410.) Texture morph: releases
+# the pending morph jobs (r3, r4), under a critical section, through
+# sub_8235ABA0. The render loop calls it after its final pass (return address
+# 0x8236C7E8); with realtime texture morphing their EDRAM draws then clobber
+# the frame Present resolves. src/core/fable2_morph_release_defer.h (#188)
+# holds that call and runs it right after PresentFrame_82B69488 instead.
 [entrypoint.functions."0x8235E0D8"]
-name = "ProcessAndProcessAndProcess1410_8235E0D8"
+name = "TextureMorph_ReleaseJobs_8235E0D8"
 
 # Process a structure (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and fifty-first form). It takes a structure, constructs a 12-byte structure (Construct12Byte), and drives sub-operations (ProcessAndProcessAndProcess524, ProcessAndProcessAndProcess676, ProcessAndProcessAndProcess677) based on the result. Part of the 0x821D9 process cluster. 68 lines. 4 callees. 5 callers (sub_821BDE80, sub_822C50F0, sub_82A3E7C0, sub_82A48AA0, sub_82B34580).
 [entrypoint.functions."0x821D9840"]
@@ -43142,9 +43148,15 @@ name = "ProcessAndProcessAndProcess1465_821D96E8"
 [entrypoint.functions."0x821E13B8"]
 name = "ProcessAndProcessAndProcess1466_821E13B8"
 
-# Process a very large data structure by destroying a circular list (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and eighty-seventh form). It takes a structure, destroys a circular list (DestroyCircularList), sets an event (SetEvent), and drives sub-operations (sub_8218D9A8, sub_821AC058, sub_821D1C98, sub_821E1AA8, sub_821E1C98, sub_821E3070, sub_822955C0, sub_82A88E50) based on the result. Part of the 0x821E2 process cluster. 523 lines. 10 callees. 1 caller (ProcessAndProcessAndProcess1385).
+# (Named 2026-11; was ProcessAndProcessAndProcess1467.) The per-frame cloth
+# update. r3 = the cloth system. Works out this frame's step time from the
+# wall clock, then walks the global cloth list. For each cloth of the current
+# world it copies owner+208 to owner+144 (previous), stores the owner's drawn
+# world matrix (Instance_GetDrawnMatrix_821E1C98) at owner+208, and, when there
+# is time to simulate, steps it with Cloth_RunStep_821AC058. The cloth
+# interpolation hook (#210, fable2_hook_cloth_world_transform) reads owner+208.
 [entrypoint.functions."0x821E2D40"]
-name = "ProcessAndProcessAndProcess1467_821E2D40"
+name = "Cloth_UpdateAll_821E2D40"
 
 # Process a structure by growing a buffer (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and eighty-eighth form). It takes a structure, grows a buffer (GrowBufferAndAppend), and drives a sub-operation (ProcessAndProcessAndProcess776) based on the result. Part of the 0x821E9 process cluster. 99 lines. 2 callees. 0 callers.
 [entrypoint.functions."0x821E9D18"]
@@ -48128,6 +48140,13 @@ name = "DispatchOsNotifications_82185080"
 # 60 FPS dispatch function (0x82B9C7F8). fps_meter.h hooks this symbol.
 [entrypoint.functions."0x82B9CD68"]
 name = "MainRenderLoop_82B9CD68"
+# Render settings setup: fills the main render settings object (r3, kept in
+# r31), including the render size (+148 width 1120, 960 in 4:3; +152 height
+# 720) and the MSAA mode (+156, 2 = 2x, from li r9,2 at 0x8238DF3C). Called
+# on boot, at the main menu and on each level load. Overridden by
+# src/core/hotfunc/render/InitRenderSettings_8238DE58.cpp (disable_msaa).
+[entrypoint.functions."0x8238DE58"]
+name = "InitRenderSettings_8238DE58"
 [entrypoint.functions."0x8222B3C8"]
 name = "SwitchDispatch_8222B3C8"
 size = 0x00F8
@@ -49535,3 +49554,141 @@ name = "TextureCompress_Quantized_83008E98"
 # GPU mip generation. PDB: __imp__sub_821FC4A0, 6505 bytes.
 [entrypoint.functions."0x821FC4A0"]
 name = "TextureMips_BuildGPU_821FC4A0"
+
+# =====================================================================
+# Functions used by recent PRs (named 2026-11)
+# =====================================================================
+#
+# Named after himdo's review of #183: game functions a PR relies on get a real
+# name. Gathered from master's last 40 commits (photo mode #169/#184, the
+# morph release fix #188, the GUI every HF tick option #208 and the cloth
+# interpolation #210), plus the notes on Locme's interp-presets branch.
+
+# --- Game frame and front-end GUI (#208, src/core/fable2_hooks.cpp) ---
+
+# Game frame update, run on every HF tick from ProcessGameFrame_82276C30.
+# r3 = the game object, f1/f2 = frame times, r6 low byte = an LF tick
+# boundary was crossed. Runs per-tick updates, then calls the front-end
+# object's vtable[2] (GuiManager_Update_82286B40) only when r6 is set or a
+# query says so (the check starts at 0x82278D1C; the call is at 0x82278D40).
+# The gui_every_hf_tick hook (fable2_hook_gui_every_tick) jumps straight to
+# the call.
+[entrypoint.functions."0x82278C90"]
+name = "GameFrame_HfTickUpdate_82278C90"
+
+# The front-end GUI manager's update (subtitles, HUD text); vtable[2] of the
+# front-end object, called by GameFrame_HfTickUpdate_82278C90. It times itself
+# with Timer_GetElapsed_822B6D70, so calling it more often only updates the
+# text more often.
+[entrypoint.functions."0x82286B40"]
+name = "GuiManager_Update_82286B40"
+
+# A simple timer. r3 = the timer. The first call stores the start time
+# (timer+104, from GetTimebase_8221EB58), sets timer+103 and returns 0; later
+# calls return (now - start) scaled by a constant, as an integer.
+[entrypoint.functions."0x822B6D70"]
+name = "Timer_GetElapsed_822B6D70"
+
+# --- Character pose blending (notes from Locme's interp-presets branch) ---
+
+# Draws a character's skeleton blended between its last two LF poses
+# (previous *(inst+516), current *(inst+512)) with the alpha in f1 (callers
+# load it from *(inst+176)+16; `fmr f31,f1` at 0x8222E314 keeps it). Checks
+# that the pose's skeleton id (pose+8) matches the skeleton's +20. For each
+# 48-byte bone (quaternion, translation, scale) it copies the previous bone to
+# a stack buffer (r3) and blends it toward the current bone (r4) with
+# Pose_BlendBone_8222E5D0 (`bl` at 0x8222E418), then builds the bone's matrix
+# with Bone_BuildMatrix_8222E208. The cloth collider hook (#210) blends bones
+# the same way.
+[entrypoint.functions."0x8222E300"]
+name = "Pose_BlendForDraw_8222E300"
+
+# Blends one bone toward another: r3 = the bone to change (a copy of the
+# previous pose's bone), r4 = the current pose's bone, f1 = alpha. Quaternion
+# sign-corrected lerp, translation and scale lerped. Called by
+# Pose_BlendForDraw_8222E300.
+[entrypoint.functions."0x8222E5D0"]
+name = "Pose_BlendBone_8222E5D0"
+
+# --- Cloth (#210, src/core/fable2_hooks.cpp; hooks above in this file) ---
+
+# Steps one cloth for the frame. r3 = the cloth, f1/f2/f3 = step times. Finds
+# the cloth's owner (sub_821E1AA8), unlinks a pending entry, runs
+# Cloth_Step_8219ADD8 when the owner has an instance, then queues the cloth's
+# job (sub_822AB070) and clears owner+532. Sole caller: Cloth_UpdateAll_821E2D40.
+[entrypoint.functions."0x821AC058"]
+name = "Cloth_RunStep_821AC058"
+
+# Prepares and runs one cloth step. r3 = the cloth (r30 inside), f1/f2 = step
+# times. Copies the entity matrix (inst+336) to the stack and hands it to
+# Cloth_SetWorldTransform_8218D730 (`addi r4,r1,80` at 0x8219AEA0), then
+# builds the colliders (Cloth_BuildColliders_82A895C0) and calls sub_82A88DA8
+# and sub_82A76680 (the simulation; not read in detail). Instance_UpdateMatrix_822222D8 rewrites
+# inst+336 later in the frame, so the copy is one frame late; the
+# fable2_hook_cloth_world_transform hook points r4 at the drawn matrix
+# (owner+208) instead.
+[entrypoint.functions."0x8219ADD8"]
+name = "Cloth_Step_8219ADD8"
+
+# Sets a cloth's world matrix for the step. r3 = the cloth, r4 = the new
+# 64-byte matrix. When the cloth has an owner (cloth+0) it moves the current
+# matrix (cloth+192) to cloth+128 and stores the new one at cloth+192; the
+# solver turns the change into inertia. When the translation moved more than a
+# threshold (squared distance of +240 vs +176) it resets the cloth
+# (sub_82A88E50): teleports.
+[entrypoint.functions."0x8218D730"]
+name = "Cloth_SetWorldTransform_8218D730"
+
+# Builds a cloth's collision shapes from the driving character's skeleton.
+# Four loops each read a bone from the CURRENT pose (*(inst+512)+16, 48-byte
+# bones) right after `add r11,r11,r9` and turn it into a matrix
+# (QuatScaleToMatrix_8222E6C0). The fable2_hook_cloth_collider_bone hooks
+# (0x82A8965C, 0x82A89770, 0x82A898A8, 0x82A899E4) point r11 at the bone
+# blended to the render time, the way Pose_BlendForDraw_8222E300 draws it.
+[entrypoint.functions."0x82A895C0"]
+name = "Cloth_BuildColliders_82A895C0"
+
+# Rebuilds an instance's world matrix for the frame. r3 = the instance. When
+# it has an interpolator (inst+176, still valid) it takes the interpolator's
+# matrix (sub_822333B8), stores it transposed at inst+336 and a derived matrix
+# (sub_8220B698) at inst+384.
+[entrypoint.functions."0x822222D8"]
+name = "Instance_UpdateMatrix_822222D8"
+
+# Gets an instance's matrix as drawn. r3 = out, r4 = the instance. With an
+# interpolator (inst+176) it returns the interpolator's matrix at the render
+# time (sub_822333B8); otherwise the instance matrix at inst+336
+# (Matrix_3x4ToTransposed4x4_8220B5C8). Cloth_UpdateAll_821E2D40 stores the
+# result at owner+208 for the cloth.
+[entrypoint.functions."0x821E1C98"]
+name = "Instance_GetDrawnMatrix_821E1C98"
+
+# --- Photo mode game calls (#169/#184, src/core/fable2_photo_mode.h) ---
+
+# The native body of the Lua function Debug.SetDrawGUI (FABLE2_LUA_API.md).
+# r3 = bool: draw the HUD. Writes the byte at 0x8331930E.
+[entrypoint.functions."0x823AC520"]
+name = "LuaDebug_SetDrawGUI_823AC520"
+
+# The native body of the Lua function Debug.SetShouldDrawWorldIcons. r3 = bool.
+[entrypoint.functions."0x823AC5B8"]
+name = "LuaDebug_SetShouldDrawWorldIcons_823AC5B8"
+
+# The native body of the Lua function Timing.SetTimeOfDayAbsolute. r3 = the
+# timing object, f1 = the time of day, 0..1. Photo mode calls it, then
+# rebuilds the theme with Theme_UpdateLighting_822BD510 and Theme_Update_8218EB30.
+[entrypoint.functions."0x8249A790"]
+name = "LuaTiming_SetTimeOfDayAbsolute_8249A790"
+
+# Theme (colour grading) lighting update for the current time of day.
+# r3 = the theme manager. The world update calls it (around 0x82276094)
+# before Theme_Update_8218EB30; photo mode calls the pair to rebuild the theme
+# while the world is paused.
+[entrypoint.functions."0x822BD510"]
+name = "Theme_UpdateLighting_822BD510"
+
+# Theme (colour grading) update: blends the active themes for the current
+# time of day. r3 = the theme manager. Called after
+# Theme_UpdateLighting_822BD510 (world update, and photo mode).
+[entrypoint.functions."0x8218EB30"]
+name = "Theme_Update_8218EB30"

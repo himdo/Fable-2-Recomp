@@ -3,7 +3,7 @@
 // Strong override of the recompiled main-loop function MainRenderLoop_82B9CD68
 // (0x82B9CD68; renamed from sub_82B9CD68 in fable_2_manifest.toml). One
 // call per frame; ~33 ms period at the 30 fps cap, see
-// docs/FPS_CAP_INVESTIGATION.md). Counts invocations over 5 s windows and
+// docs/fix/fps_cap/technical.md). Counts invocations over 5 s windows and
 // appends one line per window to fps_meter.log (CWD = exe dir):
 //   HH:MM:SS t=<s since start> mainloop rate=NN.N/s low1%=NN.N worst=NN.Nms
 //   hitches>50ms=N (total N)
