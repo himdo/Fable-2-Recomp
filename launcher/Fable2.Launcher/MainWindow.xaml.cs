@@ -116,6 +116,7 @@ public partial class MainWindow : Window
         _executableDirectory = File.Exists(Path.Combine(AppContext.BaseDirectory, "fable_2.exe"))
             ? AppContext.BaseDirectory : _gameDirectory;
         GamePathText.Text = _gameDirectory;
+        RefreshPortuguesePackButton();
         LauncherState.SaveGameDirectory(_gameDirectory);
         try
         {
@@ -130,6 +131,40 @@ public partial class MainWindow : Window
             StatusText.Text = exception.Message;
             ConfigStateText.Text = "Not ready to launch";
         }
+    }
+
+    private void RefreshPortuguesePackButton()
+    {
+        bool installed = _gameDirectory != null && BrazilianPortuguesePack.IsInstalled(_gameDirectory);
+        PortuguesePackButton.Content = installed ? "Remove PT-BR pack" : "Install PT-BR pack…";
+        PortuguesePackButton.IsEnabled = installed || File.Exists(Path.Combine(_gameDirectory!, "data", "language", "cultures.txt"));
+    }
+
+    private void PortuguesePackClicked(object sender, RoutedEventArgs e)
+    {
+        if (_extracting || _gameDirectory == null) return;
+        try
+        {
+            if (BrazilianPortuguesePack.IsInstalled(_gameDirectory))
+            {
+                BrazilianPortuguesePack.Remove(_gameDirectory);
+                StatusText.Text = "PT-BR pack removed. Original language files restored.";
+            }
+            else
+            {
+                var compatibility = GameCompatibilityInspector.Inspect(_gameDirectory);
+                if (!compatibility.Supported) throw new InvalidOperationException(compatibility.Message);
+                var dialog = new OpenFileDialog { Title = "Choose Dio Carvalho's Fable II PT-BR pack", Filter = "Translation ZIP (*.zip)|*.zip" };
+                if (dialog.ShowDialog(this) != true) return;
+                BrazilianPortuguesePack.Install(_gameDirectory, dialog.FileName);
+                StatusText.Text = "PT-BR installed. In the game, choose Language → Portuguese (Brazil).";
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "PT-BR language pack", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally { RefreshPortuguesePackButton(); }
     }
 
     private void LoadConfiguration()
@@ -368,6 +403,12 @@ public partial class MainWindow : Window
     private void ExtractClicked(object sender, RoutedEventArgs e)
     {
         if (_extracting) return;
+        if (BrazilianPortuguesePack.IsInstalled(AppContext.BaseDirectory))
+        {
+            MessageBox.Show(this, "Remove the PT-BR pack before re-extracting into this folder.",
+                "PT-BR language pack", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
 
         var isoDialog = new OpenFileDialog
         {

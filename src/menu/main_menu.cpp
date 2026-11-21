@@ -70,6 +70,26 @@ void DestructString(PPCContext& ctx, uint8_t* base, uint32_t slot) {
   DestructRefCounted_82214F08(ctx, base);
 }
 
+// FrontMenu's language-change handler (0x826C81A0) and the native locale
+// setter (0x82373D60) use this table for the selected language. Each record
+// starts with its NUL-terminated locale code. Read it on each menu rebuild.
+std::string_view CurrentLanguage(uint8_t* base) {
+  constexpr uint32_t kLanguageTable = 0x833197BC;
+  constexpr uint32_t kLanguageRecordSize = 0x60;
+  const uint32_t records = REX_LOAD_U32(kLanguageTable);
+  const uint32_t count = REX_LOAD_U32(kLanguageTable + 4);
+  const uint32_t selected = REX_LOAD_U32(kLanguageTable + 8);
+  constexpr std::string_view kPortuguese = "pt-br";
+  if (records && selected < count) {
+    const uint32_t code = records + selected * kLanguageRecordSize;
+    for (size_t i = 0; i < kPortuguese.size(); ++i) {
+      if (REX_LOAD_U8(code + i) != kPortuguese[i]) return kFallbackLanguage;
+    }
+    if (REX_LOAD_U8(code + kPortuguese.size()) == 0) return kPortuguese;
+  }
+  return kFallbackLanguage;
+}
+
 // Mirrors one add-item call in FrontMenu_Populate. The label is handed over as
 // the already-localized wide string the game would get from its string table.
 void AddItem(PPCContext& ctx, uint8_t* base, uint32_t menu, const MenuItem& item) {
@@ -80,7 +100,7 @@ void AddItem(PPCContext& ctx, uint8_t* base, uint32_t menu, const MenuItem& item
   WriteString(base, sp + kNameChars, item.id, kParentChars - kNameChars - 1);
   WriteString(base, sp + kParentChars, kRootParent, kIconChars - kParentChars - 1);
   WriteString(base, sp + kIconChars, kIcon, kTextChars - kIconChars - 1);
-  WriteWideString(base, sp + kTextChars, LabelText(item.label));
+  WriteWideString(base, sp + kTextChars, LabelText(item.label, CurrentLanguage(base)));
   REX_STORE_U32(sp + kTextSlot, sp + kTextHandle);
   REX_STORE_U32(sp + kTextHandle, sp + kTextChars);
   ctx.r1.u64 = sp;
