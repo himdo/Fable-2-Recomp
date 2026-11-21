@@ -63,7 +63,7 @@ config_version = 1
 [input]
 # Host keyboard/mouse -> guest gamepad map: "Key:Button,Key:Button,..." (one
 # line; do not add spaces or newlines inside the string). Key = Windows
-# virtual-key name (see README.md, Keyboard controls) or a mouse button
+# virtual-key name (see UPSTREAM-README.md, Keyboard controls) or a mouse button
 # (LMB/RMB/MMB, or XMB1/XMB2 for the side buttons); Button = A/B/X/Y, LB/RB,
 # LT/RT, Up/Down/Left/Right, Pause, Select, L3/R3, StickUp/StickDown/
 # StickLeft/StickRight. Empty string disables the keyboard gamepad.
