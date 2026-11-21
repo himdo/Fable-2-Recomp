@@ -3,7 +3,13 @@
 A .NET 8 WPF settings launcher for verified GOTY USA/Europe and German GOTY
 dumps. It validates the original XEX and content markers, then checks the
 native build descriptor. Unknown revisions and known mixed retail/TU1 content
-are rejected; original game files are never modified.
+are rejected.
+
+## Brazilian Portuguese language pack
+
+Close the game and click **Install PT-BR pack…** in the Game location panel. Select Dio Carvalho's translation ZIP (tested with Beta 0.9.1 on GOTY USA/Europe). The game folder needs the English voice bank for fallback. In the game, select **Language → Portuguese (Brazil)** and enable subtitles. The game stores the selected language in the player profile. [Translation and credits](https://github.com/diocarvalho/Fable2-PTBR-Project/releases)
+
+The launcher adds the text and dialogue resources, installs the four Pub Games localization files and merges the PT-BR entries into the disc's own `cultures.txt`. It keeps the previous contents in `.fable2-pt-br.json` next to `default.xex`. Keep that backup with the game folder. Use **Remove PT-BR pack** with the game closed to restore those files. Remove the pack before re-extracting into the same folder. Removal also cleans manifest entries added for the pack and preserves other mods' entries. If another tool has edited a managed file, removal reports the conflict and keeps the backup.
 
 ## Extracting from an ISO
 
