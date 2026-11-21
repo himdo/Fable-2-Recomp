@@ -220,6 +220,26 @@ settings, and `f2 mouse mode|sens|invert` change them live (see
 `docs/console/CONSOLE-COMMANDS.md`, "Mouse look"). Example: `fable_2.exe
 --mouse_look_scale 512` for a more sensitive camera.
 
+### Mouse aim
+
+While you aim a gun or crossbow (hold the aim button, `RMB` by default), the
+mouse moves the aim reticle instead of the camera, and WASD stops moving it.
+The reticle moves exactly as far as the mouse, with no top speed or deadzone.
+A real controller aims as before.
+
+| Argument | Effect |
+|---|---|
+| `--mouse_aim_mode <both\|rmb\|detect\|off>` | When the mouse aims: `both` (default) = the aim button is held and the game is aiming; `rmb` = the button alone; `detect` = the game aiming alone |
+| `--mouse_aim_input <direct\|stick>` | `direct` (default) moves the reticle itself; `stick` drives the left stick, with its deadzone and top speed |
+| `--mouse_aim_sens <x>` | Direct aim: sideways reticle movement per count (default `0.0007`). Up/down follows the screen shape |
+| `--mouse_aim_y_ratio <r>` | Direct aim: up/down speed on screen against sideways (default `1` = the same) |
+| `--mouse_aim_invert_y <bool>` | Direct aim: invert up/down (default `false`) |
+| `--mouse_aim_scale <n>` | Stick aim: sensitivity (default `256` = 1×) |
+
+These also come from `[input]` in `fable2_config.toml`, and the launcher's
+Advanced Options set the mode and `mouse_aim_sens`. `f2 mouse aim|aiminput|
+aimsens|aiminvert|aimscale` change them live.
+
 All cvars above are hot-reloadable, so they can also be changed from the in-game console.
 
 ## F5 — run an external Lua script

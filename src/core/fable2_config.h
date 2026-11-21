@@ -59,6 +59,14 @@ struct Values {
   double mouse_look_sens_y = 0.06;
   bool mouse_look_invert_y = false;
   double mouse_look_direct_smoothing = 0.0;  // 0..0.9
+  // Mouse aiming (src/input/mouse_aim.h). Seed the cvars of the same names;
+  // `f2 mouse aim|aiminput|aimsens|aiminvert|aimscale` change them live.
+  std::string mouse_aim_mode = "both";     // "off", "rmb", "detect" or "both"
+  std::string mouse_aim_input = "direct";  // "direct" or "stick"
+  double mouse_aim_sens = 0.0007;          // direct aim: cursor units per count
+  double mouse_aim_y_ratio = 1.0;          // range 0.1..10 (cvar constraint)
+  bool mouse_aim_invert_y = false;
+  int32_t mouse_aim_scale = 256;  // stick aim; range 1..4096 (cvar constraint)
   // Direct mouse-to-camera look (see src/input/mouse_look.h). EXPERIMENTAL.
   // When true, mouse movement bypasses the synthetic pad's right stick and is
   // applied directly to the active camera's orientation by

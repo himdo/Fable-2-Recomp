@@ -397,6 +397,8 @@ try
         MouseLook = true,
         MouseLookScale = 512,
         MouseLookMode = "stick",
+        MouseAimMode = "detect",
+        MouseAimSens = 0.00125,
         UnlockWebsite = true,
         UnlockCe = false,
         SkipIntroVideos = true,
@@ -427,6 +429,10 @@ try
     Require(readBack.MouseLookMode == "stick", "mouse look mode roundtrip failed");
     Require(writtenAdv.Contains("mouse_look_mode = \"stick\""), "mouse_look_mode is not a TOML string");
     Require(!writtenAdv.Contains("direct_mouse_look"), "the old direct_mouse_look key was written");
+    Require(readBack.MouseAimMode == "detect", "mouse aim mode roundtrip failed");
+    Require(writtenAdv.Contains("mouse_aim_mode = \"detect\""), "mouse_aim_mode is not a TOML string");
+    Require(readBack.MouseAimSens == 0.00125, "mouse aim sensitivity roundtrip failed");
+    Require(writtenAdv.Contains("mouse_aim_sens = 0.00125"), "mouse_aim_sens is not a TOML float");
     Require(!readBack.UnlockCe, "unlock_ce roundtrip failed");
     Require(readBack.SkipIntroVideos, "skip_intro_videos roundtrip failed");
     Require(readBack.DisableMotionBlur, "disable_motion_blur roundtrip failed");
@@ -481,6 +487,20 @@ try
     string modeContent = File.ReadAllText(modePath);
     Require(modeContent.Contains("mouse_look_mode = \"direct\""), "mouse_look_mode was not rewritten");
     Require(modeContent.Contains("direct_mouse_look = true"), "the old direct_mouse_look line was changed");
+    // mouse_aim_mode: read in any case, like the game; unknown values fall back
+    // to "both". The aim keys the launcher doesn't show are left alone.
+    string aimPath = Path.Combine(testDirectory, "fable2_config_aim.toml");
+    File.WriteAllText(aimPath, "config_version = 1\n[input]\nmouse_aim_mode = \"RMB\"\nmouse_aim_invert_y = true\n");
+    var aimValues = Fable2ConfigFile.Read(aimPath);
+    Require(aimValues.MouseAimMode == "rmb", "mouse_aim_mode was not read in any case");
+    Require(aimValues.MouseAimSens == 0.0007, "a missing mouse_aim_sens did not keep its default");
+    Fable2ConfigFile.Write(aimPath, aimValues);
+    string aimContent = File.ReadAllText(aimPath);
+    Require(aimContent.Contains("mouse_aim_mode = \"rmb\""), "mouse_aim_mode was not rewritten");
+    Require(aimContent.Contains("mouse_aim_sens = 0.0007"), "a missing mouse_aim_sens was not added");
+    Require(aimContent.Contains("mouse_aim_invert_y = true"), "the unmanaged mouse_aim_invert_y line was changed");
+    File.WriteAllText(aimPath, "config_version = 1\n[input]\nmouse_aim_mode = \"always\"\n");
+    Require(Fable2ConfigFile.Read(aimPath).MouseAimMode == "both", "unknown mouse_aim_mode did not fall back to both");
     Console.WriteLine("Advanced options (fable2_config.toml) roundtrip and preservation passed.");
 
     if (args.Length > 0)

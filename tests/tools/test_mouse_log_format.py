@@ -66,6 +66,30 @@ def mode_notes():
     return re.findall(r'Note\(\s*"mode "\s*\+\s*(\w+)\s*\)', source(CONSOLE_H))
 
 
+def padstick_notes():
+    """The pieces of the note `f2 pad stick` writes, in the same form as inject_notes()."""
+    calls = re.findall(r'Note\(\s*("padstick lx="(?:\s*\+\s*(?:"[^"]*"|[\w:]+\(\w+\)))*)\s*\)',
+                       source(CONSOLE_H))
+    return [re.findall(r'"([^"]*)"|[\w:]+\((\w+)\)', call) for call in calls]
+
+
+def padstick_release_notes():
+    """The note the console writes when a `pad stick` is let go."""
+    return re.findall(r'Note\(\s*"(padstick released)"\s*\)', source(CONSOLE_H))
+
+
+def padstick_note_line(t=1000):
+    """The N line for `f2 pad stick 6000 -200 30`, as Diag::Note writes it."""
+    values = {"stick_lx": "6000", "stick_ly": "-200", "frames": "30"}
+    note = "".join(literal or values[name] for literal, name in padstick_notes()[0])
+    return f"N t={t} " + note
+
+
+def aim_notes():
+    """The `f2 mouse aim` note, as in Note("aim " + name)."""
+    return re.findall(r'Note\(\s*"aim "\s*\+\s*(\w+)\s*\)', source(CONSOLE_H))
+
+
 def fill(fmt, samples):
     """Fill each key=%... field with samples[key], and any other field with 0."""
     return FIELD.sub(lambda m: f"{m.group(1)}={samples.get(m.group(1), '0')}", fmt).replace("\\n", "")
@@ -73,7 +97,11 @@ def fill(fmt, samples):
 
 def poll_line():
     """A P line as OnPoll writes it, for a poll that moved and was clamped, with smoothing on."""
-    samples = {"t": "123456", "dx": "-3", "dy": "2", "inj": "4,-1", "clamp": "1", "sm": "1", "w": "20,0"}
+    samples = {"t": "123456", "dx": "-3", "dy": "2", "inj": "4,-1", "clamp": "1", "sm": "1", "w": "20,0",
+               "aim": "1", "lx": "1200", "ly": "-300", "cur": "0.25,-0.5", "atk": "42",
+               "hl": "1", "fl": "0,1", "f234": "0", "hage": "37",
+               "tgt": "0.3125,-0.125", "tf": "1", "mrel": "3", "msup": "41", "mhop": "2",
+               "mmag": "17"}
     return fill(poll_formats()[0], samples)
 
 
@@ -125,6 +153,77 @@ def describe_poll_line():
         record = mouse_stats.parse_line(poll_line())
 
         assert mouse_stats.pair(record.fields.get("w")) == (20, 0)
+
+    def test_should_carry_the_aim_stick_swap_flag():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert record.fields.get("aim") == "1"
+
+    def test_should_carry_the_left_stick_sent_to_the_game():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert (record.fields.get("lx"), record.fields.get("ly")) == ("1200", "-300")
+
+    def test_should_carry_the_aim_reticle_position():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert mouse_stats.float_pair(record.fields.get("cur")) == (0.25, -0.5)
+
+    def test_should_carry_the_games_cursor_update_count():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert mouse_stats.number(record.fields.get("atk")) == 42.0
+
+    def test_should_carry_whether_a_target_is_highlighted():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert record.fields.get("hl") == "1"
+
+    def test_should_carry_the_left_stick_detectors_flick_and_held_flags():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert mouse_stats.pair(record.fields.get("fl")) == (0, 1)
+        assert record.fields.get("f234") == "0"
+
+    def test_should_carry_how_long_the_highlight_has_been_held():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert mouse_stats.number(record.fields.get("hage")) == 37.0
+
+    def test_should_carry_where_the_highlighted_target_sits_in_cursor_units():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert mouse_stats.float_pair(record.fields.get("tgt")) == (0.3125, -0.125)
+        assert record.fields.get("tf") == "1"
+
+    def test_should_read_a_target_with_no_position_as_missing():
+        # Behind the camera or not computed, C prints NaN as "nan".
+        record = mouse_stats.parse_line(poll_line().replace("tgt=0.3125,-0.125", "tgt=nan,nan"))
+
+        assert mouse_stats.float_pair(record.fields.get("tgt")) is None
+
+    def test_should_print_the_target_with_a_bounded_width():
+        assert "tgt=%.5g,%.5g" in poll_formats()[0]
+
+    def test_should_carry_how_often_the_mouse_let_go_and_held_the_pick():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert mouse_stats.number(record.fields.get("mrel")) == 3.0
+        assert mouse_stats.number(record.fields.get("msup")) == 41.0
+
+    def test_should_carry_how_many_wheel_hops_were_asked_for():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert mouse_stats.number(record.fields.get("mhop")) == 2.0
+
+    def test_should_carry_how_many_updates_got_the_magnetism_nudge():
+        record = mouse_stats.parse_line(poll_line())
+
+        assert mouse_stats.number(record.fields.get("mmag")) == 17.0
+
+    def test_should_print_the_reticle_with_a_bounded_width():
+        # %g keeps a garbage float short, so the line (and its newline) fits the buffer.
+        assert "cur=%.5g,%.5g" in poll_formats()[0]
 
 
 def describe_camera_update_line():
@@ -205,3 +304,79 @@ def describe_mode_note():
         segments = mouse_stats.find_segments(records)
 
         assert segments[0].label == "inject 2400,0 px over 4000 ms [direct]"
+
+
+def describe_pad_stick_note():
+    def test_should_be_found_once_in_the_console():
+        assert len(padstick_notes()) == 1
+
+    def test_should_have_its_release_note_written_in_one_place():
+        # ReleasePad writes it, for every way a timed `pad` input ends.
+        assert len(padstick_release_notes()) == 1
+
+    def test_should_start_a_run_named_after_the_stick():
+        records = mouse_stats.read_log([padstick_note_line()])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert segments[0].label == "pad stick 6000,-200 for 30 frames"
+
+    def test_should_end_the_run_at_the_release_note():
+        records = mouse_stats.read_log([padstick_note_line(1000),
+                                        "N t=600000 " + padstick_release_notes()[0]])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert (segments[0].start, segments[0].end) == (1000, 600000)
+
+
+def aiminput_notes():
+    """The `f2 mouse aiminput` note, as in Note("aiminput " + name)."""
+    return re.findall(r'Note\(\s*"aiminput "\s*\+\s*(\w+)\s*\)', source(CONSOLE_H))
+
+
+def describe_aim_input_note():
+    def test_should_be_found_once_in_the_console():
+        assert len(aiminput_notes()) == 1
+
+    def test_should_name_the_aim_input_in_the_next_run():
+        records = mouse_stats.read_log(["N t=400 aim both", "N t=450 aiminput direct", inject_note_line()])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert segments[0].label == "inject 2400,0 px over 4000 ms [aim both, direct aim]"
+
+    def test_should_not_be_taken_for_the_aim_mode():
+        records = mouse_stats.read_log(["N t=450 aiminput stick", inject_note_line()])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert segments[0].label == "inject 2400,0 px over 4000 ms [stick aim]"
+
+
+def describe_aim_note():
+    def test_should_be_found_once_in_the_console():
+        assert len(aim_notes()) == 1
+
+    def test_should_name_the_aim_mode_in_the_next_run():
+        # `f2 mouse aim detect` writes Note("aim " + name) with name = "detect".
+        records = mouse_stats.read_log(["N t=400 aim detect", inject_note_line()])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert segments[0].label == "inject 2400,0 px over 4000 ms [aim detect]"
+
+    def test_should_be_listed_after_the_mouse_mode():
+        records = mouse_stats.read_log(["N t=400 aim both", "N t=500 mode direct", inject_note_line()])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert segments[0].label == "inject 2400,0 px over 4000 ms [direct, aim both]"
+
+    def test_should_not_be_taken_for_a_route_change():
+        # The router's "route aim" note has a different first word.
+        records = mouse_stats.read_log(["N t=400 route aim", inject_note_line()])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert segments[0].label == "inject 2400,0 px over 4000 ms"
