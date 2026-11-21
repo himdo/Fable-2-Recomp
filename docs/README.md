@@ -27,6 +27,7 @@ When you finish a fix or a feature, add or update its folder and its row below. 
 | Feature | Status | Commits | Summary |
 | --- | --- | --- | --- |
 | [console_commands](feature/console_commands/overview.md) | merged | 4f0afe5 (#127) | The `f2` developer console and its command reference |
+| [difficulty_settings](feature/difficulty_settings/overview.md) | no commit yet | bd6846a (branch `feature/game-difficulty`) | Pick Easy/Medium/Hard/Hardcore on New Game; research and a temporary log probe so far |
 | [fit_window](feature/fit_window/overview.md) | merged | 4f0afe5 (#127) | Render at the window's aspect ratio, with the HUD and menus following |
 | [function_naming](feature/function_naming/overview.md) | merged | f451b72 (#238) | Manifest names for the 22 functions recent PRs relied on |
 | [german_goty_support](feature/german_goty_support/overview.md) | merged | bfcc5d6, 77059af | Accept the German GOTY XEX alongside USA/Europe |

@@ -49692,3 +49692,193 @@ name = "Theme_UpdateLighting_822BD510"
 # Theme_UpdateLighting_822BD510 (world update, and photo mode).
 [entrypoint.functions."0x8218EB30"]
 name = "Theme_Update_8218EB30"
+
+# --- Difficulty settings (feature/game-difficulty, docs/feature/difficulty_settings/) ---
+
+# Reads one field of the tweak record HeroCombatBalanceParams.DifficultyLevelMultipliers
+# (strings at 0x820ACFD4 / 0x820ACFEC) through ProcessAndProcessAndProcess2670_82196E10.
+# r3 = field index: 0 DamageCaused, 1 DamageReceived, 2 ExperienceReceived,
+# 3 SpellManaCost, 4 StockItemPrice; returns the float in f1 (1.0 for any other
+# index). There is no level argument, so the table is one row. Its five callers
+# only call it when the player component's level (+80) is above 1 (Verified in the
+# generated code).
+[entrypoint.functions."0x823C92F0"]
+name = "Difficulty_GetMultiplier_823C92F0"
+
+# The native body of the Lua function Player.SetDifficultyLevel (registered in
+# sub_823C6030 through the member binder sub_823D62F8). r3 = the bound object,
+# r4 = the level. If it differs from obj+80: obj+80 = level, byte obj+38 = 1 (the
+# "changed" flag behind HasDifficultyLevelChanged). Verified in the generated code
+# and in game (the level sticks and is saved with the hero).
+[entrypoint.functions."0x823C9458"]
+name = "LuaPlayer_SetDifficultyLevel_823C9458"
+
+# The native body of the Lua function Player.GetDifficultyLevel: returns obj+80
+# (Verified in the generated code).
+[entrypoint.functions."0x82612AC0"]
+name = "LuaPlayer_GetDifficultyLevel_82612AC0"
+
+# Buy price of an item. r3 = a type-124 component (from
+# Shopkeeper_GetStockComponent_827B0358), r4 = the item, f1/f2 = the shopkeeper's
+# type-47 values (+44/+48), f3 = the shopkeeper multiplier. price = base
+# (sub_828E7C58) x economy (sub_828E8C80) x item+36 x f3 (f3 is replaced by 1.0
+# and the +60 discount applied when sub_828B0B38 on player 1's type-69 component
+# is true) x StockItemPrice. The StockItemPrice gate looks up type 33 on *(r3+4),
+# not on the hero. Returns the int price in r3 (Verified in the generated code).
+[entrypoint.functions."0x828E7F78"]
+name = "Item_GetBuyPrice_828E7F78"
+
+# Sell price of an item; the mirror of Item_GetBuyPrice_828E7F78. base x
+# sub_828E8EC0 x item+40, divided by StockItemPrice behind the same type-33 gate
+# on *(r3+4), +64 discount, clamped against the buy price (Verified in the
+# generated code).
+[entrypoint.functions."0x828E8320"]
+name = "Item_GetSellPrice_828E8320"
+
+# Buy price at a shop. r3 = the shopkeeper component, r4 = the item. Gets the stock
+# component (Shopkeeper_GetStockComponent_827B0358), reads f1/f2 from type 47 on
+# the shop entity (+44/+48, default 0x820994B4), f3 = shopkeeper+12, and calls
+# Item_GetBuyPrice_828E7F78 (Verified in the generated code).
+[entrypoint.functions."0x827AF5A0"]
+name = "Shopkeeper_GetBuyPrice_827AF5A0"
+
+# Sell price at a shop; the mirror of Shopkeeper_GetBuyPrice_827AF5A0 that calls
+# Item_GetSellPrice_828E8320 (Inference: from the 2026-11-15 search pass, its
+# body not re-read; the probe logs its callers).
+[entrypoint.functions."0x827AF6F8"]
+name = "Shopkeeper_GetSellPrice_827AF6F8"
+
+# r3 = the shopkeeper component. Follows the weak handle at r3+16 to an entity and
+# returns its type-124 component (0 if none). Verified in the generated code; what
+# the entity is (the shop's stock, the shop building) is not known yet.
+[entrypoint.functions."0x827B0358"]
+name = "Shopkeeper_GetStockComponent_827B0358"
+
+# Where every save goes. r3 = the save manager (*(*(0x83496920)+12)+148), r4-r7 =
+# flags. First calls sub_824EBF30, which refuses when byte +2093 (SetSavingAsAllowed)
+# is 0. Callers: Lua SaveGame / AutoSaveGame, PauseSaveBox_HandleEvent_82413988
+# and four native callers (Verified in the generated code and in game).
+[entrypoint.functions."0x824E8990"]
+name = "SaveManager_Save_824E8990"
+
+# The native body of the Lua function SaveGame: SaveManager_Save_824E8990(mgr, 0)
+# (Verified in the generated code).
+[entrypoint.functions."0x824E8978"]
+name = "LuaSaveManager_SaveGame_824E8978"
+
+# The native body of the Lua function AutoSaveGame. r3 = the save manager, r4 =
+# defer (sets the pending byte +2088 and returns), r5 = force (byte +2089, skips the
+# throttle on FrameLastAutoSaved +2008). Otherwise saves with (mgr, 1, 0, 0, 1)
+# (Verified in the generated code).
+[entrypoint.functions."0x824E8D28"]
+name = "LuaSaveManager_AutoSaveGame_824E8D28"
+
+# The native body of the Lua function SaveFailQuestSave: sets byte +2090 on the save
+# manager (Verified in the generated code).
+[entrypoint.functions."0x824E8D18"]
+name = "LuaSaveManager_SaveFailQuestSave_824E8D18"
+
+# The native body of the Lua function LoadFailQuestSave (loads failquestsave.bin).
+# Registered in sub_824EC750 (Verified as the binding; the body was not read).
+[entrypoint.functions."0x824ECCB8"]
+name = "LuaSaveManager_LoadFailQuestSave_824ECCB8"
+
+# Handles the pause menu Save box. r4 = event (46 = a button was chosen, 47 =
+# another path), r5 = sub-code: 23 Save and Continue (save, r7 = 1), 24 Save and
+# Quit (save, r7 = 0, then the quit routine 0x8233CAC8), 25 Quit without saving
+# (quit routine only). Verified in the generated code; 24 also seen in game.
+[entrypoint.functions."0x82413988"]
+name = "PauseSaveBox_HandleEvent_82413988"
+
+# Player 1's entity: follows the weak handle at r3+104 (r3 = the player object,
+# *(*(*(*(*(0x83496920)+12)+88)+4)+0) in Item_GetBuyPrice_828E7F78). Verified in
+# the generated code; the same check (comp+4 == this) marks player 1 in
+# MoneyComp_Modify_8239E698.
+[entrypoint.functions."0x8222C210"]
+name = "Player_GetEntity_8222C210"
+
+# The gold choke point (also behind Lua Money.Modify, sub_8239EE98). r3 = the money
+# component, r4 = delta, r5 = 1 on the co-op share recursion, r6 = share with
+# co-op, r7 = 1 only for rent and income. comp+12 += delta, clamped to
+# [0, 999999999], then posts a change message (Verified in the generated code).
+[entrypoint.functions."0x8239E698"]
+name = "MoneyComp_Modify_8239E698"
+
+# The health choke point, also Lua Health.Modify. r3 = the health component,
+# f1 = delta, r5 = the source entity. comp+20 += delta, clamped to the max at +28;
+# respects the invulnerable byte +305 and the god-mode bytes 0x83496B27/3C/3D
+# (Verified in the generated code).
+[entrypoint.functions."0x8268BD90"]
+name = "HealthComp_Modify_8268BD90"
+
+# Starts a new game (GUI_SCREEN_FRONT_END_NEW_GAME, QC010_ChildhoodStart). Called
+# from FrontMenu_HandleCardEvent_826C9188 on BOY_SELECTED / GIRL_SELECTED with the
+# hero creature ("CreatureHeroChild" / "CreatureHeroFemaleChild") in r4 (Verified
+# in the generated code). The natural hook for the difficulty step.
+[entrypoint.functions."0x8237A0C8"]
+name = "FrontMenu_StartNewGame_8237A0C8"
+
+# Front-end card events. r3 = the front-end object, r4 = the event, hash at r4+4,
+# matched against the globals at 0x834A0000 - 20456 (BOY_ACTIVE) ... - 20428
+# (DIALOG_ACTIVE). BOY_ACTIVE / GIRL_ACTIVE / UNFREEZE set state +24 to 3 / 4 / 0;
+# the _SELECTED events call FrontMenu_StartNewGame_8237A0C8 (Verified in the
+# generated code).
+[entrypoint.functions."0x826C9188"]
+name = "FrontMenu_HandleCardEvent_826C9188"
+
+# Selects a save card on the Continue screen. r3 = the front-end object, r4 = the
+# card index (clamped to 6). Moves the old and new cards' slides, plays a sound and
+# sets loadgame.SaveGameDescription from the string list at ~+120 (Verified in the
+# generated code).
+[entrypoint.functions."0x826C9008"]
+name = "FrontMenu_SelectLoadCard_826C9008"
+
+# TEMPORARY research probe (src/core/hotfunc/unsorted/DifficultyProbe.cpp). Remove
+# these hooks together with that file before any PR to master. Each sits right
+# after a difficulty gate's `lwz r11,80(rX)` (rX = the type-33 component found,
+# r11 = the level read), or after the economy multiply in a price function.
+[[entrypoint.midasm_hook]]
+address = 0x826A455C
+name = "fable2_probe_gate_damage_caused"
+registers = ["r11", "r31"]
+after_instruction = true
+
+[[entrypoint.midasm_hook]]
+address = 0x8249F628
+name = "fable2_probe_gate_damage_received"
+registers = ["r10", "r11"]
+after_instruction = true
+
+[[entrypoint.midasm_hook]]
+address = 0x8251CF2C
+name = "fable2_probe_gate_experience"
+registers = ["r10", "r11"]
+after_instruction = true
+
+[[entrypoint.midasm_hook]]
+address = 0x828E8284
+name = "fable2_probe_gate_buy"
+registers = ["r10", "r11"]
+after_instruction = true
+
+[[entrypoint.midasm_hook]]
+address = 0x828E84A0
+name = "fable2_probe_gate_sell"
+registers = ["r10", "r11"]
+after_instruction = true
+
+# In Item_GetBuyPrice_828E7F78, after `fmuls f0,f1,f26`: f1 = economy term,
+# f26 = item+36, f27 = base value, f31 = f3 or 1.0 (owned), r27 = owned flag.
+[[entrypoint.midasm_hook]]
+address = 0x828E8160
+name = "fable2_probe_buy_factors"
+registers = ["f1", "f26", "f27", "f31", "r27", "r29"]
+after_instruction = true
+
+# In Item_GetSellPrice_828E8320, after `fmuls f0,f1,f30`: f1 = sub_828E8EC0's
+# term, f30 = item+40, f31 = base value.
+[[entrypoint.midasm_hook]]
+address = 0x828E8374
+name = "fable2_probe_sell_factors"
+registers = ["f1", "f30", "f31", "r29"]
+after_instruction = true
