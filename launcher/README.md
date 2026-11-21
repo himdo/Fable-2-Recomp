@@ -33,7 +33,7 @@ filtering (game default through 16x), none/FXAA/FXAA Extreme, VSync,
 windowed/borderless/exclusive fullscreen and 30/60/120/144/165/240/unlimited FPS. Output size
 is separate from the original 720p guest mode. The FPS options need the
 matched source-built Release runtime described in
-[the runtime guide](../docs/RUNTIME_FIXES.md). Higher rates are not a promise
+[the runtime guide](../docs/fix/runtime_fixes/technical.md). Higher rates are not a promise
 of correct timing in every scene.
 
 The **Advanced Options** button in the top bar opens a second page for the
@@ -118,4 +118,4 @@ continue to use the existing save folder beside the executable.
 
 Launcher overview supplied by the tester (before the high-refresh presets were added):
 
-![Launcher overview](../docs/screenshots/launcher.png)
+![Launcher overview](../docs/reference/screenshots/launcher.png)

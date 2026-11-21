@@ -17,6 +17,7 @@ nul
 pi-session-*.html
 .claude/*
 !.claude/skills/
+CLAUDE.local.md
 
 # --- Runtime logs written next to the exe (may land in the root when running
 #     with --game_data_root) ---------------------------------------------------
@@ -46,6 +47,7 @@ fable_2_manifest.toml.bak
 /*.sh
 /*.png
 build_*.log
+build_*.status
 rebuild.log
 rebuild2.log
 __pycache__/

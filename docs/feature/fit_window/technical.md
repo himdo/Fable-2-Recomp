@@ -1,5 +1,7 @@
 # Fit game to window (widescreen)
 
+**Status:** merged · **Commits:** 4f0afe5 (#127), docs be92838 · **Last checked against:** 5f5f55f
+
 `src/core/fable2_fit_window.h` renders the game at the window's aspect ratio
 (4:3 up to 4:1) and stretches the frame to fill the window.
 `src/core/fable2_fit_window_ui.h` moves the HUD and menus to match. Turn it
@@ -8,7 +10,7 @@ off with `fit_game_to_window = false` in `fable_2.toml`.
 Everything follows the aspect live: resizing the window, `f2 ws aspect` or
 `f2 ws on|off` in the developer console updates open screens without a
 restart. At 16:9 every element is back at its authored place. See
-`docs/console/CONSOLE-COMMANDS.md` (Widescreen) for the `ws` commands.
+`docs/feature/console_commands/technical.md` (Widescreen) for the `ws` commands.
 
 ## What is handled
 
