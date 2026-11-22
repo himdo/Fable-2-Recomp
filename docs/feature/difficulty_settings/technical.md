@@ -9,9 +9,10 @@ On New Game, after the boy/girl cards, the player picks one of four difficulties
 - gold gained;
 - prices;
 - enemy damage;
-- enemy health.
+- enemy health;
+- XP gained.
 
-Normal is the default, with every multiplier at 1.0. On top of that:
+**Easy is the original game** (every multiplier 1.0) and the default; the other levels only make it harder (decision 6, 2026-11-22). On top of that:
 
 - **Hardcore** removes the ways back to an older save.
 - **The pause menu** shows the level and can change it (Hardcore is locked).
@@ -466,7 +467,55 @@ Sizes come from `gui_texture_headers.bnk`; the textures themselves are in `art/g
 | 2 | Mid-game change | free with Hardcore locked / fully free / lower only / leave open | **Free, Hardcore locked.** Easy, Medium and Hard can be switched from the pause menu; Hardcore is New Game only, with no entering or leaving later. |
 | 3 | Built-in difficulty system | investigate first / own multipliers only / built-in as-is | **Investigate first.** It is the preferred route for damage and prices. Decode `globals.gdb` next. The Masochist side effect is still open. |
 
-The remaining open questions (Medium subtitle, Archon placement, slot label format, starting values, Masochist, XP, unused Theresa lines, property prices) are listed in `overview.md`.
+| 6 | Multipliers (2026-11-22) | steps like XP / gentler / steeper | **Steps like XP**, with **Easy = the original game** (delta4o's correction). Values in section 17. |
+
+The remaining open questions (slot label format, Masochist, unused Theresa lines) are listed in `overview.md`.
+
+### 17. The multipliers (decision 6, 2026-11-22)
+
+| Level | Game level (type 33 `+80`) | Gold gained | Prices | Enemy damage | Enemy health | XP |
+| --- | --- | --- | --- | --- | --- | --- |
+| Easy | 1 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
+| Medium | 2 (Inference: the mapping isn't built yet) | 0.85 | 1.15 | 1.5 | 1.25 | 0.85 |
+| Hard | 3 | 0.7 | 1.3 | 2.0 | 1.5 | 0.7 |
+| Hardcore | 4 | 0.65 | 1.4 | 2.5 | 2.0 | 0.65 |
+
+Default and missing value: Easy (old saves and the New Game screen's first card).
+
+What each column means for the code (Inference until built):
+- **Easy needs no code path.** All five gates in section 1 skip at level 1, and the gold and price hooks pass 1.0 through.
+- **Enemy damage** goes through the DamageReceived gate in `Combat_GetDamageTakenFactor_8249F298`, which does `f31 /= mult`. So the value the gate gets must be `1 / enemy damage` (0.667 / 0.5 / 0.4). `Difficulty_GetMultiplier_823C92F0` has no level argument and the table is one row (13.1), so per-level values need an override or a hook that reads the hero's level. Don't feed the DamageCaused gate: the hero's own damage stays as it is, and so does the Ghoul life-steal worked out from it (16.2).
+- **XP** goes through the ExperienceReceived gate in `Experience_ScaleAward_8251CDD8` (a plain multiply), but **only for XP the hero collects**. XP handed out by a script (Lua `Experience.Modify`) is not scaled (decision 6, 2026-11-22), because the Guild tutorial would get stuck otherwise (17.1).
+- **Prices:** the StockItemPrice gate never runs for the hero (16.3), so shop prices need a hook on `Item_GetBuyPrice_828E7F78` (× prices) and `Item_GetSellPrice_828E8320` (÷ prices, as the game's own design divides). Property follows the same rule at the returns of `Property_GetBuyPrice_8274DD78` and `Property_GetSellPrice_8274DFD0`, which the real-estate screen also reads. `LuaPlayerProperties_PurchasePropertyQuietly_828AFBB8` stays free.
+- **Gold gained:** a hook on `MoneyComp_Modify_8239E698` for `delta > 0` to player 1, following the rules in section 2. Earned gold is scaled, rent and pub-game winnings included. Skip shop sales (`Shopkeeper_SellItem_827AFB58`), property sales (`Ownership_SellProperty_828B01C8`), the co-op share recursion, network replays (type-91 `+107`), the transfers (`Coop_MoveGoldToPlayer1_82413620`, `Network_DropClient_8230FEB0`) and the orb-gift refund. Lua gold all arrives through `LuaMoney_CallMethod_8239F830` and is all earned gold, so it's scaled as one.
+- **Enemy health** is still later (decision 0): it needs the friend-or-foe check.
+
+#### 17.1 The Guild tutorial XP check (2026-11-22)
+
+delta4o asked whether every level still gets enough XP at the Guild to buy a skill, since the tutorial asks for one.
+
+- **The grant.** `qc060_newbeginning` sets `FreeWillExp = 350` in its init. At the Guild power-up ("MUSIC_QC060_HERO_POWERUP", after `HeroPowerUpThread` starts) it calls `Experience.Modify(hero, EXPERIENCE_WILL, self.FreeWillExp, false)` (Verified in the script bytecode).
+- **The wait.** It then loops Theresa's `THERESA_SEAL_BUY_SPELL_WAIT_10/20/30` lines until `HeroBoughtWillAbility` is true, which means any of the eight Will spells at level 1 or more. Then it sets `HeroBoughtSpell` and the story moves on (Verified in the bytecode). There is no other way out of the loop.
+- **The other three `Experience.Modify` calls** in that script (1000 general, strength and skill XP) only run with the quest's `DEBUG_MODE`, a developer skip to Thag's cave. `FABLE2_LUA_API.md` lists `Experience.Modify` in this one file only.
+- **The Lua path is scaled.** `LuaExperience_Modify_8251C8E0` converts the amount to a float and calls `Experience_Add_8251C0A8` (r6 = 0, r7 = the 4th argument, r8 = 1). For a positive single-player grant, that calls `Experience_ScaleAward_8251CDD8` (at 0x8251C4B0). Verified in the generated code.
+- **Ability costs** (`ExperienceCost`, read from `globals.gdb`; the level-to-level steps are ×6, ×6, ×4, ×3 for every ability, which confirms the field):
+
+  | Will spell | Level 1 | 2 | 3 | 4 | 5 |
+  | --- | --- | --- | --- | --- | --- |
+  | Force Push | 300 | 1,800 | 10,800 | 43,200 | 129,600 |
+  | Fireball | 350 | 2,100 | 12,600 | 50,400 | 151,200 |
+  | Vortex | 400 | 2,400 | 14,400 | 57,600 | 172,800 |
+  | Lightning, Summon Blades | 450 | 2,700 | 16,200 | 64,800 | 194,400 |
+  | Raise Dead | 500 | 3,000 | 18,000 | 72,000 | 216,000 |
+  | Slow Time, Chaos | 600 | 3,600 | 21,600 | 86,400 | 259,200 |
+
+  Some Strength and Skill level-1 costs, for reference: Physique 600, Toughness 450, Speed 450.
+- **Result with XP scaled:** 350 × 0.85 = 297.5, × 0.7 = 245, × 0.65 = 227.5. All are below Force Push's 300, so on Medium, Hard and Hardcore the hero can't buy a spell and the quest can't continue. Inference: the hero has no other XP at that point. The script gives none before the power-up, but this isn't checked in game.
+- **Decision (delta4o):** don't scale scripted XP. A hook can tell the two apart by marking calls that come through `LuaExperience_Modify_8251C8E0` (for example a thread-local flag set around it), so `Experience_ScaleAward_8251CDD8` leaves them alone (Inference until built).
+- **How `globals.gdb` was read** (throwaway script, not in the repo):
+  - the file is the header `GDB\0`, then object records from 0x20, then the field layouts from 0x154A94 (7,389 parsed). Each layout is a word `00 00 nn ff`, then nn field-name hashes, then nn `type << 24 | slot` words;
+  - then a sorted list of 71,374 words from 0x1C0A68, and a name table of `{u32 FNV-1 hash, zero-ended name}` entries;
+  - an ability-level record holds `[layout id] [ExperienceCost] [parent] [NameTextTag hash] [DescriptionTextTag hash]`. It was found through the hash of its `GUI_SCREEN_ABILITIES_..._NAME_LEVEL_0n` tag. Toughness and Accuracy use other layouts with the same values.
 
 ### 12. Next research steps (rewritten 2026-11-20)
 
@@ -964,6 +1013,9 @@ Functions named on 2026-11-22 from sections 15 and 16. All were generic `sub_` n
 | 0x8249F298 | `Combat_GetDamageTakenFactor_8249F298` | Verified (1, 16.2) |
 | 0x8251CDD8 | `Experience_ScaleAward_8251CDD8` | Verified for the multiply (1, 16.2) |
 | 0x8268AB30 | `Combat_ApplyHit_8268AB30` | Verified (4, 16.2) |
+| 0x8251D958 | `LuaExperience_Register_8251D958` | Verified (17.1) |
+| 0x8251C8E0 | `LuaExperience_Modify_8251C8E0` | Verified (17.1) |
+| 0x8251C0A8 | `Experience_Add_8251C0A8` | Verified for the calls (17.1) |
 
 These stay unnamed until their role is confirmed:
 - the co-op partner getter `sub_828BEEC0` (Inference);

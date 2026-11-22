@@ -23,7 +23,7 @@ Findings are marked as:
   | Level | Subtitle |
   | --- | --- |
   | Easy | "Little Sparrow" |
-  | Medium (Normal) | "Hero of Albion" |
+  | Medium | "Hero of Albion" |
   | Hard | "GuildMaster" |
   | Hardcore | "Archon's Heir" |
 
@@ -34,9 +34,10 @@ Findings are marked as:
   - how much gold the player gets, from every source;
   - how expensive things are;
   - how much damage enemies do;
-  - how much health enemies have.
+  - how much health enemies have;
+  - how much XP the hero gains (added 2026-11-22).
 
-  Normal is the default, with every multiplier at 1.0.
+  **Easy is the original game**, with every multiplier at 1.0, and it's the default (changed 2026-11-22, decision 6; the first plan had Medium as the original game).
 - **Hardcore:** no "Save and Continue" or "Save and Quit", to make it extra hard. The player shouldn't be forced to play a certain way to get a save, but also shouldn't be able to cheat the system.
 - **Pause menu:** the difficulty shows somewhere under the game options, and it can be changed there.
 - **Title screen:** the save slot shows its difficulty, e.g. "Hero 1 (Easy)" or "Hero 2 (Hard)". The other option is to put it on a new line.
@@ -214,7 +215,7 @@ Details are in technical.md sections 15 (code reading) and 16 (in-game results).
 
 ## Where to pick up next time
 
-1. **Decide the starting multipliers** (open question 4). The game gives no reference values: its table is all 1.0.
+1. ~~**Decide the starting multipliers**~~: done 2026-11-22 (decision 6). Easy is the original game.
 2. ~~**Name the functions**~~: done 2026-11-22. 44 functions now have real names, among them the gold callers, the shop and property price steps, rent, and the combat checks (technical.md "What changed").
 3. **A short round 3 in game** (one restart is enough): pick up some gold, try Golden touch on a monster, change region and buy a house, try Save and Continue, check the slot label, then New Game → boy or girl. Raise the probe's item limit first.
 4. Next research: enemy health and telling friend from foe, then where the pause menu gets its items.
@@ -300,6 +301,23 @@ Use the Release build in `out/build/win-amd64-release`. Type **one console comma
 
 **Choice: move them now**, with the status "no commit yet".
 
+**6. The multipliers** (asked 2026-11-22). delta4o corrected the plan first: **Easy is the original game**, and Medium, Hard and Hardcore only make it harder. Options for those three: steps that follow the XP values / gentler / steeper.
+
+**Choice: steps that follow the XP values.** Gold follows the XP steps; prices rise by a similar amount; enemy damage climbs faster, because dying in Fable II costs little.
+
+| | Gold gained | Prices | Enemy damage | Enemy health | XP |
+| --- | --- | --- | --- | --- | --- |
+| Easy | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
+| Medium | 0.85 | 1.15 | 1.5 | 1.25 | 0.85 |
+| Hard | 0.7 | 1.3 | 2.0 | 1.5 | 0.7 |
+| Hardcore | 0.65 | 1.4 | 2.5 | 2.0 | 0.65 |
+
+The hero can buy about 0.74× as much on Medium, 0.54× on Hard and 0.46× on Hardcore (gold ÷ prices). Also decided:
+- **Which gold scales:** earned gold. That's quests, jobs, pickups, chests, rewards, the dowry, rent and building income, and pub-game winnings. **Not** selling items or property: those already follow the price multiplier, so they'd be scaled twice. Transfers, refunds and gold copied over the network aren't scaled either.
+- **Property** follows the price multiplier, buying and selling, like shop items.
+- **XP** is scaled (the table's last column), through the game's own XP check, but only XP the hero collects. **XP a script hands out isn't scaled.** delta4o asked to check the Guild tutorial: it gives exactly 350 Will XP and won't continue until the hero buys a spell. The cheapest, Force Push, costs 300, so with the multiplier Medium, Hard and Hardcore would get stuck (297, 245 and 227 XP). Only that tutorial hands out XP from a script, so it now plays exactly as in the original on every level (technical.md 17.1).
+- **Default:** the Easy card is selected when the New Game screen opens, and an existing save without a difficulty counts as Easy, so old saves play exactly as before.
+
 **5. How much to log in the next play session** (asked 2026-11-21). Options:
   - **the five difficulty checks plus extras** (gold, health, saves, New Game, slot cards);
   - the five difficulty checks only.
@@ -311,27 +329,18 @@ Use the Release build in `out/build/win-amd64-release`. Type **one console comma
 1. ~~Medium's subtitle~~: answered 2026-11-20, "Hero of Albion".
 2. ~~"Archon of their time": Hard or Hardcore?~~: answered 2026-11-20. Hard is "GuildMaster" and Hardcore "Archon's Heir". Check the game's own Guildmaster spelling.
 3. **Slot label:** "Hero 1 (Easy)" on the same line, or a new line? The same line is much cheaper (see above).
-4. **Starting multiplier values.** A first guess to argue over, not a decision:
-
-   | | Gold gained | Prices | Enemy damage | Enemy health |
-   | --- | --- | --- | --- | --- |
-   | Easy | 1.5 | 0.75 | 0.5 | 0.75 |
-   | Medium | 1.0 | 1.0 | 1.0 | 1.0 |
-   | Hard | 0.75 | 1.25 | 1.5 | 1.5 |
-   | Hardcore | 0.5 | 1.5 | 2.0 | 2.0 |
-
-   The game's own table turned out to be all 1.0 (2026-11-22), so it gives no reference.
-5. **Masochist achievement:** should Hard or Hardcore count as the game's "above Normal" level, so it can unlock? And if difficulty changes mid-game, should it stop counting, as the original does?
-6. **XP:** the game's table can also scale XP. Do we want that, and on which levels?
+4. ~~**Starting multiplier values**~~: decided 2026-11-22, see decision 6.
+5. **Masochist achievement:** should Hard or Hardcore count as the game's "above Normal" level, so it can unlock? (Since decision 6, Easy is the original game, so Medium and up map naturally to the game's "above Normal".) And if difficulty changes mid-game, should it stop counting, as the original does?
+6. ~~**XP**~~: decided 2026-11-22, scaled 1.0 / 0.85 / 0.7 / 0.65 (decision 6).
 7. **Theresa's unused lines:** use any of them on the difficulty screen?
-8. **Property prices:** should houses and shops follow the price multiplier too? (Possible since 2026-11-22: one hook on the buy and sell price functions also fixes the price shown.) If selling is scaled, the gold-gain rule must skip property sales.
-9. **Which gold gains scale** (new, 2026-11-22): all of them, or only some (for example quests and jobs, but not rent or gambling)? Script-paid gold all arrives the same way, so a choice per source means touching the scripts.
+8. ~~**Property prices**~~: decided 2026-11-22, yes, buying and selling (decision 6). The gold-gain rule skips property sales.
+9. ~~**Which gold gains scale**~~: decided 2026-11-22, earned gold but not sales (decision 6). Script-paid gold is all earned gold, so no script changes are needed.
 
 ## Proposed approach (cheapest first, not started)
 
 1. ~~**Read the game's own multiplier values** and test the hero's level above Normal~~: done 2026-11-22. All 1.0; the checks fire on the hero for damage and XP, but not for prices.
-2. **Damage and prices** through the game's own table, with our values per level. Make the table apply on every level, Normal included, so the hidden "above Normal" check doesn't get in the way.
-3. **Gold gained:** one hook on the gold function, only for the hero's gains.
+2. **Enemy damage and XP** through the game's own checks, with our values per level. Easy is the game's level 1, where the checks don't run, so it stays the original game by itself. **Prices** need their own hook (shop items and property).
+3. **Gold gained:** one hook on the gold function, only for the hero's earned gains (not sales, transfers, refunds or network copies).
 4. **Enemy health:** a hook on the health function, or each enemy's own multiplier set when it spawns.
 5. **Hardcore saving:** remove the two Save-box options, force a save on every quit, and block the reload prompt.
 6. **Store the level** with the save: the game's own per-hero level, or a small file of our own next to (not inside) the save folder.

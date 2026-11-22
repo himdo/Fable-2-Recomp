@@ -37449,7 +37449,7 @@ name = "ProcessAndAllocateAndProcess19_82350EC8"
 [entrypoint.functions."0x82358A18"]
 name = "ProcessAndProcessAndProcess127_82358A18"
 
-# A processor that processes the data (one hundred and twenty-eighth form). It takes a structure (a: field at a->0), a value (b), and a value (c). It processes the data (a, b, and c). This is the "process this data" routine (one hundred and twenty-eighth form), part of the 0x82358 process cluster. 89 lines. 5 callees (ProcessAndAppendElement, ProcessAndCopyReferenceAndHash, ProcessAndDispatchAndResolve, ProcessAndHashString, and ProcessAndResolveTypedField). 7 callers (sub_8251D958, sub_824DE170, sub_82415830, sub_823ADF80, sub_823577C0, sub_82908E20, and sub_824FA760).
+# A processor that processes the data (one hundred and twenty-eighth form). It takes a structure (a: field at a->0), a value (b), and a value (c). It processes the data (a, b, and c). This is the "process this data" routine (one hundred and twenty-eighth form), part of the 0x82358 process cluster. 89 lines. 5 callees (ProcessAndAppendElement, ProcessAndCopyReferenceAndHash, ProcessAndDispatchAndResolve, ProcessAndHashString, and ProcessAndResolveTypedField). 7 callers (LuaExperience_Register_8251D958, sub_824DE170, sub_82415830, sub_823ADF80, sub_823577C0, sub_82908E20, and sub_824FA760).
 [entrypoint.functions."0x82358B48"]
 name = "ProcessAndProcessAndProcess128_82358B48"
 
@@ -50111,9 +50111,11 @@ name = "Combat_ScaleDamageDealt_826A41C8"
 [entrypoint.functions."0x8249F298"]
 name = "Combat_GetDamageTakenFactor_8249F298"
 
-# Multiplies an experience award (the value at r5) by
-# Difficulty_GetMultiplier_823C92F0(2) (ExperienceReceived) at level > 1. Verified for
-# the multiply and in game (the gate fires on XP pickups); the rest is not read.
+# Scales an XP award. r3 = the experience component, f1 = the amount, r5 = also apply
+# the collection multiplier (+52). For a positive amount whose owner has a type-33
+# component at level > 1: x Difficulty_GetMultiplier_823C92F0(2) (ExperienceReceived).
+# Returns the scaled amount in f1. Called from Experience_Add_8251C0A8 (Verified in the
+# generated code; the gate fires on XP pickups in game).
 [entrypoint.functions."0x8251CDD8"]
 name = "Experience_ScaleAward_8251CDD8"
 
@@ -50124,6 +50126,28 @@ name = "Experience_ScaleAward_8251CDD8"
 # generated code and in game for damage and life-steal; the gold payout is untested.
 [entrypoint.functions."0x8268AB30"]
 name = "Combat_ApplyHit_8268AB30"
+
+# Registers the Lua table Experience: Get, GetTotalEarned, Modify
+# (LuaExperience_Modify_8251C8E0), Drain, SetCollectionMultiplier and the efficiency
+# calls. Verified from the strings and binders in the generated code.
+[entrypoint.functions."0x8251D958"]
+name = "LuaExperience_Register_8251D958"
+
+# The native body of the Lua function Experience.Modify(hero, type, amount, flag):
+# converts the int amount to a float and calls Experience_Add_8251C0A8 with r6 = 0,
+# r7 = flag, r8 = 1. Only qc060 (the Guild tutorial's 350 Will XP) calls it outside
+# debug code (Verified in the generated code and the scripts).
+[entrypoint.functions."0x8251C8E0"]
+name = "LuaExperience_Modify_8251C8E0"
+
+# Adds XP of one type to an experience component. r3 = the component, r4 = the type,
+# f1 = the amount, r6 = 1 on the co-op share recursion (skips the share), r7 = apply
+# the collection multiplier (+52), r8 = a flag. For positive amounts it shares with the
+# co-op partner (recursing with r6 = r7 = r8 = 1), then scales the amount through
+# Experience_ScaleAward_8251CDD8 (call at 0x8251C4B0). Verified for the calls;
+# the exact meaning of r8 is Inference.
+[entrypoint.functions."0x8251C0A8"]
+name = "Experience_Add_8251C0A8"
 
 # TEMPORARY research probe (src/core/hotfunc/unsorted/DifficultyProbe.cpp). Remove
 # these hooks together with that file before any PR to master. Each sits right
