@@ -98,16 +98,21 @@ def main(argv):
 
     direct = defined - overrides
 
-    changed_files = calls = kept = 0
+    changed_files = calls = kept = restored = 0
     for fn in files:
         p = os.path.join(gen_dir, fn)
         with open(p, encoding="utf-8", errors="replace") as f:
             text = f.read()
-        n_direct = n_kept = 0
+        n_direct = n_kept = n_restored = 0
 
         def repl(m):
-            nonlocal n_direct, n_kept
+            nonlocal n_direct, n_kept, n_restored
             name = m.group(1)
+            # A function that gained an override since an earlier run: its
+            # call sites were made direct then, point them at it again.
+            if name.startswith("__imp__") and name[len("__imp__"):] in overrides:
+                n_restored += 1
+                return f"{name[len('__imp__'):]}(ctx, base);"
             if name in direct:
                 n_direct += 1
                 return f"__imp__{name}(ctx, base);"
@@ -118,12 +123,14 @@ def main(argv):
         new = CALL_RE.sub(repl, text)
         calls += n_direct
         kept += n_kept
+        restored += n_restored
         if new != text:
             with open(p, "w", encoding="utf-8", newline="") as f:
                 f.write(new)
             changed_files += 1
     print(f"{len(defined)} generated functions, {len(overrides)} overridden (kept); "
-          f"{calls} calls made direct in {changed_files} files, {kept} calls to overrides kept")
+          f"{calls} calls made direct in {changed_files} files, {kept} calls to overrides kept, "
+          f"{restored} restored to new overrides")
     return 0
 
 
