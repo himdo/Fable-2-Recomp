@@ -139,6 +139,7 @@ The other 17 callers were identified on 2026-11-22; see 15.1. In short:
 
 - Scale only when `delta > 0`.
 - Scale only when `comp+4 == Player_GetEntity_8222C210()` (player 1), the same check used in the choke point and in `HealthComp_Modify_8268BD90`.
+- Lua-driven gold (jobs, fines, quest scripts, pickups) all arrives from one caller, 0x8239F998, the `Money.Modify` binding (16.5). The caller can't tell those sources apart, so choose per source in the scripts or accept scaling all Lua gains.
 - Skip the co-op share recursion by its **caller** (the two recursive `bl`s inside `MoneyComp_Modify_8239E698`, at 0x8239EA58 and 0x8239EC80; the second one's branch isn't read yet), not by r5 = 1. The henchman wage and the end-of-co-op transfer also pass r5 = 1.
 - Skip network replays, where the owner's type-91 component has byte `+107` set. They take a short path that only adds and clamps, so the gold was already scaled on the machine that sent it.
 - Don't scale transfers and refunds: `sub_82413620`, `sub_8230FEB0`, and the orb-gift refund through `sub_8238D190`.
@@ -806,6 +807,82 @@ Here `P` is the property's **type-67 component**, which every price function tak
   - Property buying and selling go through the choke point like any other gold change. The cleanest hook point for prices is the return of `sub_8274DD78` / `sub_8274DFD0`, which the GUI also reads, so the price shown would match the price charged.
   - Selling is a gain with r6 = 1. Like shop selling, a gain hook would scale it on top of any sell-price change, so exclude `sub_828B01C8` there or leave the sell price alone.
 
+### 16. In-game results, round 2 (2026-11-22, log `out/build/win-amd64-release/logs/fable_2_064.log`)
+
+The Release build from 4d14650 (built 2026-11-21 17:37, probe included) on the dev machine. Slot 1 hero, 16:35–17:25. delta4o played and read out the screens; Claude matched the `[difficulty-probe]` lines by time. Where this section disagrees with an older one, this section wins.
+
+#### 16.1 The level object (check A, Verified)
+
+`lua Player.SetDifficultyLevel(QuestManager.HeroEntity, 2)` wrote to `42160FB0`, which is **player 1's type-33 component**. Its `+80` went 3 → 2 and `+38` (changed) = 1. So the console command, the gates and `stats` all use the same object.
+
+#### 16.2 The game's table and the combat gates (checks B, F, Verified)
+
+- **The gates fire for the hero.** DamageCaused (idx 0), DamageReceived (idx 1) and Experience (idx 2) each found player 1's type-33 component at level 2. The first reads came from 0x826A4570, 0x8249F63C and 0x8251CF40, the return addresses of the three multiply sites in section 1.
+- **The table is all 1.0:** `DamageCaused`, `DamageReceived`, `ExperienceReceived`, `SpellManaCost` and `StockItemPrice` are each 1.0000. With one row for every level above 1 (13.1), **the game's built-in difficulty changes nothing in the shipped data** except the Masochist flag. That answers decision 3 and 13.1 item 1: the game's gates and multiply sites are a usable route for damage and XP, but every value has to be ours.
+- **Health** (`HealthComp_Modify_8268BD90`, caller 0x8268AF98 in the hit handler `sub_8268AB30`):
+  - the hero's melee did -157.7 twice and -9.5 once to guards (600 max);
+  - a guard hit the hero for -30, twice (600 max).
+- **Life-steal.** Each of the hero's melee hits gave **+39.42 = 25% of 157.7** to the hero (source = target = hero, caller 0x8268B968). This is the Ghoul augment on the hero's Master Cleaver. Because it's worked out from the damage, a damage multiplier carries through to it. A heal hook must leave it alone.
+- **Golden touch** (also on the cleaver) produced **no** gold lines on any hit (guards or other targets). Its payout at 0x8268B604 ("RichGoldPerHit") is still untested; try a hostile creature.
+- **Ranged (Inference).** Crossbow hits added no new lines. The health limit is per caller, so ranged most likely uses the same caller as melee.
+
+#### 16.3 Shop prices (checks C, E, Verified)
+
+Every price line said `gate skipped`: the stock's owner is never player 1 and has no type-33 component (14.1). So **prices need our own hook**, at any level.
+
+| Shop | Item | Menu | Log | Gold |
+| --- | --- | --- | --- | --- |
+| A shop the hero owns | toy sword | base 25, wealth +4.9%, owner discount 39%, price 16 | base 26.214, f1 1.0, f2 0.0692, f1/f2 term 1.0, owned 1, `stock+60` 0.6 → 16 | -16 from 0x827AF9A4 |
+| Bowerstone Pie Stall (sold first, so not owned) | Crumbly Blueberry Pie | base 24, wealth +4.9%, Love 6%, Fear 6%, price 22 | base 25.165, f1 0.2891, f2 0.2953, term **0.8725** → 21.96 → 22 | -22 from 0x827AF9A4 |
+| Same, after rude expressions | Apple Pie Pocket | base 58, Love 0%, price 57 (was 53) | base 60.816; the probe's item limit was full, so no new line | not bought |
+
+- **Base (`sub_828E7C58`) = the item value × village wealth.** For example 25 × 1.0486 = 26.214.
+- **f1 = Love and f2 = Fear** of the shopkeeper (type-47 `+44` / `+48`). `sub_828E8C80(f1, f2)` is the **opinion discount**, about `1 - 0.218 × (f1 + f2)` (Inference from two points). For the Apple Pie Pocket, Love 0 and Fear 0.2953 give 0.936 × 60.816 = 56.9 → 57, which fits.
+- **Owning the shop also removes the opinion discount.** With f1 = 1.0 the term was still 1.0. The 0.6 owner discount applies instead of the shopkeeper multiplier and the opinion term. Where this happens isn't read yet.
+- **Prices round to the nearest whole number** (15.73 → 16, 21.96 → 22, 53.06 → 53), not down. The "floor at 0, convert to int" step in 14.3 is a clamp plus rounding.
+- **Owner bonus on selling** is `stock+64` = 1.4.
+- **Opening a shop asks for about 3,000 prices** (every item, buy and sell, from 0x828E8654 / 0x827AF830 and the menu at 0x827AF6D8), and about 100 more after each purchase. A price hook has to be cheap.
+
+#### 16.4 Property sale (Verified)
+
+The Bowerstone Pie Stall's sell screen showed:
+- Base Value 2250 ("BasicSalePrice");
+- **Decoration 0** (so `P+44 × P+116` is the decoration value);
+- Town Economy +109;
+- Selling Fees -236, so SellingMultiplier = 0.9;
+- **Final 2123** = `int(2359 × 0.9)`;
+- Profit 23, against the 2100 stored at `record+48`.
+
+The log has `gold +2123 from 0x828B0438` (inside `sub_828B01C8`) with r6 = 1, which matches 15.3.
+
+#### 16.5 Other gold (check E, Verified)
+
+- **Rent.** On load, +131,076 from 0x828AEBAC (`sub_828AEA50`) and +5,958 from 0x828AF2E4 (`sub_828AECD0`), both with r7 = 1. In play, +5,935 from `sub_828AECD0` about every 4 minutes. After the Pie Stall sale it paid 23 less, probably that stall's share.
+  - The load payout was identical (+131,076 from 5,227,209) on a second load about 50 minutes later. So it's stored in, or worked out from, the save, not real time.
+- **Lua gold all comes from 0x8239F998,** the return address in the Lua `Money.Modify` binding: the guard fine (-250) and the blacksmith job (+47, +94, +141, one call per sword; sword *n* pays n × 47). **A gain hook can't tell Lua sources apart by caller**; that needs Lua-level context, or the scripts themselves.
+
+#### 16.6 Saves and the front end (checks G, I, Verified)
+
+- Save box **sub-code 25** = Quit without saving (no save followed). **Sub-code 24** = Save and Quit: `save from 0x82413AA8` with r4–r7 = 0.
+- Job-end autosave: `AutoSaveGame` from 0x824EEC8C deferred (defer 1, pending 0), then from 0x82275FFC (defer 0, pending 1) it saved through `SaveManager_Save_824E8990` (caller 0x824E8DC8, r4 = 1, r7 = 1).
+- Continue screen: `SelectLoadCard` -1, 1, 0 (callers 0x826C7728 / 0x826C75DC).
+- **The reload undid the session.** "Quit without saving" took the game back to the last autosave, from before the session: gold back to 5,227,209, and the Pie Stall sale and the purchases gone. Slot 1 was then saved by the job-end autosave and Save and Quit, at 5,358,567 gold. Its level is whatever that save had (probably 3; not checked).
+
+#### 16.7 Not run this round
+
+- The level 1 against 2/3 price comparison (pointless, since the price gate never fires).
+- Gold pickups.
+- Golden touch on a hostile creature.
+- Region change and house purchase.
+- Save and Continue.
+- The `ui get` / `ui label` slot-label checks.
+- New Game → gender (check H).
+
+#### 16.8 Probe limits found
+
+- `g_price_seen` stops at 4096 items. Two shops filled it, so later stock items were never logged. Raise it, or key it by item type, next round.
+- The health lines stop after 3 per caller and kind. One fight used them all up.
+
 ## What changed
 
 Research only, on `feature/game-difficulty`. Nothing here is meant for master yet.
@@ -860,23 +937,35 @@ Run on Windows 11 (the dev machine) on 2026-11-21, before and after the round 2 
 
 - **Manifest:** it parses with `tomllib`, and `tools/check_manifest_collisions.py` against `out/tooling/runtime-sdk/win-amd64/bin/rexruntime.dll` reports no clash (5120 named functions).
 - **Build:** `build.cmd -release fable_2` succeeded. In the regenerated code, each of the seven `fable2_probe_*` hooks is called right after its intended instruction (the gates' `lwz r11,80(rX)`, and the two `fmuls` after the economy calls), with the registers in the manifest's order.
-- **In game:** nothing yet; see 14.5 and the overview's checklist.
+- **In game (2026-11-22):** round 2 ran on this build; results in section 16 (`fable_2_064.log`).
 
 ## Not tested
 
-- Everything in 14.5: the round 2 probe hasn't run in game yet.
-- Combat (DamageCaused and DamageReceived), XP, the region-change and house-purchase autosaves, the fail-quest prompt, and the label size and test label.
-- The game's own five table values: they have never been logged.
-- Whether `sub_828B0B38` is the "owns this shop" check.
+- Round 2 left these out (16.7):
+  - gold pickups;
+  - Golden touch on a hostile creature;
+  - the region-change and house-purchase autosaves;
+  - Save and Continue;
+  - the fail-quest prompt;
+  - the label size and test label;
+  - New Game → gender.
+- Where the owned-shop path removes the opinion term (16.3).
 - Co-op (player 2 also has a type-33 component).
 
 ## Follow-ups
 
-1. Run 14.5 and read the log. Decide the prices route (the built-in gate or our own hook) and the damage route from it. In the gold part, also check a quest reward, a pub game and a coach fare against the callers in 15.1.
-2. Name the gate functions and `sub_828B0B38` once the log confirms their roles.
+1. ~~Run 14.5~~: done 2026-11-22 (section 16).
+   - Prices need our own hook.
+   - Damage and XP can go through the game's gates, with our values (the shipped table is all 1.0).
+   - Still to check in game: a quest reward, a pub game, a coach fare, a gold pickup and Golden touch.
+2. Name the roles the log confirmed:
+   - the gates `sub_826A41C8` (damage caused), `sub_8249F298` (damage-taken factor) and `sub_8251CDD8` (XP);
+   - `sub_828B0B38` (the "owns this" check);
+   - `sub_828E7C58` (item value × village wealth) and `sub_828E8C80` (opinion discount);
+   - and the candidates in 15.2.
 3. Next research after that: enemy health and the friend-or-foe check (decision 0b), and the pause-menu population point.
 4. Find the game's spelling of "Guildmaster" (section 13.7).
 5. **Clean-up** before any PR to master:
    - the probe file and the TEMPORARY hooks;
    - the `difficulty-probe-marker.txt` files in `Hero000`–`Hero004`;
-   - the `saves.backup-difficulty-2026-11-20` backup. Slot 1's hero is at level 3 with the changed flag set; restore it from the backup if that matters.
+   - the `saves.backup-difficulty-2026-11-20` backup. Slot 1's hero has the changed flag set and was saved again on 2026-11-22 (16.6); restore it from the backup if that matters.

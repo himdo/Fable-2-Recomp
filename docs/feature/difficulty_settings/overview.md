@@ -186,19 +186,48 @@ It's still temporary and must be removed before the feature goes to master.
 ### The shout-out shop test (delta4o's idea)
 Like using Cheat Engine: change one thing, watch what moves. While shopping, delta4o reads out what the screen shows, and Claude matches it with the log afterwards, by time. That tells us which part of the price formula each in-game modifier comes from, and whether the price shown is what's actually taken.
 
+## Research step 3 (2026-11-22)
+
+Details are in technical.md sections 15 (code reading) and 16 (in-game results).
+
+### Every way gold comes in or goes out
+- **Confirmed in the code.** Every gold change in the game is now accounted for:
+  - **gains:** quest rewards, pub games, a wedding dowry, items worth gold, gift rewards, building income, gifts from other players, the co-op henchman's wage, rent, jobs, and shop and property sales;
+  - **spending:** shops, property, tattoo removal, coach fares, family upkeep and allowances, fines;
+  - **transfers:** in co-op, when player 2 leaves, their gold moves to player 1.
+- The "more or less gold" rule has to skip transfers, refunds and gold that arrives over the network, or some gold gets scaled twice.
+- **Confirmed in game.** Everything the game's scripts pay or charge (jobs, fines and more) comes through one doorway, so a gold hook can't tell those apart without help from the scripts.
+
+### Prices
+- **Confirmed in game:** the shop price is the item's value, plus the village's wealth, minus a discount for how much the shopkeeper **loves** and **fears** you (about 6% each in the test). Rude expressions took the Love discount away, and the price went up from 53 to 57, as predicted.
+- **Owning the shop** replaces all of that with a flat owner discount (39% in the test).
+- **The game's own difficulty price step never runs for the hero**, at any level. Prices will need our own hook.
+- **Property:** the sale price matched the code to the coin (2123 for the Bowerstone Pie Stall). Buying works out the price from the building type, the village's economy, decoration, and the neighbours' opinion of you. One script command gives property away for free.
+
+### The game's hidden difficulty
+- **Confirmed in game:** the console command sets the hero's own difficulty level, and the game's checks for damage dealt, damage taken and XP all look at the hero.
+- **But every value in the game's table is 1.0**, so the hidden system changes nothing in the shipped game. The checks are a good place to plug in our own values for damage and XP; the values themselves must be ours.
+- The Ghoul augment's life-steal follows the damage dealt, so a damage multiplier will carry over to it.
+
+### Saves
+- **Confirmed in game:** what the Save box buttons do (Save and Quit, Quit without saving) and when a job autosave fires.
+
 ## Where to pick up next time
 
-1. Run the checklist below on the new Release build.
-2. From the log: decide whether prices go through the game's check or our own hook, and whether fighting works through the game's check.
-3. Name the functions the log confirms.
+1. **Decide the starting multipliers** (open question 4). The game gives no reference values: its table is all 1.0.
+2. **Name the functions** the code reading and the log confirmed (technical.md follow-up 2).
+3. **A short round 3 in game** (one restart is enough): pick up some gold, try Golden touch on a monster, change region and buy a house, try Save and Continue, check the slot label, then New Game → boy or girl. Raise the probe's item limit first.
 4. Next research: enemy health and telling friend from foe, then where the pause menu gets its items.
 5. Tidy up before anything goes to master:
    - delete the probe and its temporary hooks;
    - delete the marker files in the slot folders;
    - remove the `saves.backup-difficulty-2026-11-20` backup.
-   The slot 1 hero is at difficulty 3 with "changed" set; restore it from the backup if that matters.
+
+   The slot 1 hero has "changed" set and was saved again on 2026-11-22 (5,358,567 gold); restore it from the backup if that matters.
 
 ## In-game checklist (round 2)
+
+**Run on 2026-11-22** (`fable_2_064.log`). Done: 1, 2 (no level comparison: pointless, because the price step never runs), 3, the job part of 4, two of the Save box buttons (5), and the slot cards (6). Still to do: listed under "Where to pick up next time", item 3.
 
 Use the Release build in `out/build/win-amd64-release`. Type **one console command per line**; two on a line don't run. The slot 1 hero is at level 3. Each check writes `[difficulty-probe]` lines to the newest `logs/fable_2_NNN.log`.
 
@@ -260,6 +289,11 @@ Use the Release build in `out/build/win-amd64-release`. Type **one console comma
 
 **Choice: investigate first.** It's the preferred route for damage and prices. Next step: read its real values from `globals.gdb`. The Masochist achievement question stays open (below).
 
+**Result (2026-11-22):**
+- The game's values are all 1.0, read live in game, so they suggest nothing.
+- Its checks work for damage and XP, so they're the route there, with our values.
+- For prices they never run, so prices need our own hook.
+
 **4. Where these notes live** (asked 2026-11-21). Options:
   - keep them in a personal notes folder until the feature has a commit on master;
   - **move them into the repo's `docs/feature/` now**.
@@ -286,15 +320,16 @@ Use the Release build in `out/build/win-amd64-release`. Type **one console comma
    | Hard | 0.75 | 1.25 | 1.5 | 1.5 |
    | Hardcore | 0.5 | 1.5 | 2.0 | 2.0 |
 
-   The game's own table values (once decoded) may suggest better numbers.
+   The game's own table turned out to be all 1.0 (2026-11-22), so it gives no reference.
 5. **Masochist achievement:** should Hard or Hardcore count as the game's "above Normal" level, so it can unlock? And if difficulty changes mid-game, should it stop counting, as the original does?
 6. **XP:** the game's table can also scale XP. Do we want that, and on which levels?
 7. **Theresa's unused lines:** use any of them on the difficulty screen?
-8. **Property prices:** should houses and shops follow the price multiplier too?
+8. **Property prices:** should houses and shops follow the price multiplier too? (Possible since 2026-11-22: one hook on the buy and sell price functions also fixes the price shown.) If selling is scaled, the gold-gain rule must skip property sales.
+9. **Which gold gains scale** (new, 2026-11-22): all of them, or only some (for example quests and jobs, but not rent or gambling)? Script-paid gold all arrives the same way, so a choice per source means touching the scripts.
 
 ## Proposed approach (cheapest first, not started)
 
-1. **Read the game's own multiplier values** from `globals.gdb`, and test what happens when the hero's level is set above Normal from the console.
+1. ~~**Read the game's own multiplier values** and test the hero's level above Normal~~: done 2026-11-22. All 1.0; the checks fire on the hero for damage and XP, but not for prices.
 2. **Damage and prices** through the game's own table, with our values per level. Make the table apply on every level, Normal included, so the hidden "above Normal" check doesn't get in the way.
 3. **Gold gained:** one hook on the gold function, only for the hero's gains.
 4. **Enemy health:** a hook on the health function, or each enemy's own multiplier set when it spawns.
