@@ -49721,15 +49721,16 @@ name = "LuaPlayer_GetDifficultyLevel_82612AC0"
 # Buy price of an item. r3 = a type-124 component (from
 # Shopkeeper_GetStockComponent_827B0358), r4 = the item, f1/f2 = the shopkeeper's
 # type-47 values (+44/+48), f3 = the shopkeeper multiplier. price = base
-# (sub_828E7C58) x economy (sub_828E8C80) x item+36 x f3 (f3 is replaced by 1.0
-# and the +60 discount applied when sub_828B0B38 on player 1's type-69 component
+# (Item_GetBaseValue_828E7C58) x the opinion factor (Item_GetBuyOpinionFactor_828E8C80)
+# x item+36 x f3 (f3 is replaced by 1.0 and the +60 discount applied when
+# Ownership_OwnsProperty_828B0B38 on player 1's type-69 component
 # is true) x StockItemPrice. The StockItemPrice gate looks up type 33 on *(r3+4),
 # not on the hero. Returns the int price in r3 (Verified in the generated code).
 [entrypoint.functions."0x828E7F78"]
 name = "Item_GetBuyPrice_828E7F78"
 
 # Sell price of an item; the mirror of Item_GetBuyPrice_828E7F78. base x
-# sub_828E8EC0 x item+40, divided by StockItemPrice behind the same type-33 gate
+# Item_GetSellOpinionFactor_828E8EC0 x item+40, divided by StockItemPrice behind the same type-33 gate
 # on *(r3+4), +64 discount, clamped against the buy price (Verified in the
 # generated code).
 [entrypoint.functions."0x828E8320"]
@@ -49797,7 +49798,7 @@ name = "PauseSaveBox_HandleEvent_82413988"
 [entrypoint.functions."0x8222C210"]
 name = "Player_GetEntity_8222C210"
 
-# The gold choke point (also behind Lua Money.Modify, sub_8239EE98). r3 = the money
+# The gold choke point (also behind Lua Money.Modify, LuaMoney_Modify_8239EE98). r3 = the money
 # component, r4 = delta, r5 = 1 on the co-op share recursion, r6 = share with
 # co-op, r7 = 1 only for rent and income. comp+12 += delta, clamped to
 # [0, 999999999], then posts a change message (Verified in the generated code).
@@ -49832,6 +49833,297 @@ name = "FrontMenu_HandleCardEvent_826C9188"
 # generated code).
 [entrypoint.functions."0x826C9008"]
 name = "FrontMenu_SelectLoadCard_826C9008"
+
+# --- Gold: Lua bindings (docs/feature/difficulty_settings/technical.md section 2) ---
+
+# Registers the Lua table Money: Get (0x830418B0, reads comp+12), Modify
+# (LuaMoney_Modify_8239EE98) and Set (LuaMoney_Set_8239EEA8). Verified from the
+# strings and binders in the generated code.
+[entrypoint.functions."0x8239EEE0"]
+name = "LuaMoney_Register_8239EEE0"
+
+# The native body of the Lua function Money.Modify: MoneyComp_Modify_8239E698(comp,
+# delta, r5 = 0, r6 = 1, r7 = 0) as a tail call (Verified in the generated code).
+[entrypoint.functions."0x8239EE98"]
+name = "LuaMoney_Modify_8239EE98"
+
+# The native body of the Lua function Money.Set: stores comp+12 and clamps it.
+# Bypasses MoneyComp_Modify_8239E698 (Verified in the generated code).
+[entrypoint.functions."0x8239EEA8"]
+name = "LuaMoney_Set_8239EEA8"
+
+# Lua glue for a Money method that takes one argument. r3 = the binding record (the
+# native body at +4), r4 = the entity, r5 = the argument. Finds the entity's type-81
+# (money) component and calls the body with (comp, r5). Every Lua Money.Modify
+# reaches MoneyComp_Modify_8239E698 from its return address 0x8239F998: guard fines,
+# blacksmith pay (Verified in the generated code and in game, 2026-11-22).
+[entrypoint.functions."0x8239F830"]
+name = "LuaMoney_CallMethod_8239F830"
+
+# --- Gold: native callers of MoneyComp_Modify_8239E698 (technical.md section 15.1) ---
+
+# Gives a quest's rewards: gold from quest+36 (MoneyComp_Modify_8239E698 with
+# r6 = 1), renown from +32, then items. Reached from the Lua QuestTracker.SetAsCompleted
+# and QuestTracker.GiveRewards bodies (Verified in the generated code).
+[entrypoint.functions."0x825FC180"]
+name = "Quest_GiveRewards_825FC180"
+
+# Registers the Lua table QuestTracker (SetAsCompleted, SetRewardMoney, GiveRewards,
+# ...). Verified from the strings and binders in the generated code.
+[entrypoint.functions."0x825FE168"]
+name = "LuaQuestTracker_Register_825FE168"
+
+# The native body of the Lua function QuestTracker.SetRewardMoney: sets quest+36,
+# the gold Quest_GiveRewards_825FC180 pays (Verified in the generated code).
+[entrypoint.functions."0x825FB298"]
+name = "LuaQuestTracker_SetRewardMoney_825FB298"
+
+# The native body of the Lua function QuestTracker.SetAsCompleted; reaches
+# Quest_GiveRewards_825FC180 (Verified as the binding and the call path).
+[entrypoint.functions."0x825F9748"]
+name = "LuaQuestTracker_SetAsCompleted_825F9748"
+
+# The native body of the Lua function QuestTracker.GiveRewards; reaches
+# Quest_GiveRewards_825FC180 (Verified as the binding and the call path).
+[entrypoint.functions."0x825FC878"]
+name = "LuaQuestTracker_GiveRewards_825FC878"
+
+# Pub games: pays the net result sub_82EE1DF0(obj+124) - obj+96 with r6 = 1, which can
+# be negative, then applies the "PurityBalancing" step ("MaxGoldForScalingFromGambling",
+# "MaxPurityModifierForGambling"). Verified in the generated code.
+[entrypoint.functions."0x825ABDC0"]
+name = "PubGame_PayResult_825ABDC0"
+
+# Marriage: reads "RenownBoostForMarrying" and "DowryForMarrying" from the spouse's
+# data and pays the dowry with r6 = 1. Its caller sub_82824C38 holds the marriage
+# strings (Verified in the generated code).
+[entrypoint.functions."0x8282AEB8"]
+name = "Marriage_PayDowry_8282AEB8"
+
+# Gives an item to an entity's inventory. When the item's definition has a
+# "MoneyComponent", it pays its "Money" value instead (MoneyComp_Modify_8239E698 with
+# r6 = the item's "SplitWithHenchmanIfGivenToHero"). Called from the inventory Lua
+# bindings (sub_8261AD88), the hero titles (sub_828E92D0) and sub_828EB1F0. Verified
+# for the money part; the item part and the exact Lua name are Inference.
+[entrypoint.functions."0x8261A738"]
+name = "Inventory_GiveItemOrMoney_8261A738"
+
+# Constructor of the gift/reward object (vtable 0x82002320), made by sub_8244FD18.
+# Reads "IsMoneyGift", "MoneyAmount" (+32), "GiftItem" (+28) and "IsRandomReward"
+# (Verified in the generated code).
+[entrypoint.functions."0x827ADBD8"]
+name = "GiftReward_Init_827ADBD8"
+
+# Gift/reward object method: pays MoneyAmount (+32) with r6 = 1, then gives GiftItem
+# (+28) to the recipient's type-13 component. Verified in the generated code; who
+# hands these out is not traced.
+[entrypoint.functions."0x827ADCF8"]
+name = "GiftReward_Give_827ADCF8"
+
+# Building income pickup update (vtable 0x820E0E10; "PickupDistance", "BuildingUID",
+# "BuildingIncome"). When player 1 is within +28, pays them the pickup entity's own
+# type-81 balance (r7 = 0), logs it on player 1's type-69 component (sub_828B21F0)
+# and removes the pickup. Verified in the generated code; the removal is Inference.
+[entrypoint.functions."0x828B46E8"]
+name = "BuildingIncomePickup_Update_828B46E8"
+
+# Orb gift, applying: adds gift+112 gold (r6 = 1), then the item, to an entity. Called
+# on receipt (sub_8238C488, "GUI_NET_RECEIVE_GOLD") and as the refund when a gift
+# fails (sub_8238D190, "GUI_ORB_GIFT_FAILED"). Verified in the generated code.
+[entrypoint.functions."0x8238D4A8"]
+name = "OrbGift_Apply_8238D4A8"
+
+# Network message handler: a 270-case switch on the message type, called from
+# sub_82317598 ("CECNetwork"). Case 43 sets byte +107 on the entity's type-91
+# (network) component, then applies msg+4 gold through MoneyComp_Modify_8239E698,
+# which with +107 set only adds and clamps (Verified in the generated code).
+[entrypoint.functions."0x8237DE18"]
+name = "Network_HandleMessage_8237DE18"
+
+# Co-op henchman wage: looks up "GoldEarnedPerMinute" in "HenchmanJobLevels" by
+# minutes played (obj+1060, "MinimumNumberOfMinutesPlayedToReachLevel"), builds up
+# fractions at obj+1064 and pays whole coins with r5 = 1, r6 = 1 (Verified in the
+# generated code).
+[entrypoint.functions."0x824A6FD8"]
+name = "Henchman_PayWage_824A6FD8"
+
+# Tattoo removal menu action ("TattooRemoval"): charges -"PriceOfTattooRemoval"
+# through MoneyComp_Modify_8239E698 (Verified in the generated code; the rest of the
+# menu handling is not read).
+[entrypoint.functions."0x82593950"]
+name = "TattooShop_RemoveTattoo_82593950"
+
+# Coach/ferry fare: charges the fare to player 1 only when the balance covers it.
+# Reached from the Lua travel bindings near "FastTravelToStop" / "TravelToStopInRegion"
+# and from sub_82837610. Verified for the charge; which Lua name pairs with which
+# pointer is Inference.
+[entrypoint.functions."0x82609B90"]
+name = "Travel_ChargeFare_82609B90"
+
+# End of co-op: moves all of player 2's gold (playerObj+112) to player 1 (+104) with
+# r5 = 1, r6 = 0, then sets player 2's to 0. Its caller sub_824130C0 looks like the
+# co-op teardown (Verified for the move; the caller's role is Inference).
+[entrypoint.functions."0x82413620"]
+name = "Coop_MoveGoldToPlayer1_82413620"
+
+# Drops network client(s) ("GUI_NET_DROPPED_CLIENT"): gives player 1 the co-op
+# partner's gold (sub_828BEEC0(playerObj), r6 = 0), then saves through
+# SaveManager_Save_824E8990. Called from the quit routine InitializeGameEntity_8233CAC8
+# with r4 = a 24-byte-entry list, and from sub_823211F0 / sub_82321268. Verified for
+# the gold and save calls; the list and the exact role are Inference.
+[entrypoint.functions."0x8230FEB0"]
+name = "Network_DropClient_8230FEB0"
+
+# --- Shops (technical.md sections 14 and 16.3) ---
+
+# Buys an item at a shop: -Shopkeeper_GetBuyPrice_827AF5A0 through
+# MoneyComp_Modify_8239E698 (return address 0x827AF9A4). Verified in the generated
+# code and in game (2026-11-22: -16 and -22 matched the menu prices).
+[entrypoint.functions."0x827AF850"]
+name = "Shopkeeper_BuyItem_827AF850"
+
+# Sells an item at a shop: +Shopkeeper_GetSellPrice_827AF6F8 through
+# MoneyComp_Modify_8239E698 (Verified in the generated code; not seen in game yet).
+[entrypoint.functions."0x827AFB58"]
+name = "Shopkeeper_SellItem_827AFB58"
+
+# An item's base price at a shop: the item's value x the village's wealth. In game a
+# value-25 item with wealth +4.9% gave 26.214 (Verified at runtime, 2026-11-22). How it
+# finds the wealth (sub_82455F20, sub_828E8858) is not read (Inference).
+[entrypoint.functions."0x828E7C58"]
+name = "Item_GetBaseValue_828E7C58"
+
+# Opinion factor for buy prices. r3 = the stock component (type 124), f1 = the
+# shopkeeper's Love, f2 = Fear (type-47 +44/+48). Returns 1.0 when
+# Ownership_OwnsProperty_828B0B38(player 1's type-69 component, *(r3+4)) is true
+# (the hero owns the shop). Otherwise 1 / (1 + stock+52 x max(Love,0)
+# + stock+48 x |min(Love,0)| + stock+56 x max(Fear,0)). Verified in the generated
+# code and in game (0.8725 at Love 0.2891, Fear 0.2953).
+[entrypoint.functions."0x828E8C80"]
+name = "Item_GetBuyOpinionFactor_828E8C80"
+
+# Opinion factor for sell prices, used by Item_GetSellPrice_828E8320. Same shape and
+# calls as Item_GetBuyOpinionFactor_828E8C80, including the owner check (Inference:
+# the body was not read line by line).
+[entrypoint.functions."0x828E8EC0"]
+name = "Item_GetSellOpinionFactor_828E8EC0"
+
+# --- Property (technical.md section 15.3; P = the property's type-67 component) ---
+
+# Property base value: int("BasicSalePrice" x (1 + P+112 x pct x 0.01)) + P+44 x P+116.
+# pct = +16 of the type-65 component reached through the type-66 weak handle at
+# comp66+12 (0 if none). P+44 x P+116 is the decoration value (0 in game). Verified in
+# the generated code and in game (2026-11-22, the Bowerstone Pie Stall).
+[entrypoint.functions."0x8274D1E0"]
+name = "Property_GetBaseValue_8274D1E0"
+
+# "TypePriceAdjustments" step of the buy price: sums "AdjustValue" x base over the
+# entries whose "BuildingType" bits match P+28. r3 = P, f1 = base (Verified in the
+# generated code).
+[entrypoint.functions."0x8274D4D0"]
+name = "Property_GetTypePriceAdjustment_8274D4D0"
+
+# "OpinionPriceAdjustments" step of the buy price: averages the five type-47 opinion
+# axes over the occupants (list at P+120) and the entities on the property's type-41
+# component, weights them and returns int(v x sum). r3 = P, f1 = v (Verified in the
+# generated code).
+[entrypoint.functions."0x8274D6D8"]
+name = "Property_GetOpinionPriceAdjustment_8274D6D8"
+
+# Property buy price: base + Property_GetTypePriceAdjustment_8274D4D0, x
+# "NotForSaleAdjustment" when P+128 is set, + Property_GetOpinionPriceAdjustment_8274D6D8,
+# x "PlayerKilledOccupantAdjustment" when byte P+81 is set, floored at
+# Property_GetSellPrice_8274DFD0 (Verified in the generated code).
+[entrypoint.functions."0x8274DD78"]
+name = "Property_GetBuyPrice_8274DD78"
+
+# Property sell price: int(Property_GetBaseValue_8274D1E0 x "SellingMultiplier").
+# Verified in the generated code and in game (2359 x 0.9 -> 2123).
+[entrypoint.functions."0x8274DFD0"]
+name = "Property_GetSellPrice_8274DFD0"
+
+# True when the owner's type-69 (ownership) component r3 owns the property entity r4.
+# Property buy and sell branch opposite ways on it; Item_GetBuyOpinionFactor_828E8C80
+# uses it for "the hero owns this shop". Verified in the generated code and in game
+# (an owned shop gave the 0.6 owner discount; after selling the stall it was gone).
+[entrypoint.functions."0x828B0B38"]
+name = "Ownership_OwnsProperty_828B0B38"
+
+# Buys a property. r3 = the buyer's type-69 component, r4 = the property entity. Does
+# nothing when Ownership_OwnsProperty_828B0B38 is true; otherwise creates a 68-byte
+# ownership record (sub_828AC940), stores the price at record+48 and charges -price
+# with r6 = 1. Also called from the real-estate GUI (sub_82598548). Verified in the
+# generated code.
+[entrypoint.functions."0x828AF6D0"]
+name = "Ownership_BuyProperty_828AF6D0"
+
+# Sells a property: only when Ownership_OwnsProperty_828B0B38 is true. Pays
+# +Property_GetSellPrice_8274DFD0 with r6 = 1 (return address 0x828B0438), then cleans
+# up. Called from the real-estate GUI (sub_825986E0). Verified in the generated code
+# and in game (+2123, 2026-11-22).
+[entrypoint.functions."0x828B01C8"]
+name = "Ownership_SellProperty_828B01C8"
+
+# Registers the Lua table PlayerProperties (PurchaseProperty, PurchasePropertyQuietly,
+# IsOwnedByPlayer, GetCurrentPropertyValue, ...). Verified from the strings and
+# binders in the generated code.
+[entrypoint.functions."0x828B4240"]
+name = "LuaPlayerProperties_Register_828B4240"
+
+# The native body of the Lua function PlayerProperties.PurchaseProperty: checks the
+# buyer is valid, then jumps to Ownership_BuyProperty_828AF6D0 (Verified in the
+# generated code).
+[entrypoint.functions."0x828AFB80"]
+name = "LuaPlayerProperties_PurchaseProperty_828AFB80"
+
+# The native body of the Lua function PlayerProperties.PurchasePropertyQuietly: the
+# same set-up as Ownership_BuyProperty_828AF6D0 and stores the price, but never
+# charges gold (Verified in the generated code).
+[entrypoint.functions."0x828AFBB8"]
+name = "LuaPlayerProperties_PurchasePropertyQuietly_828AFBB8"
+
+# Pays property rent that is due: comp+128 to the owner once the game tick passes
+# comp+132 (r7 = 1), then zeroes +128; also calls Ownership_UpdateIncome_828AECD0.
+# Verified in the generated code and in game (+131,076 from 0x828AEBAC on load).
+[entrypoint.functions."0x828AEA50"]
+name = "Ownership_PayDueRent_828AEA50"
+
+# Property rent and profits update ("RealEstateRentMedium", "RealEstateProfitsMedium",
+# "RealEstateGossip", "MONEY: "): pays income with r7 = 1. Verified in the generated
+# code and in game (+5,935 from 0x828AF2E4 about every 4 minutes).
+[entrypoint.functions."0x828AECD0"]
+name = "Ownership_UpdateIncome_828AECD0"
+
+# --- Combat (technical.md sections 1, 4 and 16.2) ---
+
+# Scales an outgoing hit: when the attacker has a type-33 (player) component at
+# level > 1, hit+56 x= Difficulty_GetMultiplier_823C92F0(0) (DamageCaused). Called
+# from sub_826A33A8. Verified in the generated code; the gate fires on the hero's hits
+# in game. It also reads "BerserkValues.DamageDealtMultiplier" and "KnockdownPoseHit"
+# (how they are used is not read).
+[entrypoint.functions."0x826A41C8"]
+name = "Combat_ScaleDamageDealt_826A41C8"
+
+# The hero's damage-taken factor from "Toughness", "BarkskinMultiplier" and
+# "BerserkValues.DamageTakenMultiplier", divided by Difficulty_GetMultiplier_823C92F0(1)
+# (DamageReceived) at level > 1; stored at entity+2164. Called from sub_8268DEF0.
+# Verified in the generated code; the gate fires on the hero in game.
+[entrypoint.functions."0x8249F298"]
+name = "Combat_GetDamageTakenFactor_8249F298"
+
+# Multiplies an experience award (the value at r5) by
+# Difficulty_GetMultiplier_823C92F0(2) (ExperienceReceived) at level > 1. Verified for
+# the multiply and in game (the gate fires on XP pickups); the rest is not read.
+[entrypoint.functions."0x8251CDD8"]
+name = "Experience_ScaleAward_8251CDD8"
+
+# Applies a hit: damage through HealthComp_Modify_8268BD90 (return address
+# 0x8268AF98), the vampiric heal ("VampiricSuckDamageMultiplier", 25% of the damage
+# for the Ghoul augment, return 0x8268B968), "GeniusSuckDamageMultiplier",
+# "RichCorruptionPerHit" and the "RichGoldPerHit" payout (0x8268B604). Verified in the
+# generated code and in game for damage and life-steal; the gold payout is untested.
+[entrypoint.functions."0x8268AB30"]
+name = "Combat_ApplyHit_8268AB30"
 
 # TEMPORARY research probe (src/core/hotfunc/unsorted/DifficultyProbe.cpp). Remove
 # these hooks together with that file before any PR to master. Each sits right
@@ -49875,7 +50167,7 @@ name = "fable2_probe_buy_factors"
 registers = ["f1", "f26", "f27", "f31", "r27", "r29"]
 after_instruction = true
 
-# In Item_GetSellPrice_828E8320, after `fmuls f0,f1,f30`: f1 = sub_828E8EC0's
+# In Item_GetSellPrice_828E8320, after `fmuls f0,f1,f30`: f1 = Item_GetSellOpinionFactor_828E8EC0's
 # term, f30 = item+40, f31 = base value.
 [[entrypoint.midasm_hook]]
 address = 0x828E8374

@@ -122,9 +122,9 @@ uint32_t FindComponent(uint32_t ent, uint32_t type) {
   return (lo != end && U32(lo) == type) ? U32(lo + 4) : 0;
 }
 
-// Player 1's entity, the way Item_GetBuyPrice_828E7F78 and sub_828E8C80 get it:
+// Player 1's entity, the way Item_GetBuyPrice_828E7F78 and Item_GetBuyOpinionFactor_828E8C80 get it:
 // the player object *(*(*(*(*(0x83496920)+12)+88)+4)+0), then the weak handle at
-// +104 (Player_GetEntity_8222C210, inlined in sub_828E8C80).
+// +104 (Player_GetEntity_8222C210, inlined in Item_GetBuyOpinionFactor_828E8C80).
 uint32_t Player1Entity() {
   if (fable2::patches::GuestBase() == nullptr) return 0;
   uint32_t a = U32(0x83496920u);

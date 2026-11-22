@@ -215,7 +215,7 @@ Details are in technical.md sections 15 (code reading) and 16 (in-game results).
 ## Where to pick up next time
 
 1. **Decide the starting multipliers** (open question 4). The game gives no reference values: its table is all 1.0.
-2. **Name the functions** the code reading and the log confirmed (technical.md follow-up 2).
+2. ~~**Name the functions**~~: done 2026-11-22. 44 functions now have real names, among them the gold callers, the shop and property price steps, rent, and the combat checks (technical.md "What changed").
 3. **A short round 3 in game** (one restart is enough): pick up some gold, try Golden touch on a monster, change region and buy a house, try Save and Continue, check the slot label, then New Game → boy or girl. Raise the probe's item limit first.
 4. Next research: enemy health and telling friend from foe, then where the pause menu gets its items.
 5. Tidy up before anything goes to master:

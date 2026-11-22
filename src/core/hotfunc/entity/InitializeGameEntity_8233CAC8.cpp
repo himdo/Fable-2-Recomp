@@ -52,7 +52,7 @@ extern "C" void ProcessAndProcessAndProcess938_8217E3F8(PPCContext& ctx, uint8_t
 extern "C" void __restgprlr_29(PPCContext& ctx, uint8_t* base);
 extern "C" void __savegprlr_29(PPCContext& ctx, uint8_t* base);
 extern "C" void sub_822F9EC0(PPCContext& ctx, uint8_t* base);
-extern "C" void sub_8230FEB0(PPCContext& ctx, uint8_t* base);
+extern "C" void Network_DropClient_8230FEB0(PPCContext& ctx, uint8_t* base);
 extern "C" void sub_8233D250(PPCContext& ctx, uint8_t* base);
 extern "C" void sub_829F7E18(PPCContext& ctx, uint8_t* base);
 
@@ -164,7 +164,7 @@ extern "C" void InitializeGameEntity_8233CAC8(PPCContext& __restrict ctx, uint8_
       // slot address (state2+84, high 32) and start2 (low 32) into r4.
       ctx.r4.u64 = (static_cast<u64>(static_cast<u32>(state2) + 84) << 32) | start2;
       ctx.lr = 0x8233CB90;                        // bl 0x8230feb0
-      sub_8230FEB0(ctx, base);
+      Network_DropClient_8230FEB0(ctx, base);
     }
   }
 
