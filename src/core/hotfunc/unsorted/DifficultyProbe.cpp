@@ -10,16 +10,11 @@
 //   B. fable2_probe_gate_*: midasm hooks right after each gate's
 //      `lwz r11,80(rX)` (rX = the type-33 component the gate found, r11 = the
 //      level it read). They only run when the gate found a component.
-//   C. Item_GetBuyPrice_828E7F78 / Item_GetSellPrice_828E8320: the component the
-//      price gate checks (*(r3+4)), whether it has type 33, the price factors
-//      (fable2_probe_buy_factors / _sell_factors) and the price. A price is logged
-//      once per item and again when it changes; the shop UI asks for it often.
-//   Difficulty_GetMultiplier_823C92F0: the five table values on its first call,
-//      and the first read of each index with its caller.
+//   C. (moved) The price, gold and multiplier overrides now belong to the feature,
+//      src/core/hotfunc/difficulty/Difficulty.cpp, which logs "[difficulty]" lines.
+//      fable2_probe_buy_factors / _sell_factors still run but nothing reads them.
 //
 // Tier 2, first calls per caller (a caller = the return address in lr):
-//   E. MoneyComp_Modify_8239E698: every player-1 gold change (with the balance
-//      after), the first 3 per caller for anyone else.
 //   F. HealthComp_Modify_8268BD90: the first 3 per caller and target kind.
 //   G. Saves: SaveManager_Save_824E8990, LuaSaveManager_AutoSaveGame_824E8D28,
 //      _SaveFailQuestSave_824E8D18, _LoadFailQuestSave_824ECCB8 and
@@ -51,16 +46,12 @@
 
 #include "fable2_patches.h"  // fable2::patches::GuestBase
 
-extern "C" void __imp__Difficulty_GetMultiplier_823C92F0(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__LuaPlayer_SetDifficultyLevel_823C9458(PPCContext& ctx, uint8_t* base);
-extern "C" void __imp__Item_GetBuyPrice_828E7F78(PPCContext& ctx, uint8_t* base);
-extern "C" void __imp__Item_GetSellPrice_828E8320(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__SaveManager_Save_824E8990(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__LuaSaveManager_AutoSaveGame_824E8D28(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__LuaSaveManager_SaveFailQuestSave_824E8D18(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__LuaSaveManager_LoadFailQuestSave_824ECCB8(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__PauseSaveBox_HandleEvent_82413988(PPCContext& ctx, uint8_t* base);
-extern "C" void __imp__MoneyComp_Modify_8239E698(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__HealthComp_Modify_8268BD90(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__FrontMenu_StartNewGame_8237A0C8(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__FrontMenu_HandleCardEvent_826C9188(PPCContext& ctx, uint8_t* base);
@@ -228,83 +219,11 @@ void fable2_probe_sell_factors(PPCRegister& f1, PPCRegister& f30, PPCRegister& f
 
 namespace {
 
-// --- C. Prices -----------------------------------------------------------------
-
-std::mutex g_price_mu;
-std::unordered_map<uint64_t, int32_t> g_price_seen;  // (buy/sell, item) -> last price
-
-void LogPrice(bool buy, uint32_t lr, uint32_t stock, uint32_t item, double f1, double f2,
-              double f3, int32_t price) {
-  {
-    std::lock_guard lock(g_price_mu);
-    const uint64_t key = (uint64_t{buy} << 32) | item;
-    auto it = g_price_seen.find(key);
-    if (it != g_price_seen.end() && it->second == price) return;
-    if (it == g_price_seen.end() && g_price_seen.size() >= 4096) return;
-    g_price_seen[key] = price;
-  }
-  const uint32_t owner = Ptr(stock) ? U32(stock + 4) : 0;
-  const uint32_t p1 = Player1Entity();
-  const uint32_t owner33 = FindComponent(owner, 33);
-  const PriceTrace& t = t_price;
-  const std::string gate =
-      t.gate ? fmt::format("fired, level {}", t.gate_level) : std::string("skipped");
-  if (buy) {
-    REXSYS_INFO(
-        "[difficulty-probe] buy price {} for item={:08X} from {:08X}: stock={:08X} owner={:08X} "
-        "owner-is-p1={} owner-type33={:08X} | f1={:.4f} f2={:.4f} f3(shop)={:.4f} | base={:.3f} "
-        "economy={:.4f} stock+36={:.4f} shop-or-owned={:.4f} owned={} stock+60={:.4f} | gate {}",
-        price, item, lr, stock, owner, Yes(owner != 0 && owner == p1), owner33, f1, f2, f3, t.base,
-        t.econ, t.mult, t.shop, t.owned, Ptr(stock) ? F32(stock + 60) : 0.0f, gate);
-  } else {
-    REXSYS_INFO(
-        "[difficulty-probe] sell price {} for item={:08X} from {:08X}: stock={:08X} owner={:08X} "
-        "owner-is-p1={} owner-type33={:08X} | f1={:.4f} f2={:.4f} f3={:.4f} | base={:.3f} "
-        "term={:.4f} stock+40={:.4f} stock+64={:.4f} | gate {}",
-        price, item, lr, stock, owner, Yes(owner != 0 && owner == p1), owner33, f1, f2, f3, t.base,
-        t.econ, t.mult, Ptr(stock) ? F32(stock + 64) : 0.0f, gate);
-  }
-}
-
-constexpr std::array<const char*, 5> kFields = {"DamageCaused", "DamageReceived",
-                                                "ExperienceReceived", "SpellManaCost",
-                                                "StockItemPrice"};
-std::atomic<bool> g_table_logged{false};
-std::array<std::atomic<bool>, 5> g_idx_seen{};
-
-PerKey g_money_calls;
 PerKey g_health_calls;
 std::atomic<uint32_t> g_card_events{0};
 std::atomic<uint32_t> g_load_cards{0};
 
 }  // namespace
-
-// --- Difficulty_GetMultiplier ------------------------------------------------
-
-extern "C" void Difficulty_GetMultiplier_823C92F0(PPCContext& __restrict ctx, uint8_t* base) {
-  const uint32_t idx = ctx.r3.u32;
-  const uint32_t caller = static_cast<uint32_t>(ctx.lr);
-  if (!g_table_logged.exchange(true)) {
-    std::array<double, 5> v{};
-    for (uint32_t i = 0; i < 5; ++i) {
-      PPCContext saved = ctx;
-      ctx.r3.u64 = i;
-      __imp__Difficulty_GetMultiplier_823C92F0(ctx, base);
-      v[i] = ctx.f1.f64;
-      saved.fpscr = ctx.fpscr;  // keep the live flush mode, as GuestFrame does
-      ctx = saved;
-    }
-    REXSYS_INFO(
-        "[difficulty-probe] DifficultyLevelMultipliers: {}={:.4f} {}={:.4f} {}={:.4f} "
-        "{}={:.4f} {}={:.4f}",
-        kFields[0], v[0], kFields[1], v[1], kFields[2], v[2], kFields[3], v[3], kFields[4], v[4]);
-  }
-  __imp__Difficulty_GetMultiplier_823C92F0(ctx, base);
-  if (idx < 5 && !g_idx_seen[idx].exchange(true)) {
-    REXSYS_INFO("[difficulty-probe] first read of {} (idx {}) from {:08X} -> {:.4f}",
-                kFields[idx], idx, caller, ctx.f1.f64);
-  }
-}
 
 // --- A. SetDifficultyLevel -----------------------------------------------------
 
@@ -324,45 +243,6 @@ extern "C" void LuaPlayer_SetDifficultyLevel_823C9458(PPCContext& __restrict ctx
       "p1-type33+80={}",
       caller, obj, old_level, level, Ptr(obj) ? U8(obj + 38) : 0, obj_owner, p1, p1c33,
       Yes(obj != 0 && obj == p1c33), Ptr(p1c33) ? static_cast<int32_t>(U32(p1c33 + 80)) : -1);
-}
-
-// --- C. Prices -----------------------------------------------------------------
-
-extern "C" void Item_GetBuyPrice_828E7F78(PPCContext& __restrict ctx, uint8_t* base) {
-  const uint32_t lr = static_cast<uint32_t>(ctx.lr);
-  const uint32_t stock = ctx.r3.u32, item = ctx.r4.u32;
-  const double f1 = ctx.f1.f64, f2 = ctx.f2.f64, f3 = ctx.f3.f64;
-  t_price = {};
-  __imp__Item_GetBuyPrice_828E7F78(ctx, base);
-  LogPrice(true, lr, stock, item, f1, f2, f3, ctx.r3.s32);
-}
-
-extern "C" void Item_GetSellPrice_828E8320(PPCContext& __restrict ctx, uint8_t* base) {
-  const uint32_t lr = static_cast<uint32_t>(ctx.lr);
-  const uint32_t stock = ctx.r3.u32, item = ctx.r4.u32;
-  const double f1 = ctx.f1.f64, f2 = ctx.f2.f64, f3 = ctx.f3.f64;
-  t_price = {};
-  __imp__Item_GetSellPrice_828E8320(ctx, base);
-  LogPrice(false, lr, stock, item, f1, f2, f3, ctx.r3.s32);
-}
-
-// --- E. Gold ---------------------------------------------------------------------
-
-extern "C" void MoneyComp_Modify_8239E698(PPCContext& __restrict ctx, uint8_t* base) {
-  const uint32_t lr = static_cast<uint32_t>(ctx.lr);
-  const uint32_t comp = ctx.r3.u32;
-  const int32_t delta = ctx.r4.s32;
-  const uint32_t r5 = ctx.r5.u32, r6 = ctx.r6.u32, r7 = ctx.r7.u32;
-  const uint32_t owner = Ptr(comp) ? U32(comp + 4) : 0;
-  const int32_t before = Ptr(comp) ? static_cast<int32_t>(U32(comp + 12)) : 0;
-  __imp__MoneyComp_Modify_8239E698(ctx, base);
-  const bool p1 = owner != 0 && owner == Player1Entity();
-  if (p1 || g_money_calls.Take(lr, 3)) {
-    REXSYS_INFO(
-        "[difficulty-probe] gold {:+} from {:08X} owner={:08X} p1={} r5={} r6={} r7={}: {} -> {}",
-        delta, lr, owner, Yes(p1), r5, r6, r7, before,
-        Ptr(comp) ? static_cast<int32_t>(U32(comp + 12)) : 0);
-  }
 }
 
 // --- F. Health -------------------------------------------------------------------

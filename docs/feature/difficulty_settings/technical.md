@@ -471,6 +471,23 @@ Sizes come from `gui_texture_headers.bnk`; the textures themselves are in `art/g
 
 The remaining open questions (slot label format, Masochist, unused Theresa lines) are listed in `overview.md`.
 
+### 18. Feature code, step 1 (2026-11-22)
+
+`src/core/hotfunc/difficulty/Difficulty.cpp`, strong overrides that call the originals (`__imp__`). There's no config key: Easy is the original game, so the level is the switch.
+
+| Override | What it does |
+| --- | --- |
+| `Difficulty_GetMultiplier_823C92F0` | Returns idx 1 (DamageReceived) = enemy damage and idx 2 (ExperienceReceived) = XP. The other indexes return 1.0. It doesn't call the original (the shipped table is all 1.0). |
+| `LuaExperience_Modify_8251C8E0` | Sets a thread-local flag around the original, so the XP index returns 1.0 for scripted XP (17.1). |
+| `Item_GetBuyPrice_828E7F78`, `Item_GetSellPrice_828E8320` | Buy × prices, sell ÷ prices, rounded to the nearest coin, never below 1. |
+| `Property_GetBuyPrice_8274DD78`, `Property_GetSellPrice_8274DFD0` | The same for property. |
+| `MoneyComp_Modify_8239E698` | `delta > 0` to player 1 is × gold, except the eight return addresses listed in the file (shop and property sales, the co-op recursion, the two transfers, orb gifts, network messages) and network replays (type-91 `+107`). |
+
+- **The level:** player 1's type-33 `+80`. 1 or lower is Easy, 2 Medium, 3 Hard, 4 or higher Hardcore. A fresh hero's default isn't read yet; anything ≤ 1 is Easy either way. Set it with `lua Player.SetDifficultyLevel(QuestManager.HeroEntity, n)`. That also sets the changed flag `+38`, which blocks the Masochist achievement (open question 5).
+- **Logging:** `[difficulty] level ...` when the level read changes, and `[difficulty] gold +a -> +b from <caller>` for every scaled gain.
+- **Not done:** enemy health (decision 0), the New Game cards, the pause-menu entry, Hardcore saving, the slot label.
+- **Inference until tested:** the gates still read each component's own level, so a co-op player 2 at game level 1 isn't affected; prices are scaled for every caller of the item price functions.
+
 ### 17. The multipliers (decision 6, 2026-11-22)
 
 | Level | Game level (type 33 `+80`) | Gold gained | Prices | Enemy damage | Enemy health | XP |
@@ -484,7 +501,7 @@ Default and missing value: Easy (old saves and the New Game screen's first card)
 
 What each column means for the code (Inference until built):
 - **Easy needs no code path.** All five gates in section 1 skip at level 1, and the gold and price hooks pass 1.0 through.
-- **Enemy damage** goes through the DamageReceived gate in `Combat_GetDamageTakenFactor_8249F298`, which does `f31 /= mult`. So the value the gate gets must be `1 / enemy damage` (0.667 / 0.5 / 0.4). `Difficulty_GetMultiplier_823C92F0` has no level argument and the table is one row (13.1), so per-level values need an override or a hook that reads the hero's level. Don't feed the DamageCaused gate: the hero's own damage stays as it is, and so does the Ghoul life-steal worked out from it (16.2).
+- **Enemy damage** goes through the DamageReceived gate in `Combat_GetDamageTakenFactor_8249F298`, which does `f31 /= mult` on the hero's damage-taken factor (stored at `entity+2164`). The hit path (`sub_8268DEF0`) then divides the damage by that factor. So **damage taken = damage × DamageReceived**, and the gate gets the enemy-damage value itself (1.5 / 2.0 / 2.5). Corrected 2026-11-22: this said `1 / enemy damage` before; Verified in the generated code. It covers all damage the hero takes, not only from enemies (Inference). `Difficulty_GetMultiplier_823C92F0` has no level argument and the table is one row (13.1), so per-level values need an override or a hook that reads the hero's level. Don't feed the DamageCaused gate: the hero's own damage stays as it is, and so does the Ghoul life-steal worked out from it (16.2).
 - **XP** goes through the ExperienceReceived gate in `Experience_ScaleAward_8251CDD8` (a plain multiply), but **only for XP the hero collects**. XP handed out by a script (Lua `Experience.Modify`) is not scaled (decision 6, 2026-11-22), because the Guild tutorial would get stuck otherwise (17.1).
 - **Prices:** the StockItemPrice gate never runs for the hero (16.3), so shop prices need a hook on `Item_GetBuyPrice_828E7F78` (× prices) and `Item_GetSellPrice_828E8320` (÷ prices, as the game's own design divides). Property follows the same rule at the returns of `Property_GetBuyPrice_8274DD78` and `Property_GetSellPrice_8274DFD0`, which the real-estate screen also reads. `LuaPlayerProperties_PurchasePropertyQuietly_828AFBB8` stays free.
 - **Gold gained:** a hook on `MoneyComp_Modify_8239E698` for `delta > 0` to player 1, following the rules in section 2. Earned gold is scaled, rent and pub-game winnings included. Skip shop sales (`Shopkeeper_SellItem_827AFB58`), property sales (`Ownership_SellProperty_828B01C8`), the co-op share recursion, network replays (type-91 `+107`), the transfers (`Coop_MoveGoldToPlayer1_82413620`, `Network_DropClient_8230FEB0`) and the orb-gift refund. Lua gold all arrives through `LuaMoney_CallMethod_8239F830` and is all earned gold, so it's scaled as one.
@@ -932,9 +949,10 @@ The log has `gold +2123 from 0x828B0438` (inside `Ownership_SellProperty_828B01C
 
 ## What changed
 
-Research only, on `feature/game-difficulty`. Nothing here is meant for master yet.
+On `feature/game-difficulty`. Nothing here is meant for master yet.
 
-- `src/core/hotfunc/unsorted/DifficultyProbe.cpp`: the research probe (14.4). bd6846a holds round 1; round 2 is the rewrite on 2026-11-21. **Temporary: remove it before any PR to master.**
+- `src/core/hotfunc/difficulty/Difficulty.cpp` (2026-11-22): **feature code, step 1** (section 18). It applies the decision-6 multipliers for gold gained, prices, damage taken and collected XP, from the hero's game level.
+- `src/core/hotfunc/unsorted/DifficultyProbe.cpp`: the research probe (14.4). bd6846a holds round 1; round 2 is the rewrite on 2026-11-21. On 2026-11-22 its overrides of `Difficulty_GetMultiplier_823C92F0`, both item price functions and `MoneyComp_Modify_8239E698` moved to the feature file. **Temporary: remove it before any PR to master.**
 - `fable_2_manifest.toml`: a "Difficulty settings" block at the end with:
   - the names below;
   - seven TEMPORARY `fable2_probe_*` midasm hooks (14.4), to remove together with the probe.
@@ -1036,6 +1054,7 @@ Run on Windows 11 (the dev machine) on 2026-11-21, before and after the round 2 
 - **Manifest:** it parses with `tomllib`, and `tools/check_manifest_collisions.py` against `out/tooling/runtime-sdk/win-amd64/bin/rexruntime.dll` reports no clash (5120 named functions).
 - **Build:** `build.cmd -release fable_2` succeeded. In the regenerated code, each of the seven `fable2_probe_*` hooks is called right after its intended instruction (the gates' `lwz r11,80(rX)`, and the two `fmuls` after the economy calls), with the registers in the manifest's order.
 - **In game (2026-11-22):** round 2 ran on this build; results in section 16 (`fable_2_064.log`).
+- **Feature step 1 (2026-11-22):** the Release build succeeded with no new warnings. The test suites match the baseline (the table above). Not run in game yet; the checks are the overview's round 3 checklist.
 
 ## Not tested
 

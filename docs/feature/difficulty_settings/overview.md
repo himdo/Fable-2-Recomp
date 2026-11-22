@@ -2,11 +2,12 @@
 
 **Status:** no commit yet · **Commits:** bd6846a (research probe, branch `feature/game-difficulty`, not on master) · **Last checked against:** 5f5f55f
 
-A new feature still being researched: choosing a difficulty when starting a new game. There's no feature code yet and nothing has changed for players. The addresses, function names and evidence are in [technical.md](technical.md).
+A new feature in progress: choosing a difficulty when starting a new game. The first feature code exists on `feature/game-difficulty` (2026-11-22): the multipliers work, with the level set from the console. The screens don't exist yet. The addresses, function names and evidence are in [technical.md](technical.md).
 
 Progress so far:
 - **2026-11-15: the idea and a first research pass.** Read-only searches of the game's code and data.
 - **2026-11-20: research step 1.** Checked by hand and in game, with a temporary log probe on branch `feature/game-difficulty`.
+- **2026-11-22: research step 3, the multipliers decided, feature code step 1.** Gold, prices, damage taken and XP now follow the level (technical.md section 18).
 - **2026-11-21: research step 2.** We found why the game's own price difficulty never kicked in, and built a bigger log probe for the next play session (see "Research step 2" below). The notes moved from a personal folder into the repo.
 
 Findings are marked as:
@@ -217,14 +218,27 @@ Details are in technical.md sections 15 (code reading) and 16 (in-game results).
 
 1. ~~**Decide the starting multipliers**~~: done 2026-11-22 (decision 6). Easy is the original game.
 2. ~~**Name the functions**~~: done 2026-11-22. 44 functions now have real names, among them the gold callers, the shop and property price steps, rent, and the combat checks (technical.md "What changed").
-3. **A short round 3 in game** (one restart is enough): pick up some gold, try Golden touch on a monster, change region and buy a house, try Save and Continue, check the slot label, then New Game → boy or girl. Raise the probe's item limit first.
-4. Next research: enemy health and telling friend from foe, then where the pause menu gets its items.
-5. Tidy up before anything goes to master:
+3. **Round 3 in game:** test the feature code (checklist below), and the leftovers from round 2: Golden touch on a monster, a region change and a house purchase, Save and Continue, the slot label, then New Game → boy or girl.
+4. **Feature code, next steps:** the New Game difficulty cards, the pause-menu entry, Hardcore saving, the slot label, then enemy health.
+5. Next research: enemy health and telling friend from foe, then where the pause menu gets its items.
+6. Tidy up before anything goes to master:
    - delete the probe and its temporary hooks;
    - delete the marker files in the slot folders;
    - remove the `saves.backup-difficulty-2026-11-20` backup.
 
    The slot 1 hero has "changed" set and was saved again on 2026-11-22 (5,358,567 gold); restore it from the backup if that matters.
+
+## In-game checklist (round 3, feature code step 1)
+
+Use the Release build in `out/build/win-amd64-release`. One console command per line. The slot 1 hero is probably at game level 3 (Hard), so set the level first. Each scaled gain writes a `[difficulty] gold` line to the newest `logs/fable_2_NNN.log`.
+
+1. **Set Medium:** `lua Player.SetDifficultyLevel(QuestManager.HeroEntity, 2)`. The log should say `[difficulty] level Medium (game level 2)`.
+2. **Shop prices** (×1.15 buy, ÷1.15 sell): the toy sword in your own shop should cost about 18 (was 16). The Pie Stall's Crumbly Blueberry Pie should cost about 25 (was 22), if the stall is still not yours. Sell something and compare with Easy.
+3. **Gold** (×0.85): a blacksmith sword should pay 40 (was 47), and rent about 5,045 every 4 minutes (was 5,935). A guard fine should still be the full amount.
+4. **Damage taken** (×1.5): a guard's hit should take about 45 health (was 30). Your own hits should still do the same damage as before.
+5. **XP** (×0.85): XP orbs should give less than on Easy. (The Guild's scripted 350 Will XP stays whole, but that needs a new game.)
+6. **Property:** the sale price of a property you own should be ÷1.15 (the Pie Stall: about 1,846 instead of 2,123).
+7. **Back to Easy:** `lua Player.SetDifficultyLevel(QuestManager.HeroEntity, 1)`: everything should be as in the original again.
 
 ## In-game checklist (round 2)
 
