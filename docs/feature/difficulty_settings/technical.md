@@ -117,20 +117,31 @@ There are 25. A `neg r4` before the call means the gold is being spent.
 | `sub_827AF850` | Shop buy: `-Shopkeeper_GetBuyPrice_827AF5A0` |
 | `sub_827AFB58` | Shop sell: `+Shopkeeper_GetSellPrice_827AF6F8` |
 | `sub_828AEA50`, `sub_828AECD0` | Rent and income. These are the only callers with **r7 = 1**; `"RealEstateRentMedium"` appears here. |
-| `sub_828AF6D0` | Property buy (Inference) |
-| `sub_828B01C8` | Property sell (Inference) |
+| `sub_828AF6D0` | Property buy: `-PropertyBuyPrice`, r6 = 1 (Verified 2026-11-22, see 15.3) |
+| `sub_828B01C8` | Property sell: `+PropertySellPrice`, r6 = 1 (Verified 2026-11-22, see 15.3) |
 | `sub_8268AB30` @0x8268B604 | "RichGoldPerHit" |
 
-Other callers:
-- Spending (they negate the amount): `sub_82597DC0`, `sub_82609B90`, `sub_8238BEB0`, `sub_825A11F0`, `sub_8281E6A8`.
-- Gains, purpose not identified: `sub_827ADCF8`, `sub_828B46E8`, `sub_8237DE18`, `sub_8238D4A8`, `sub_8282AEB8`, `sub_825FC180`, `sub_8261A738`, `sub_82593950`, `sub_825ABDC0`, `sub_824A6FD8`.
-- Transfers (r6 = 0): `sub_8230FEB0`, `sub_82413620`.
+The other 17 callers were identified on 2026-11-22; see 15.1. In short:
+- **Gains:**
+  - quest rewards and pub games;
+  - the wedding dowry and money items;
+  - gift/reward objects and building income pickups;
+  - orb gifts (received and refunded);
+  - network replays and the co-op henchman's wage.
+- **Spending:**
+  - tattoo removal (listed as a gain before 2026-11-22);
+  - coach/ferry fares and family upkeep;
+  - the household allowance;
+  - sending orb gifts.
+- **Transfers:** two co-op moves of player 2's gold to player 1.
 
-#### Rules for a gain hook (Inference)
+#### Rules for a gain hook (Inference; revised 2026-11-22, see 15.2)
 
 - Scale only when `delta > 0`.
 - Scale only when `comp+4 == Player_GetEntity_8222C210()` (player 1), the same check used in the choke point and in `HealthComp_Modify_8268BD90`.
-- Skip the recursive call (r5 = 1).
+- Skip the co-op share recursion by its **caller** (the two recursive `bl`s inside `MoneyComp_Modify_8239E698`, at 0x8239EA58 and 0x8239EC80; the second one's branch isn't read yet), not by r5 = 1. The henchman wage and the end-of-co-op transfer also pass r5 = 1.
+- Skip network replays, where the owner's type-91 component has byte `+107` set. They take a short path that only adds and clamps, so the gold was already scaled on the machine that sent it.
+- Don't scale transfers and refunds: `sub_82413620`, `sub_8230FEB0`, and the orb-gift refund through `sub_8238D190`.
 - Decide whether shop-sell income is excluded. Selling is already divided by `StockItemPrice`, so it would otherwise be scaled twice.
 
 ### 3. Prices (Verified)
@@ -138,9 +149,9 @@ Other callers:
 - **Buy:** `Item_GetBuyPrice_828E7F78(itemComp, r4, f1, f2, f3)` (`.219:14334`). The price is the base value (`sub_828E7C58`) × the economy term (`sub_828E8C80(f1, f2)`) × `item+36` × f3 (the shopkeeper multiplier) × `StockItemPrice` (level > 1 only) × the `item+60` discount. The result is floored at 0 and converted to int.
 - **Sell:** `Item_GetSellPrice_828E8320`. The price is the base value × `item+40` × `sub_828E8EC0` ÷ `StockItemPrice`. A discount at `item+64` applies, and the result is clamped against the buy price and `item+108`.
 - **Wrappers:** `Shopkeeper_GetBuyPrice_827AF5A0` (buy) and `Shopkeeper_GetSellPrice_827AF6F8` (sell) read f1 and f2 from component type 47 (+44/+48) on the shopkeeper. The default is at 0x820994B4. f3 is `shopkeeperComp+12`.
-- **Inference:** f1 and f2 are the village economy and wealth.
+- ~~**Inference:** f1 and f2 are the village economy and wealth.~~ **Corrected 2026-11-22 (15.3):** type 47 is the opinion component, and `+44` / `+48` are its **Love** and **Fear** axes. So f1 and f2 are the shopkeeper's Love and Fear values.
 - **`Shopkeeper.ApplyPriceMultiplier`** is `sub_827AFD40` (`comp+12 *= f1`). It is called only from `miscfunctions.lua`, next to the `EconomyManager` village-wealth calls.
-- **Property prices** (`sub_8274DD78` / `sub_8274DFD0`): **not analysed**.
+- **Property prices** (`sub_8274DD78` / `sub_8274DFD0`): analysed on 2026-11-22, see 15.3.
 
 ### 4. Damage and health (Verified unless marked)
 
@@ -710,6 +721,91 @@ The overview gives these in plain steps. In short:
 | 5 | Probe scope for round 2 | gate tracing and extras / gate tracing only | **Gate tracing and extras** |
 | – | Shop test method | (delta4o's own idea) | **The shout-out test** (14.5) |
 
+### 15. Research step (2026-11-22): the unknown gold callers
+
+Read by hand in the generated code and the decrypted image on `feature/game-difficulty` at 4d14650. Strings were resolved from the image (base 0x82000000) with throwaway scripts in the session scratchpad; none were added to the repo. Where this section disagrees with section 2, this section wins.
+
+#### 15.1 The 17 callers
+
+r5 / r6 / r7 are the `MoneyComp_Modify_8239E698` arguments (r5 = 1 on the co-op share recursion, r6 = share with co-op, r7 = 1 for rent and income).
+
+**Gains:**
+
+| Caller | What it does | r5 r6 | Evidence |
+| --- | --- | --- | --- |
+| `sub_825FC180` | **Quest rewards.** It pays `quest+36`, which Lua `QuestTracker.SetRewardMoney` (`sub_825FB298`) sets. Renown is at `+32`, and items follow. It is reached from `QuestTracker.SetAsCompleted` (`sub_825F9748`) and `QuestTracker.GiveRewards` (`sub_825FC878`). | 0 1 | Verified (the binding table is registered in the function holding 0x825FE168) |
+| `sub_825ABDC0` | **Pub games.** It pays the net result `sub_82EE1DF0(obj+124) - obj+96`, which **can be negative**. Then it does the "PurityBalancing" step with "MaxGoldForScalingFromGambling" and "MaxPurityModifierForGambling". | 0 1 | Verified |
+| `sub_8282AEB8` | **Wedding.** It reads "RenownBoostForMarrying" and "DowryForMarrying" from the spouse's data (`sub_827699A0`, name hashes in the globals 0x8349BC3C / 0x8349BC40) and pays the dowry. Its caller `sub_82824C38` holds the marriage strings. | 0 1 | Verified |
+| `sub_8261A738` | **Money items.** When an item's definition has a "MoneyComponent", it pays the "Money" value instead of adding an item. r6 = the item's "SplitWithHenchmanIfGivenToHero". It is part of the inventory "add items" bindings (`sub_8261AD88`), and `sub_828E92D0` (hero titles) and `sub_828EB1F0` also call it. | 0 flag | Verified for the money part; the exact Lua name is Inference |
+| `sub_827ADCF8` | **Gift/reward object** (vtable 0x82002320). The constructor `sub_827ADBD8` (made by `sub_8244FD18`) reads "IsMoneyGift", "MoneyAmount" (`+32`), "GiftItem" (`+28`) and "IsRandomReward". This method pays MoneyAmount, then gives the item to the recipient's type-13 component. | 0 1 | Verified; who hands these out is not traced |
+| `sub_828B46E8` | **Building income pickup** (vtable 0x820E0E10, next to "PickupDistance", "BuildingUID" and "BuildingIncome"). When player 1 is within `+28` (PickupDistance), they get the whole balance of the pickup entity's own type-81 component. It is logged to player 1's type-69 component (`sub_828B21F0`), then the pickup is removed. | 0 1 | Verified; the removal is Inference |
+| `sub_8238D4A8` | **Orb gift: apply.** It adds the gold at `gift+112`, then the item, to an entity. It is called on receipt (`sub_8238C488`, "GUI_NET_RECEIVE_GOLD") and when a gift fails (`sub_8238D190`, "GUI_ORB_GIFT_FAILED": the refund to the sender). | 0 1 | Verified |
+| `sub_8237DE18` | **Network replay**, case 43 of its 270-case message switch (called from `sub_82317598`, "CECNetwork"). It sets byte `+107` on the entity's type-91 component, then calls the choke point with `msg+4`. | 0 1 | Verified |
+| `sub_824A6FD8` | **Co-op henchman wage.** It looks up "GoldEarnedPerMinute" in "HenchmanJobLevels" by minutes played ("MinimumNumberOfMinutesPlayedToReachLevel", `obj+1060`). Fractions build up at `obj+1064`, and whole coins are paid. | **1** 1 | Verified |
+
+**Spending** (each negates the amount):
+
+| Caller | What it does | Evidence |
+| --- | --- | --- |
+| `sub_82593950` | **Tattoo removal:** `-"PriceOfTattooRemoval"`. Listed as a gain before; the `neg` sits well before the call. | Verified |
+| `sub_82609B90` | **Coach/ferry fare.** It is charged only when the balance covers it. It is reached from the Lua travel bindings near "FastTravelToStop" (`sub_823AD510`) and "TravelToStopInRegion" (`sub_82609DE0`), and from `sub_82837610`. | Verified for the domain; which name pairs with which pointer is Inference (names and pointers interleave in those tables) |
+| `sub_8281E6A8` | **Family upkeep.** The cost is `r10 × r25` (Inference: days × the daily allowance; "DailyUpkeepCost" sits next to the wedding strings), and the amount is recorded at `+172`. The callers are `sub_828214A8` (divorce and "children taken" text), `sub_8282BBE8` and the pause-menu builder `sub_82842860`. | Inference |
+| `sub_82597DC0` | **Household allowance, real-estate menu** (GUI table 0x820C1670). It sets a household's amount through `sub_8282BBE8`, then charges `new - old (+172)` right away, capped at the balance. | Inference |
+| `sub_8238BEB0` | **Orb gift: send.** It takes r5 gold from the sender, removes the item (`sub_8261AF88`) and autosaves. It is called from the gift menu (`sub_825A0F50`, `sub_825A1510`). | Inference |
+| `sub_825A11F0` | **Gift menu** (GUI table 0x820C1E14). It takes r4 gold, then calls `sub_825A0D98`. | Inference |
+
+**Transfers** (r6 = 0):
+
+| Caller | What it does | Evidence |
+| --- | --- | --- |
+| `sub_82413620` | **End of co-op.** It moves all of player 2's gold (`playerObj+112`) to player 1 (`+104`) with r5 = 1, then sets player 2 to 0. Its caller `sub_824130C0` looks like the co-op teardown. | Verified for the move; the caller's role is Inference |
+| `sub_8230FEB0` | **Client dropped** ("GUI_NET_DROPPED_CLIENT"). Player 1 gets the gold of the co-op partner (`sub_828BEEC0(playerObj)`, the same helper the choke point uses for the share), then the game saves. | Verified for the call; the direction is Inference |
+
+#### 15.2 What this changes
+
+- **Money component = type 81** (presence bit 17 of `+44`). It is found by that type in every caller above.
+- **The network component is type 91.** Its byte `+107` means "applying a received message". In that case the choke point skips everything except `comp+12 += delta` and the clamp (the `+107` test at 0x8239E7D8, the stores at 0x8239E7FC and 0x8239E81C), so there's no co-op share and no change message.
+- **r5 = 1 is not only the share recursion.** The henchman wage and the end-of-co-op transfer also pass it. So the gain-hook rule now goes by caller (section 2).
+- **Rent and income** (`sub_828AEA50` / `sub_828AECD0`, r7 = 1) pay the owner of the calling component: `comp+128` once the game tick passes `comp+132`, after which `+128` is zeroed. The building pickups (`sub_828B46E8`, r7 = 0) are a separate route, so rent doesn't pass through them.
+- **Pub games pass net results**, so a positive delta there is winnings, not a whole payout.
+- **Candidates to name** once the feature work is ready:
+  - Verified: `sub_825FC180` (quest rewards), `sub_825ABDC0` (pub-game payout), `sub_8282AEB8` (wedding dowry), `sub_8238D4A8` (orb gift apply), `sub_824A6FD8` (henchman wage), `sub_82593950` (tattoo removal), `sub_82413620` (end-of-co-op transfer).
+  - Inference first: `sub_828BEEC0` as the co-op partner getter.
+
+#### 15.3 Property prices, buying and selling (Verified unless marked)
+
+Here `P` is the property's **type-67 component**, which every price function takes in r3. Data values in quotes are read from the property's definition.
+
+- **Base value**, `sub_8274D1E0(P)`:
+  - `int("BasicSalePrice" × (1 + P+112 × pct × 0.01))`, plus `P+44 × P+116`.
+  - `pct` is `+16` of a type-65 component. To find it, the code follows the property entity's type-66 component through the weak handle at `comp66+12` (`sub_82455F20`), then takes the type-65 component on that entity. Without one, `pct` = 0.
+  - **Inference:** type 65 / 66 are the region or village link and its economy. `P+44` × `P+116` is an added amount, maybe upgrades; not traced.
+- **Sell price**, `sub_8274DFD0(P)`: `int(base × "SellingMultiplier")`.
+- **Buy price**, `sub_8274DD78(P)`:
+  1. `v = base + A`, where A is `sub_8274D4D0(P, base)`, the "TypePriceAdjustments" step. It sums `"AdjustValue" × base` over every entry whose "BuildingType" bits match `P+28`.
+  2. If `P+128` is not 0 and the definition has "NotForSaleAdjustment": `v = int(v × NotForSaleAdjustment)`.
+  3. `v += B`, where B is `sub_8274D6D8(P, v)`, the "OpinionPriceAdjustments" step:
+     - it averages the five opinion axes over the property's occupants (the list at `P+120`) and the entities listed on the property entity's type-41 component (`+24`), skipping any without a type-47 component;
+     - it multiplies each average by the matching table weight and returns `int(v × Σ)`.
+  4. If byte `P+81` is set, player 1 is valid (`+144` & 0x40) and has a type-33 component, and the definition has "PlayerKilledOccupantAdjustment": `v = int(v × PlayerKilledOccupantAdjustment)`.
+  5. **The buy price is floored at the sell price.**
+- **Type 47 = the opinion component.** Its five floats at `+44 / +48 / +52 / +56 / +60` are, in order, "LoveAxis", "FearAxis", "AttractivenessAxis", "MoralityAxis" and "RespectAxis". The name list is a global array at 0x8349B408, filled at startup by the code at `fable_2_recomp.67.cpp:34693` (generated code, for reference only). This corrects the f1/f2 guess in section 3.
+- **Buying**, `sub_828AF6D0(ownerComp r3, property entity r4)`:
+  1. If `sub_828B0B38(r3, r4)` is true (already owned), it does nothing.
+  2. Otherwise it creates a 68-byte ownership record (`sub_828AC940`), stores the price at `record+48`, and charges `-price` with r6 = 1.
+  3. Lua `PurchaseProperty` is `sub_828AFB80`, which checks that the buyer is valid, then jumps here.
+  4. It is also called from the real-estate GUI (`sub_82598548`).
+- **Lua `PurchasePropertyQuietly`** (`sub_828AFBB8`) does the same setup and stores the price, but **never charges gold**. It's a free grant, so a buy-price hook won't see it.
+- **Selling**, `sub_828B01C8(ownerComp r3, property entity r4)`: only when `sub_828B0B38` is true. It pays `+sell price` with r6 = 1, then the clean-up calls. Its caller is the real-estate GUI (`sub_825986E0`).
+- **`sub_828B0B38` is the "already owns this" check.** Buy and sell branch opposite ways on it. Its use in `Item_GetBuyPrice_828E7F78` (14.3), on player 1's type-69 component and the stock owner, now reads as "the hero owns this shop's building". It still needs the in-game check before it's named.
+- **Other price users:**
+  - `sub_825981C0` and `sub_825974C0`, the real-estate GUI (table 0x820C1670), probably the price shown;
+  - `sub_828ED8C0` and `sub_8274E940`;
+  - **Inference:** the Lua "GetCurrentPropertyValue", whose name sits next to the price strings.
+- **For the feature:**
+  - Property buying and selling go through the choke point like any other gold change. The cleanest hook point for prices is the return of `sub_8274DD78` / `sub_8274DFD0`, which the GUI also reads, so the price shown would match the price charged.
+  - Selling is a gain with r6 = 1. Like shop selling, a gain hook would scale it on top of any sell-price change, so exclude `sub_828B01C8` there or leave the sell price alone.
+
 ## What changed
 
 Research only, on `feature/game-difficulty`. Nothing here is meant for master yet.
@@ -776,7 +872,7 @@ Run on Windows 11 (the dev machine) on 2026-11-21, before and after the round 2 
 
 ## Follow-ups
 
-1. Run 14.5 and read the log. Decide the prices route (the built-in gate or our own hook) and the damage route from it.
+1. Run 14.5 and read the log. Decide the prices route (the built-in gate or our own hook) and the damage route from it. In the gold part, also check a quest reward, a pub game and a coach fare against the callers in 15.1.
 2. Name the gate functions and `sub_828B0B38` once the log confirms their roles.
 3. Next research after that: enemy health and the friend-or-foe check (decision 0b), and the pause-menu population point.
 4. Find the game's spelling of "Guildmaster" (section 13.7).
