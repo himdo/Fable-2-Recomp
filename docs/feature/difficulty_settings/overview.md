@@ -230,6 +230,8 @@ Details are in technical.md sections 15 (code reading) and 16 (in-game results).
 
 ## In-game checklist (round 3, feature code step 1)
 
+**Run on 2026-11-22.** Everything matched: prices (shop and property, every level), job pay, rent, Golden touch, the fine, your own damage and the damage you take. One bug was found and fixed: the game caches the damage you take, so a level change only applied after a reload. Details in technical.md section 18.
+
 Use the Release build in `out/build/win-amd64-release`. One console command per line. The slot 1 hero is probably at game level 3 (Hard), so set the level first. Each scaled gain writes a `[difficulty] gold` line to the newest `logs/fable_2_NNN.log`.
 
 1. **Set Medium:** `lua Player.SetDifficultyLevel(QuestManager.HeroEntity, 2)`. The log should say `[difficulty] level Medium (game level 2)`.

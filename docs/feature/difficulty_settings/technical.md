@@ -485,6 +485,37 @@ The remaining open questions (slot label format, Masochist, unused Theresa lines
 
 - **The level:** player 1's type-33 `+80`. 1 or lower is Easy, 2 Medium, 3 Hard, 4 or higher Hardcore. A fresh hero's default isn't read yet; anything ≤ 1 is Easy either way. Set it with `lua Player.SetDifficultyLevel(QuestManager.HeroEntity, n)`. That also sets the changed flag `+38`, which blocks the Masochist achievement (open question 5).
 - **Logging:** `[difficulty] level ...` when the level read changes, and `[difficulty] gold +a -> +b from <caller>` for every scaled gain.
+- **Jobs (checked 2026-11-22, delta4o's question):** promotion is unchanged. All three job scripts (`qj001` woodcutter, `qj002` blacksmith, `qj003` bartender) work out the pay themselves (blacksmith: `ceil(4 × level² × chain multiplier × (1 + 0.1 × Physique))`) and add it to their own `MoneyEarned` **before** `Money.Modify`. Our multiplier scales only what arrives. So promotion, which compares `TotalMoneyEarnedAs<Job>` with fixed thresholds (blacksmith 60 / 800 / 8,000 / 32,000; bartender 80 / 800 / 8,000 / 32,000; woodcutter 100 / 1,000 / 10,000 / 40,000), takes the same number of successes on every level. The job's "gold until promotion" counter, the `STAT_MONEY_MADE_JOB_*` tracked stat and the village-wealth boost (`MoneyEarned × 0.001`) use the unscaled pay; the "current gold" counter reads the real balance (Verified in the script bytecode). In game on Medium: 40 / 80 / 120 for the first three swords (47 / 94 / 141 × 0.85).
+- **The damage-taken cache (found in game 2026-11-22):** `Combat_GetDamageTakenFactor_8249F298` returns the value cached at `+2164` of the hero's **type-57** component unless it is 0.0, and the game clears it on load. So a level change only reached the damage taken after a reload. The feature now also overrides `LuaPlayer_SetDifficultyLevel_823C9458`, which clears that cache after the original runs (the probe gave up its override of it).
+- **The price pairs call each other (found in game 2026-11-22):**
+  - `Item_GetSellPrice_828E8320` ends with `sell = min(max(raw, 1), Item_GetBuyPrice_828E7F78(...) × stock+108)`, rounded (Verified in the generated code);
+  - `Property_GetBuyPrice_8274DD78` floors at `Property_GetSellPrice_8274DFD0`.
+
+  The inner calls reached our overrides too, so the item sell cap was worked out from the *scaled* buy price. In an owned shop the cap is what binds (raw sell with the ×1.4 owner bonus, about 5,513 for the diamond, against a cap of about 4,048). So the ÷ undid the scaled cap, and sell prices didn't change on Medium or Hard: 4,048 on both. Hardcore showed 3,938 because the cap rose above the raw price.
+
+  **Fix:** a thread-local depth counter (`PriceScope`). While one price is being worked out, the partner function returns the game's own value, and only the outermost call is scaled. So every level gets the game's Easy price × or ÷ its multiplier.
+- **The game's own sell price moves.** The diamond's Easy sell price was 4,048, then 3,938 later the same evening, then 4,127 once the merchant had sold her only diamond. Inference: shop stock and village wealth feed into it. The shop screen keeps showing the old price until it is reopened.
+- **In game (2026-11-22, `fable_2_065.log` and `fable_2_066.log`, Release build of this step plus the cache fix):**
+
+  | Check | Level | Expected | Seen | |
+  | --- | --- | --- | --- | --- |
+  | Toy sword, own shop | Medium | 16 × 1.15 → 18 | 18 | ✓ |
+  | Diamond, own shop (base value 6,250) | all four | the game's 3,938; × 1.15 → 4,529; × 1.3 → 5,119; × 1.4 → 5,513 | 3,938; 4,529; 5,119; 5,513 | ✓ |
+  | Diamond sell, before the price-pair fix | Easy / Medium / Hard / Hardcore | 4,048 ÷ m | 4,048 / 4,048 / 4,048 / 3,938 | ✗, fixed |
+  | Diamond sell, after the fix | Easy / Medium / Hard / Hardcore | 3,938 ÷ m | 3,938 / 3,432 / 3,029 / 2,813 | ✓ (Medium: the game's own price moved; rechecked as 4,127 → 3,589 ✓) |
+  | Pie, own Pie Stall (the round-2 sale was undone by the reload) | Medium | 15 × 1.15 → 17 | 17, gold −17 | ✓ |
+  | Blacksmith, 3 swords | Medium | 47 / 94 / 141 × 0.85 | 40 / 80 / 120 (from 0x8239F998) | ✓ |
+  | Rent | Hard, then Medium | × 0.7 / × 0.85 | +5,958 → +4,171; +35,748 → +30,386; +5,958 → +5,064 | ✓ |
+  | Golden touch on a kill ("RichGoldPerHit", 0x8268B608) | Medium, Hard | 50 × 0.85 / × 0.7 | +43 / +35 | ✓ |
+  | Guard fine | Medium | unscaled | −250 | ✓ |
+  | Hero's melee hit, Ghoul life-steal | Easy, Medium | unchanged | −157.70, +39.42 on both | ✓ |
+  | Guard's hit on the hero | Medium | raw 21 × 1.5 | −31.50 (the same guard hit a villager for −21.00) | ✓ |
+  | Guard's hit on the hero | Hard | 21 × 2.0 = 42 | the DamageReceived gate re-read at level 3 after the cache clear; the probe's 3-line limit hid the amount | gate ✓, amount not logged |
+  | XP orbs | Medium, Hard | × 0.85 / × 0.7 | the XP gate fired at level 2 and 3; the amount isn't logged | gate ✓ |
+  | Pie Stall sale screen | Easy / Medium / Hard | 2,125 / ÷ 1.15 / ÷ 1.3 | 2,125 / 1,848 / 1,635 | ✓ |
+
+  The sale screen shows our cut as a bigger "Selling fees" line (−514 on Medium, base + economy − final).
+- **Not tested in game:** a shop the hero doesn't own, buying property (the floor case of the price-pair fix), the Guild tutorial's scripted XP (needs a new game), co-op.
 - **Not done:** enemy health (decision 0), the New Game cards, the pause-menu entry, Hardcore saving, the slot label.
 - **Inference until tested:** the gates still read each component's own level, so a co-op player 2 at game level 1 isn't affected; prices are scaled for every caller of the item price functions.
 
@@ -915,7 +946,7 @@ The Bowerstone Pie Stall's sell screen showed:
 - Town Economy +109;
 - Selling Fees -236, so SellingMultiplier = 0.9;
 - **Final 2123** = `int(2359 × 0.9)`;
-- Profit 23, against the 2100 stored at `record+48`.
+- Profit 23. ~~against the 2100 stored at `record+48`~~: corrected 2026-11-22, it stayed 23 when the sale price changed to 1,848 and 1,635 (feature step 1 in game), so it isn't sale price minus purchase price. Probably the rent profit (Inference).
 
 The log has `gold +2123 from 0x828B0438` (inside `Ownership_SellProperty_828B01C8`) with r6 = 1, which matches 15.3.
 
@@ -1054,7 +1085,7 @@ Run on Windows 11 (the dev machine) on 2026-11-21, before and after the round 2 
 - **Manifest:** it parses with `tomllib`, and `tools/check_manifest_collisions.py` against `out/tooling/runtime-sdk/win-amd64/bin/rexruntime.dll` reports no clash (5120 named functions).
 - **Build:** `build.cmd -release fable_2` succeeded. In the regenerated code, each of the seven `fable2_probe_*` hooks is called right after its intended instruction (the gates' `lwz r11,80(rX)`, and the two `fmuls` after the economy calls), with the registers in the manifest's order.
 - **In game (2026-11-22):** round 2 ran on this build; results in section 16 (`fable_2_064.log`).
-- **Feature step 1 (2026-11-22):** the Release build succeeded with no new warnings. The test suites match the baseline (the table above). Not run in game yet; the checks are the overview's round 3 checklist.
+- **Feature step 1 (2026-11-22):** the Release build succeeded with no new warnings. The test suites match the baseline (the table above). In game: see section 18.
 
 ## Not tested
 

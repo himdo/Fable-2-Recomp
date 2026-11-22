@@ -5,8 +5,7 @@
 // "[difficulty-probe]".
 //
 // Tier 1, why the game's own difficulty gates never fired:
-//   A. LuaPlayer_SetDifficultyLevel_823C9458: which object the Lua binding writes,
-//      compared with player 1's type-33 (player) component.
+//   A. (moved) LuaPlayer_SetDifficultyLevel_823C9458 now belongs to the feature file.
 //   B. fable2_probe_gate_*: midasm hooks right after each gate's
 //      `lwz r11,80(rX)` (rX = the type-33 component the gate found, r11 = the
 //      level it read). They only run when the gate found a component.
@@ -46,7 +45,6 @@
 
 #include "fable2_patches.h"  // fable2::patches::GuestBase
 
-extern "C" void __imp__LuaPlayer_SetDifficultyLevel_823C9458(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__SaveManager_Save_824E8990(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__LuaSaveManager_AutoSaveGame_824E8D28(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__LuaSaveManager_SaveFailQuestSave_824E8D18(PPCContext& ctx, uint8_t* base);
@@ -224,26 +222,6 @@ std::atomic<uint32_t> g_card_events{0};
 std::atomic<uint32_t> g_load_cards{0};
 
 }  // namespace
-
-// --- A. SetDifficultyLevel -----------------------------------------------------
-
-extern "C" void LuaPlayer_SetDifficultyLevel_823C9458(PPCContext& __restrict ctx,
-                                                     uint8_t* base) {
-  const uint32_t obj = ctx.r3.u32;
-  const int32_t level = ctx.r4.s32;
-  const uint32_t caller = static_cast<uint32_t>(ctx.lr);
-  const int32_t old_level = Ptr(obj) ? static_cast<int32_t>(U32(obj + 80)) : -1;
-  const uint32_t obj_owner = Ptr(obj) ? U32(obj + 4) : 0;
-  __imp__LuaPlayer_SetDifficultyLevel_823C9458(ctx, base);
-  const uint32_t p1 = Player1Entity();
-  const uint32_t p1c33 = FindComponent(p1, 33);
-  REXSYS_INFO(
-      "[difficulty-probe] SetDifficultyLevel from {:08X}: obj={:08X} level {} -> {} "
-      "changed(+38)={} obj+4={:08X} | p1={:08X} p1-type33={:08X} obj-is-p1-type33={} "
-      "p1-type33+80={}",
-      caller, obj, old_level, level, Ptr(obj) ? U8(obj + 38) : 0, obj_owner, p1, p1c33,
-      Yes(obj != 0 && obj == p1c33), Ptr(p1c33) ? static_cast<int32_t>(U32(p1c33 + 80)) : -1);
-}
 
 // --- F. Health -------------------------------------------------------------------
 

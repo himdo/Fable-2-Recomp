@@ -37,6 +37,7 @@
 
 extern "C" void __imp__Difficulty_GetMultiplier_823C92F0(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__LuaExperience_Modify_8251C8E0(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__LuaPlayer_SetDifficultyLevel_823C9458(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__Item_GetBuyPrice_828E7F78(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__Item_GetSellPrice_828E8320(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__Property_GetBuyPrice_8274DD78(PPCContext& ctx, uint8_t* base);
@@ -74,6 +75,10 @@ uint32_t U32(uint32_t a) {
   return __builtin_bswap32(v);
 }
 uint8_t U8(uint32_t a) { return *Mem(a); }
+void W32(uint32_t a, uint32_t v) {
+  v = __builtin_bswap32(v);
+  std::memcpy(Mem(a), &v, 4);
+}
 
 // Only follow pointers the game itself would follow, and never page zero.
 bool Ptr(uint32_t a) { return a >= 0x10000u; }
@@ -182,6 +187,26 @@ bool IsUnscaledGoldCaller(uint32_t lr) {
 
 }  // namespace
 
+// --- The level changes ----------------------------------------------------------------
+
+// r3 = the type-33 component, r4 = the new level. Combat_GetDamageTakenFactor_8249F298
+// caches its result at +2164 of the entity's type-57 component and only recomputes it
+// while that is 0.0 (the game clears it on load). Clearing it here makes the next hit
+// use the new level's DamageReceived value (Verified in the generated code; seen in game
+// 2026-11-22: one gate read, then cached hits).
+extern "C" void LuaPlayer_SetDifficultyLevel_823C9458(PPCContext& __restrict ctx,
+                                                     uint8_t* base) {
+  const uint32_t comp = ctx.r3.u32;
+  const int32_t old_level = Ptr(comp) ? static_cast<int32_t>(U32(comp + 80)) : -1;
+  const int32_t new_level = ctx.r4.s32;
+  __imp__LuaPlayer_SetDifficultyLevel_823C9458(ctx, base);
+  const uint32_t ent = Ptr(comp) ? U32(comp + 4) : 0;
+  const uint32_t combat = FindComponent(ent, 57);
+  if (Ptr(combat)) W32(combat + 2164, 0);  // 0.0f: recompute the damage-taken factor
+  REXSYS_INFO("[difficulty] SetDifficultyLevel {} -> {} on {:08X} (player 1: {})", old_level,
+              new_level, ent, ent != 0 && ent == Player1Entity() ? "yes" : "no");
+}
+
 // --- Enemy damage and XP: the game's own gates --------------------------------------
 
 // r3 = the index (0 DamageCaused, 1 DamageReceived, 2 ExperienceReceived,
@@ -213,28 +238,47 @@ extern "C" void LuaExperience_Modify_8251C8E0(PPCContext& __restrict ctx, uint8_
 
 // --- Prices ---------------------------------------------------------------------------
 
+// Each pair calls its partner internally: Item_GetSellPrice_828E8320 clamps against
+// Item_GetBuyPrice_828E7F78, and Property_GetBuyPrice_8274DD78 floors at
+// Property_GetSellPrice_8274DFD0. Those inner calls reach these overrides too, so while
+// one price is being worked out the inner one returns the game's own value, and the
+// multiplier is applied once, to the final result. Without this, an owned shop's sell
+// price (owner bonus x1.4) clamped against the scaled buy price and came out unchanged
+// on Hardcore (seen in game 2026-11-22: diamond sell 3,938 on Hardcore).
+thread_local int t_price_depth = 0;
+
+class PriceScope {
+ public:
+  PriceScope() : outer_(t_price_depth++ == 0) {}
+  ~PriceScope() { --t_price_depth; }
+  bool outer() const { return outer_; }
+
+ private:
+  bool outer_;
+};
+
 extern "C" void Item_GetBuyPrice_828E7F78(PPCContext& __restrict ctx, uint8_t* base) {
+  const PriceScope scope;
   __imp__Item_GetBuyPrice_828E7F78(ctx, base);
-  SetResult(ctx, Scale(ctx.r3.s32, Current().prices));
+  if (scope.outer()) SetResult(ctx, Scale(ctx.r3.s32, Current().prices));
 }
 
-// Calls Item_GetBuyPrice_828E7F78 (this file's override) for its clamp, so the clamp
-// compares against the scaled buy price; dividing afterwards keeps sell <= buy.
 extern "C" void Item_GetSellPrice_828E8320(PPCContext& __restrict ctx, uint8_t* base) {
+  const PriceScope scope;
   __imp__Item_GetSellPrice_828E8320(ctx, base);
-  SetResult(ctx, Scale(ctx.r3.s32, 1.0 / Current().prices));
+  if (scope.outer()) SetResult(ctx, Scale(ctx.r3.s32, 1.0 / Current().prices));
 }
 
-// Floors at Property_GetSellPrice_8274DFD0 (this file's override), so the result is
-// max(price, sell / m) x m >= sell / m.
 extern "C" void Property_GetBuyPrice_8274DD78(PPCContext& __restrict ctx, uint8_t* base) {
+  const PriceScope scope;
   __imp__Property_GetBuyPrice_8274DD78(ctx, base);
-  SetResult(ctx, Scale(ctx.r3.s32, Current().prices));
+  if (scope.outer()) SetResult(ctx, Scale(ctx.r3.s32, Current().prices));
 }
 
 extern "C" void Property_GetSellPrice_8274DFD0(PPCContext& __restrict ctx, uint8_t* base) {
+  const PriceScope scope;
   __imp__Property_GetSellPrice_8274DFD0(ctx, base);
-  SetResult(ctx, Scale(ctx.r3.s32, 1.0 / Current().prices));
+  if (scope.outer()) SetResult(ctx, Scale(ctx.r3.s32, 1.0 / Current().prices));
 }
 
 // --- Gold gained ----------------------------------------------------------------------
