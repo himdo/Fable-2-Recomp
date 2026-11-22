@@ -405,6 +405,7 @@ try
         GuiEveryHfTick = false,
         Interpolation = false,
         DisableMotionBlur = true,
+        DisableMsaa = true,
         RealtimeTextureMorphing = true,
         HeroDogTextureReadback = false,
         HotFuncYieldEvery = 4,
@@ -429,6 +430,7 @@ try
     Require(!readBack.UnlockCe, "unlock_ce roundtrip failed");
     Require(readBack.SkipIntroVideos, "skip_intro_videos roundtrip failed");
     Require(readBack.DisableMotionBlur, "disable_motion_blur roundtrip failed");
+    Require(readBack.DisableMsaa, "disable_msaa roundtrip failed");
     Require(readBack.HighTickRate, "high_tick_rate roundtrip failed");
     Require(!readBack.HigherHfTickRate, "higher_hf_tick_rate roundtrip failed");
     Require(!readBack.GuiEveryHfTick, "gui_every_hf_tick roundtrip failed");

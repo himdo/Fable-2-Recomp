@@ -48123,6 +48123,13 @@ name = "DispatchOsNotifications_82185080"
 # 60 FPS dispatch function (0x82B9C7F8). fps_meter.h hooks this symbol.
 [entrypoint.functions."0x82B9CD68"]
 name = "MainRenderLoop_82B9CD68"
+# Render settings setup: fills the main render settings object (r3, kept in
+# r31), including the render size (+148 width 1120, 960 in 4:3; +152 height
+# 720) and the MSAA mode (+156, 2 = 2x, from li r9,2 at 0x8238DF3C). Called
+# on boot, at the main menu and on each level load. Overridden by
+# src/core/hotfunc/render/InitRenderSettings_8238DE58.cpp (disable_msaa).
+[entrypoint.functions."0x8238DE58"]
+name = "InitRenderSettings_8238DE58"
 [entrypoint.functions."0x8222B3C8"]
 name = "SwitchDispatch_8222B3C8"
 size = 0x00F8

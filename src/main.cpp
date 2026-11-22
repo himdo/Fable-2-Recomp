@@ -98,6 +98,12 @@ REXCVAR_DEFINE_BOOL(mouse_controller_priority, true, "Input",
                     "Ignore mouse buttons and movement while a controller is in use, so tools\n"
                     "that turn the controller into a mouse (Steam's Desktop layout: A = left\n"
                     "click, B = right click, sticks = cursor) don't press X/Y or move the camera.");
+// Disable MSAA ([patches] disable_msaa, seeded from fable2_config.toml in
+// src/core/fable_2_app.h): src/core/hotfunc/render/InitRenderSettings_8238DE58.cpp.
+// Listed in the F4 settings menu; the render setup reads it at start-up.
+REXCVAR_DEFINE_BOOL(disable_msaa, false, "Patches",
+                    "Disable MSAA (restart to apply): no 2x anti-aliasing, faster, jaggier edges")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 REXCVAR_DEFINE_BOOL(mouse_look_invert_y, false, "Input",
                     "Direct mouse camera: true = moving the mouse up makes the camera look down.");
 REXCVAR_DEFINE_DOUBLE(mouse_look_direct_smoothing, 0.0, "Input",
