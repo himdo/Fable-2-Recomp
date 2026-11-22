@@ -83,7 +83,10 @@ Transform patterns:
   so every new `{ }` block can still see them. Do not introduce new
   variables, except loop bookkeeping that is provably side-effect-free.
 - **No gratuitous reformatting or renames.** Only control-flow syntax
-  changes. Do not merge branches, drop "dead" stores, or add optimizations
+  changes. (Naming the function or its callees in the manifest is a
+  separate step: list any callee still called `sub_*` or
+  `ProcessAndProcessAndProcessN_*` whose role became clear while reading
+  the body in the final report, for `/name-functions`.) Do not merge branches, drop "dead" stores, or add optimizations
   — that is a separate task. The in-repo exemplar of the finished style is
   `src/core/hotfunc/vblank/FrameLimiterWait_82242628.cpp` (goto-free,
   otherwise faithful transliteration).
@@ -137,3 +140,5 @@ It writes `build_release.log` and `build_release.status`
 - Summary of the control-flow transformation.
 - Release build status (exit code).
 - Any behavioral caveats (there should be none — if there are, list them).
+- Callees whose role became clear while reading the body, with a suggested
+  name each, for `/name-functions`.

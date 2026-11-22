@@ -37,7 +37,7 @@ includes = ["fable2_switch_tables.toml"]
 longjmp_address = 0x82CA9260
 setjmp_address = 0x83000200
 
-# --- Recomp-level patches via mid-asm hooks (see docs/patches.md) ---------
+# --- Recomp-level patches via mid-asm hooks (see docs/feature/guest_patches/technical.md) ---------
 # Code-region Xenia patches are inert at runtime in this recomp (guest .text
 # is never executed), so they are applied to the RECOMPILED code instead: a
 # hook is injected at a specific guest instruction address and a C++ function
@@ -382,7 +382,7 @@ name = "LoadPubGames_831465C8"
 # Collectors Edition content. An unregistered player who clicks it sees
 # "Go to www.fable2.com for information on how to access the gold and items
 # your heroic ancestors left behind." These are the functions on the
-# chest-click path (see docs/patches.md). Names are best-effort from runtime
+# chest-click path (see docs/feature/guest_patches/technical.md). Names are best-effort from runtime
 # tracing; refine them as behaviour is confirmed.
 
 # Website-item getter. The Xenia "Unlock Website Items" patch targets its

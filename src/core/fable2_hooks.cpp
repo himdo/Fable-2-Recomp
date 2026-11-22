@@ -1,5 +1,5 @@
 // fable2_hooks.cpp - mid-asm hook functions for the [[entrypoint.midasm_hook]]
-// entries in fable_2_manifest.toml (see docs/patches.md).
+// entries in fable_2_manifest.toml (see docs/feature/guest_patches/technical.md).
 //
 // Codegen emits an extern prototype for each hook into the generated code
 // (e.g. `extern void fable2_hook_website_g1(PPCRegister& r9);`) and calls it at

@@ -14,6 +14,14 @@ The argument is the exact recompiled symbol name (with its hex suffix, or a
 
 ## Steps
 
+0. **Name it first if it is still generic.** If the argument is a
+   `sub_XXXXXXXX` or `ProcessAndProcessAndProcessN_XXXXXXXX` name and you
+   already know what the function does, suggest naming it with
+   `/name-functions` and rebuilding (codegen then emits the new name) before
+   making the override. The override file and its symbol then carry the
+   real name from the start. If the role isn't known yet, carry on with the
+   generic name and say in the report that it still needs a name.
+
 1. **Locate the function** in the generated code:
 
    ```
