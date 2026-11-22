@@ -151,6 +151,26 @@ if(NOT FABLE2_PGO STREQUAL "OFF")
         target_link_options(${_fable2_pgo_target} PRIVATE ${_fable2_pgo_link})
     endforeach()
 endif()
+# ThinLTO for the game code (build.sh --game-lto): the recompiled code is split
+# into ~250 source files that call each other; only a link-time optimizer can
+# inline across them (with game PGO, the hot calls).
+option(FABLE2_LTO "ThinLTO for the game code (clang, lld)" OFF)
+if(FABLE2_LTO)
+    if(WIN32 OR NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "FABLE2_LTO needs clang on a non-Windows platform")
+    endif()
+    foreach(_fable2_lto_target fable_2 fable_2_recomp)
+        if(TARGET ${_fable2_lto_target})
+            target_compile_options(${_fable2_lto_target} PRIVATE -flto=thin)
+        endif()
+    endforeach()
+    target_link_options(fable_2 PRIVATE -flto=thin -fuse-ld=lld)
+    if(REXGLUE_LTO_LINK_FLAGS)
+        separate_arguments(_fable2_lto_link_flags UNIX_COMMAND "${REXGLUE_LTO_LINK_FLAGS}")
+        target_link_options(fable_2 PRIVATE ${_fable2_lto_link_flags})
+    endif()
+    message(STATUS "Game code LTO: ThinLTO")
+endif()
 # In-tree SDK build (REXSDK_DIR, the Linux path): rex/rex_app.h includes
 # <imgui.h>, which an installed SDK ships in its include dir but the in-tree
 # rex::runtime target does not propagate.

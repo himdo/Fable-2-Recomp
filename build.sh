@@ -24,6 +24,9 @@
 #   --pgo-use <file> optimize the runtime libraries with a profile merged
 #                    from those files (llvm-profdata merge -o <file> ...)
 #   --lto            ThinLTO for the GPU plugin library (needs lld)
+#   --game-lto       ThinLTO for the game code too (the recompiled code and the
+#                    app; needs lld): lets the compiler inline across the
+#                    recompiled code's source files
 #   --game-pgo-generate  instrument the game code itself (the recompiled code
 #                    and the app) too; it writes rex-pgo-*.profraw next to the
 #                    executable every 30 s of play and when quitting from the
@@ -55,6 +58,7 @@ CPU="${FABLE2_CPU:-generic}"
 FUNC_TRACE=OFF
 PGO=OFF
 LTO=OFF
+GAME_LTO=OFF
 PGO_PROFILE=
 GAME_PGO=OFF
 GAME_PGO_PROFILE=
@@ -70,6 +74,7 @@ while [ $# -gt 0 ]; do
         --trace) FUNC_TRACE=ON ;;
         --pgo-generate) PGO=GENERATE ;;
         --lto) LTO=ON ;;
+        --game-lto) GAME_LTO=ON ;;
         --game-pgo-generate) GAME_PGO=GENERATE ;;
         --game-pgo-use) shift; GAME_PGO=USE; GAME_PGO_PROFILE="$(readlink -f "${1:?--game-pgo-use needs a .profdata file}")" ;;
         --game-pgo-use=*) GAME_PGO=USE; GAME_PGO_PROFILE="$(readlink -f "${1#--game-pgo-use=}")" ;;
@@ -96,9 +101,17 @@ fi
 # 360), and with FMA available clang would otherwise fuse them. Explicit fused
 # instructions (fmadd -> std::fma) stay fused, and become one instruction
 # instead of a libm call once FMA is enabled.
+# Deck: no vzeroupper. It exists to avoid the SSE/AVX transition penalty of
+# Intel CPUs; AMD's Zen 2 has none, but executes it as 12 micro-ops, and the
+# compiler puts one at the exit of every function that used 256-bit registers
+# (the command processor's packet and draw functions run it millions of times
+# a second). LTO links generate code too, so they get the option as well.
+NO_VZEROUPPER="-mllvm -x86-use-vzeroupper=false"
+LTO_LINK_FLAGS=
+[ "$CPU" = deck ] && LTO_LINK_FLAGS="-Wl,-mllvm,-x86-use-vzeroupper=false"
 case "$CPU" in
     generic) ARCH_FLAGS="-march=x86-64-v2" ;;
-    deck) ARCH_FLAGS="-march=znver2 -mtune=znver2" ;;
+    deck) ARCH_FLAGS="-march=znver2 -mtune=znver2 $NO_VZEROUPPER" ;;
     native) ARCH_FLAGS="-march=native" ;;
     *) echo "Error: --cpu must be generic, deck or native (got '$CPU')" >&2; exit 1 ;;
 esac
@@ -175,7 +188,7 @@ configure() {
         -DREXGLUE_ENABLE_TRACY=OFF -DREXGLUE_BUILD_TESTS=OFF \
         -DFABLE2_FUNC_TRACE="$FUNC_TRACE" \
         -DREXGLUE_PGO="$PGO" -DREXGLUE_PGO_PROFILE="$PGO_PROFILE" \
-        -DREXGLUE_LTO="$LTO" -DREXGLUE_GPU_LINE_TABLES=ON         -DFABLE2_PGO="$GAME_PGO" -DFABLE2_PGO_PROFILE="$GAME_PGO_PROFILE" \
+        -DREXGLUE_LTO="$LTO" -DREXGLUE_LTO_LINK_FLAGS="$LTO_LINK_FLAGS" -DFABLE2_LTO="$GAME_LTO"         -DREXGLUE_GPU_LINE_TABLES=ON         -DFABLE2_PGO="$GAME_PGO" -DFABLE2_PGO_PROFILE="$GAME_PGO_PROFILE" \
         "${SDL_ARGS[@]}"
 }
 
@@ -194,6 +207,12 @@ echo "$ARCH_FLAGS" > "$STAMP"
 if [ ! -f "$ROOT/generated/default/sources.cmake" ]; then
     cmake --build "$BUILD" --target fable_2_codegen
     configure
+fi
+# --game-lto: call the recompiled functions directly (__imp__NAME) wherever
+# nothing overrides them, so the link-time optimizer can inline them. Only
+# calls not yet rewritten change, so a rebuild recompiles nothing extra.
+if [ "$GAME_LTO" = ON ] && [ -d "$ROOT/generated/default" ]; then
+    python3 "$ROOT/tools/direct_guest_calls.py" "$ROOT/generated/default" "$ROOT/src"
 fi
 if [ "$TARGET" = package ]; then
     [ "$CONFIG" = Release ] || { echo "Error: package needs a Release build" >&2; exit 1; }
