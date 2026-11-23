@@ -51,6 +51,7 @@ public partial class MainWindow : Window
         DetectGameDirectory();
         _loading = false;
         RefreshSummary();
+        VersionText.Text = $"Version {UpdateChecker.ReadInstalledVersion(AppContext.BaseDirectory) ?? "???"}";
         Loaded += async (_, _) => await ShowAvailableUpdateAsync();
     }
 
@@ -676,6 +677,8 @@ public partial class MainWindow : Window
             SelectByTag(MouseLookModeCombo, Fable2ConfigFile.NormalizeMouseLookMode(_advanced.MouseLookMode));
             MouseSensitivitySlider.Value = _advanced.MouseLookScale;
             MouseSensitivityBox.Text = _advanced.MouseLookScale.ToString(CultureInfo.InvariantCulture);
+            SelectByTag(MouseAimModeCombo, Fable2ConfigFile.NormalizeMouseAimMode(_advanced.MouseAimMode));
+            MouseAimSensBox.Text = Fable2ConfigFile.FormatDouble(_advanced.MouseAimSens);
             HotFuncYieldSlider.Value = Math.Clamp(_advanced.HotFuncYieldEvery, 0, 16);
             HotFuncYieldBox.Text = _advanced.HotFuncYieldEvery.ToString(CultureInfo.InvariantCulture);
             LoadPhotoMode();
@@ -1014,8 +1017,14 @@ public partial class MainWindow : Window
         AddPatchRow("GUI Every HF Tick", "gui_every_hf_tick",
             "Update subtitles and HUD text every HF tick instead of every LF tick.",
             _advanced.GuiEveryHfTick);
+        AddPatchRow("Interpolation", "interpolation",
+            "Keep cloth (capes, coats) in step with the drawn body.",
+            _advanced.Interpolation);
         AddPatchRow("Disable Motion Blur", "disable_motion_blur",
             "Zero the camera's full-screen motion blur amount each frame.", _advanced.DisableMotionBlur);
+        AddPatchRow("Disable MSAA", "disable_msaa",
+            "Render without the game's 2x MSAA: faster on weaker GPUs, jaggier edges. Applies on the next start.",
+            _advanced.DisableMsaa);
         AddPatchRow("Realtime Texture Morphing", "realtime_texture_morphing",
             "Render the hero/dog morphed skin textures on the GPU (fixes the black hero/dog).",
             _advanced.RealtimeTextureMorphing);
@@ -1037,7 +1046,9 @@ public partial class MainWindow : Window
                 case "high_tick_rate": _advanced.HighTickRate = value; break;
                 case "higher_hf_tick_rate": _advanced.HigherHfTickRate = value; break;
                 case "gui_every_hf_tick": _advanced.GuiEveryHfTick = value; break;
+                case "interpolation": _advanced.Interpolation = value; break;
                 case "disable_motion_blur": _advanced.DisableMotionBlur = value; break;
+                case "disable_msaa": _advanced.DisableMsaa = value; break;
                 case "realtime_texture_morphing": _advanced.RealtimeTextureMorphing = value; break;
                 case "hero_dog_texture_readback": _advanced.HeroDogTextureReadback = value; break;
             }
@@ -1149,6 +1160,9 @@ public partial class MainWindow : Window
         _advanced.MouseLook = MouseLookCheck.IsChecked == true;
         _advanced.MouseLookMode = Fable2ConfigFile.NormalizeMouseLookMode(SelectedTag(MouseLookModeCombo));
         _advanced.MouseLookScale = (int)MouseSensitivitySlider.Value;
+        _advanced.MouseAimMode = Fable2ConfigFile.NormalizeMouseAimMode(SelectedTag(MouseAimModeCombo));
+        _advanced.MouseAimSens = ReadDoubleBox(MouseAimSensBox, _advanced.MouseAimSens,
+            Fable2ConfigFile.MouseAimSensMin, Fable2ConfigFile.MouseAimSensMax);
         _advanced.HotFuncYieldEvery = int.TryParse(HotFuncYieldBox.Text, NumberStyles.Integer,
             CultureInfo.InvariantCulture, out int yieldEvery)
             ? Math.Clamp(yieldEvery, 0, 4096) : (int)HotFuncYieldSlider.Value;

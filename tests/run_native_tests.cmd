@@ -61,6 +61,10 @@ rem Mouse-look helpers (stick mapping, inject plan, diagnostics summary).
 rem Direct mouse camera (accumulator, route, Lua return values) and inject profiles.
 %CXX% -I"%SDK%\include" %SDK_DEPS% -I"%ROOT%" -I"%ROOT%\src\input" "%~dp0native\test_mouse_direct.cpp" %CATCH_MAIN% -o "%OUT%\mouse-direct.exe" || exit /b 1
 "%OUT%\mouse-direct.exe" %RUN% || exit /b 1
+rem Aim stick swap (mode signal, aim detection timeout, inverse aim curve).
+rem Not Catch2 yet: it has its own main and CHECK, so no Catch2 objects or %RUN%.
+%CXX% -I"%ROOT%" "%~dp0native\test_mouse_aim.cpp" -o "%OUT%\mouse-aim.exe" || exit /b 1
+"%OUT%\mouse-aim.exe" || exit /b 1
 rem Keycap prompt textures (memory scan, raw BC3 path, labels).
 %CXX% -I"%ROOT%\src" "%~dp0native\test_keycap_textures.cpp" %CATCH_MAIN% -o "%OUT%\keycap-textures.exe" || exit /b 1
 "%OUT%\keycap-textures.exe" %RUN% || exit /b 1

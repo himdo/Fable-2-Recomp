@@ -12,7 +12,7 @@
 // Shared state. `limit` (r3) is the video/limiter struct:
 //   * limit+kCounterPtrOffset holds the guest address of the GPU progress
 //     counter. The SDK's command processor writes that counter from the GPU
-//     thread (EVENT_WRITE_SHD; see docs/FPS_CAP_INVESTIGATION.md), and
+//     thread (EVENT_WRITE_SHD; see docs/fix/fps_cap/technical.md), and
 //     BeginFrame_82B9BA58 resets it on the game thread.
 //   * limit+kDeadlineOffset is the deadline in counter units, written by
 //     BeginFrame_82B9BA58 and EndFrame_822981F0.

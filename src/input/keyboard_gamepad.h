@@ -52,6 +52,7 @@
 #include "fable2_config.h"  // direct_mouse_look toggle
 #include "../core/fable2_keycap_swap.h"  // real-time keycap prompt swap
 #include "host_pad.h"       // XInput read of real controllers (controller priority)
+#include "mouse_aim.h"      // aim stick swap (mouse -> left stick while aiming)
 #include "mouse_diag.h"     // fable2_mouse.log + `f2 mouse inject` movement
 #include "mouse_direct.h"   // direct mouse camera (mouse_look_mode = "direct")
 #include "mouse_look.h"     // fable2::mouselook (accumulates the mouse delta)
@@ -71,6 +72,12 @@ REXCVAR_DECLARE(bool, mouse_look_smoothing);
 REXCVAR_DECLARE(int32_t, mouse_look_window_ms);
 REXCVAR_DECLARE(std::string, mouse_look_mode);
 REXCVAR_DECLARE(std::string, mouse_unlock_key);
+REXCVAR_DECLARE(std::string, mouse_aim_mode);
+REXCVAR_DECLARE(int32_t, mouse_aim_scale);
+REXCVAR_DECLARE(std::string, mouse_aim_input);
+REXCVAR_DECLARE(double, mouse_aim_sens);
+REXCVAR_DECLARE(double, mouse_aim_y_ratio);
+REXCVAR_DECLARE(bool, mouse_aim_invert_y);
 
 namespace fable2 {
 
@@ -329,6 +336,9 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
         REXCVAR_GET(mouse_controller_priority) && ControllerRecentlyUsed();
 
     // While the debug menu is open, clicks and typing belong to the menu.
+    // aim_key_held: a key bound to pad Y (the ranged aim button, RMB by
+    // default) is held; the "rmb" signal of the aim stick swap.
+    bool aim_key_held = false;
     if (focused && !console_open_ && !photo) {
       for (const auto& m : bindings_) {
         if (has_unlock_key && m.vk == unlock_vk) continue;  // not gamepad input
@@ -336,6 +346,7 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
         if ((GetAsyncKeyState(m.vk) & 0x8000) == 0) continue;  // not held
         if (m.button != 0) {
           buttons |= m.button;
+          if (m.button == rex::input::X_INPUT_GAMEPAD_BUTTON::X_INPUT_GAMEPAD_Y) aim_key_held = true;
         } else if (m.trigger == 'L') {
           left_trigger = 0xFF;
         } else if (m.trigger == 'R') {
@@ -450,31 +461,78 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     const bool inject_live = REXCVAR_GET(mouse_look) && !console_open_ &&
                              (injecting || fable2::mousediag::Injector::Get().Active());
 
+    // Aim stick swap (src/input/mouse_aim.h): while the player aims a ranged
+    // weapon, the mouse drives the left stick (the aim reticle) and WASD stops
+    // moving it. mouse_aim_mode picks the signal: the aim button, the game's
+    // aim cursor update (AimCursorUpdate_827B80B0.cpp), both, or off.
+    namespace ma = fable2::mouseaim;
+    const int64_t now_us = fable2::mousediag::NowUs();
+    const int64_t tick_us =
+        fable2::mousestick::DefaultWindowUs(fable2::config::Get().high_tick_rate);
+    const bool aim_detected = ma::State().Detected(now_us, ma::AimTimeoutUs(tick_us));
+    const bool aiming = ma::SwapActive(photo, looking, inject_live,
+                                       ma::ModeOrDefault(REXCVAR_GET(mouse_aim_mode)),
+                                       aim_key_held, aim_detected);
+
     // Direct mouse camera (src/input/mouse_direct.h): while the gameplay camera
     // takes the mouse directly, keep the movement for it and leave the stick
     // centred. Otherwise (stick mode, lock-on, cutscenes, menus, other
-    // cameras) the mouse drives the stick below, and nothing is kept.
+    // cameras) the mouse drives the stick below, and nothing is kept. While
+    // aiming nothing is kept either, but the camera's last report stands, so
+    // the direct route comes back as soon as aiming ends.
     const bool direct_mode = DirectMode();
     const bool routed_direct = fable2::mousedirect::State().Feed(
-        direct_mode && (looking || inject_live), fable2::mousediag::NowUs(),
-        fable2::mousedirect::RouteTimeoutUs(
-            fable2::mousestick::DefaultWindowUs(fable2::config::Get().high_tick_rate)),
-        cur_dx + inj_dx, cur_dy + inj_dy);
+        direct_mode && !aiming && (looking || inject_live), now_us,
+        fable2::mousedirect::RouteTimeoutUs(tick_us), cur_dx + inj_dx, cur_dy + inj_dy);
     // Moving the mouse in direct mode without the camera taking it: if the Lua
-    // side isn't running, that's when the host (re)starts it.
-    if (direct_mode && !routed_direct && (looking || inject_live) &&
-        (cur_dx | cur_dy | inj_dx | inj_dy) != 0)
-      fable2::mousedirect::BootState().Wanted(fable2::mousediag::NowUs());
-    if (routed_direct != routed_direct_prev_) {
-      routed_direct_prev_ = routed_direct;
-      fable2::mousediag::Diag::Get().Note(routed_direct ? "route direct" : "route stick");
+    // side isn't running, that's when the host (re)starts it. Not just after
+    // aiming (in any aim mode): the camera was silent while the aim camera ran
+    // and reports in again by itself (mouseaim::kAimBootGraceUs).
+    if (direct_mode && !aiming && !ma::State().RecentlyAimed(now_us) && !routed_direct &&
+        (looking || inject_live) && (cur_dx | cur_dy | inj_dx | inj_dy) != 0)
+      fable2::mousedirect::BootState().Wanted(now_us);
+    const Route route = aiming ? Route::kAim : routed_direct ? Route::kDirect : Route::kStick;
+    if (route != route_prev_) {
+      route_prev_ = route;
+      fable2::mousediag::Diag::Get().Note(route == Route::kAim      ? "route aim"
+                                          : route == Route::kDirect ? "route direct"
+                                                                    : "route stick");
     }
 
     bool clamped = false;
     int32_t win_x = 0;
     int32_t win_y = 0;
     const bool smoothing = REXCVAR_GET(mouse_look_smoothing);
-    if (routed_direct) {
+    // Direct aim: the movement waits for the next cursor update (the hook in
+    // AimCursorUpdate_827B80B0.cpp takes it). Only while the game is aiming
+    // (detected), so movement from before aim starts ("rmb" mode) can't jump
+    // the reticle on its first update.
+    const bool aim_direct =
+        aiming && ma::AimInputOrDefault(REXCVAR_GET(mouse_aim_input)) == ma::AimInput::kDirect;
+    if (aim_direct && aim_detected) {
+      ma::AimSens sens;
+      sens.x = REXCVAR_GET(mouse_aim_sens);
+      sens.y_ratio = REXCVAR_GET(mouse_aim_y_ratio);
+      sens.invert_y = REXCVAR_GET(mouse_aim_invert_y);
+      ma::DirectSettings().Publish(sens);
+      if (cursor_read || injecting) ma::Direct().Feed(cur_dx + inj_dx, cur_dy + inj_dy);
+    } else {
+      ma::Direct().Clear();
+    }
+    if (!aiming || aim_direct) aim_stick_.Reset();  // the next stick aim starts from a still mouse
+    if (aiming) {
+      // The keyboard's left stick (WASD) is dropped; a real pad still merges
+      // in. The right stick stays centred. Stick input: the left stick reports
+      // the mouse's velocity over one LF tick, with the aim chain's cubic
+      // response undone (mouseaim::AimStick). Direct input: the left stick
+      // stays centred too.
+      window_.Clear();
+      last_poll_us_ = 0;
+      lx = ly = 0;
+      if (!aim_direct)
+        clamped = aim_stick_.Update(now_us, tick_us, cursor_read || injecting, cur_dx + inj_dx,
+                                    cur_dy + inj_dy, REXCVAR_GET(mouse_aim_scale), lx, ly, win_x, win_y);
+    } else if (routed_direct) {
       // The camera gets this movement directly; start the stick path fresh
       // when the mouse comes back to it.
       window_.Clear();
@@ -520,6 +578,26 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     rec.clamped = clamped;
     rec.looking = looking;
     rec.direct = routed_direct;
+    rec.aim = aiming;
+    rec.lx = lx;
+    rec.ly = ly;
+    ma::State().Cursor(rec.cur_x, rec.cur_y, rec.aim_ticks);
+    {
+      const ma::Targeting tg = ma::State().LastTargeting();
+      rec.hl = tg.noted ? (tg.handle_set ? 1 : 0) : -1;
+      rec.flick = tg.flick;
+      rec.held = tg.held;
+      rec.b234 = tg.b234;
+      rec.hage = tg.age;
+      const ma::TargetPos tp = ma::State().Target();
+      rec.tgt_x = tp.x;
+      rec.tgt_y = tp.y;
+      rec.tf = tp.front;
+      rec.releases = ma::State().Releases();
+      rec.suppressed = ma::State().SuppressedPicks();
+      rec.hops = ma::State().Hops();
+      rec.magnet = ma::State().MagnetTicks();
+    }
     fable2::mousediag::Diag::Get().OnPoll(rec);
 #endif
 
@@ -667,7 +745,11 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
 
   fable2::mousestick::VelocityWindow window_;
   int64_t last_poll_us_ = 0;  // previous poll (smoothing path), for movement intervals
-  bool routed_direct_prev_ = false;  // route of the previous poll, for log notes
+  // Where the mouse went: the aim reticle (left stick), the direct camera, or
+  // the right stick.
+  enum class Route { kStick, kDirect, kAim };
+  Route route_prev_ = Route::kStick;  // route of the previous poll, for log notes
+  fable2::mouseaim::AimStick aim_stick_;  // aim stick swap (mouse_aim.h)
   // Controller priority: whether a real controller, read straight from XInput
   // (which tools that turn it into mouse input can't fake), has been in use in
   // the last kPadTailUs: sticks past the XInput deadzones, a button or a

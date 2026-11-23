@@ -1,0 +1,97 @@
+# CLAUDE.md
+
+Guidance for Claude Code (and anyone else) working in this repository.
+
+## What this is
+
+A static recompilation of Fable II (Xbox 360) on the ReXGlue SDK. `rexglue codegen` turns the guest PowerPC code in `default.xex` into C++ under `generated/default/`, driven by `fable_2_manifest.toml`. This repo adds the host app, hooks, patches, input, diagnostics, a WPF launcher and tooling.
+
+Game content (`default.xex`, `data/`) is supplied by the user and never committed. `generated/` (except `generated/rexglue.cmake`) and `out/` are build output.
+
+**The long-term goal is a readable decompilation that supports modding.** Every function, global and structure field someone works out is progress towards that, but only if it is written down. So the rule is: **name what you discover** (see Workflow step 3). Thousands of functions still have generic names (`sub_XXXXXXXX`, `ProcessAndProcessAndProcessN_XXXXXXXX`), so most PRs will touch at least one.
+
+## Layout
+
+| Path | What |
+| --- | --- |
+| `src/main.cpp`, `src/core/fable_2_app.h` | Host entry point, cvars, SDK lifecycle hooks |
+| `src/core/fable2_hooks.cpp` | Mid-asm hook bodies (declared in the manifest) |
+| `src/core/hotfunc/<category>/` | Strong overrides of recompiled functions |
+| `src/core/fable2_config.{h,cpp}`, `config/fable2_config.toml` | User config (`[patches]`, `[input]`, `[perf]`, ...) |
+| `src/input/` | Keyboard/mouse pad, mouse look and aim |
+| `src/lua/` | Recomp Lua scripts, staged into `data/scripts/recomp/` |
+| `launcher/` | WPF launcher (.NET 8) |
+| `thirdparty/rexglue-sdk` | The SDK fork (`himdo/rexglue-sdk`), the only SDK the build uses |
+| `tools/` | Build, packaging and debugging scripts |
+| `tests/` | Python, launcher and native tests (`tests/README.md`) |
+| `docs/` | `fix/`, `feature/` and `reference/` docs (`docs/README.md`) |
+
+## Build and test
+
+| Command | What it does | Needs |
+| --- | --- | --- |
+| `build.cmd -release fable_2` | Release build in `out\build\win-amd64-release` (use for anything performance-related) | Windows, LLVM ≥ 22, Ninja, CMake ≥ 3.25, Python with `pefile`, VS Build Tools, game files |
+| `build.cmd fable_2` | Debug build (much slower at runtime) | Same |
+| `build.cmd -clean [target]` | Deletes `out\build\<config>`, **including saves and any files placed there by hand**. Back them up first | Windows |
+| `build.cmd launcher` | Launcher only | .NET 8 |
+| `build.cmd package` | Release + launcher + zip in `out\dist` | Same as the Release build |
+| `./build.sh` | Linux Release build in `out/build/linux-amd64-release` (see `Linux.md`) | Linux, Clang 20 + lld, Ninja, CMake ≥ 3.25, game files |
+| `python tools/generate_game_versions.py --check` | Checks the generated version constants | Python, any OS |
+| `python -m pytest` | Python tests (`pip install -r tests/requirements.txt` first) | Python 3.11+, any OS |
+| `dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release` | Launcher logic tests | .NET 8 |
+| `tests\run_native_tests.cmd` | Catch2 native tests (`FABLE2_COVERAGE=1` for coverage) | Windows, clang ≥ 22 on PATH, VS C++ tools, SDK submodule |
+
+None of the tests need game files. CI (`.github/workflows/tests.yml`) runs all four test commands on Windows for every PR. CI never builds the game.
+
+## Workflow
+
+1. **Branch.** All work goes on a branch named `fix/<short-name>` or `feature/<short-name>`, made from an up-to-date `master`. If the current branch doesn't follow this (for example `master` or `my-thing`), say so and suggest a name and the rename (`git branch -m <new-name>`) before changing anything.
+2. **Run the tests before you change anything** and note the result (the baseline). Run the same commands after the change and compare, so a regression can't hide behind an already-failing test. Use `/run-tests`.
+3. **Name what you discover.** Every game function the change calls, hooks, overrides or mentions in a comment gets a real name in `fable_2_manifest.toml` in the same PR, with a comment above the entry saying what it does and how you know. Rename generic and wrong names too. Record what you learned about globals and structure offsets in that comment and in the docs. Use the names (not raw addresses or `sub_` names) in code, comments and docs. Use `/name-functions`, and list the new names in the PR description. This is part of every fix and feature, not a separate clean-up.
+4. **Document the work.** Every fix or feature gets a folder `docs/fix/<slug>/` or `docs/feature/<slug>/` with a `technical.md` and an `overview.md`, plus a row in `docs/README.md`. Update an existing folder rather than creating a duplicate. Fill in the commit hash and PR number once the work is merged. Use `/work-doc`. Do this before reporting the work as done.
+5. **Open the PR** against `master` on `origin` (`himdo/Fable-2-Recomp`; contributors push branches there directly). Merge `master` into the branch first if it is behind. In the description, say what was tested, on which machine, and what wasn't tested, and list the functions you named.
+6. **Keep PRs small and focused.** The maintainer reviews each one by hand.
+
+Commit subjects are sentence case and imperative, e.g. "Add a Disable MSAA option ([patches] disable_msaa)". PRs are squash-merged with `(#N)` appended.
+
+## Conventions
+
+**Changing guest behaviour**, in order of preference:
+
+1. **Mid-asm hook.** Add `[[entrypoint.midasm_hook]]` (`address`, `name`, `registers`, `after_instruction = true`) to `fable_2_manifest.toml` and define the hook in `src/core/fable2_hooks.cpp` with plain C++ linkage (not `extern "C"`); registers arrive as `PPCRegister&`. Gate it on a `[patches]` key read through `fable2::config::Get()`.
+2. **Hot-function override.** Recompiled functions are weak aliases of `__imp__<name>`. A strong definition of the same name in `src/core/hotfunc/<category>/` replaces it; call `__imp__<name>` for the original. A file whose first line is `// Hand-tuned override` is never regenerated by `tools/make_hotfunc_overrides.py`. See `docs/reference/hotfunc_overrides.md` and the `/hotfunc` and `/cleanuphotfunc` skills.
+3. **Data patch** in `src/core/fable2_patches.cpp`, gated on the same kind of key.
+4. **Never hand-edit `generated/`**; codegen overwrites it.
+
+**Adding a setting.** A new key goes in four places that must agree: `config/fable2_config.toml`, the `kTemplate` string in `src/core/fable2_config.cpp` (plus its `Values` member and `Load()` read), `launcher/Fable2.Launcher/Fable2ConfigFile.cs`, and the cvar default in `src/main.cpp`. `tests/config/test_config_template.py` checks they match.
+
+**Naming functions** (details in the `/name-functions` skill):
+
+- **Format:** `Subsystem_WhatItDoes_ADDRESS`, e.g. `Cloth_Step_8219ADD8`, `TextureMorph_ReleaseJobs_8235E0D8`. For a Lua binding, use its Lua name: `LuaDebug_SetDrawGUI_823AC520`.
+- **Entry:** a comment block (what it does, its arguments such as `r3 = the timer`, who calls it, and whether that was read in the generated code or inferred), then `[entrypoint.functions."0xADDRESS"]` and `name = "..."`. If the address already has an entry, rename it in place: TOML keys must stay unique.
+- **After renaming,** update every use of the old name (`git grep` in `src/`, `tools/`, `docs/` and the manifest's own comments). The next build reruns codegen.
+- **No clashes with the runtime:** a name must not equal an XAPI export of the runtime, or it silently shadows the kernel import (such functions get a `_Guest` suffix). Check with `python tools/check_manifest_collisions.py fable_2_manifest.toml out/tooling/runtime-sdk/win-amd64/bin/rexruntime.dll`. Pass the DLL path: the default search folders are out of date.
+
+**Game versions.** After editing `constants/game_versions.json`, run `python tools/generate_game_versions.py` and commit the regenerated files in the same commit.
+
+**Files.**
+
+- `.cmd` and `.bat` files are checked out with CRLF (`.gitattributes`). Many sources are CRLF in a Windows checkout too. Edit with tools that keep line endings; Git Bash `sed -i` silently converts CRLF to LF.
+- `.gitignore` ignores `/*.ps1`, `/*.py`, `/*.sh` and `/*.png` in the repo root. A new root script needs a `!` exception.
+
+## Gotchas
+
+- **Guest memory is big-endian.** Use `__builtin_bswap32/64`, `read_be`/`write_be` (`src/core/fable2_console.h`) or `REX_LOAD_*`/`REX_STORE_*`.
+- **An override of `sub_X` that calls `sub_X` calls itself.** Call `__imp__sub_X` (or `__imp__<name>`) instead.
+- **The ~3856 `BaseHeap::AllocFixed attempting to reserve an already reserved range` errors at startup are expected.** The game relies on those reserves failing; don't "fix" them (`docs/fix/main_menu_crash/`).
+- **Host `RunScript` only from the world-update service** (`console::service_world_thread`). Starting a game script from the render thread corrupts the Lua VM (the alt-tab crash fixed in #189). `tests/core/test_world_thread_runscript.py` enforces this.
+- **Never register host scripts with `GeneralScriptManager`.** It writes them into save games, and loading the save brings them back. `tests/lua/test_recomp_scripts.py` enforces this (only `F5.lua` may).
+- **Hooks run on guest threads:** touch registers and guest memory only, no file I/O.
+- **The debug remote-control server** (`FABLE2_REMOTE_CONTROL`, port 8791) must stay compiled out of Release builds.
+- **The game also builds on Linux (Vulkan), which CI doesn't check.** Put Windows-only code (`windows.h`, `GetAsyncKeyState`, Win32 calls) behind `#ifdef _WIN32` with a working non-Windows branch, so the build doesn't break on other platforms.
+
+## Never commit
+
+- Game files, XEX dumps, saves, shader dumps, or game text, dialogue, scripts or asset data (paraphrase in docs instead).
+- Logs that contain player or local paths, and local paths in general.
+- Personal Claude files: `CLAUDE.local.md`, `.claude/settings.local.json`.

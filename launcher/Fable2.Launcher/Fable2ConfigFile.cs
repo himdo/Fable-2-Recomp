@@ -28,6 +28,12 @@ public class Fable2ConfigValues
     // speed) or "stick" (the mouse drives the right stick, like a controller).
     // The older direct_mouse_look key isn't managed; it's left as it is.
     public string MouseLookMode { get; set; } = "direct";
+    // When the mouse moves the ranged aim reticle: "both" (aim button held and
+    // the game aiming), "rmb" (the button), "detect" (the game aiming) or "off".
+    public string MouseAimMode { get; set; } = "both";
+    // Direct aim: sideways reticle movement per mouse count (up/down follows
+    // the screen shape). The other mouse_aim_* keys aren't managed.
+    public double MouseAimSens { get; set; } = 0.0007;
 
     // [patches]
     public bool UnlockWebsite { get; set; } = true;
@@ -36,7 +42,9 @@ public class Fable2ConfigValues
     public bool HighTickRate { get; set; } = false;       // unstable
     public bool HigherHfTickRate { get; set; } = false;    // unstable
     public bool GuiEveryHfTick { get; set; } = true;
+    public bool Interpolation { get; set; } = true;
     public bool DisableMotionBlur { get; set; } = false;
+    public bool DisableMsaa { get; set; } = false;
     public bool RealtimeTextureMorphing { get; set; } = true;
     public bool HeroDogTextureReadback { get; set; } = false;
 
@@ -71,6 +79,20 @@ public static class Fable2ConfigFile
     /// <summary>mouse_look_mode is "direct" or "stick"; anything else is "direct".</summary>
     public static string NormalizeMouseLookMode(string? mode) =>
         mode == "stick" ? "stick" : "direct";
+
+    /// <summary>The mouse_aim_mode values, in the order the launcher lists them.</summary>
+    public static readonly string[] MouseAimModes = { "both", "rmb", "detect", "off" };
+
+    /// <summary>mouse_aim_mode is one of MouseAimModes, in any case, like the game reads it;
+    /// anything else is "both".</summary>
+    public static string NormalizeMouseAimMode(string? mode)
+    {
+        string lower = (mode ?? "").Trim().ToLowerInvariant();
+        return MouseAimModes.Contains(lower) ? lower : "both";
+    }
+
+    /// <summary>The range the game's mouse_aim_sens cvar accepts.</summary>
+    public const double MouseAimSensMin = 0.000001, MouseAimSensMax = 1.0;
 
     // Host key names understood by rex::ui::ParseVirtualKey (see
     // src/ui/keybinds.cpp) plus the mouse-button aliases from
@@ -139,6 +161,8 @@ public static class Fable2ConfigFile
                     else if (key == "mouse_look") values.MouseLook = ParseBool(rawValue, values.MouseLook);
                     else if (key == "mouse_look_scale") values.MouseLookScale = ParseInt(rawValue, values.MouseLookScale);
                     else if (key == "mouse_look_mode") values.MouseLookMode = NormalizeMouseLookMode(Unquote(rawValue));
+                    else if (key == "mouse_aim_mode") values.MouseAimMode = NormalizeMouseAimMode(Unquote(rawValue));
+                    else if (key == "mouse_aim_sens") values.MouseAimSens = ParseDouble(rawValue, values.MouseAimSens);
                     break;
                 case "patches":
                     if (key == "unlock_website") values.UnlockWebsite = ParseBool(rawValue, values.UnlockWebsite);
@@ -147,7 +171,9 @@ public static class Fable2ConfigFile
                     else if (key == "high_tick_rate") values.HighTickRate = ParseBool(rawValue, values.HighTickRate);
                     else if (key == "higher_hf_tick_rate") values.HigherHfTickRate = ParseBool(rawValue, values.HigherHfTickRate);
                     else if (key == "gui_every_hf_tick") values.GuiEveryHfTick = ParseBool(rawValue, values.GuiEveryHfTick);
+                    else if (key == "interpolation") values.Interpolation = ParseBool(rawValue, values.Interpolation);
                     else if (key == "disable_motion_blur") values.DisableMotionBlur = ParseBool(rawValue, values.DisableMotionBlur);
+                    else if (key == "disable_msaa") values.DisableMsaa = ParseBool(rawValue, values.DisableMsaa);
                     else if (key == "realtime_texture_morphing") values.RealtimeTextureMorphing = ParseBool(rawValue, values.RealtimeTextureMorphing);
                     else if (key == "hero_dog_texture_readback") values.HeroDogTextureReadback = ParseBool(rawValue, values.HeroDogTextureReadback);
                     break;
@@ -197,13 +223,17 @@ public static class Fable2ConfigFile
             ("input", "mouse_look", values.MouseLook ? "true" : "false"),
             ("input", "mouse_look_scale", values.MouseLookScale.ToString(CultureInfo.InvariantCulture)),
             ("input", "mouse_look_mode", Quote(NormalizeMouseLookMode(values.MouseLookMode))),
+            ("input", "mouse_aim_mode", Quote(NormalizeMouseAimMode(values.MouseAimMode))),
+            ("input", "mouse_aim_sens", FormatDouble(values.MouseAimSens)),
             ("patches", "unlock_website", values.UnlockWebsite ? "true" : "false"),
             ("patches", "unlock_ce", values.UnlockCe ? "true" : "false"),
             ("patches", "skip_intro_videos", values.SkipIntroVideos ? "true" : "false"),
             ("patches", "high_tick_rate", values.HighTickRate ? "true" : "false"),
             ("patches", "higher_hf_tick_rate", values.HigherHfTickRate ? "true" : "false"),
             ("patches", "gui_every_hf_tick", values.GuiEveryHfTick ? "true" : "false"),
+            ("patches", "interpolation", values.Interpolation ? "true" : "false"),
             ("patches", "disable_motion_blur", values.DisableMotionBlur ? "true" : "false"),
+            ("patches", "disable_msaa", values.DisableMsaa ? "true" : "false"),
             ("patches", "realtime_texture_morphing", values.RealtimeTextureMorphing ? "true" : "false"),
             ("patches", "hero_dog_texture_readback", values.HeroDogTextureReadback ? "true" : "false"),
             ("perf", "hotfunc_yield_every", values.HotFuncYieldEvery.ToString(CultureInfo.InvariantCulture)),

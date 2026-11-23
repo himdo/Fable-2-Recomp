@@ -358,6 +358,34 @@ TEST_CASE("EncodeNumbers", "[mouse][direct]") {
   }
 }
 
+// The aim stick swap (src/input/mouse_aim.h) feeds with direct_mode = false
+// while aiming. That must drop what was kept but not forget the camera's last
+// report, so the direct route is back on the first poll after aiming (within
+// the timeout), and nothing moved while aiming turns the camera afterwards.
+TEST_CASE("DirectState while aiming", "[mouse][direct][aim]") {
+  const int64_t timeout = 200000;
+  double dx = 0, dy = 0;
+  mdir::DirectState st;
+  st.Drain(true, 1000, 0.0, dx, dy);                    // the camera is accepting
+  CHECK(st.Feed(true, 2000, timeout, 4, 0));            // kept for it
+  CHECK_FALSE(st.Feed(false, 3000, timeout, 50, 50));   // aiming: to the reticle
+  CHECK_FALSE(st.RouteDirect());
+  CHECK_FALSE(st.Feed(false, 50000, timeout, -20, 10));  // still aiming
+  CHECK(st.Feed(true, 150000, timeout, 3, 0));          // aim over, still within the timeout
+  st.Drain(true, 160000, 0.0, dx, dy);
+  // neither the 4 nor the aim movement
+  CHECK_THAT(dx, WithinAbs(3.0, 1e-9));
+  CHECK_THAT(dy, WithinAbs(0.0, 1e-9));
+  // A long aim outlives the timeout: back on the stick until the camera
+  // reports again, then direct.
+  CHECK_FALSE(st.Feed(false, 170000, timeout, 5, 5));
+  CHECK_FALSE(st.Feed(true, 160000 + timeout + 1, timeout, 7, 0));
+  st.Drain(true, 400000, 0.0, dx, dy);
+  CHECK(dx == 0);
+  CHECK(dy == 0);
+  CHECK(st.Feed(true, 401000, timeout, 2, 0));
+}
+
 TEST_CASE("InjectPlan speed profiles", "[mouse][diag]") {
   SECTION("every profile moves monotonically and delivers the same total") {
     for (InjectProfile p : {InjectProfile::kEven, InjectProfile::kRamp, InjectProfile::kFlick}) {

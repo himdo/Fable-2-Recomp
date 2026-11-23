@@ -134,6 +134,37 @@ mouse_look_invert_y = false
 # Default: 0.0
 mouse_look_direct_smoothing = 0.0
 
+# When the mouse moves the ranged aim reticle instead of the camera (WASD then
+# stops moving it). "both": the aim button (any key bound to pad Y) is held
+# and the game is aiming. "rmb": the aim button alone. "detect": the game
+# aiming alone. "off": the mouse never moves the reticle. A real controller
+# aims as before in every mode.
+# Default: "both"
+mouse_aim_mode = "both"
+
+# How the mouse moves the reticle. "direct": the movement is added straight to
+# the game's aim cursor, so the reticle moves exactly as far as the mouse, with
+# no top speed, deadzone or smoothing. "stick": the mouse drives the left stick
+# through the game's own stick handling (about a 30% deadzone and a top speed).
+# Default: "direct"
+mouse_aim_input = "direct"
+
+# Direct aim: sideways reticle movement per count of mouse movement (the aim
+# box is about -0.8..0.8). Up/down is this times the game's aspect ratio times
+# mouse_aim_y_ratio, so both ways move at the same speed on screen at 1.
+# Default: 0.0007 and 1.0
+mouse_aim_sens = 0.0007
+mouse_aim_y_ratio = 1.0
+
+# Direct aim: true = moving the mouse up moves the reticle down.
+# Default: false
+mouse_aim_invert_y = false
+
+# Stick aim (mouse_aim_input = "stick"): sensitivity while the mouse drives the
+# left stick (1..4096; 256 = 1x, the same units as mouse_look_scale).
+# Default: 256
+mouse_aim_scale = 256
+
 # Direct mouse-to-camera look: apply mouse movement straight to the active
 # camera's orientation (desktop-FPS style, no stick rate cap) instead of
 # writing it into the pad's right stick. false = legacy right-stick mapping.
@@ -259,6 +290,15 @@ higher_hf_tick_rate = false
 # false = text updates on LF ticks only (original).
 # Default: true
 gui_every_hf_tick = true
+# Interpolation (smoothing): cloth follows the body as it is drawn. The bodies
+# that push cloth around are blended between the last two animation poses at
+# the moment being drawn, the way the game already draws characters, instead
+# of jumping on every LF tick. Capes and coats also move with the body as drawn
+# instead of being jolted on every tick. The log shows "[interpolation]".
+# false = cloth colliders update on LF ticks only, and cloth is jolted on every
+# tick (original).
+# Default: true
+interpolation = true
 
 # Disable Motion Blur (mid-asm hook fable2_hook_disable_motion_blur): the
 # camera's full-screen motion blur amount (what scripts set via Camera.SetBlur)
@@ -267,6 +307,16 @@ gui_every_hf_tick = true
 # the game asks for blur. false = blur as in the original game.
 # Default: false
 disable_motion_blur = false
+
+# Disable MSAA (override of InitRenderSettings_8238DE58, the render settings
+# setup): the game sets up its main render targets with 2x multisample
+# anti-aliasing (mode 2 at +156, next to the 1120x720 render size). This sets
+# mode 1, as the Xenia "Disable MSAA" patch for this executable does
+# (li r9,2 -> li r9,1 at 0x8238DF3C). Much less GPU work on the emulated EDRAM;
+# edges are jaggier. Takes effect at start-up. Also in the F4 settings menu
+# (Patches). false = original 2x MSAA.
+# Default: false
+disable_msaa = false
 
 # Realtime Texture Morphing (mid-asm hook fable2_hook_realtime_texture_morphing):
 # the hero's and dog's morphed skin textures are rendered straight into their
@@ -524,6 +574,28 @@ bool Load(const std::filesystem::path& path) {
     values.mouse_look_direct_smoothing =
         Read<double>(input_table, "input", "mouse_look_direct_smoothing", "number",
                      values.mouse_look_direct_smoothing);
+    {
+      std::string mode = Read<std::string>(input_table, "input", "mouse_aim_mode", "string",
+                                           values.mouse_aim_mode);
+      for (auto& c : mode) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if (mode == "off" || mode == "rmb" || mode == "detect" || mode == "both") {
+        values.mouse_aim_mode = mode;
+      }
+    }
+    {
+      std::string input = Read<std::string>(input_table, "input", "mouse_aim_input", "string",
+                                            values.mouse_aim_input);
+      for (auto& c : input) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if (input == "direct" || input == "stick") values.mouse_aim_input = input;
+    }
+    values.mouse_aim_sens = Read<double>(input_table, "input", "mouse_aim_sens", "number",
+                                         values.mouse_aim_sens);
+    values.mouse_aim_y_ratio = Read<double>(input_table, "input", "mouse_aim_y_ratio", "number",
+                                            values.mouse_aim_y_ratio);
+    values.mouse_aim_invert_y = Read<bool>(input_table, "input", "mouse_aim_invert_y", "boolean",
+                                           values.mouse_aim_invert_y);
+    values.mouse_aim_scale = static_cast<int32_t>(Read<int64_t>(
+        input_table, "input", "mouse_aim_scale", "integer", values.mouse_aim_scale));
     values.direct_mouse_look =
         Read<bool>(input_table, "input", "direct_mouse_look", "boolean",
                    values.direct_mouse_look);
@@ -600,9 +672,14 @@ bool Load(const std::filesystem::path& path) {
     values.gui_every_hf_tick =
         Read<bool>(patches_table, "patches", "gui_every_hf_tick", "boolean",
                    values.gui_every_hf_tick);
+    values.interpolation =
+        Read<bool>(patches_table, "patches", "interpolation", "boolean",
+                   values.interpolation);
     values.disable_motion_blur =
         Read<bool>(patches_table, "patches", "disable_motion_blur", "boolean",
                    values.disable_motion_blur);
+    values.disable_msaa =
+        Read<bool>(patches_table, "patches", "disable_msaa", "boolean", values.disable_msaa);
     values.realtime_texture_morphing =
         Read<bool>(patches_table, "patches", "realtime_texture_morphing", "boolean",
                    values.realtime_texture_morphing);
@@ -686,8 +763,7 @@ bool Load(const std::filesystem::path& path) {
 
 const Values& Get() { return g_values; }
 
-bool SavePhotoModeGamepadToggle(const std::string& combo) {
-  g_values.photo_mode_gamepad_toggle = combo;
+bool SaveSetting(std::string_view section, std::string_view key, std::string_view toml_value) {
   if (g_path.empty()) return false;
   std::string text;
   {
@@ -695,14 +771,15 @@ bool SavePhotoModeGamepadToggle(const std::string& combo) {
     if (!in) return false;
     text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
   }
-  const std::string line = "gamepad_toggle = \"" + combo + "\"";
+  const std::string header = "[" + std::string(section) + "]";
+  const std::string line = std::string(key) + " = " + std::string(toml_value);
   const std::string eol = text.find("\r\n") != std::string::npos ? "\r\n" : "\n";
-  // Find the [photo_mode] section and, inside it, the gamepad_toggle line.
-  size_t sec = text.find("\n[photo_mode]");
-  if (sec == std::string::npos && text.rfind("[photo_mode]", 0) == 0) sec = 0;
+  // Find the section and, inside it, the key's line.
+  size_t sec = text.find("\n" + header);
+  if (sec == std::string::npos && text.rfind(header, 0) == 0) sec = 0;
   if (sec == std::string::npos) {
     if (!text.empty() && text.back() != '\n') text += eol;
-    text += eol + "[photo_mode]" + eol + line + eol;
+    text += eol + header + eol + line + eol;
   } else {
     const size_t body = text.find('\n', sec + 1);
     size_t end = body == std::string::npos ? text.size() : text.find("\n[", body);
@@ -714,11 +791,16 @@ bool SavePhotoModeGamepadToggle(const std::string& combo) {
       if (le == std::string::npos) le = text.size();
       const std::string_view l(text.data() + pos, le - pos);
       const size_t k = l.find_first_not_of(" \t");
-      if (k != std::string_view::npos && l.substr(k).rfind("gamepad_toggle", 0) == 0) {
-        const size_t cut = (le > pos && text[le - 1] == '\r') ? le - 1 : le;
-        text.replace(pos, cut - pos, line);
-        replaced = true;
-        break;
+      if (k != std::string_view::npos) {
+        // The key itself, not a longer key that starts with it.
+        const std::string_view rest = l.substr(k);
+        const size_t after = rest.find_first_not_of(" \t", key.size());
+        if (rest.rfind(key, 0) == 0 && after != std::string_view::npos && rest[after] == '=') {
+          const size_t cut = (le > pos && text[le - 1] == '\r') ? le - 1 : le;
+          text.replace(pos, cut - pos, line);
+          replaced = true;
+          break;
+        }
       }
       pos = le + 1;
     }
@@ -730,8 +812,18 @@ bool SavePhotoModeGamepadToggle(const std::string& combo) {
   std::ofstream out(g_path, std::ios::binary | std::ios::trunc);
   if (!out) return false;
   out << text;
-  REXSYS_INFO("[fable2-config] photo_mode.gamepad_toggle = \"{}\" saved to {}", combo, g_path.string());
+  REXSYS_INFO("[fable2-config] {}.{} = {} saved to {}", section, key, toml_value, g_path.string());
   return bool(out);
+}
+
+bool SavePhotoModeGamepadToggle(const std::string& combo) {
+  g_values.photo_mode_gamepad_toggle = combo;
+  return SaveSetting("photo_mode", "gamepad_toggle", "\"" + combo + "\"");
+}
+
+bool SaveDisableMsaa(bool disable) {
+  g_values.disable_msaa = disable;
+  return SaveSetting("patches", "disable_msaa", disable ? "true" : "false");
 }
 
 const char* DefaultTemplate() { return kTemplate; }
