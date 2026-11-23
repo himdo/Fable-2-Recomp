@@ -116,7 +116,7 @@ public partial class MainWindow : Window
         _executableDirectory = File.Exists(Path.Combine(AppContext.BaseDirectory, "fable_2.exe"))
             ? AppContext.BaseDirectory : _gameDirectory;
         GamePathText.Text = _gameDirectory;
-        RefreshPortuguesePackButton();
+        RefreshLocaleMenu();
         LauncherState.SaveGameDirectory(_gameDirectory);
         try
         {
@@ -133,11 +133,14 @@ public partial class MainWindow : Window
         }
     }
 
-    private void RefreshPortuguesePackButton()
+    private void MergeLocalesOpened(object sender, RoutedEventArgs e) => RefreshLocaleMenu();
+
+    private void RefreshLocaleMenu()
     {
         bool installed = _gameDirectory != null && BrazilianPortuguesePack.IsInstalled(_gameDirectory);
-        PortuguesePackButton.Content = installed ? "Remove PT-BR pack" : "Install PT-BR pack…";
-        PortuguesePackButton.IsEnabled = installed || File.Exists(Path.Combine(_gameDirectory!, "data", "language", "cultures.txt"));
+        MergePortugueseItem.IsEnabled = !installed && _gameDirectory != null &&
+            File.Exists(Path.Combine(_gameDirectory, "data", "language", "cultures.txt"));
+        RemovePortugueseItem.Visibility = installed ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void PortuguesePackClicked(object sender, RoutedEventArgs e)
@@ -145,10 +148,11 @@ public partial class MainWindow : Window
         if (_extracting || _gameDirectory == null) return;
         try
         {
-            if (BrazilianPortuguesePack.IsInstalled(_gameDirectory))
+            string message;
+            if (sender == RemovePortugueseItem)
             {
                 BrazilianPortuguesePack.Remove(_gameDirectory);
-                StatusText.Text = "PT-BR pack removed. Original language files restored.";
+                message = "Brazilian Portuguese removed. The original language files have been restored.";
             }
             else
             {
@@ -157,14 +161,15 @@ public partial class MainWindow : Window
                 var dialog = new OpenFileDialog { Title = "Choose Dio Carvalho's Fable II PT-BR pack", Filter = "Translation ZIP (*.zip)|*.zip" };
                 if (dialog.ShowDialog(this) != true) return;
                 BrazilianPortuguesePack.Install(_gameDirectory, dialog.FileName);
-                StatusText.Text = "PT-BR installed. In the game, choose Language → Portuguese (Brazil).";
+                message = "Brazilian Portuguese merged. In the game, choose Language → Portuguese (Brazil).";
             }
+            MessageBox.Show(this, message, "Merge Locales", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
             MessageBox.Show(this, ex.Message, "PT-BR language pack", MessageBoxButton.OK, MessageBoxImage.Error);
         }
-        finally { RefreshPortuguesePackButton(); }
+        finally { RefreshLocaleMenu(); }
     }
 
     private void LoadConfiguration()
@@ -426,6 +431,7 @@ public partial class MainWindow : Window
 
         _extracting = true;
         _stopRequested = false;
+        LauncherMenu.IsEnabled = false;
         ExtractButton.IsEnabled = false;
         LaunchButton.IsEnabled = false;
         StopButton.IsEnabled = true;
@@ -531,6 +537,7 @@ public partial class MainWindow : Window
             {
                 _extracting = false;
                 _stopRequested = false;
+                LauncherMenu.IsEnabled = true;
                 ExtractButton.IsEnabled = true;
                 LaunchButton.IsEnabled = true;
                 if (cancelled)

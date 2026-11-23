@@ -39,11 +39,24 @@
 
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
-    <Grid Margin="34,28,34,22">
+    <Border Background="#FF131D1C" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="0,0,0,1">
+      <Menu x:Name="LauncherMenu" Background="Transparent" Padding="26,2">
+        <MenuItem Header="_Merge Locales" SubmenuOpened="MergeLocalesOpened"
+                  Foreground="{StaticResource TextBrush}" Padding="8,4">
+          <MenuItem x:Name="MergePortugueseItem" Header="Merge _Brazilian Portuguese"
+                    Foreground="{DynamicResource {x:Static SystemColors.MenuTextBrushKey}}" Click="PortuguesePackClicked" />
+          <MenuItem x:Name="RemovePortugueseItem" Header="_Remove Brazilian Portuguese" Visibility="Collapsed"
+                    Foreground="{DynamicResource {x:Static SystemColors.MenuTextBrushKey}}" Click="PortuguesePackClicked" />
+        </MenuItem>
+      </Menu>
+    </Border>
+
+    <Grid Grid.Row="1" Margin="34,20,34,22">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*" />
         <ColumnDefinition Width="Auto" />
@@ -70,7 +83,7 @@
       </StackPanel>
     </Grid>
 
-    <Grid Grid.Row="1">
+    <Grid Grid.Row="2">
       <!-- Main page content -->
       <ScrollViewer x:Name="MainContent" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
       <Grid Margin="34,0,34,22">
@@ -217,8 +230,6 @@
                       Visibility="Collapsed" />
               <Button x:Name="ExtractButton" Content="Extract from ISO" Click="ExtractClicked"
                       Style="{StaticResource SecondaryButton}" Margin="0,12,0,0" />
-              <Button x:Name="PortuguesePackButton" Click="PortuguesePackClicked"
-                      Style="{StaticResource SecondaryButton}" Margin="0,8,0,0" />
               <TextBlock x:Name="ExtractionStatusText" FontSize="12"
                          Foreground="{StaticResource MutedTextBrush}" Margin="0,10,0,0"
                          TextWrapping="Wrap" Visibility="Collapsed" />
@@ -444,7 +455,7 @@
       </ScrollViewer>
     </Grid>
 
-    <Border Grid.Row="2" Background="#E60A1012" BorderBrush="#33FFFFFF" BorderThickness="0,1,0,0">
+    <Border Grid.Row="3" Background="#E60A1012" BorderBrush="#33FFFFFF" BorderThickness="0,1,0,0">
       <Grid Margin="34,18">
         <Grid x:Name="MainFooter">
           <Grid.ColumnDefinitions>
@@ -480,7 +491,7 @@
     <!-- Fullscreen extraction progress overlay: a centered progress bar, the file
          being written, and a checklist where every top-level folder/file becomes a
          progress checkbox. Shown during extraction, dismissed when it finishes. -->
-    <Border x:Name="ExtractionOverlay" Grid.Row="0" Grid.RowSpan="3" Background="#F5070C0E"
+    <Border x:Name="ExtractionOverlay" Grid.Row="0" Grid.RowSpan="4" Background="#F5070C0E"
             Visibility="Collapsed">
       <Grid Margin="44,36">
         <Grid.RowDefinitions>
