@@ -84,6 +84,7 @@ Settings are in `fable2_config.toml` in the `Fable2-SteamDeck` folder (edit it i
 | `menu_scroll_acceleration` (`[patches]`) | `1.5` | Held scrolling speeds up to this factor (original: `1`) |
 | `menu_animation_speed` (`[patches]`) | `2.5` | Speed of menu slides and fades (original: `1`) |
 | `interpolation` (`[patches]`) | `true` | Capes and coats move smoothly with the body |
+| `disable_msaa` (`[patches]`) | `false` | `true` turns off the game's 2x anti-aliasing: a steadier 60 fps in heavy scenes, slightly jaggier edges (takes effect at the next start) |
 
 Every setting is described in the file itself.
 
@@ -97,7 +98,7 @@ Measured on a Steam Deck OLED in Gaming Mode, 90-second runs from the same saves
 | Bowerstone Market, standing | 60 fps (cap) | about 51 fps |
 | Bowerstone Market, turning the camera | about 50 fps, no stutters | 44 fps, frequent 70 ms+ stutters |
 | Busy village, many NPCs | about 52 fps | 33–35 fps |
-| Bowerstone Old Town (childhood, snow) | 58.6 fps | – (54.5 fps in 1.0.1) |
+| Bowerstone Old Town (childhood, snow) | about 59.5 fps (60 with `disable_msaa`) | – (57.0 fps in 1.0.3, 54.5 in 1.0.1) |
 
 The game presents one frame per game frame, so the Deck's performance overlay shows its real frame rate.
 
@@ -107,9 +108,9 @@ On top of Fable 2 Recomp and its native Linux build, with the renderer work in t
 
 **Performance**
 - Vulkan renderer work for the Deck: GPU memory handling, render target and occlusion query fixes, and the fix for stutters when turning the camera.
-- The recompiled game code is built with profile-guided optimisation from Deck play sessions, ThinLTO and the Deck's Zen 2 CPU as the target.
-- Five of the recompiler's register optimisations are on, including lock-free atomic updates on the game thread (+5–7.5% in 1.0.2).
-- Game threads that wait in a loop sleep briefly instead of spinning, which leaves more of the 15 W budget to the GPU.
+- The recompiled game code is built with profile-guided optimisation from Deck play sessions, ThinLTO across the game code (1.0.4) and the renderer, and the Deck's Zen 2 CPU as the target.
+- Seven of the recompiler's eight register optimisations are on: lock-free atomic updates on the game thread (+5–7.5% in 1.0.2) and, since 1.0.4, the game's registers kept in native variables instead of memory.
+- Game threads that wait in a loop sleep briefly instead of spinning, which leaves more of the 15 W budget to the GPU. Since 1.0.4 this includes the render thread's wait for occlusion results, which lets the GPU run about 8% faster in heavy scenes.
 - The Lua garbage collector, about half of the game thread's time in busy areas, runs as native code.
 - 60 fps cap by default, no CPU wait for the GPU at the start of each frame, and one presented frame per game frame.
 
@@ -123,12 +124,13 @@ On top of Fable 2 Recomp and its native Linux build, with the renderer work in t
 - A crash after committing a crime with guards nearby (Linux builds only).
 - Correct hero and dog textures and eyes on Vulkan.
 
-**From upstream**, pulled in when it's noteworthy: for example himdo's cloth interpolation (smooth capes and coats).
+**From upstream**, pulled in when it's noteworthy: for example himdo's cloth interpolation (smooth capes and coats) and the option to turn off MSAA.
 
 ### Releases
 
 | Version | Date | Highlights |
 |---|---|---|
+| [1.0.4](https://github.com/darokk/Fable-2-Recomp/releases/tag/steamdeck-1.0.4) | 2026-11-23 | About 4% faster in heavy scenes, steadier 60 fps, optional MSAA off |
 | [1.0.3](https://github.com/darokk/Fable-2-Recomp/releases/tag/steamdeck-1.0.3) | 2026-11-21 | First-start installer: game files from your disc image, *Add to Steam* |
 | [1.0.2](https://github.com/darokk/Fable-2-Recomp/releases/tag/steamdeck-1.0.2) | 2026-11-20 | Crime/guard crash fixed, up to 7.5% faster, smooth capes and coats |
 | [1.0.1](https://github.com/darokk/Fable-2-Recomp/releases/tag/steamdeck-1.0.1) | 2026-11-20 | Steam Deck button icons, faster menus |
