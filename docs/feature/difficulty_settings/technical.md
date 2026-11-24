@@ -107,7 +107,8 @@ There are 52 `Money.Modify(hero, n)` sites in 32 files:
 - Begging: `behaviournoticeexpression`.
 - Extortion: `behaviourrespondtocrime`.
 - Paying to sleep, a negative amount: `onactionusebed`.
-- `Gameflow.ChildhoodVars.GiveGold`.
+
+Corrected 2026-11-24: `Gameflow.ChildhoodVars.GiveGold` was listed here, but it uses `Money.Set`, not `Money.Modify` (section 19.1).
 
 #### Native callers
 
@@ -470,6 +471,102 @@ Sizes come from `gui_texture_headers.bnk`; the textures themselves are in `art/g
 | 6 | Multipliers (2026-11-22) | steps like XP / gentler / steeper | **Steps like XP**, with **Easy = the original game** (delta4o's correction). Values in section 17. |
 
 The remaining open questions (slot label format, Masochist, unused Theresa lines) are listed in `overview.md`.
+
+### 19. The prologue, and feature code step 2: the difficulty cards (2026-11-24)
+
+#### 19.1 The childhood gold and the music box (Verified in the script bytecode)
+
+delta4o asked whether collecting the 5 gold and paying for the music box still works on the harder levels. It does, on every level, because none of that gold reaches our hooks. Read from `data/gamescripts.bnk` (the same bytecode is in `gamescripts_r.bnk`), with the `tools/bnk.lua` reader that `tools/lua_callshapes.py` uses; line numbers are the debug line info.
+
+- **The counter.** `qc010_childhood.lua` sets `Gameflow.ChildhoodVars.Gold = 0` and `GoldNeeded = 5` (L317–318).
+- **Earning.** `GiveGold()` (L158–169) adds 1 to the counter and does `Money.Set(hero, Money.Get(hero) + 1)`. `Money.Set` is `LuaMoney_Set_8239EEA8`, a store plus clamp that never calls `MoneyComp_Modify_8239E698` (section 2). So the gold hook never sees these coins, and no rounding happens.
+- **The tasks.** Each calls `GiveGold()` once per playthrough (where there are two calls, they are the good and evil endings):
+
+  | Task | Gold |
+  | --- | --- |
+  | qc020 Pose for Picture | 1 |
+  | qc030 Beetle Hunter | 1 |
+  | qc040 Bullies and Dog | 0 |
+  | qc045 Love Letter | 1 |
+  | qc050 Wanted | 1 |
+  | qc055 Wino | 1 |
+
+  That's 5 coins against a price of 5, with none spare. `TakeGold()` (L171–178) exists but nothing calls it.
+- **Paying.** The music box is a scripted prompt, not a shop screen: `QC010_Murgo.BuyMusicBoxToaster` (L2657–2748) asks, and `CustomUpdate` state 14 plays the cutscene and calls `PayForBox()` (L2817), which does `Money.Set(hero, Money.Get(hero) - 5)`. So `Item_GetBuyPrice_828E7F78` isn't involved, and there's no money check.
+- **The gates.** `QC010_Childhood.Update` (L666) and `QC010_Rose.CustomUpdate` (L1691) read the Lua counter, never the wallet. Rose's lines pick by the counter too.
+- **Inference:** loose gold picked up in Old Town (`onactionusepickup`, `Money.Modify`) is scaled, but it only changes the wallet, which nothing in qc010 reads. Pickups placed in Old Town weren't looked for.
+
+#### 19.2 The New Game cards
+
+`src/core/difficulty_dialog.h` (drawing), `src/core/hotfunc/difficulty/{Difficulty.cpp,difficulty.h}` (logic).
+
+- **The intercept.** `FrontMenu_HandleCardEvent_826C9188` starts the game on `BOY_SELECTED` / `GIRL_SELECTED`: it builds the creature name and calls `FrontMenu_StartNewGame_8237A0C8` with r3 = `*(*(*(0x83496928)+8)+80)`. That path reads only the event's hash at `+4`, never r3 (Verified in the generated code). The override holds the event back and opens the cards.
+- **The start.** Once a card is chosen, the pad read (`on_pad_read` in `fable2_photo_mode.h`, user 0) replays the original handler with an 8-byte event `{0, hash}` on a fresh guest stack frame. It runs on the thread that sent the event (checked by thread id; after 2 s it runs anyway, and the log says `OTHER`). The game's own path then builds the name and starts the game.
+- **The level.** After `FINISHED_TRANSITIONING_TO_GAME` (newer than the start), on the world update, the chosen level is written to player 1's type-33 `+80` and the type-57 `+2164` cache is cleared. It's written directly, **without** the changed flag `+38` that `Player.SetDifficultyLevel` sets, so the Masochist question (open question 5) stays open. Easy writes nothing and only logs the fresh hero's default level.
+- **Input.** The dialog has its own counters, fed from the pad read, which also blanks the pad for the game while the cards are up and until it is released. The keyboard map reaches the same pad state, so the keys that drive the game's menus drive the cards.
+- **Not done:** B to go back to the gender cards (the cards flip before `_SELECTED`, so the game's state would have to be replayed too). Theresa's destiny line still plays on the gender choice, before the cards. delta4o (2026-11-24) wants both.
+- **Plan for Theresa's line (read in the generated code, not built):**
+  - The line plays from `ProcessAndProcessAndProcess1819_826C72A8` (card input) at exactly two calls of `ProcessAndProcessAndProcess2485_82306098(r3 = an 8-byte handle on the stack, r4 = *(*(*(0x83496928)+8)+80), r5 = &key, r6 = 0)`.
+    - Boy: returns to `0x826C7A50`, key at `0x834A0000 - 20336` (`FE_30_HM`).
+    - Girl: returns to `0x826C7B98`, key at `-20332` (`FE_30_HF`).
+  - Each call is followed by `ProcessAndVcallAndClear3_822ADE08(handle)`, which calls through `+4` only when it is non-zero, then zeroes the handle (`.243:2077`).
+  - So an override of `82306098` can skip those two calls (zero the handle, remember the key) and play the line itself once a difficulty card is chosen, right before the New Game replay, then release its own handle.
+- **Plan for B (not built):**
+  - The cards' state is `+24` / `+104` / `+108` of the same front-end object (the card input writes `+24` at `0x826C7A44`).
+  - `sub_826C9460` handles `UNFREEZE` (`-20432`). For `+104` = 0 it rebuilds the start of the card screen: slide 1 plus `FE_20` (the "who is the hero" line), as after a dialog. It also reads the flags `+101`, `+192` and `+212`, which aren't decoded.
+  - On B: close the cards, set `+104` / `+108` / `+24` to 0, and replay `UNFREEZE` through `sub_826C9460` with the held `r3`.
+  - Fallback: back to the main menu.
+- **Names to give then:**
+  - `ProcessAndProcessAndProcess2485_82306098` → `Speech_PlayByKey`;
+  - `ProcessAndVcallAndClear3_822ADE08` → `SoundHandle_Release`;
+  - `ProcessAndProcessAndProcess1819_826C72A8` → `FrontMenu_HandleCardInput`;
+  - `sub_826C9460` → `FrontMenu_HandleUnfreeze`.
+- **Seen in game (2026-11-24, `fable_2_071.log` and `fable_2_072.log`):** four new games, on Medium (twice), Hard and Hardcore.
+  - Each started on the thread that sent the card event, so the 2 s fallback never ran.
+  - A fresh hero has game level 1 with the changed flag 0. After the start, the level was 2, 3 and 4.
+  - The level was written 3.4–4.1 s after the start.
+  - `stats` showed level 2 on the Medium game.
+  - delta4o: the cards look good; backgrounds on the cards would be a nice iteration. The card back is loaded (`extra images: 37 of 37`) but drawn faintly, at 55% under a dark panel.
+  - **The prompts follow the input device (built 2026-11-24, not tested yet):** at first the cards always showed the controller's A button. They now check whether the last input came from the keyboard or mouse (`ActiveDeviceIsSynthetic(0)`, the same check as the game's prompt swap in `fable2_keycap_swap.h`).
+    - After keyboard or mouse input, they show a key cap with the key that `[input] keyboard_gamepad_map` binds to that button: the first one-letter key, else the first key that isn't a mouse button. With the default map that's "E" for A and "B" for B.
+    - After controller input, they show the controller icons, as before.
+
+#### 19.3 Changing the level in game (F8)
+
+- **F8** opens the same cards over a running game (a pad shortcut isn't chosen yet). It was F7 at first, but the SDK already binds F7 to its achievements overlay (`bind_achievements` in `rex_app.cpp`), so each press toggled both (seen in game 2026-11-24). F3, F4, F5, F6, F7, F9, F12 and the backtick are all taken. The current level is marked.
+- **Hardcore** can't be entered in game (its card says "New Game only"). On a Hardcore hero the cards only show the level (decision 2).
+- **Applying.** On the next world update, a native call to `LuaPlayer_SetDifficultyLevel_823C9458` (our override, which also clears the damage-taken cache). That does set the changed flag, as the game's own command does.
+- **Inference until tested:** the world update runs while the pause menu is open, so the change applies there too.
+- **Seen in game (2026-11-24, `fable_2_075.log`, still on F7):** Medium → Hard, Hard → Medium and Medium → Easy. `stats` went 2 → 3, and B closed the cards without a change.
+  - Right after Hard, rent was +5,958 → +4,171 (×0.7).
+  - The diamond in the Bowerstone gift store (base value 6,250), shout-out test:
+
+    | Store | Level | Expected | Seen |
+    | --- | --- | --- | --- |
+    | Owned | Hard | 3,938 × 1.3 | 5,119 ✓ |
+    | Not owned (store sold) | Easy | the game's price | 5,207 |
+    | Not owned | Medium | 5,207 × 1.15 = 5,988 | 5,988 ✓ |
+    | Not owned | Hard | 5,207 × 1.3 = 6,769 | 6,769 ✓ |
+
+    So buying in a shop the hero doesn't own is confirmed.
+
+#### 19.4 The slot label on the Continue screen
+
+- **The level per slot.** After each save made in this run (its `mainsave.bin` written in the last 30 s), `<slot folder>/recomp_difficulty.txt` gets the level name. This is done on the UI thread, every 2 s, from the level last seen in game. A slot with no file counts as Easy. **Seen in game 2026-11-24:** Hero001 Medium, Hero002 Hard, Hero003 Hardcore.
+- **Slot names.** `Headers/00000001/HeroNNN.header` holds the slot name in UTF-16 big-endian at `+8` ("Hero 1") and the folder name in ASCII at `+0x108` ("Hero000"). Read on disk.
+- **How the game sets the label.** `FrontMenu_SelectLoadCard_826C9008` calls `sub_823F8268(element, *(r3+20), &names[card])` with `names = *(r3+120)`. That sets the element's text object (`*(*(element+4))`, string slot `+140`). A string handle points to a ref-counted record `{+0 UTF-16BE chars, +4 length, +12 refcount}`, and the text object keeps a reference to it (`ProcessAndReplaceRefCounted_822B85C8`). Verified in the generated code. The text is the whole card description: "Hero 2 / Bowerstone Old Town", a line break, then the chapter text (seen in game).
+- **What didn't work (2026-11-24):**
+  - Reading `textstring` with `getAttribute` returns the layout's placeholder ("fdggdf dfg …"), not the live text.
+  - Setting `textstring` has no visible effect.
+  - A first native try crashed: a stale header (`Hero004`, its save deleted) gave a card whose record pointed into text, and "QC01" was read as a pointer.
+- **In place (seen in game 2026-11-24, second try):** the level is written into the description record itself. " (Medium)" goes after the name, the rest moves right, and as many characters drop off the end of the chapter text, so the length and the allocation don't change. Every address is checked first (`VirtualQuery`: committed, writable, aligned).
+  - Done in `FrontMenu_SelectLoadCard_826C9008`, Hero 2, 3 and 4 showed Medium, Hard and Hardcore, and Hero 1 showed Easy after being selected again.
+  - But the first card shown on opening had no level: opening the screen sets card 0's text through another path. `SelectLoadCard` is then called with -1, which only plays a sound.
+- **Current version:** the same in-place write, moved into `sub_823F8268` (the element-text setter that both paths use). It acts on any text that reads "<known slot name> / …" followed by a line break.
+  - **Seen in game (screenshots, 2026-11-24):** "Hero 1 (Easy) / Bowerstone Market", "Hero 2 (Medium) / Bowerstone Old Town", "Hero 3 (Hard) / …".
+  - The first card shows its level straight away on opening, also after B and Continue again (confirmed by delta4o on the 21:38 build).
+- **Known problem:** the chapter text loses its last characters ("Living as an orphan in the Bowersto", "Forging the finest swords in"), because the string can't grow in place. The fix is a new, longer string: find the game's wide-string constructor (or what the `+8` field of the record is, in case it's a capacity).
+- **A cleaner way, later:** build a new string with the game's wide-string constructor (not found yet), or add the level where the description is built.
 
 ### 18. Feature code, step 1 (2026-11-22)
 

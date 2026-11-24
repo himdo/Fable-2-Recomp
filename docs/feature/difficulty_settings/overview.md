@@ -2,12 +2,20 @@
 
 **Status:** no commit yet · **Commits:** bd6846a (research probe, branch `feature/game-difficulty`, not on master) · **Last checked against:** 5f5f55f
 
-A new feature in progress: choosing a difficulty when starting a new game. The first feature code exists on `feature/game-difficulty` (2026-11-22): the multipliers work, with the level set from the console. The screens don't exist yet. The addresses, function names and evidence are in [technical.md](technical.md).
+A new feature in progress: choosing a difficulty when starting a new game. Feature code is on `feature/game-difficulty`:
+- the multipliers (2026-11-22);
+- since 2026-11-24, the difficulty cards on New Game and with F8 in game, plus a level file per save slot for the Continue screen's label (technical.md section 19).
+
+The 2026-11-24 work isn't committed yet. The addresses, function names and evidence are in [technical.md](technical.md).
 
 Progress so far:
 - **2026-11-15: the idea and a first research pass.** Read-only searches of the game's code and data.
 - **2026-11-20: research step 1.** Checked by hand and in game, with a temporary log probe on branch `feature/game-difficulty`.
 - **2026-11-22: research step 3, the multipliers decided, feature code step 1.** Gold, prices, damage taken and XP now follow the level (technical.md section 18).
+- **2026-11-24: feature code step 2.**
+  - The prologue checked: its gold and the music box can't get stuck on any level.
+  - The difficulty cards on New Game (after boy or girl) and with F8 in game.
+  - The level saved per slot, and a first go at showing it on the Continue screen.
 - **2026-11-21: research step 2.** We found why the game's own price difficulty never kicked in, and built a bigger log probe for the next play session (see "Research step 2" below). The notes moved from a personal folder into the repo.
 
 Findings are marked as:
@@ -214,12 +222,45 @@ Details are in technical.md sections 15 (code reading) and 16 (in-game results).
 ### Saves
 - **Confirmed in game:** what the Save box buttons do (Save and Quit, Quit without saving) and when a job autosave fires.
 
+## Feature step 2 (2026-11-24)
+
+### The prologue
+**Confirmed in the scripts:** collecting the 5 gold and paying for the music box works on every level.
+- The child's coins are handed out with a command that doesn't go through the gold multiplier, so each task still gives exactly 1 coin.
+- The music box is a scripted payment, not a shop, so the price multiplier doesn't touch it either.
+- The quest counts its own coin counter, not the purse.
+
+### The difficulty cards
+- **New Game:** after boy or girl, four cards appear: Easy "Little Sparrow", Medium "Hero of Albion", Hard "GuildMaster", Hardcore "Archon's Heir". Each shows its multipliers.
+  - Easy is selected first. A card must be picked (there's no going back to boy or girl yet).
+  - Then the game starts on that level.
+  - **Confirmed in game:** four new games started on the chosen level. `stats` showed level 2 for Medium.
+  - The level is set without the game's "changed" flag, so the Masochist achievement question (open question 5) stays open.
+- **In game:** F8 opens the same cards and marks the current level.
+  - Easy, Medium and Hard can be switched.
+  - Hardcore can't be picked there ("New Game only"), and a Hardcore hero can't change level (decision 2).
+  - Not tested in game yet. There's no controller shortcut yet.
+- **Theresa's destiny line** still plays on the boy or girl choice, before the cards.
+
+### The level on the Continue screen
+- **Confirmed in game:** each save now writes the hero's level into a small file in its slot folder.
+- **Confirmed in game:** the Continue screen shows "Hero 1 (Easy) / Bowerstone Market", "Hero 2 (Medium) / …" and so on. The level is written into the card's description text itself, because the GUI's text attribute doesn't change what's drawn.
+  - The catch: the text can't grow, so the end of the chapter text is cut off by the same number of characters. See technical.md 19.4.
+
 ## Where to pick up next time
 
+0. **2026-11-24 leftovers:**
+   - the slot label cuts off the end of the chapter text (it needs a longer string, not an in-place edit);
+   - check the cards' keyboard prompts ("E Choose" after keyboard input; built 2026-11-24, not tested);
+   - F8 Easy → Hard → Easy in game;
+   - round 4a: an unowned shop's buy and sell, buying a house;
+   - backgrounds on the cards;
+   - B to go back to boy or girl, and Theresa's destiny line after the cards (delta4o wants both; the plans are in technical.md 19.2);
+   - a controller shortcut for F8.
 1. ~~**Decide the starting multipliers**~~: done 2026-11-22 (decision 6). Easy is the original game.
 2. ~~**Name the functions**~~: done 2026-11-22. 44 functions now have real names, among them the gold callers, the shop and property price steps, rent, and the combat checks (technical.md "What changed").
 3. **Round 3 in game:** test the feature code (checklist below), and the leftovers from round 2: Golden touch on a monster, a region change and a house purchase, Save and Continue, the slot label, then New Game → boy or girl.
-4. **Feature code, next steps:** the New Game difficulty cards, the pause-menu entry, Hardcore saving, the slot label, then enemy health.
+4. **Feature code, next steps:** ~~the New Game difficulty cards~~ (done 2026-11-24), the pause-menu entry (F8 for now), Hardcore saving, the slot label (started), then enemy health.
 5. Next research: enemy health and telling friend from foe, then where the pause menu gets its items.
 6. Tidy up before anything goes to master:
    - delete the probe and its temporary hooks;

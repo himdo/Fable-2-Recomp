@@ -18,8 +18,8 @@
 //   G. Saves: SaveManager_Save_824E8990, LuaSaveManager_AutoSaveGame_824E8D28,
 //      _SaveFailQuestSave_824E8D18, _LoadFailQuestSave_824ECCB8 and
 //      PauseSaveBox_HandleEvent_82413988 (events 46/47 only).
-//   H. FrontMenu_StartNewGame_8237A0C8 and FrontMenu_HandleCardEvent_826C9188.
-//   I. FrontMenu_SelectLoadCard_826C9008.
+//   H. FrontMenu_StartNewGame_8237A0C8 (the card events moved to Difficulty.cpp).
+//   I. (FrontMenu_SelectLoadCard_826C9008 moved to Difficulty.cpp, the slot label.)
 //
 // Component lookup (read in the generated code of Item_GetBuyPrice_828E7F78,
 // Shopkeeper_GetBuyPrice_827AF5A0 and Shopkeeper_GetStockComponent_827B0358 for
@@ -52,8 +52,6 @@ extern "C" void __imp__LuaSaveManager_LoadFailQuestSave_824ECCB8(PPCContext& ctx
 extern "C" void __imp__PauseSaveBox_HandleEvent_82413988(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__HealthComp_Modify_8268BD90(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__FrontMenu_StartNewGame_8237A0C8(PPCContext& ctx, uint8_t* base);
-extern "C" void __imp__FrontMenu_HandleCardEvent_826C9188(PPCContext& ctx, uint8_t* base);
-extern "C" void __imp__FrontMenu_SelectLoadCard_826C9008(PPCContext& ctx, uint8_t* base);
 
 static_assert(std::is_trivially_copyable_v<PPCContext>, "saved and restored by copy");
 
@@ -218,8 +216,6 @@ void fable2_probe_sell_factors(PPCRegister& f1, PPCRegister& f30, PPCRegister& f
 namespace {
 
 PerKey g_health_calls;
-std::atomic<uint32_t> g_card_events{0};
-std::atomic<uint32_t> g_load_cards{0};
 
 }  // namespace
 
@@ -302,38 +298,9 @@ extern "C" void FrontMenu_StartNewGame_8237A0C8(PPCContext& __restrict ctx, uint
   __imp__FrontMenu_StartNewGame_8237A0C8(ctx, base);
 }
 
-extern "C" void FrontMenu_HandleCardEvent_826C9188(PPCContext& __restrict ctx, uint8_t* base) {
-  if (g_card_events.fetch_add(1) < 200) {
-    // The event hash is at r4+4; the names are the globals at 0x834A0000 - offset.
-    static constexpr std::array<std::pair<int32_t, const char*>, 8> kEvents = {{
-        {-20456, "BOY_ACTIVE"},
-        {-20452, "GIRL_ACTIVE"},
-        {-20448, "BOY_SELECTED"},
-        {-20444, "GIRL_SELECTED"},
-        {-20440, "LOAD_CARD_ACTIVE"},
-        {-20436, "LOAD_CARD_SELECTED"},
-        {-20432, "UNFREEZE"},
-        {-20428, "DIALOG_ACTIVE"},
-    }};
-    const uint32_t ev = ctx.r4.u32;
-    const uint32_t hash = Ptr(ev) ? U32(ev + 4) : 0;
-    const char* name = "?";
-    for (const auto& [off, n] : kEvents) {
-      if (hash != 0 && hash == U32(0x834A0000u + static_cast<uint32_t>(off))) name = n;
-    }
-    const uint32_t state = Ptr(ctx.r3.u32) ? U32(ctx.r3.u32 + 24) : 0;
-    REXSYS_INFO("[difficulty-probe] card event {} (hash {:08X}) state(+24)={} from {:08X}", name,
-                hash, state, static_cast<uint32_t>(ctx.lr));
-  }
-  __imp__FrontMenu_HandleCardEvent_826C9188(ctx, base);
-}
+// FrontMenu_HandleCardEvent_826C9188 is now the feature's (Difficulty.cpp: the New Game
+// cards), so the probe no longer logs card events.
 
 // --- I. Slot label ----------------------------------------------------------------
 
-extern "C" void FrontMenu_SelectLoadCard_826C9008(PPCContext& __restrict ctx, uint8_t* base) {
-  if (g_load_cards.fetch_add(1) < 200) {
-    REXSYS_INFO("[difficulty-probe] SelectLoadCard {} from {:08X}", ctx.r4.s32,
-                static_cast<uint32_t>(ctx.lr));
-  }
-  __imp__FrontMenu_SelectLoadCard_826C9008(ctx, base);
-}
+// FrontMenu_SelectLoadCard_826C9008 is now the feature's (Difficulty.cpp: the slot label).

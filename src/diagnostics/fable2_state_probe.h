@@ -752,6 +752,6 @@ extern "C" void InputGetPadState_822B2D60(PPCContext& ctx, uint8_t* base) {
   // Photo mode reads the pad here, then blanks it for the game while it is on
   // (src/core/fable2_photo_mode.h, which defines this override itself in
   // non-remote builds).
-  fable2::photomode::on_pad_read(base, user, state_ptr, ctx.r3.u32);
+  fable2::photomode::on_pad_read(ctx, base, user, state_ptr, ctx.r3.u32);
 }
 #endif  // FABLE2_REMOTE_CONTROL

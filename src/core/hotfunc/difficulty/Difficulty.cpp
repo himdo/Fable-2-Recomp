@@ -5,8 +5,9 @@
 // The level is the game's own per-hero difficulty level: the int at +80 of player 1's
 // type-33 (player) component, which LuaPlayer_SetDifficultyLevel_823C9458 writes and
 // the save keeps. Game level 1 or lower is Easy (the original game, every multiplier
-// 1.0), 2 Medium, 3 Hard, 4 or higher Hardcore. Until the New Game cards exist, set it
-// from the console: lua Player.SetDifficultyLevel(QuestManager.HeroEntity, 2)
+// 1.0), 2 Medium, 3 Hard, 4 or higher Hardcore. It is chosen on the New Game cards
+// (after boy or girl) or changed in game with F8 (src/core/difficulty_dialog.h); the
+// console still works: lua Player.SetDifficultyLevel(QuestManager.HeroEntity, 2)
 //
 // Where each multiplier goes:
 //   - Enemy damage and XP: Difficulty_GetMultiplier_823C92F0, which the game's own
@@ -25,16 +26,40 @@
 // Every line it logs starts with "[difficulty]".
 #include "fable_2_pch.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <functional>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>  // VirtualQuery: the slot label checks guest addresses first
+#endif
 
 #include <rex/logging/macros.h>
 #include <rex/ppc/context.h>
 
-#include "fable2_patches.h"  // fable2::patches::GuestBase
+#include "difficulty.h"
+#include "fable2_patches.h"   // fable2::patches::GuestBase
+#include "fable2_ui_events.h" // FINISHED_TRANSITIONING_TO_GAME
 
+extern "C" void __imp__FrontMenu_HandleCardEvent_826C9188(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_823F8268(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__Difficulty_GetMultiplier_823C92F0(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__LuaExperience_Modify_8251C8E0(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__LuaPlayer_SetDifficultyLevel_823C9458(PPCContext& ctx, uint8_t* base);
@@ -48,20 +73,14 @@ namespace {
 
 // --- The multipliers (overview decision 6) -----------------------------------------
 
-struct Multipliers {
-  const char* name;
-  double gold;          // gold gained
-  double prices;        // shop items and property: buy x, sell /
-  double enemy_damage;  // damage the hero takes
-  double enemy_health;  // not applied yet
-  double xp;            // XP the hero collects
-};
+using Multipliers = fable2::difficulty::LevelInfo;
 
-constexpr std::array<Multipliers, 4> kLevels = {{
-    {"Easy", 1.0, 1.0, 1.0, 1.0, 1.0},
-    {"Medium", 0.85, 1.15, 1.5, 1.25, 0.85},
-    {"Hard", 0.7, 1.3, 2.0, 1.5, 0.7},
-    {"Hardcore", 0.65, 1.4, 2.5, 2.0, 0.65},
+// Subtitles: delta4o's choice of 2026-11-20 (overview, "The idea").
+constexpr std::array<Multipliers, fable2::difficulty::kLevelCount> kLevels = {{
+    {"Easy", "Little Sparrow", 1.0, 1.0, 1.0, 1.0, 1.0},
+    {"Medium", "Hero of Albion", 0.85, 1.15, 1.5, 1.25, 0.85},
+    {"Hard", "GuildMaster", 0.7, 1.3, 2.0, 1.5, 0.7},
+    {"Hardcore", "Archon's Heir", 0.65, 1.4, 2.5, 2.0, 0.65},
 }};
 
 // --- Guest memory (big-endian) ------------------------------------------------------
@@ -304,4 +323,457 @@ extern "C" void MoneyComp_Modify_8239E698(PPCContext& __restrict ctx, uint8_t* b
     }
   }
   __imp__MoneyComp_Modify_8239E698(ctx, base);
+}
+
+// --- The difficulty cards: New Game and in game ----------------------------------------
+//
+// New Game: the cards come between the gender choice and the start (delta4o's design).
+// FrontMenu_HandleCardEvent_826C9188 starts the new game on BOY_SELECTED / GIRL_SELECTED:
+// it builds the creature name ("CreatureHeroChild" / "CreatureHeroFemaleChild") and calls
+// FrontMenu_StartNewGame_8237A0C8 with r3 = *(*(*(0x83496928)+8)+80). That path reads
+// only the event's hash at +4, never r3 (Verified in the generated code). So the override
+// holds the event back and opens the cards; once a card is chosen, the pad read replays
+// the same handler with an 8-byte event of the same hash, built on the guest stack.
+// The level is written to the new hero after FINISHED_TRANSITIONING_TO_GAME.
+
+namespace {
+
+// Event hash globals at 0x834A0000 + offset (technical.md section 7).
+constexpr int32_t kBoySelected = -20448;
+constexpr int32_t kGirlSelected = -20444;
+uint32_t EventHash(int32_t offset) {
+  return U32(0x834A0000u + static_cast<uint32_t>(offset));
+}
+
+size_t ThreadKey() { return std::hash<std::thread::id>{}(std::this_thread::get_id()); }
+
+std::atomic<uint32_t> g_held_event{0};  // the held-back SELECTED hash, 0 = none
+std::atomic<uint32_t> g_held_self{0};   // r3 of the held call
+std::atomic<size_t> g_card_thread{0};   // the thread that sent it
+std::atomic<int64_t> g_choice_ms{0};    // when the card was chosen
+thread_local bool t_replaying = false;
+
+std::atomic<int> g_newgame_level{-1};   // card index to write to the new hero
+std::atomic<int64_t> g_newgame_ms{0};   // when the new game was started
+std::atomic<uint32_t> g_hero_at_start{0};
+
+// Pad edges (pad-read thread only).
+uint16_t g_prev_buttons = 0;
+bool g_prev_left = false;
+bool g_prev_right = false;
+
+void ReplayCardEvent(PPCContext& ctx, uint8_t* base, uint32_t self, uint32_t hash) {
+  const PPCContext saved = ctx;
+  // A fresh frame below the caller's: back chain at sp, the event at sp + 0x100. The
+  // handler's own frame goes below sp.
+  const uint32_t sp = (ctx.r1.u32 - 0x200u) & ~0xFu;
+  W32(sp, ctx.r1.u32);
+  const uint32_t ev = sp + 0x100u;
+  W32(ev, 0);
+  W32(ev + 4, hash);
+  ctx.r1.u64 = sp;
+  ctx.r3.u64 = self;
+  ctx.r4.u64 = ev;
+  t_replaying = true;
+  __imp__FrontMenu_HandleCardEvent_826C9188(ctx, base);
+  t_replaying = false;
+  ctx = saved;
+}
+
+}  // namespace
+
+extern "C" void FrontMenu_HandleCardEvent_826C9188(PPCContext& __restrict ctx, uint8_t* base) {
+  const uint32_t ev = ctx.r4.u32;
+  const uint32_t hash = Ptr(ev) ? U32(ev + 4) : 0;
+  const bool boy = hash != 0 && hash == EventHash(kBoySelected);
+  const bool girl = hash != 0 && hash == EventHash(kGirlSelected);
+  if ((boy || girl) && !t_replaying) {
+    namespace d = fable2::difficulty;
+    if (g_held_event.load() == 0) {
+      g_held_self.store(ctx.r3.u32);
+      g_card_thread.store(ThreadKey());
+      d::Dialog().chosen.store(-1);
+      d::Dialog().nav_x.store(0);
+      d::Dialog().activate.store(0);
+      d::Dialog().back.store(0);
+      g_held_event.store(hash);
+      d::Dialog().mode.store(int(d::DialogMode::kNewGame));
+      REXSYS_INFO("[difficulty] New Game: {} chosen, showing the difficulty cards (thread {:X})",
+                  boy ? "boy" : "girl", ThreadKey());
+    }
+    return;  // the game starts once a card is chosen (OnPadRead)
+  }
+  __imp__FrontMenu_HandleCardEvent_826C9188(ctx, base);
+}
+
+namespace fable2::difficulty {
+
+const LevelInfo& Level(int index) {
+  return kLevels[static_cast<size_t>(std::clamp(index, 0, kLevelCount - 1))];
+}
+
+int CurrentIndex() {
+  const uint32_t comp = FindComponent(Player1Entity(), 33);
+  if (!Ptr(comp)) return -1;
+  return static_cast<int>(LevelIndex(static_cast<int32_t>(U32(comp + 80))));
+}
+
+DialogState& Dialog() {
+  static DialogState d;
+  return d;
+}
+
+void RequestInGameDialog() {
+  DialogState& d = Dialog();
+  if (DialogOpen()) return;
+  if (CurrentIndex() < 0) {
+    REXSYS_INFO("[difficulty] F8: no hero yet, the cards only open in game");
+    return;
+  }
+  d.chosen.store(-1);
+  d.nav_x.store(0);
+  d.activate.store(0);
+  d.back.store(0);
+  d.mode.store(int(DialogMode::kInGame));
+  REXSYS_INFO("[difficulty] in-game cards opened (level {})", Level(CurrentIndex()).name);
+}
+
+void Choose(int index) {
+  DialogState& d = Dialog();
+  d.chosen_mode.store(d.mode.load());
+  d.chosen.store(std::clamp(index, 0, kLevelCount - 1));
+  g_choice_ms.store(fable2::uievents::NowMs());
+  d.suppress_pad.store(true);  // the A that chose it must not reach the game
+  d.mode.store(int(DialogMode::kClosed));
+}
+
+void CloseDialog() {
+  DialogState& d = Dialog();
+  if (d.mode.load() != int(DialogMode::kInGame)) return;  // New Game needs a choice
+  d.suppress_pad.store(true);
+  d.mode.store(int(DialogMode::kClosed));
+  REXSYS_INFO("[difficulty] in-game cards closed, level unchanged");
+}
+
+bool OnPadRead(PPCContext& ctx, uint8_t* base, uint16_t buttons, int16_t lx) {
+  DialogState& d = Dialog();
+
+  // A card was chosen on New Game: start the game on the thread that sent the event.
+  const uint32_t held = g_held_event.load();
+  if (held != 0 && !DialogOpen() && d.chosen.load() >= 0 &&
+      d.chosen_mode.load() == int(DialogMode::kNewGame)) {
+    const bool same_thread = ThreadKey() == g_card_thread.load();
+    const bool late = fable2::uievents::NowMs() - g_choice_ms.load() > 2000;
+    if (same_thread || late) {
+      const int level = d.chosen.exchange(-1);
+      g_held_event.store(0);
+      g_hero_at_start.store(Player1Entity());
+      g_newgame_level.store(level);
+      g_newgame_ms.store(fable2::uievents::NowMs());
+      REXSYS_INFO("[difficulty] New Game on {}: starting the game ({} thread {:X}, card thread {:X})",
+                  Level(level).name, same_thread ? "same" : "OTHER", ThreadKey(), g_card_thread.load());
+      ReplayCardEvent(ctx, base, g_held_self.load(), held);
+    }
+  }
+
+  const bool left = (buttons & 0x0004) != 0 || lx < -16000;
+  const bool right = (buttons & 0x0008) != 0 || lx > 16000;
+  const uint16_t pressed = buttons & static_cast<uint16_t>(~g_prev_buttons);
+  const bool left_edge = left && !g_prev_left;
+  const bool right_edge = right && !g_prev_right;
+  g_prev_buttons = buttons;
+  g_prev_left = left;
+  g_prev_right = right;
+
+  if (DialogOpen()) {
+    if (pressed & 0x1000) d.activate.fetch_add(1);                  // A
+    if (pressed & (0x2000 | 0x0020)) d.back.fetch_add(1);           // B, Back
+    if (left_edge) d.nav_x.fetch_sub(1);
+    if (right_edge) d.nav_x.fetch_add(1);
+    return true;
+  }
+  if (d.suppress_pad.load()) {
+    if (buttons == 0 && lx > -7849 && lx < 7849) d.suppress_pad.store(false);
+    return true;
+  }
+  return false;
+}
+
+// The hero's level as last seen in game, for the slot label's level file (written on
+// the UI thread after a save).
+std::atomic<int> g_last_level{-1};
+
+void OnWorldUpdate(PPCContext& ctx, uint8_t* base) {
+  if (const int now = CurrentIndex(); now >= 0) g_last_level.store(now, std::memory_order_relaxed);
+
+  // New Game: write the chosen level to the new hero once the game is on screen.
+  if (const int level = g_newgame_level.load(); level >= 0) {
+    const int64_t started = g_newgame_ms.load();
+    const bool in_game = fable2::uievents::LastFired("FINISHED_TRANSITIONING_TO_GAME") > started;
+    const uint32_t hero = Player1Entity();
+    // Without the event, only trust a hero when none existed at the start (a fresh
+    // boot); otherwise it may still be the hero of the game left before.
+    const bool fresh = g_hero_at_start.load() == 0 && hero != 0;
+    const uint32_t comp = FindComponent(hero, 33);
+    if ((in_game || fresh) && Ptr(comp)) {
+      g_newgame_level.store(-1);
+      const int32_t before = static_cast<int32_t>(U32(comp + 80));
+      const uint8_t changed = U8(comp + 38);
+      if (level > 0) {
+        // Directly, without the "changed" flag at +38 that Player.SetDifficultyLevel sets:
+        // the Masochist question (open question 5) stays open.
+        W32(comp + 80, static_cast<uint32_t>(level + 1));
+        const uint32_t combat = FindComponent(hero, 57);
+        if (Ptr(combat)) W32(combat + 2164, 0);  // recompute the damage-taken factor
+      }
+      REXSYS_INFO(
+          "[difficulty] New Game: hero {:08X} had game level {} (changed flag {}), now {} ({}), "
+          "{} ms after the start{}",
+          hero, before, changed, level > 0 ? level + 1 : before, Level(level).name,
+          fable2::uievents::NowMs() - started, in_game ? "" : " (no transition event seen)");
+    }
+  }
+
+  // In game: a card chosen with F8.
+  DialogState& d = Dialog();
+  if (d.chosen_mode.load() == int(DialogMode::kInGame) && d.chosen.load() >= 0) {
+    const int level = d.chosen.exchange(-1);
+    const uint32_t comp = FindComponent(Player1Entity(), 33);
+    const int now = CurrentIndex();
+    if (level >= 0 && Ptr(comp) && now != 3 && level != 3 && level != now) {
+      const PPCContext saved = ctx;
+      ctx.r3.u64 = comp;
+      ctx.r4.s64 = level + 1;
+      LuaPlayer_SetDifficultyLevel_823C9458(ctx, base);  // the override: also clears the cache
+      ctx = saved;
+      REXSYS_INFO("[difficulty] in game: {} -> {}", Level(now).name, Level(level).name);
+    } else if (level >= 0) {
+      REXSYS_INFO("[difficulty] in game: {} kept", now >= 0 ? Level(now).name : "?");
+    }
+  }
+}
+
+// --- The slot label ----------------------------------------------------------------------
+
+namespace {
+
+constexpr const char* kLevelFile = "recomp_difficulty.txt";
+std::mutex g_slots_mu;
+std::filesystem::path g_save_root;
+std::vector<std::pair<std::string, int>> g_slot_levels;  // slot name ("Hero 1") -> card index
+const auto g_process_start = std::filesystem::file_time_type::clock::now();
+
+int ParseLevel(std::string s) {
+  while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' ')) s.pop_back();
+  for (int i = 0; i < kLevelCount; ++i) {
+    if (s == Level(i).name) return i;
+  }
+  return 0;  // no file or unknown: Easy, the original game (decision 6)
+}
+
+// The slot name in a HeroNNN.header: UTF-16 big-endian from +8; the folder name in
+// ASCII from +0x108 (read on disk 2026-11-24: "Hero 1" / "Hero000", "Hero 6" / "Hero005").
+bool ReadHeader(const std::filesystem::path& file, std::string& name, std::string& folder) {
+  std::ifstream in(file, std::ios::binary);
+  std::vector<unsigned char> b((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  if (b.size() < 0x128) return false;
+  name.clear();
+  for (size_t i = 8; i + 1 < 0x108 && name.size() < 64; i += 2) {
+    const unsigned c = (unsigned(b[i]) << 8) | b[i + 1];
+    if (c == 0) break;
+    if (c < 0x80) {
+      name += char(c);
+    } else if (c < 0x800) {
+      name += char(0xC0 | (c >> 6));
+      name += char(0x80 | (c & 0x3F));
+    } else {
+      name += char(0xE0 | (c >> 12));
+      name += char(0x80 | ((c >> 6) & 0x3F));
+      name += char(0x80 | (c & 0x3F));
+    }
+  }
+  folder.clear();
+  for (size_t i = 0x108; i < 0x128 && b[i] != 0; ++i) folder += char(b[i]);
+  return !name.empty() && !folder.empty();
+}
+
+}  // namespace
+
+void SetSaveRoot(const std::filesystem::path& root) {
+  std::lock_guard<std::mutex> lock(g_slots_mu);
+  g_save_root = root;
+}
+
+void PollSaveSlots() {
+  static int64_t last = 0;
+  const int64_t now_ms = fable2::uievents::NowMs();
+  if (now_ms - last < 2000) return;
+  last = now_ms;
+  std::filesystem::path root;
+  {
+    std::lock_guard<std::mutex> lock(g_slots_mu);
+    root = g_save_root;
+  }
+  if (root.empty()) return;
+
+  namespace fs = std::filesystem;
+  std::error_code ec;
+  std::vector<std::pair<std::string, int>> table;
+  const auto fnow = fs::file_time_type::clock::now();
+  const int level = g_last_level.load(std::memory_order_relaxed);
+  for (const auto& profile : fs::directory_iterator(root, ec)) {
+    const fs::path title = profile.path() / "4D5307F1";
+    const fs::path data = title / "00000001";
+    const fs::path headers = title / "Headers" / "00000001";
+    std::error_code e2;
+    if (!fs::is_directory(data, e2)) continue;
+
+    // 1. A save written in this run, in the last 30 s, gets the hero's level next to it.
+    if (level >= 0) {
+      for (const auto& slot : fs::directory_iterator(data, e2)) {
+        std::error_code e3;
+        const auto saved = fs::last_write_time(slot.path() / "mainsave.bin", e3);
+        if (e3 || saved < g_process_start || fnow - saved > std::chrono::seconds(30)) continue;
+        const fs::path file = slot.path() / kLevelFile;
+        const auto stamped = fs::last_write_time(file, e3);
+        if (!e3 && stamped >= saved) continue;
+        std::ofstream(file, std::ios::trunc) << Level(level).name << "\n";
+        REXSYS_INFO("[difficulty] slot {}: saved on {}", slot.path().filename().string(), Level(level).name);
+      }
+    }
+
+    // 2. The slot names and their levels, for the label.
+    for (const auto& h : fs::directory_iterator(headers, e2)) {
+      if (h.path().extension() != ".header") continue;
+      std::string name, folder;
+      if (!ReadHeader(h.path(), name, folder)) continue;
+      std::ifstream in(data / folder / kLevelFile);
+      std::string text;
+      std::getline(in, text);
+      table.emplace_back(name, ParseLevel(text));
+    }
+  }
+  std::lock_guard<std::mutex> lock(g_slots_mu);
+  g_slot_levels = std::move(table);
+}
+
+}  // namespace fable2::difficulty
+
+// --- The slot label: "Hero 2 (Medium) / Bowerstone Old Town" ----------------------------
+//
+// The Continue screen's shared loadgame.SaveGameDescription text is set through
+// sub_823F8268(element r3, r4, &handle r5), which copies the string handle into the text
+// object's slot (*(*(element+4)))+140 and marks it changed. FrontMenu_SelectLoadCard_826C9008
+// passes &names[card] with names = *(fe+120); opening the screen sets card 0 through another
+// path that also ends here (seen in game 2026-11-24: the first card had no level until it was
+// selected again). A handle points to a ref-counted record {+0 UTF-16BE chars, +4 length,
+// +12 refcount} (Verified in the generated code: .156:10993-11011, .216:4627,
+// ProcessAndProcessAndProcess1666_822D6998, ProcessAndReplaceRefCounted_822B85C8). The text
+// is the whole card description: "Hero 2 / Bowerstone Old Town\nLiving as an orphan ...".
+//
+// Setting the GUI's textstring attribute has no visible effect, and making a new string
+// would need the game's wide-string constructor (not found yet). So, before the text is
+// set, a description of a known slot ("<slot name> / ...", the name from the headers) gets
+// the level written into it: " (Medium)" after the name, the rest moved right, and the same
+// number of characters dropped off the end of the flavour text. The length doesn't change,
+// so nothing is allocated. Every address is checked first (a stale header's card pointed
+// into text: "QC01" read as a pointer crashed an earlier try).
+
+namespace {
+
+#ifdef _WIN32
+// The end of the committed, readable (and writable, if asked) region holding a, or 0.
+const uint8_t* HostRegionEnd(uint32_t a, bool write) {
+  if (fable2::patches::GuestBase() == nullptr || a < 0x10000u) return nullptr;
+  const uint8_t* p = Mem(a);
+  MEMORY_BASIC_INFORMATION mbi{};
+  if (VirtualQuery(p, &mbi, sizeof(mbi)) == 0 || mbi.State != MEM_COMMIT) return nullptr;
+  const DWORD prot = mbi.Protect & 0xFF;
+  if ((mbi.Protect & PAGE_GUARD) != 0 || prot == PAGE_NOACCESS) return nullptr;
+  if (write && !(prot == PAGE_READWRITE || prot == PAGE_EXECUTE_READWRITE || prot == PAGE_WRITECOPY ||
+                 prot == PAGE_EXECUTE_WRITECOPY))
+    return nullptr;
+  return static_cast<const uint8_t*>(mbi.BaseAddress) + mbi.RegionSize;
+}
+#else
+const uint8_t* HostRegionEnd(uint32_t, bool) { return nullptr; }
+#endif
+
+bool HostRange(uint32_t a, size_t n, bool write) {
+  const uint8_t* end = HostRegionEnd(a, write);
+  return end != nullptr && Mem(a) + n <= end;
+}
+
+uint16_t U16(uint32_t a) { return static_cast<uint16_t>((U8(a) << 8) | U8(a + 1)); }
+void W16(uint32_t a, uint16_t v) {
+  *Mem(a) = static_cast<uint8_t>(v >> 8);
+  *Mem(a + 1) = static_cast<uint8_t>(v & 0xFF);
+}
+
+constexpr uint32_t kMaxChars = 1024;
+
+// `handle` = the address of a string handle about to be set as some element's text.
+void LabelSlotText(uint32_t handle) {
+  namespace d = fable2::difficulty;
+  if ((handle & 3u) != 0 || !HostRange(handle, 4, false)) return;
+  const uint32_t rec = U32(handle);
+  if ((rec & 3u) != 0 || !HostRange(rec, 16, false)) return;
+  const uint32_t chars = U32(rec);
+  if ((chars & 1u) != 0) return;
+  const uint8_t* region_end = HostRegionEnd(chars, true);
+  if (region_end == nullptr) return;
+  const uint32_t room = static_cast<uint32_t>(std::min<std::ptrdiff_t>(region_end - Mem(chars), std::ptrdiff_t{2} * kMaxChars) / 2);
+  if (room < 2) return;
+
+  // Cheap filter first: the first character must start one of the slot names.
+  std::vector<std::pair<std::string, int>> slots;
+  {
+    std::lock_guard<std::mutex> lock(d::g_slots_mu);
+    slots = d::g_slot_levels;
+  }
+  const uint16_t first = U16(chars);
+  bool maybe = false;
+  for (const auto& [slot, lv] : slots) maybe = maybe || (!slot.empty() && static_cast<uint8_t>(slot[0]) == first);
+  if (!maybe) return;
+
+  uint32_t len = 0;
+  while (len < room && U16(chars + 2 * len) != 0) ++len;
+  if (len == 0 || len >= room) return;
+  std::string text;
+  for (uint32_t i = 0; i < len; ++i) {
+    const uint16_t c = U16(chars + 2 * i);
+    text += c < 0x80 ? static_cast<char>(c) : '?';
+  }
+  // A card description: "<name> / <place>\n<text>".
+  const size_t line_end = text.find('\n');
+  const size_t name_end = text.find(" / ");
+  if (line_end == std::string::npos || name_end == std::string::npos || name_end > line_end) return;
+  const std::string name = text.substr(0, name_end);
+  int level = -1;
+  for (const auto& [slot, lv] : slots) {
+    if (slot == name) level = lv;
+  }
+  if (level < 0) return;
+  for (int i = 0; i < d::kLevelCount; ++i) {
+    if (text.compare(name_end, 2 + std::strlen(d::Level(i).name), std::string(" (") + d::Level(i).name) == 0)
+      return;  // already labelled
+  }
+  const std::string suffix = std::string(" (") + d::Level(level).name + ")";
+  const uint32_t k = static_cast<uint32_t>(suffix.size());
+  // Keep the name's line: only drop characters that come after the line break.
+  if (len - line_end <= k + 1) {
+    REXSYS_INFO("[difficulty] slot label: no room for the level in '{}'", name);
+    return;
+  }
+  for (uint32_t i = len - 1; i >= name_end + k; --i) W16(chars + 2 * i, U16(chars + 2 * (i - k)));
+  for (uint32_t i = 0; i < k; ++i)
+    W16(chars + 2 * (static_cast<uint32_t>(name_end) + i), static_cast<uint8_t>(suffix[i]));
+  REXSYS_INFO("[difficulty] slot label: '{}{}'", name, suffix);
+}
+
+}  // namespace
+
+extern "C" void sub_823F8268(PPCContext& __restrict ctx, uint8_t* base) {
+  LabelSlotText(ctx.r5.u32);
+  __imp__sub_823F8268(ctx, base);
 }
