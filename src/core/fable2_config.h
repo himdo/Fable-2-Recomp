@@ -216,6 +216,10 @@ struct Values {
   // [patches] disable_msaa: render without the game's multisample anti-aliasing
   // (override of InitRenderSettings_8238DE58, src/core/hotfunc/render/InitRenderSettings_8238DE58.cpp).
   bool disable_msaa = false;
+  // [patches] async_pipelines: create new GPU pipelines in the background and
+  // skip the draws needing them until ready, instead of stopping (SDK cvars
+  // async_shader_compilation and vulkan_async_skip_draws).
+  bool async_pipelines = false;
   // [patches] realtime_texture_morphing: build the hero/dog morphed skin
   // textures on the GPU (the game's own RealTimeTextureMorphing mode) instead
   // of CPU-compressing a resolved scratch texture, so they are not black on a

@@ -321,6 +321,17 @@ disable_motion_blur = false
 # Default: false
 disable_msaa = false
 
+# Compile Without Stopping (SDK cvars async_shader_compilation and
+# vulkan_async_skip_draws): the first time a new kind of object, effect or
+# material shows up, its GPU pipeline has to be compiled, which stops the game
+# for a moment (a stutter, mostly in places you haven't been to yet; compiled
+# pipelines are saved, so each happens once). true = compile it in the
+# background and leave that object out until it's ready: no stutter, but the
+# object can appear a few frames late the first time it's seen. Takes effect at
+# start-up. false = stop and compile, as original.
+# Default: false
+async_pipelines = false
+
 # Realtime Texture Morphing (mid-asm hook fable2_hook_realtime_texture_morphing):
 # the hero's and dog's morphed skin textures are rendered straight into their
 # final texture on the GPU (the game's own RealTimeTextureMorphing mode)
@@ -713,6 +724,8 @@ bool Load(const std::filesystem::path& path) {
                    values.disable_motion_blur);
     values.disable_msaa =
         Read<bool>(patches_table, "patches", "disable_msaa", "boolean", values.disable_msaa);
+    values.async_pipelines = Read<bool>(patches_table, "patches", "async_pipelines", "boolean",
+                                        values.async_pipelines);
     values.realtime_texture_morphing =
         Read<bool>(patches_table, "patches", "realtime_texture_morphing", "boolean",
                    values.realtime_texture_morphing);

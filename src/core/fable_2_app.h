@@ -242,6 +242,15 @@ class Fable2App : public rex::ReXApp {
         }
       }
     }
+    // [patches] async_pipelines sets GPU-plugin cvars, so here.
+    if (fable2::config::Get().async_pipelines) {
+      for (const char* cvar : {"async_shader_compilation", "vulkan_async_skip_draws"}) {
+        if (rex::cvar::GetFlagSource(cvar) == rex::cvar::Source::kDefault &&
+            !rex::cvar::SetFlagByName(cvar, "true")) {
+          REXSYS_WARN("[fable2-config] {} cvar missing (SDK without it?)", cvar);
+        }
+      }
+    }
     // [patches] faster_render_targets sets GPU-plugin cvars, so here.
     {
       const char* value = fable2::config::Get().faster_render_targets ? "true" : "false";
