@@ -321,16 +321,17 @@ disable_motion_blur = false
 # Default: false
 disable_msaa = false
 
-# Compile Without Stopping (SDK cvars async_shader_compilation and
-# vulkan_async_skip_draws): the first time a new kind of object, effect or
-# material shows up, its GPU pipeline has to be compiled, which stops the game
-# for a moment (a stutter, mostly in places you haven't been to yet; compiled
-# pipelines are saved, so each happens once). true = compile it in the
-# background and leave that object out until it's ready: no stutter, but the
-# object can appear a few frames late the first time it's seen. Takes effect at
-# start-up. false = stop and compile, as original.
-# Default: false
-async_pipelines = false
+# Async Shader Compilation (SDK cvars async_shader_compilation and
+# vulkan_async_skip_draws): the first time a new shader is needed (a new kind of
+# object, effect or material), the game would stop for a moment to compile it:
+# a stutter, mostly in places you haven't been to yet (compiled shaders are
+# saved, so each happens once). true = compile it in the background and leave
+# whatever needs it (part of an object, or an effect) out until it's ready: no
+# stutter, but it can appear a moment late the first time it's seen. Also in
+# the pause menu's Deck Recomp folder, where a change applies at once.
+# false = stop and compile, as original.
+# Default: true
+async_pipelines = true
 
 # Realtime Texture Morphing (mid-asm hook fable2_hook_realtime_texture_morphing):
 # the hero's and dog's morphed skin textures are rendered straight into their

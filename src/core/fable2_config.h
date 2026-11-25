@@ -218,8 +218,8 @@ struct Values {
   bool disable_msaa = false;
   // [patches] async_pipelines: create new GPU pipelines in the background and
   // skip the draws needing them until ready, instead of stopping (SDK cvars
-  // async_shader_compilation and vulkan_async_skip_draws).
-  bool async_pipelines = false;
+  // async_shader_compilation and vulkan_async_skip_draws). On by default.
+  bool async_pipelines = true;
   // [patches] realtime_texture_morphing: build the hero/dog morphed skin
   // textures on the GPU (the game's own RealTimeTextureMorphing mode) instead
   // of CPU-compressing a resolved scratch texture, so they are not black on a
