@@ -255,7 +255,7 @@ Controls the fit-window module (`src/core/fable2_fit_window.h`), which renders a
 | `ws native` | `ws native on\|off` | `fit_window_native_16x9`: keeps the loading screens and saving banner at 16:9. | |
 | `ws log` | `ws log on\|off` | `fit_window_ui_log`: the `[fit-window]` layout log. | |
 | `ws apply` | `ws apply` | Writes the aspect again now. | |
-| `ws tune` | `ws tune <cover\|page\|card\|bookcover\|paper> <factor>` | Sets one of the layout script's menu offsets live, as a multiple of the extra width per side (so 16:9 stays vanilla). | Defaults 1, 1.2, 1.8, 1.2, 1.5; see `docs/FIT_WINDOW.md`. |
+| `ws tune` | `ws tune <cover\|page\|card\|bookcover\|paper> <factor>` | Sets one of the layout script's menu offsets live, as a multiple of the extra width per side (so 16:9 stays vanilla). | Defaults 1, 1.2, 1.8, 1.2, 1.5; see [fit_window](../fit_window/technical.md). |
 
 ## Gamepad (console-v11)
 

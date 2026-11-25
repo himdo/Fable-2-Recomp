@@ -20,10 +20,10 @@ mode (stock 0.10.0 DLLs) was unaffected.
 
 The crash is a NULL dereference inside the *game's own* memory-pool manager:
 
-- `sub_83231BE8` reads the pool descriptor pointer from static
+- `Free_SizeBucketed_83231BE8` reads the pool descriptor pointer from static
   `*0x83496BD4` (value `0x40001880`, valid), then reads the pool's
   free-list head `*(*(0x83496BD4) + 12)`, which was **0**.
-- It passes that NULL head to `sub_832304E8`, whose first instruction
+- It passes that NULL head to `Pool_FreeByAddress_832304E8`, whose first instruction
   `lwz r9, 28(r4)` faults at guest `0x1C`.
 
 At startup the same field was non-NULL (init probe: `+12 (head) =
