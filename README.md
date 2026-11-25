@@ -46,30 +46,11 @@ Delete the `Fable2-SteamDeck` folder (it holds everything: game files, saves, se
 
 ## Playing
 
-- **Controls:** the Deck's controls work like an Xbox 360 controller, with the Steam Deck's own buttons shown in the game's prompts. In Desktop Mode, keyboard and mouse work too (see [Keyboard and mouse](#keyboard-and-mouse)).
+- **Controls:** the Deck's controls work like an Xbox 360 controller, with the Steam Deck's own buttons shown in the game's prompts.
 - **Saves** are kept in `Fable2-SteamDeck/saves`. Back up that folder to keep your progress.
 - **Settings in the game:** pause the game and open **Deck Recomp**, just below *Options* (see [Settings](#settings)).
 - **First visits:** the first time an area's shaders are seen, they are prepared for the Deck's GPU, which can cause brief stalls. They are compiled in the background, so this is much reduced, and later visits are smooth.
 - **Battery:** the game runs at up to 60 fps. For longer battery life, set the Quick Access Menu's Performance tab to 40 Hz with a 40 fps limit, or choose 30 or 40 fps under *Frame Rate Cap* in the Deck Recomp menu.
-
-### Keyboard and mouse
-
-Keyboard and mouse act as a gamepad (together with a real one), with mouse look: moving the mouse turns the camera.
-
-| Key | Game input |
-|---|---|
-| `W` `A` `S` `D` | Move (left stick) |
-| Left mouse button | `X` (melee) |
-| Right mouse button | `Y` (ranged) |
-| Middle mouse button / `B` | `B` (will) |
-| `Shift` / `E` | `A` |
-| `Q` / `R` | Left / right trigger |
-| `Z` / `Tab` | Left / right shoulder |
-| Arrow keys | D-pad |
-| `Escape` | Start (pause menu) |
-| `M` | Back |
-
-To remap, edit `keyboard_gamepad_map` under `[input]` in `fable2_config.toml` (format `Key:Button,Key:Button,...`); the mouse look settings are in the same section. The details are in [UPSTREAM-README.md](UPSTREAM-README.md#keyboard-controls).
 
 ### Known issues
 
@@ -105,7 +86,6 @@ All settings, including ones the menu doesn't show, are in `fable2_config.toml` 
 |---|---|---|
 | `interpolation` (`[patches]`) | `true` | Capes and coats move smoothly with the body |
 | `disable_msaa` (`[patches]`) | `false` | `true` turns off the game's 2x anti-aliasing: more GPU headroom, slightly jaggier edges (takes effect at the next start) |
-| `keyboard_gamepad_map` (`[input]`) | see [Keyboard and mouse](#keyboard-and-mouse) | Keyboard layout in Desktop Mode |
 
 ## Performance
 
