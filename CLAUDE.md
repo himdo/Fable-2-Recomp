@@ -37,11 +37,12 @@ Game content (`default.xex`, `data/`) is supplied by the user and never committe
 | `build.cmd package` | Release + launcher + zip in `out\dist` | Same as the Release build |
 | `./build.sh` | Linux Release build in `out/build/linux-amd64-release` (see `Linux.md`) | Linux, Clang 20 + lld, Ninja, CMake ≥ 3.25, game files |
 | `python tools/generate_game_versions.py --check` | Checks the generated version constants | Python, any OS |
+| `python tools/check_manifest_names.py --base origin/master` | Checks that the manifest entries a branch adds or renames follow the naming rules | Python, git, any OS |
 | `python -m pytest` | Python tests (`pip install -r tests/requirements.txt` first) | Python 3.11+, any OS |
 | `dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release` | Launcher logic tests | .NET 8 |
 | `tests\run_native_tests.cmd` | Catch2 native tests (`FABLE2_COVERAGE=1` for coverage) | Windows, clang ≥ 22 on PATH, VS C++ tools, SDK submodule |
 
-None of the tests need game files. CI (`.github/workflows/tests.yml`) runs all four test commands on Windows for every PR. CI never builds the game.
+None of the tests need game files. CI (`.github/workflows/tests.yml`) runs all five test commands on Windows for every PR. CI never builds the game.
 
 ## Workflow
 
@@ -70,6 +71,7 @@ Commit subjects are sentence case and imperative, e.g. "Add a Disable MSAA optio
 - **Format:** `Subsystem_WhatItDoes_ADDRESS`, e.g. `Cloth_Step_8219ADD8`, `TextureMorph_ReleaseJobs_8235E0D8`. For a Lua binding, use its Lua name: `LuaDebug_SetDrawGUI_823AC520`.
 - **Entry:** a comment block (what it does, its arguments such as `r3 = the timer`, who calls it, and whether that was read in the generated code or inferred), then `[entrypoint.functions."0xADDRESS"]` and `name = "..."`. If the address already has an entry, rename it in place: TOML keys must stay unique.
 - **After renaming,** update every use of the old name (`git grep` in `src/`, `tools/`, `docs/` and the manifest's own comments). The next build reruns codegen.
+- **Check the rules:** `python tools/check_manifest_names.py --base origin/master` checks that each entry the branch adds or renames has a real name in this format, a comment above it, an address suffix that matches and a unique name. CI runs it on every PR.
 - **No clashes with the runtime:** a name must not equal an XAPI export of the runtime, or it silently shadows the kernel import (such functions get a `_Guest` suffix). Check with `python tools/check_manifest_collisions.py fable_2_manifest.toml out/tooling/runtime-sdk/win-amd64/bin/rexruntime.dll`. Pass the DLL path: the default search folders are out of date.
 
 **Game versions.** After editing `constants/game_versions.json`, run `python tools/generate_game_versions.py` and commit the regenerated files in the same commit.

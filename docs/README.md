@@ -37,6 +37,7 @@ When you finish a fix or a feature, add or update its folder and its row below. 
 | [german_goty_support](feature/german_goty_support/overview.md) | merged | bfcc5d6, 77059af | Accept the German GOTY XEX alongside USA/Europe |
 | [guest_patches](feature/guest_patches/overview.md) | merged | cab738b, #208, #210, #226, #228 | Xenia-style guest patches, mid-asm hook patches and their `[patches]` switches |
 | [legal_and_distribution](feature/legal_and_distribution/overview.md) | no commit yet (research only) | — | Late-2026 recomp takedowns and the no-game-data distribution rules |
+| [manifest_naming_check](feature/manifest_naming_check/overview.md) | no commit yet | — | A CI check that new and renamed manifest names follow the naming rules and have a comment |
 | [mouse_aim](feature/mouse_aim/overview.md) | merged | 49c70ab (#183) | The mouse moves the ranged aim reticle; highlight release |
 | [mouse_camera](feature/mouse_camera/overview.md) | merged | 80e8361 (#177) | Direct mouse camera: a fixed angle per count, no stick top speed or coast |
 | [player_complaints](feature/player_complaints/overview.md) | no commit yet (research only) | — | What players complained about in 2008–2009, and what the recomp already covers |
