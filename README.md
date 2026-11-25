@@ -23,7 +23,7 @@ You need your own Fable 2 GOTY disc image (`.iso`) and about 7 GB of free space.
 
 Original GOTY USA/Europe and German GOTY dumps are supported by the default
 `goty-compatible` build profile. Other XEX revisions remain rejected. See
-[German GOTY validation and known limits](docs/GERMAN_GOTY_SUPPORT.md).
+[German GOTY validation and known limits](docs/feature/german_goty_support/technical.md).
 [x] Can be used to beat the game\
 [x] Guild chest fully unlocked\
 [x] Uncapped framerate / increased framerate\
@@ -91,7 +91,7 @@ https://discord.gg/8TQUZpPNeR
 # Notes for running the game
 - **How to extract (built-in, recommended):** the launcher has an **Extract from ISO** button. Click **Extract from ISO** and pick your disc image (`.iso`). It first checks the iso against the supported-version list, and only once that matches does it extract disc (`default.xex` and `data/`) into the launcher's own folder. No separate tool is required.
 - **How to extract (external GUI tool):** alternatively, rip the disc to an ISO and open it with **[XboxImageExtractor](https://github.com/dromex1/XboxImageExtractor)** — a GUI tool for Xbox 360 game images. It lists the image's filesystem; select `default.xex` and `data` and extract them into the project root (`data` extract as folders).
-- **You must supply the game content yourself** (it is not in the repo): rip the Fable 2 GOTY (USA/EU) disc (see the hashes in [German GOTY support](docs/GERMAN_GOTY_SUPPORT.md)) and put `default.xex` and `data/` in the project root. The build does not copy this into the build directories   
+- **You must supply the game content yourself** (it is not in the repo): rip the Fable 2 GOTY (USA/EU) disc (see the hashes in [German GOTY support](docs/feature/german_goty_support/technical.md)) and put `default.xex` and `data/` in the project root. The build does not copy this into the build directories   
 - **Saves live in `<build dir>\saves\`** — back that folder up to keep your progress, and copy it between build trees (Debug/Release) or machines to carry a save over.
 - The `--game_data_root <path>` override still points the content root at a different tree (e.g. to run from a shared content copy without staging); saves/cache still land next to the exe. The recomp Lua scripts (`data/scripts/recomp`) are copied from next to the exe into that tree at each start, and the exe's copies win.
 - Although this was made for the US / Europe GOTY version I have been able to run the following regions: Germany, France, Italy, Russia, and Spain. Your milage may very if you use those regions.
@@ -144,8 +144,8 @@ game recreates it with defaults on launch if it is ever missing. Loaded in
   "High Tick Rate" / "Higher HF Tick Rate"; turn both on together), which
   also drive the guest-image data writes below, and `gui_every_hf_tick` (on
   by default), which updates subtitles and HUD text every HF tick
-  (`docs/patches.md`, "GUI every HF tick"), and `interpolation` (on by
-  default), which keeps cloth in step with the drawn body (`docs/patches.md`,
+  (`docs/feature/guest_patches/technical.md`, "GUI every HF tick"), and `interpolation` (on by
+  default), which keeps cloth in step with the drawn body (`docs/feature/guest_patches/technical.md`,
   "Interpolation"). There is no separate patch file.
 
 
@@ -219,7 +219,7 @@ there to change them permanently; the launcher's Advanced Options set the mode
 and `mouse_look_scale`), the command line overrides per launch, and the cvars
 are hot-reloadable from the in-game console. `f2 mouse` shows the current
 settings, and `f2 mouse mode|sens|invert` change them live (see
-`docs/console/CONSOLE-COMMANDS.md`, "Mouse look"). Example: `fable_2.exe
+`docs/feature/console_commands/technical.md`, "Mouse look"). Example: `fable_2.exe
 --mouse_look_scale 512` for a more sensitive camera.
 
 ### Mouse aim
@@ -289,7 +289,7 @@ There is no patch file: each patch is switched on by a `[patches]` key in
 `fable2_config.toml` (currently `high_tick_rate` and `higher_hf_tick_rate`).
 **Scope: data patches only** — code-region ops are inert in this recomp
 (guest `.text` is never executed); code patches are mid-asm hooks instead.
-Full details: `docs/patches.md`.
+Full details: `docs/feature/guest_patches/technical.md`.
 
 ## Guest function-call tracing (fable2_func_trace.log)
 
@@ -529,7 +529,7 @@ build.cmd -release [t]  # build as Release (-O3) instead of Debug (-r is short f
 
 Both Debug and Release build the pinned, patched SDK from source, and a first Debug
 build also builds the Release SDK because only that one ships the codegen tool; see
-[runtime build requirements](docs/RUNTIME_FIXES.md). Game content is required
+[runtime build requirements](docs/fix/runtime_fixes/technical.md). Game content is required
 for code generation but is never published with this repository.
 
 Manual/advanced setup (normally not needed):
@@ -623,7 +623,7 @@ tools\build_sdk_vulkan.cmd     # builds the SDK source with REXGLUE_USE_VULKAN=O
 The SDK source is the stock `rexglue/rexglue-sdk` repo **plus this project's
 local modifications** (`thirdparty/rexglue-sdk-local.patch`: the main-menu
 crash fix in `exception_handler_win.cpp` + `xmemory.cpp`, and the Vulkan/
-FPS instrumentation — see `docs/main_menu_crash_fix.md` and the patch
+FPS instrumentation — see `docs/fix/main_menu_crash/technical.md` and the patch
 header). `tools/setup_sdk_src.cmd` reproduces that exact tree from the
 tracked patch + submodule pins, so the source never has to live outside
 this repo.
@@ -656,6 +656,14 @@ Migrated from the XenonRecomp config (`XenonRecomp/fable2.toml`):
 - Known runtime risk: codegen logs a handful of non-fatal "Unresolved conditional branch" warnings (e.g. `0x82C8D408`, `0x82C99E74`, `0x82C9A0BC`); those paths emit `REX_FATAL` if hit.
 
 ## Function naming rule (important)
+
+**Name what you discover.** The long-term goal is a readable decompilation
+that supports modding. When a PR calls, hooks, overrides or explains a game
+function, give it a real name in `fable_2_manifest.toml` in the same PR
+(`Subsystem_WhatItDoes_ADDRESS`, e.g. `Cloth_Step_8219ADD8`), with a comment
+saying what it does and how you know. Rename generic `sub_` /
+`ProcessAndProcessAndProcessN_` names and wrong ones. `CLAUDE.md` has the
+details, and Claude Code users can run `/name-functions`.
 
 A manifest `name` becomes a C symbol: codegen emits the function body as
 `__imp__<name>` (extern "C"). A name must therefore NOT equal an XAPI export

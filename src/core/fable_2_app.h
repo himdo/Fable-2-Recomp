@@ -201,7 +201,7 @@ class Fable2App : public rex::ReXApp {
         }
       }
     }
-    // Dog fur Z-fighting fix (docs/RUNTIME_FIXES.md): the shell-fur pixel shader
+    // Dog fur Z-fighting fix (docs/fix/runtime_fixes/technical.md): the shell-fur pixel shader
     // relies on exact 24-bit depth ties; a small host depth bias restores them.
     // depth_bias_shader is a GPU-plugin cvar, so it is seeded here too.
     if (fable2::config::Get().dog_fur_depth_bias &&

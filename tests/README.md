@@ -3,6 +3,10 @@
 These tests check the launcher, the build tools and some runtime code. None of
 them need game files, a GPU or an audio device.
 
+The known bugs behind the strict xfails, the coverage gaps and the quirks of
+each suite are written up in
+[docs/feature/test_suite/technical.md](../docs/feature/test_suite/technical.md).
+
 ## Quick start
 
 From the repository root, with Python 3.11 or later. The first time, set up a
