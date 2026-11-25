@@ -71,4 +71,18 @@ size_t ApplyAll(rex::memory::Memory* memory, const rex::PPCImageInfo& image);
 // registers but not the base.
 uint8_t* GuestBase();
 
+// High Tick Rate / Higher HF Tick Rate while the game runs (the Deck Recomp
+// page): rewrites the tick-rate doubles the two patches above change (LF 15
+// or 30 Hz at 0x83319510, HF 30 or 60 Hz at 0x83319518). The skip-store
+// hooks in fable2_hooks.cpp follow the config live, so the game does not
+// write them back. Needs ApplyAll to have run (it keeps the memory). Higher
+// HF only counts with High Tick Rate, as at startup.
+bool SetTickRates(bool high_tick_rate, bool higher_hf_tick_rate);
+
+// View distance while the game runs: rewrites the four per-class draw
+// distance multipliers the "View Distance" patch sets (clamped to 1..10).
+// Objects pick them up as they load, so the change shows from the next area
+// or save load. Needs ApplyAll to have run.
+bool SetDrawDistance(float multiplier);
+
 }  // namespace fable2::patches

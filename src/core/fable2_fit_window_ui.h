@@ -166,8 +166,7 @@ pcall(function()
 end)
 -- Menu response and scroll acceleration ([patches] menu_instant_response /
 -- menu_scroll_acceleration), wrapped once per screen; the wrappers check
--- menuQuick / menuAccel each time, so the pause menu's Deck Recomp settings
--- can switch them on the open screen.
+-- menuQuick / menuAccel each time they run.
 pcall(function()
   if type(GUI) ~= "table" or rawget(_G, "__f2menuWrap") then return end
   rawset(_G, "__f2menuWrap", true)
@@ -819,9 +818,9 @@ inline std::string BuildScript(float aspect, bool move_hud, bool log_tree) {
                 log_tree ? "true" : "false", cfg.menu_repeat_delay,
                 cfg.menu_animation_speed, cfg.menu_instant_response ? "true" : "false",
                 cfg.menu_scroll_acceleration);
-  // The Deck Recomp menu first: kScript returns early on screens without a
+  // The Deck Recomp row first: kScript returns early on screens without a
   // Scene element or with the HUD fit off.
-  return std::string(header) + "\n" + fable2::deckmenu::BuildScript() + kScript;
+  return std::string(header) + "\n" + fable2::deckmenu::kOptionsRowLua + kScript;
 }
 
 }  // namespace detail
@@ -851,7 +850,7 @@ inline void OnPresentationLoaded(PPCContext& ctx, uint8_t* base,
   const auto& cfg = fable2::config::Get();
   const bool menu_timing = cfg.menu_repeat_delay > 0.0 || cfg.menu_animation_speed != 1.0 ||
                            cfg.menu_instant_response || cfg.menu_scroll_acceleration > 1.0;
-  // (The pause menu's Deck Recomp settings always need the script.)
+  // (The Deck Recomp row in Options always needs the script.)
   (void)menu_timing;
 
   const uint32_t index = detail::g_presentations.fetch_add(1) + 1;
@@ -912,9 +911,8 @@ inline void OnGamefaceMessage(uint32_t level, uint32_t text) {
   std::string message;
   if (!detail::ReadGuestString(text, message) || message.empty()) return;
   fable2::uievents::OnMessage(message);  // for the console's waitui / boot
-  if (fable2::deckmenu::OnMessage(message)) return;  // "[f2set] key=value"
   if (message.rfind("[f2deck]", 0) == 0) {
-    REXSYS_WARN("{}", message);  // the Deck Recomp menu's own reports
+    REXSYS_INFO("{}", message);  // the Deck Recomp row's own reports
     return;
   }
   if (message.rfind("[fitwin-menu]", 0) == 0) {

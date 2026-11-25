@@ -48,6 +48,7 @@
 #include "remote_gamepad_driver.h"
 #include "fable2_crash_log.h"  // host crash report (fable2_crash.log)
 #include "photo_mode_dialog.h"  // photo mode settings panel (ImGui)
+#include "deck_settings_page.h"  // Options > Deck Recomp Settings page
 #ifdef FABLE2_REMOTE_CONTROL
 #include "remote_control_server.h"
 // 1-second game-state classifier (src/diagnostics/fable2_state_probe.h, single-TU inline).
@@ -110,6 +111,9 @@ class Fable2App : public rex::ReXApp {
   // Photo mode settings panel (src/core/photo_mode_dialog.h). Created in
   // OnCreateDialogs, released in OnShutdown (before the SDK drops the drawer).
   std::unique_ptr<fable2::photomode::PhotoModeDialog> photo_dialog_;
+  // The Deck Recomp page (src/core/deck_settings_page.h), opened from the
+  // pause menu's Options (src/menu/main_menu.cpp).
+  std::unique_ptr<fable2::decksettings::DeckSettingsPage> deck_settings_page_;
 
   // Emulate the Xbox 360 Xenos GPU. Two plugins are staged next to the exe:
   //   rexgpu-xenos[d].dll        -> D3D12 (prebuilt SDK plugin; the default)
@@ -570,6 +574,7 @@ class Fable2App : public rex::ReXApp {
     // The panel unregisters itself from the ImGui drawer, which the SDK
     // destroys right after this hook.
     photo_dialog_.reset();
+    deck_settings_page_.reset();
 #ifdef FABLE2_REMOTE_CONTROL
     // Stop the state classifier thread, then the remote control server
     // threads, before anything else tears down.
@@ -821,7 +826,15 @@ class Fable2App : public rex::ReXApp {
       // The pose cards' expression icons come from the same bank.
       std::vector<std::string> pose_icons;
       for (const auto& pose : fable2::photomode::kPoses) pose_icons.push_back(pose.icon);
-      icons = gi::Load(root, icon_log, pose_icons);
+      // The Deck Recomp page's paper, page rims, cover and title flourish.
+      pose_icons.push_back(fable2::decksettings::kMotifs);
+      pose_icons.push_back(fable2::decksettings::kPaperTexture);
+      pose_icons.push_back(fable2::decksettings::kCoverTop);
+      pose_icons.push_back(fable2::decksettings::kCoverBottom);
+      pose_icons.push_back(fable2::decksettings::kFrameSheet);
+      // The Steam Deck prompts too, as the game's own icons get them.
+      const std::string& deck = fable2::config::Get().deck_button_prompts;
+      icons = gi::Load(root, icon_log, pose_icons, deck == "off" ? std::string() : deck);
       if (icons > 0) break;
     }
     const int icons_added = gi::AddAllToAtlas(atlas);
@@ -831,6 +844,7 @@ class Fable2App : public rex::ReXApp {
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     // fable2::deadbeef_overlay::register_overlay(drawer);
     photo_dialog_ = std::make_unique<fable2::photomode::PhotoModeDialog>(drawer);
+    deck_settings_page_ = std::make_unique<fable2::decksettings::DeckSettingsPage>(drawer);
 #ifdef _WIN32
     fable2::crashlog::Install();  // again, after the SDK set up its own handlers
 #endif

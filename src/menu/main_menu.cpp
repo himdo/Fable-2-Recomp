@@ -1,4 +1,6 @@
-// Adds the recomp's items to the front-end main menu.
+// Adds the recomp's items to the front-end main menu (and leaves out its
+// Downloadable Content item), and opens the Deck Recomp page from the pause
+// menu's Options.
 //
 // FrontMenu_Populate builds the main menu with one ExpandableMenu_SpawnButton
 // call per item. When an item is chosen, FrontMenu_HandleEvent receives an
@@ -7,9 +9,11 @@
 #include "fable_2_pch.h"
 
 #include <mutex>
+#include <string>
 #include <string_view>
 #include <utility>
 
+#include "deck_settings_state.h"
 #include "menu_items.h"
 #include "menu_labels.h"
 
@@ -139,10 +143,47 @@ void QuitGame() {
 
 }  // namespace fable2::menu
 
+namespace {
+// Set while the game's own FrontMenu_Populate runs, so the SpawnButton filter
+// below only touches the main menu.
+thread_local bool t_populating_front_menu = false;
+
+// The name a SpawnButton call hands over: the slot holds the string object,
+// whose first word points at the chars.
+std::string GuestName(uint8_t* base, uint32_t slot) {
+  std::string s;
+  if (slot == 0) return s;
+  const uint32_t object = REX_LOAD_U32(slot);
+  if (object == 0) return s;
+  const uint32_t chars = REX_LOAD_U32(object);
+  if (chars == 0) return s;
+  for (uint32_t i = 0; i < 64; ++i) {
+    const char c = static_cast<char>(REX_LOAD_U8(chars + i));
+    if (c == '\0') break;
+    s.push_back(c);
+  }
+  return s;
+}
+}  // namespace
+
+// The main menu's Downloadable Content item is left out: there is no
+// marketplace to show. The game's populate still runs; only that button's
+// spawn is skipped. (From himdo/Fable-2-Recomp PR #213 by Locme.)
+extern "C" void __imp__ExpandableMenu_SpawnButton(PPCContext& ctx, uint8_t* base);
+extern "C" void ExpandableMenu_SpawnButton(PPCContext& ctx, uint8_t* base) {
+  if (t_populating_front_menu && GuestName(base, ctx.r4.u32) == "Downloadable Content") {
+    REXSYS_INFO("[main-menu] left out Downloadable Content");
+    return;
+  }
+  __imp__ExpandableMenu_SpawnButton(ctx, base);
+}
+
 extern "C" void __imp__FrontMenu_Populate(PPCContext& ctx, uint8_t* base);
 extern "C" void FrontMenu_Populate(PPCContext& ctx, uint8_t* base) {
   const uint32_t menu = ctx.r3.u32;
+  t_populating_front_menu = true;
   __imp__FrontMenu_Populate(ctx, base);
+  t_populating_front_menu = false;
   const uint64_t result = ctx.r3.u64;
   for (const auto& item : fable2::menu::kMainMenuItems) {
     fable2::menu::AddItem(ctx, base, menu, item);
@@ -157,4 +198,78 @@ extern "C" void FrontMenu_HandleEvent(PPCContext& ctx, uint8_t* base) {
     return;
   }
   __imp__FrontMenu_HandleEvent(ctx, base);
+}
+
+// The pause menu's Options screen: its rows come from GameFace Lua, where
+// src/core/fable2_deck_menu.h adds the Deck Recomp row. A on a row reaches
+// OptionsMenu_HandleInput (sub_82582E50: r3 = screen, r4 = input, 0x24 = A),
+// which asks ExpandableMenu_GetHighlightedItem (sub_8259DB00) for the row and
+// opens options page (row event type - 70). For the Deck Recomp row the Deck
+// Recomp page opens instead and the game's handler is skipped. (From himdo/
+// Fable-2-Recomp PR #213 by Locme.)
+extern "C" void sub_8259DB00(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_82582E50(PPCContext& ctx, uint8_t* base);
+
+namespace fable2::menu {
+namespace {
+
+constexpr uint32_t kInputA = 0x24;
+constexpr std::string_view kDeckRecompRow = "F2DeckRecomp";  // fable2_deck_menu.h NAME
+
+// Whether the Options menu's highlighted row is the Deck Recomp row, read the
+// same way OptionsMenu_HandleInput reads it: GetHighlightedItem fills
+// {event type, ID, name string, text tag string} for the menu's owner
+// *(*(*(0x834968A4) + 0x1C) + 0x3C).
+bool DeckRecompRowHighlighted(PPCContext& ctx, uint8_t* base) {
+  const uint32_t gui = REX_LOAD_U32(0x834968A4u);
+  const uint32_t screens = gui ? REX_LOAD_U32(gui + 0x1C) : 0;
+  const uint32_t owner = screens ? REX_LOAD_U32(screens + 0x3C) : 0;
+  if (owner == 0) return false;
+
+  const PPCContext saved = ctx;
+  const uint32_t caller_sp = ctx.r1.u32;
+  const uint32_t sp = caller_sp - 0x100;
+  const uint32_t data = sp + 0x60;  // {type, id, name string, text string}
+  REX_STORE_U32(sp, caller_sp);
+  REX_STORE_U32(data, 0);
+  REX_STORE_U32(data + 4, 0);
+  ctx.r1.u64 = sp;
+  ConstructString(ctx, base, data + 8, 0);
+  ConstructString(ctx, base, data + 12, 0);
+
+  ctx.r3.u64 = owner;
+  ctx.r4.u64 = data;
+  sub_8259DB00(ctx, base);
+
+  bool match = false;
+  if (const uint32_t name_ref = REX_LOAD_U32(data + 8)) {
+    if (const uint32_t name = REX_LOAD_U32(name_ref)) {
+      match = true;
+      for (size_t i = 0; match && i <= kDeckRecompRow.size(); ++i) {
+        const char expected = i < kDeckRecompRow.size() ? kDeckRecompRow[i] : '\0';
+        match = static_cast<char>(REX_LOAD_U8(name + i)) == expected;
+      }
+    }
+  }
+  DestructString(ctx, base, data + 12);
+  DestructString(ctx, base, data + 8);
+  ctx = saved;
+  return match;
+}
+
+}  // namespace
+}  // namespace fable2::menu
+
+extern "C" void sub_82582E50(PPCContext& ctx, uint8_t* base) {
+  const uint32_t screen = ctx.r3.u32;
+  // A on the menu (no options page open: the byte at screen+0x18 is 0).
+  if (ctx.r4.u32 == fable2::menu::kInputA && screen != 0 && REX_LOAD_U8(screen + 0x18) == 0 &&
+      fable2::menu::DeckRecompRowHighlighted(ctx, base)) {
+    fable2::decksettings::from_main_menu().store(false);
+    fable2::decksettings::open_request().store(true);
+    if (void (*hook)() = fable2::decksettings::open_hook().load()) hook();  // register the page
+    REXSYS_INFO("[deck-menu] Options > Deck Recomp Settings");
+    return;
+  }
+  __imp__sub_82582E50(ctx, base);
 }

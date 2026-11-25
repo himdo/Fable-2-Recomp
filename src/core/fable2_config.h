@@ -216,6 +216,11 @@ struct Values {
   // [patches] disable_msaa: render without the game's multisample anti-aliasing
   // (override of InitRenderSettings_8238DE58, src/core/hotfunc/render/InitRenderSettings_8238DE58.cpp).
   bool disable_msaa = false;
+  // [patches] view_distance_multiplier / lod_distance_multiplier: the game's
+  // draw distances and full-detail (LOD) distances times this (1..10; 1 = the
+  // original). Objects take them as they load.
+  float view_distance_multiplier = 1.0f;
+  float lod_distance_multiplier = 1.0f;
   // [patches] async_pipelines: create new GPU pipelines in the background and
   // skip the draws needing them until ready, instead of stopping (SDK cvars
   // async_shader_compilation and vulkan_async_skip_draws). On by default.

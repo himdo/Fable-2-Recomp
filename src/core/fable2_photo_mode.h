@@ -61,6 +61,7 @@
 #include "host_pad.h"
 #include "mouse_look.h"
 #include "photo_mode_state.h"
+#include "deck_settings_pad.h"
 #include "world_thread.h"
 #include "fable2_func_trace.h"
 
@@ -1290,5 +1291,7 @@ extern "C" void InputGetPadState_822B2D60(PPCContext& ctx, uint8_t* base) {
   const uint32_t state_ptr = ctx.r4.u32;
   __imp__InputGetPadState_822B2D60(ctx, base);
   fable2::photomode::on_pad_read(base, user, state_ptr, ctx.r3.u32);
+  // The Deck Recomp page reads the pad here too, and blanks it while open.
+  fable2::decksettings::on_pad_read(base, user, state_ptr, ctx.r3.u32);
 }
 #endif

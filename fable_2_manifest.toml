@@ -167,6 +167,21 @@ name = "fable2_hook_ce_grantavail"
 registers = ["r3"]
 after_instruction = true
 
+# View distance, LOD half. GraphicComponent_InitDrawDistances_825470E0
+# reads each graphic's distances from its object definition: MaxDrawDistance
+# (times the per-class draw distance multiplier at 0x83319368..74, which the
+# data half in src/core/fable2_patches.cpp raises), then
+# DrawDistanceFadeRangeFactor, MaxClothDistance, BillboardDistance and
+# LodDistance. The LodDistance read returns in f1 and is stored by
+# `stfs f1, 52(r31)` at 0x825471C4; the hook runs before that store and scales
+# f1 so the full-detail model is kept farther out.
+# Setting: [patches] lod_distance_multiplier (1 = original). (From himdo/
+# Fable-2-Recomp PR #213 by Locme.)
+[[entrypoint.midasm_hook]]
+address = 0x825471C4
+name = "fable2_hook_lod_distance"
+registers = ["f1"]
+
 # High Tick Rate (Xenia patch by Guy), code half. The Xenia patch NOPs the
 # store at 0x8233AEB4 that writes the tick-rate double at 0x83319510 every
 # time it runs, and patches that double (be8 0x83319511: 15.0 -> 30.0; written

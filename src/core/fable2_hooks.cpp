@@ -11,6 +11,7 @@
 // Every patch hook is gated on a toggle in fable2_config.toml ([patches]),
 // consulted on each call, so a patch can be A/B'd without a rebuild.
 
+#include <algorithm>
 #include <bit>
 #include <cmath>
 #include <cstring>
@@ -129,6 +130,19 @@ void fable2_hook_disable_motion_blur(PPCRegister& f12) {
   }
 }
 
+// View distance, LOD half (the draw distance half is a data write in
+// src/core/fable2_patches.cpp). Runs before `stfs f1, 52(r31)` at 0x825471C4
+// in GraphicComponent_InitDrawDistances_825470E0, where f1 is the object
+// definition's LodDistance. Scaling it keeps the full-detail model farther
+// out. Runs once per graphic as objects load. (From himdo/Fable-2-Recomp
+// PR #213 by Locme.)
+void fable2_hook_lod_distance(PPCRegister& f1) {
+  const float mult = std::clamp(fable2::config::Get().lod_distance_multiplier, 1.0f, 10.0f);
+  if (mult != 1.0f) {
+    f1.f64 *= mult;
+  }
+}
+
 // Skip Intro Videos (just-harry's "Skip intro videos" patch, as a hook).
 // sub_822F4958 builds the boot video queue (microsoft_logo.bik,
 // lionhead_logo.bik, terminator) and loops queueing slots until
@@ -150,14 +164,17 @@ void fable2_hook_skip_intro_videos(PPCRegister& r3) {
 // at load by src/core/fable2_patches.cpp) and the patch had no effect.
 // Toggle: [patches] high_tick_rate.
 bool fable2_hook_high_tick_rate_skip_store() {
-  static const bool enabled = [] {
-    const bool on = fable2::config::Get().high_tick_rate;
-    if (on) {
-      REXSYS_INFO("[tick-rate] LF tick forced to 30 Hz (high_tick_rate)");
-    }
-    return on;
-  }();
-  return enabled;
+  // Read on every call: the Deck Recomp page switches it while the game runs
+  // (fable2::patches::SetTickRates writes the value this store would undo).
+  // One bool read, the same cost as the old once-only guard. (Live switching
+  // from himdo/Fable-2-Recomp PR #213 by Locme.)
+  const bool on = fable2::config::Get().high_tick_rate;
+  static bool logged = false;
+  if (on && !logged) {
+    logged = true;
+    REXSYS_INFO("[tick-rate] LF tick forced to 30 Hz (high_tick_rate)");
+  }
+  return on;
 }
 
 // Higher HF Tick Rate (Xenia patch by Ultra), code half. Runs BEFORE the store
@@ -169,18 +186,21 @@ bool fable2_hook_high_tick_rate_skip_store() {
 // break the 2:1 ratio the other way, so it is ignored unless both are on.
 // Toggle: [patches] higher_hf_tick_rate (needs [patches] high_tick_rate).
 bool fable2_hook_high_hf_tick_rate_skip_store() {
-  static const bool enabled = [] {
-    const auto& cfg = fable2::config::Get();
-    if (cfg.higher_hf_tick_rate && !cfg.high_tick_rate) {
+  // Read on every call, like the LF hook above.
+  const auto& cfg = fable2::config::Get();
+  static bool warned = false, logged = false;
+  if (cfg.higher_hf_tick_rate && !cfg.high_tick_rate) {
+    if (!warned) {
+      warned = true;
       REXSYS_WARN("[tick-rate] higher_hf_tick_rate ignored: it requires high_tick_rate");
-      return false;
     }
-    if (cfg.higher_hf_tick_rate) {
-      REXSYS_INFO("[tick-rate] HF tick forced to 60 Hz (higher_hf_tick_rate)");
-    }
-    return cfg.higher_hf_tick_rate;
-  }();
-  return enabled;
+    return false;
+  }
+  if (cfg.higher_hf_tick_rate && !logged) {
+    logged = true;
+    REXSYS_INFO("[tick-rate] HF tick forced to 60 Hz (higher_hf_tick_rate)");
+  }
+  return cfg.higher_hf_tick_rate;
 }
 
 // Direct mouse-to-camera look (separates the mouse from the keyboard->gamepad

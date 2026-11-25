@@ -322,6 +322,21 @@ disable_motion_blur = false
 # Default: false
 disable_msaa = false
 
+# Draw Distance: how far away objects, buildings, villagers and creatures are
+# drawn before they pop out, as a multiple of the game's own distances (its
+# per-class draw distance multipliers, which only a debug script setter
+# otherwise changes). Objects take it as they load: the next area or save.
+# Higher costs GPU time. 1 = the original game. (From himdo/Fable-2-Recomp
+# PR #213 by Locme.)
+# Default: 1
+view_distance_multiplier = 1
+
+# Detail Distance: how far out models keep their full-detail version, as a
+# multiple of the game's own distance (hook fable2_hook_lod_distance).
+# Objects take it as they load. Higher costs GPU time. 1 = the original game.
+# Default: 1
+lod_distance_multiplier = 1
+
 # Async Shader Compilation (SDK cvars async_shader_compilation and
 # vulkan_async_skip_draws): the first time a new shader is needed (a new kind of
 # object, effect or material), the game would stop for a moment to compile it:
@@ -726,6 +741,12 @@ bool Load(const std::filesystem::path& path) {
                    values.disable_motion_blur);
     values.disable_msaa =
         Read<bool>(patches_table, "patches", "disable_msaa", "boolean", values.disable_msaa);
+    values.view_distance_multiplier = static_cast<float>(
+        Read<double>(patches_table, "patches", "view_distance_multiplier", "number",
+                     values.view_distance_multiplier));
+    values.lod_distance_multiplier = static_cast<float>(
+        Read<double>(patches_table, "patches", "lod_distance_multiplier", "number",
+                     values.lod_distance_multiplier));
     values.async_pipelines = Read<bool>(patches_table, "patches", "async_pipelines", "boolean",
                                         values.async_pipelines);
     values.realtime_texture_morphing =

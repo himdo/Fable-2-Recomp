@@ -728,6 +728,7 @@ inline void do_sample() {
 // no allocation). Debug/remote builds only (FABLE2_REMOTE_CONTROL); release
 // builds use the original weak body untouched.
 #ifdef FABLE2_REMOTE_CONTROL
+#include "deck_settings_pad.h"
 // sub_82B458C0 = prompt/manager element-list fetch/next (returns element, 0 =
 // done). Count the non-zero returns for lists in the 0x8333xxxx manager
 // region: the rate is high (~15-17/s) while the "Press A" prompt OR the main
@@ -753,5 +754,7 @@ extern "C" void InputGetPadState_822B2D60(PPCContext& ctx, uint8_t* base) {
   // (src/core/fable2_photo_mode.h, which defines this override itself in
   // non-remote builds).
   fable2::photomode::on_pad_read(base, user, state_ptr, ctx.r3.u32);
+  // The Deck Recomp page too (src/core/deck_settings_pad.h).
+  fable2::decksettings::on_pad_read(base, user, state_ptr, ctx.r3.u32);
 }
 #endif  // FABLE2_REMOTE_CONTROL

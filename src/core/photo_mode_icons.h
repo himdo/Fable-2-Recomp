@@ -34,6 +34,7 @@
 #include <imgui.h>
 #include <zlib-ng.h>
 
+#include "../gui/deck_prompts.h"
 #include "../gui/gui_tex_codec.h"
 
 namespace fable2::gameicons {
@@ -287,6 +288,27 @@ namespace detail {
 struct BankPair {
   Bank tex, hdr;
 };
+// With [input] deck_button_prompts on, the controller icons get the Steam Deck
+// prompts the game's own textures get (src/gui/deck_prompts.h); null = off.
+inline const fable2::gui::DeckArt*& deck_art() {
+  static const fable2::gui::DeckArt* art = nullptr;
+  return art;
+}
+// A texture as a full RGBA payload (u32 byte count, then tiled A,R,G,B), the
+// form the Deck restyle works on; false for formats it doesn't take.
+inline bool ToFullPayload(const std::vector<uint8_t>& data, uint32_t w, uint32_t h, uint32_t fmt,
+                          std::vector<uint8_t>& out) {
+  const size_t full = 4 + size_t(w) * h * 4;
+  if (fmt == 2 && data.size() == full && be32(data.data()) + 4 == data.size()) {
+    out = data;
+    return true;
+  }
+  if (data.size() >= 12 && be32(data.data()) != 7) {
+    return fable2::gui::DecodeCompressedIconToTile(data.data(), data.size(), int(w), int(h), out) &&
+           out.size() == full;
+  }
+  return false;
+}
 // Decode bank entry `name` (lower case) from the first bank that has it.
 inline bool LoadEntry(const std::vector<BankPair>& banks, const std::string& name, Image& img, std::string& why_all) {
   std::vector<uint8_t> data, hdr;
@@ -299,7 +321,17 @@ inline bool LoadEntry(const std::vector<BankPair>& banks, const std::string& nam
       continue;
     }
     std::string why;
-    if (Decode(data, be32(&hdr[16]), be32(&hdr[20]), be32(&hdr[24]), img, why)) {
+    uint32_t fmt = be32(&hdr[24]);
+    const uint32_t w = be32(&hdr[16]), h = be32(&hdr[20]);
+    if (deck_art() && fable2::gui::HasDeckStyle(name)) {
+      std::vector<uint8_t> payload;
+      if (ToFullPayload(data, w, h, fmt, payload) &&
+          fable2::gui::ApplyDeckStyle(name, payload, int(w), int(h), *deck_art())) {
+        data = std::move(payload);
+        fmt = 2;
+      }
+    }
+    if (Decode(data, w, h, fmt, img, why)) {
       img.loaded = true;
       img.source = name;
       return true;
@@ -312,8 +344,11 @@ inline bool LoadEntry(const std::vector<BankPair>& banks, const std::string& nam
 
 // Load every button icon, plus the `extra` entries (lower-case bank names),
 // from the game data under `root`. Returns how many button icons loaded;
-// `log` gets one line per icon that fell back or failed.
-inline int Load(const std::filesystem::path& root, std::string& log, const std::vector<std::string>& extra = {}) {
+// `log` gets one line per icon that fell back or failed. `deck_set` is the
+// Steam Deck prompt set ([input] deck_button_prompts: "dark", "light"), empty
+// for the game's own Xbox 360 icons.
+inline int Load(const std::filesystem::path& root, std::string& log, const std::vector<std::string>& extra = {},
+                const std::string& deck_set = "") {
   using detail::BankPair;
   extras().clear();
   std::vector<BankPair> banks;  // localised first
@@ -342,6 +377,29 @@ inline int Load(const std::filesystem::path& root, std::string& log, const std::
   if (banks.empty()) {
     log = "gui_textures.bnk not found under " + root.string();
     return 0;
+  }
+  // The Steam Deck prompts: the glyph set and the game's green medallion, taken
+  // from its Back icons, as src/gui/prompt_textures.h makes them.
+  static fable2::gui::DeckArt deck;
+  detail::deck_art() = nullptr;
+  if (!deck_set.empty()) {
+    deck = fable2::gui::DeckArt{};
+    deck.set = deck_set;
+    auto medallion = [&](const char* name, uint32_t size) -> std::vector<uint8_t> {
+      for (const detail::BankPair& b : banks) {
+        const auto* te = b.tex.Get(name);
+        const auto* he = b.hdr.Get(name);
+        std::vector<uint8_t> data, hdr, tile;
+        if (!te || !he || !b.hdr.Read(*he, hdr) || hdr.size() < 32 || !b.tex.Read(*te, data)) continue;
+        if (detail::be32(&hdr[16]) != size || detail::be32(&hdr[20]) != size) continue;
+        if (detail::ToFullPayload(data, size, size, detail::be32(&hdr[24]), tile))
+          return fable2::gui::deck_detail::MakeMedallion(tile, int(size));
+      }
+      return {};
+    };
+    deck.medallion64 = medallion(fable2::gui::kDeckMedallion64, 64);
+    deck.medallion32 = medallion(fable2::gui::kDeckMedallion32, 32);
+    detail::deck_art() = &deck;
   }
   // Candidate entries per icon, best first (the 64 px art, then the 32 px HUD set).
   static const char* const kCandidates[kIconCount][2] = {
@@ -440,6 +498,30 @@ inline bool ExtraReady(int i) {
 }
 inline void DrawExtra(ImDrawList* dl, int i, ImVec2 p0, float size, ImU32 col = IM_COL32_WHITE) {
   if (ExtraReady(i)) DrawImage(dl, extras()[i].img, p0, size, col);
+}
+// The texels [t0, t1) of extra image `i` stretched over [p0, p1], upside
+// down when `flip_v`. Half a texel is kept off each edge so the atlas
+// neighbours do not bleed in. False if the image is not ready.
+// (From himdo/Fable-2-Recomp PR #213 by Locme.)
+inline bool DrawExtraRegion(ImDrawList* dl, int i, ImVec2 p0, ImVec2 p1, ImVec2 t0, ImVec2 t1, ImU32 col,
+                            bool flip_v) {
+  if (!ExtraReady(i)) return false;
+  const Image& img = extras()[i].img;
+  ImFontAtlasRect r;
+  if (!img.atlas->GetCustomRect(img.rect_id, &r)) return false;
+  const float du = (r.uv1.x - r.uv0.x) / float(img.w), dv = (r.uv1.y - r.uv0.y) / float(img.h);
+  const float u0 = r.uv0.x + (t0.x + 0.5f) * du, u1 = r.uv0.x + (t1.x - 0.5f) * du;
+  const float v0 = r.uv0.y + (t0.y + 0.5f) * dv, v1 = r.uv0.y + (t1.y - 0.5f) * dv;
+  dl->AddImage(dl->_CmdHeader.TexRef, p0, p1, ImVec2(u0, flip_v ? v1 : v0), ImVec2(u1, flip_v ? v0 : v1), col);
+  return true;
+}
+// Extra image `i` (its rows down to `v_max` of its height) stretched over
+// [p0, p1], upside down when `flip_v` (so two copies meet without a seam).
+inline bool DrawExtraRect(ImDrawList* dl, int i, ImVec2 p0, ImVec2 p1, ImU32 col, bool flip_v,
+                          float v_max = 1.0f) {
+  if (!ExtraReady(i)) return false;
+  const Image& img = extras()[i].img;
+  return DrawExtraRegion(dl, i, p0, p1, ImVec2(0, 0), ImVec2(float(img.w), float(img.h) * v_max), col, flip_v);
 }
 
 }  // namespace fable2::gameicons
