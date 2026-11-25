@@ -4,10 +4,10 @@ A native **Steam Deck / Linux** version of [**Fable 2 Recomp**](https://github.c
 
 **[⬇ Download the latest release](https://github.com/darokk/Fable-2-Recomp/releases/latest)** · [Install](#install) · [Playing](#playing) · [Settings](#settings) · [Performance](#performance) · [What this fork changes](#what-this-fork-changes) · [Credits](#credits)
 
-**A smooth 60 fps on the Steam Deck, even in the game's heaviest scenes** (apart from brief work the first time an area's shaders are seen), Steam Deck button icons, and an in-game **Deck Recomp** settings menu.
+**A smooth 60 fps on the Steam Deck, even in the game's heaviest scenes** (apart from brief work the first time an area's shaders are seen), Steam Deck button icons, and an in-game **Deck Recomp Settings** page in the game's Options.
 
 <p align="center">
-  <img src="docs/screenshots/deck-recomp-menu.jpg" alt="The Deck Recomp settings menu in Fable II's pause menu on a Steam Deck" width="49%">
+  <img src="docs/screenshots/deck-recomp-settings.jpg" alt="The Deck Recomp Settings page in Fable II's Options on a Steam Deck" width="49%">
   <img src="docs/screenshots/title-deck-buttons.jpg" alt="Fable II's title screen with the Steam Deck A button icon" width="49%">
 </p>
 
@@ -38,7 +38,7 @@ That's it: from now on, start **Fable II** from your library in **Gaming Mode** 
 
 ### Updating
 
-Download the new release and extract it over your existing `~/Games/Fable2-SteamDeck` folder. Your saves, game files and shader cache stay where they are, and the game starts straight away. The settings file `fable2_config.toml` is replaced with the new defaults, so if you changed settings (in the file or in the Deck Recomp menu), back it up first and copy your changes back afterwards, or set them again in the menu.
+Download the new release and extract it over your existing `~/Games/Fable2-SteamDeck` folder. Your saves, game files and shader cache stay where they are, and the game starts straight away. The settings file `fable2_config.toml` is replaced with the new defaults, so if you changed settings (in the file or in Deck Recomp Settings), back it up first and copy your changes back afterwards, or set them again in Deck Recomp Settings.
 
 ### Uninstalling
 
@@ -48,44 +48,46 @@ Delete the `Fable2-SteamDeck` folder (it holds everything: game files, saves, se
 
 - **Controls:** the Deck's controls work like an Xbox 360 controller, with the Steam Deck's own buttons shown in the game's prompts.
 - **Saves** are kept in `Fable2-SteamDeck/saves`. Back up that folder to keep your progress.
-- **Settings in the game:** pause the game and open **Deck Recomp**, just below *Options* (see [Settings](#settings)).
+- **Settings in the game:** pause the game and open *Options* → **Deck Recomp Settings** (see [Settings](#settings)).
 - **First visits:** the first time an area's shaders are seen, they are prepared for the Deck's GPU, which can cause brief stalls. They are compiled in the background, so this is much reduced, and later visits are smooth.
-- **Battery:** the game runs at up to 60 fps. For longer battery life, set the Quick Access Menu's Performance tab to 40 Hz with a 40 fps limit, or choose 30 or 40 fps under *Frame Rate Cap* in the Deck Recomp menu.
+- **Battery:** the game runs at up to 60 fps. For longer battery life, set the Quick Access Menu's Performance tab to 40 Hz with a 40 fps limit, or choose 30 or 40 fps under *Frame Rate Cap* in Deck Recomp Settings.
 
 ### Known issues
 
 - A texture or object can occasionally render wrong for a single frame (as in the Windows version).
-- In Desktop Mode, the window can stay white for several seconds at start-up before the first video. Gaming Mode isn't affected.
+- On start-up the window can stay white for up to several minutes before the first video. Enabling the Skip Intro Videos setting seems to improve this.
 
 If something goes wrong, the game shows an error with the path of its log file. For a bug report, set `log_level = "info"` in `fable_2.toml`, reproduce the problem and [open an issue](https://github.com/darokk/Fable-2-Recomp/issues) with the newest file from `logs/`.
 
 ## Settings
 
-### In the game: the Deck Recomp menu
+### In the game: Deck Recomp Settings
 
-Pause the game and open **Deck Recomp**, just below *Options*. Press **A** on a setting to step through its values. Each change is saved to `fable2_config.toml` straight away and, where possible, applies at once; settings that need a restart say so. While a setting is highlighted, the right-hand page explains what it does.
+Pause the game and open *Options* → **Deck Recomp Settings**, after the game's own Game, Video, Controls and Audio pages. It is a page of the game's book like theirs: switch tabs with **L1 / R1**, move with up / down, change a setting with **left / right**, press **Y** for its default, **A** to accept (saves to `fable2_config.toml`) or **B** to cancel (puts the changes back). Changes apply at once where they can; the page shows what each setting does and when it takes effect, and lists settings that need a restart.
 
-| Setting | Default | What it does |
-|---|---|---|
-| High Tick Rate | Off | Runs the game's updates twice as often: smoother menus and HUD, less input delay. Experimental; takes effect after a restart |
-| Menu Hold Scroll Delay | 0.18 s | How long a held direction waits before the menu starts scrolling (original: 0.25 s) |
-| Menu Animation Speed | 2.5x | How fast the menus slide and fade |
-| Instant Menu Response | On | Menus react in the same update as the press |
-| Menu Scroll Acceleration | 1.5x | Holding a direction speeds up scrolling |
-| Skip Intro Videos | Off | Skips the logo videos at start-up, which may also make the game start faster (after a restart) |
-| Motion Blur | On | The camera's full-screen blur when it moves |
-| Button Icons | Steam Deck (Dark) | Steam Deck buttons in dark or light, or the original Xbox 360 buttons (after a restart) |
-| Frame Rate Cap | 60 fps | 30 (the original game's lock), 40, 45, 60 or unlimited |
-| Async Shader Compilation | On | New shaders are compiled in the background instead of pausing the game: fewer stutters, but a part of an object or an effect can appear a moment late the first time it's seen |
+| Tab | Setting | Default | What it does |
+|---|---|---|---|
+| Performance | Frame Rate Cap | 60 fps | 30 (the original game's lock), 40, 45, 60 or unlimited |
+| Performance | Async Shader Compilation | On | New shaders are compiled in the background instead of pausing the game: fewer stutters, but a part of an object or an effect can appear a moment late the first time it's seen |
+| Performance | High Tick Rate | Off | Runs the game's updates twice as often: smoother menus and HUD, less input delay. Experimental |
+| Display | Draw Distance | 1x | How far away objects, buildings, villagers and creatures are drawn, up to 10x. Above 3x is not recommended: busy places like Bowerstone lose a lot of frame rate. From the next area or save load |
+| Display | Detail Distance | 1x | How far out models keep their full detail, up to 10x; the same advice. From the next area or save load |
+| Display | Anti-Aliasing | 2x MSAA | Off frees GPU time, with slightly jaggier edges (after a restart) |
+| Display | Motion Blur | On | The camera's full-screen blur when it moves |
+| Display | Button Icons | Steam Deck (Dark) | Steam Deck buttons in dark or light, or the original Xbox 360 buttons (after a restart) |
+| Interface | Menu Hold Scroll Delay | 0.18 s | How long a held direction waits before the menu starts scrolling (original: 0.25 s) |
+| Interface | Menu Animation Speed | 2.5x | How fast the menus slide and fade |
+| Interface | Instant Menu Response | On | Menus react in the same update as the press |
+| Interface | Menu Scroll Acceleration | 1.5x | Holding a direction speeds up scrolling |
+| Interface | Skip Intro Videos | Off | Skips the logo videos at start-up, which may also make the game start faster |
 
 ### In the settings file
 
-All settings, including ones the menu doesn't show, are in `fable2_config.toml` in the `Fable2-SteamDeck` folder (edit it in Desktop Mode with any text editor); each one is described in the file. A few useful ones that aren't in the menu:
+All settings, including ones the page doesn't show, are in `fable2_config.toml` in the `Fable2-SteamDeck` folder (edit it in Desktop Mode with any text editor); each one is described in the file. A useful one that isn't on the page:
 
 | Setting | Default | What it does |
 |---|---|---|
 | `interpolation` (`[patches]`) | `true` | Capes and coats move smoothly with the body |
-| `disable_msaa` (`[patches]`) | `false` | `true` turns off the game's 2x anti-aliasing: more GPU headroom, slightly jaggier edges (takes effect at the next start) |
 
 ## Performance
 
@@ -111,10 +113,10 @@ How it gets there, on top of Fable 2 Recomp and its native Linux build (renderer
 On top of Fable 2 Recomp and its native Linux build, besides the [performance work](#performance):
 
 **Steam Deck experience**
-- **Deck Recomp settings menu** in the pause menu: change the build's settings in the game, with an explanation for each.
+- **Deck Recomp Settings** in the game's Options: change the build's settings in the game, on a page in the game's own style, with an explanation for each.
 - Steam Deck button icons in Fable II's own style, in the game and the pub games (dark, light or off).
 - Faster, more responsive menus: instant response, a shorter hold delay, scroll acceleration and quicker animations, each adjustable.
-- Menus laid out for the Deck's 16:10 screen.
+- Menus laid out for the Deck's 16:10 screen, and no *Downloadable Content* entry in the main menu (there is no marketplace).
 - First-start installer: finds your disc image, extracts the game files and adds the game to Steam.
 
 **Fixes**
@@ -127,6 +129,7 @@ On top of Fable 2 Recomp and its native Linux build, besides the [performance wo
 
 | Version | Date | Highlights |
 |---|---|---|
+| [1.0.6](https://github.com/darokk/Fable-2-Recomp/releases/tag/steamdeck-1.0.6) | 2026-11-25 | Deck Recomp Settings page in Options, Draw and Detail Distance, Anti-Aliasing setting |
 | [1.0.5](https://github.com/darokk/Fable-2-Recomp/releases/tag/steamdeck-1.0.5) | 2026-11-25 | Deck Recomp settings menu, smooth 60 fps in heavy scenes, async shader compilation |
 | [1.0.4](https://github.com/darokk/Fable-2-Recomp/releases/tag/steamdeck-1.0.4) | 2026-11-23 | Faster in heavy scenes, optional MSAA off |
 | [1.0.3](https://github.com/darokk/Fable-2-Recomp/releases/tag/steamdeck-1.0.3) | 2026-11-21 | First-start installer: game files from your disc image, *Add to Steam* |
