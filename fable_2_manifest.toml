@@ -37977,9 +37977,17 @@ name = "ProcessAndProcessAndProcess253_82372758"
 [entrypoint.functions."0x82372E88"]
 name = "ProcessAndProcessAndProcess254_82372E88"
 
-# A processor that processes the data (two hundred and fifty-fifth form). It takes a value (a). It processes the data (a). This is the "process this data" routine (two hundred and fifty-fifth form), part of the 0x82373 process cluster. 841 lines. 17 callees (Allocate_OrDbgBreak, ConstructRefCounted, Free_SizeBucketed_Thunk, MemSet_SdkRuntime, ProcessAndAbort, ProcessAndConstructWithFlag2, ProcessAndConstructWithFlag3, ProcessAndParseValue, ProcessAndValidateAndConstruct, Release_RefCounted, ToUpper_SdkRuntime, sub_82373D60, sub_823746F0, sub_82BECB98, sub_82BECC38, sub_82BEF360, and sub_82BEFAA0). 3 callers (sub_82373D60, sub_82373E08, and sub_8229A9D8).
+# A processor that processes the data (two hundred and fifty-fifth form). It takes a value (a). It processes the data (a). This is the "process this data" routine (two hundred and fifty-fifth form), part of the 0x82373 process cluster. 841 lines. 17 callees (Allocate_OrDbgBreak, ConstructRefCounted, Free_SizeBucketed_Thunk, MemSet_SdkRuntime, ProcessAndAbort, ProcessAndConstructWithFlag2, ProcessAndConstructWithFlag3, ProcessAndParseValue, ProcessAndValidateAndConstruct, Release_RefCounted, ToUpper_SdkRuntime, Locale_SetActiveByIndex_82373D60, sub_823746F0, sub_82BECB98, sub_82BECC38, sub_82BEF360, and sub_82BEFAA0). 3 callers (Locale_SetActiveByIndex_82373D60, sub_82373E08, and sub_8229A9D8).
 [entrypoint.functions."0x823737D0"]
 name = "ProcessAndProcessAndProcess255_823737D0"
+
+# FrontMenu_HandleEvent passes the requested locale index in r3. The generated
+# code bounds-checks it against the count at 0x833197BC + 4 and reads the
+# locale code from the start of the selected 0x60-byte record (table pointer
+# at +0). When the index changes it writes the new index at +8 and sets the
+# byte at +16 to 1 before calling the language table update routine.
+[entrypoint.functions."0x82373D60"]
+name = "Locale_SetActiveByIndex_82373D60"
 
 # A processor that processes the data (two hundred and fifty-sixth form). It takes nothing. It processes the data. This is the "process this data" routine (two hundred and fifty-sixth form), part of the 0x82373 process cluster. 131 lines. 10 callees (ProcessAndProcessAndProcess255, sub_82374808, sub_82374C00, sub_82374D58, sub_82BEEC70, sub_82BEEE88, sub_82BF2128, sub_82BF2140, sub_82BF28A8, and sub_82CBC5F0). 1 caller (ProcessAndProcessAndProcess214).
 [entrypoint.functions."0x82373E08"]

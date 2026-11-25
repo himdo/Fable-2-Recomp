@@ -70,9 +70,8 @@ void DestructString(PPCContext& ctx, uint8_t* base, uint32_t slot) {
   DestructRefCounted_82214F08(ctx, base);
 }
 
-// FrontMenu's language-change handler (0x826C81A0) and the native locale
-// setter (0x82373D60) use this table for the selected language. Each record
-// starts with its NUL-terminated locale code. Read it on each menu rebuild.
+// FrontMenu_HandleEvent selects the language through Locale_SetActiveByIndex_82373D60.
+// Read the same table on each menu rebuild so a language change updates the label.
 std::string_view CurrentLanguage(uint8_t* base) {
   constexpr uint32_t kLanguageTable = 0x833197BC;
   constexpr uint32_t kLanguageRecordSize = 0x60;
