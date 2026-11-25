@@ -26,6 +26,7 @@ When you finish a fix or a feature, add or update its folder and its row below. 
 
 | Feature | Status | Commits | Summary |
 | --- | --- | --- | --- |
+| [brazilian_portuguese](feature/brazilian_portuguese/overview.md) | open PR #242 | bf3eb48, b53cbb8, c5d3c15 | Install or remove a Brazilian Portuguese text pack from the Windows launcher and select it in the game |
 | [console_commands](feature/console_commands/overview.md) | merged | 4f0afe5 (#127) | The `f2` developer console and its command reference |
 | [fit_window](feature/fit_window/overview.md) | merged | 4f0afe5 (#127) | Render at the window's aspect ratio, with the HUD and menus following |
 | [function_naming](feature/function_naming/overview.md) | merged | f451b72 (#238) | Manifest names for the 22 functions recent PRs relied on |
