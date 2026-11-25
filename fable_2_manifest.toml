@@ -46,7 +46,7 @@ setjmp_address = 0x83000200
 # keyed by address in codegen (a duplicate address overrides the earlier one),
 # so each address appears exactly once below.
 #
-# Unlock Website Items (Xenia "Unlock Website Items" by Guy). sub_8256E368 is
+# Unlock Website Items (Xenia "Unlock Website Items" by Guy). GuildChest_GetWebsiteItem_8256E368 is
 # the "is a website/Guild-chest item available" check. It is gated by the
 # player's website-registration flags on the chest object (r4): GATE 1 = bit6
 # of *(r4+0x90), GATE 1b = bit0 of *(r4+0x40). Only when BOTH pass does the
@@ -68,7 +68,7 @@ registers = ["r8"]
 after_instruction = true
 
 # Unlock Collectors Edition Content (Xenia "Unlock Collectors Edition Content"
-# by Guy). Same shape: sub_824B3528 is the "is CE-chest content available"
+# by Guy). Same shape: GuildChest_GetCEContent_824B3528 is the "is CE-chest content available"
 # check, gated by GATE 1 = bit6 of *(r4+0x90) and GATE 1b = a bit of
 # *(r4+0x28); only when both pass does the type-0x39 item lookup run and the
 # content get GRANTED via a vtable call (bctrl at 0x824B3678). We force each
@@ -379,9 +379,8 @@ name = "LoadPubGames_831465C8"
 
 # === Guild chest (fable2.com website items / CE content unlock) ===
 # The Guild chest holds items obtainable from the fable2.com website and the
-# Collectors Edition content. An unregistered player who clicks it sees
-# "Go to www.fable2.com for information on how to access the gold and items
-# your heroic ancestors left behind." These are the functions on the
+# Collectors Edition content. An unregistered player who clicks it gets a
+# message pointing them to the fable2.com website. These are the functions on the
 # chest-click path (see docs/feature/guest_patches/technical.md). Names are best-effort from runtime
 # tracing; refine them as behaviour is confirmed.
 
