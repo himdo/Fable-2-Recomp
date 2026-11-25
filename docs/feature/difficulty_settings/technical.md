@@ -1,6 +1,6 @@
 # Difficulty settings: technical notes
 
-**Status:** no commit yet · **Commits:** bd6846a (research probe, branch `feature/game-difficulty`, not on master) · **Last checked against:** 5f5f55f
+**Status:** no PR yet · **Commits:** bd6846a, 4d14650 (probes), 891eab4 (names), c2215e2, 92583be (multipliers), bad29df (cards), on branch `feature/game-difficulty`, not on master · **Last checked against:** 7863041
 
 ## Goal
 
@@ -444,7 +444,7 @@ Sizes come from `gui_texture_headers.bnk`; the textures themselves are in `art/g
   - Implement them in `src/core/fable2_hooks.cpp`, taking `PPCRegister&`, and gate them on `fable2::config::Get()`.
   - Pattern to copy: `fable2_hook_disable_motion_blur(PPCRegister& f12)` (lines 113–125), which rewrites a float register.
 - **Strong overrides.**
-  - Define `extern "C" sub_XXXX` and forward to `__imp__sub_XXXX`; the example is `src/core/hotfunc/gui/MeterHitTest_824F1F00.cpp` (`docs/reference/hotfunc_overrides.md`).
+  - Define `extern "C" <name>` (the function's manifest name) and forward to `__imp__<name>`; this branch's `src/core/hotfunc/difficulty/Difficulty.cpp` does this for every hook it adds, and `src/core/hotfunc/vblank/FrameLimiterWait_82242628.cpp` is a hand-tuned example (`docs/reference/hotfunc_overrides.md`).
   - These suit `MoneyComp_Modify_8239E698`, `HealthComp_Modify_8268BD90` and `Difficulty_GetMultiplier_823C92F0`: adjust `ctx.r4` / `ctx.f1` before the call, or `ctx.f1` after it.
 - **Config.**
   - Add a field to `Values` in `src/core/fable2_config.h` (~166).
@@ -565,7 +565,7 @@ delta4o asked whether collecting the 5 gold and paying for the music box still w
 - **Current version:** the same in-place write, moved into `sub_823F8268` (the element-text setter that both paths use). It acts on any text that reads "<known slot name> / …" followed by a line break.
   - **Seen in game (screenshots, 2026-11-24):** "Hero 1 (Easy) / Bowerstone Market", "Hero 2 (Medium) / Bowerstone Old Town", "Hero 3 (Hard) / …".
   - The first card shows its level straight away on opening, also after B and Continue again (confirmed by delta4o on the 21:38 build).
-- **Known problem:** the chapter text loses its last characters ("Living as an orphan in the Bowersto", "Forging the finest swords in"), because the string can't grow in place. The fix is a new, longer string: find the game's wide-string constructor (or what the `+8` field of the record is, in case it's a capacity).
+- **Known problem:** the chapter text under the name loses as many characters from its end as the level adds, so its last word or two are cut off mid-word (seen on two slots), because the string can't grow in place. The fix is a new, longer string: find the game's wide-string constructor (or what the `+8` field of the record is, in case it's a capacity).
 - **A cleaner way, later:** build a new string with the game's wide-string constructor (not found yet), or add the level where the description is built.
 
 ### 18. Feature code, step 1 (2026-11-22)

@@ -1,22 +1,22 @@
 # Difficulty settings: overview
 
-**Status:** no commit yet · **Commits:** bd6846a (research probe, branch `feature/game-difficulty`, not on master) · **Last checked against:** 5f5f55f
+**Status:** no PR yet · **Commits:** bd6846a, 4d14650 (probes), 891eab4 (names), c2215e2, 92583be (multipliers), bad29df (cards), on branch `feature/game-difficulty`, not on master · **Last checked against:** 7863041
 
 A new feature in progress: choosing a difficulty when starting a new game. Feature code is on `feature/game-difficulty`:
 - the multipliers (2026-11-22);
 - since 2026-11-24, the difficulty cards on New Game and with F8 in game, plus a level file per save slot for the Continue screen's label (technical.md section 19).
 
-The 2026-11-24 work isn't committed yet. The addresses, function names and evidence are in [technical.md](technical.md).
+All of it is committed on that branch (bad29df is the latest), but there's no pull request yet. The addresses, function names and evidence are in [technical.md](technical.md).
 
 Progress so far:
 - **2026-11-15: the idea and a first research pass.** Read-only searches of the game's code and data.
 - **2026-11-20: research step 1.** Checked by hand and in game, with a temporary log probe on branch `feature/game-difficulty`.
+- **2026-11-21: research step 2.** We found why the game's own price difficulty never kicked in, and built a bigger log probe for the next play session (see "Research step 2" below). The notes moved from a personal folder into the repo.
 - **2026-11-22: research step 3, the multipliers decided, feature code step 1.** Gold, prices, damage taken and XP now follow the level (technical.md section 18).
 - **2026-11-24: feature code step 2.**
   - The prologue checked: its gold and the music box can't get stuck on any level.
   - The difficulty cards on New Game (after boy or girl) and with F8 in game.
   - The level saved per slot, and a first go at showing it on the Continue screen.
-- **2026-11-21: research step 2.** We found why the game's own price difficulty never kicked in, and built a bigger log probe for the next play session (see "Research step 2" below). The notes moved from a personal folder into the repo.
 
 Findings are marked as:
 - confirmed in the code: read in the repo or the game's compiled code
