@@ -1,6 +1,6 @@
 # Integrated graphics crash: overview
 
-**Status:** fixed for laptops with a graphics card; still open for machines with only built-in graphics · **Commits:** 4d58a5f (#55), shipped in 1.5.0 · **Last checked against:** 5f5f55f
+**Status:** fixed for laptops with a graphics card; still open for machines with only built-in graphics · **Commits:** 4d58a5f (#55), shipped in 1.5.0 · **Last checked against:** 7863041
 
 Issues: [#42](https://github.com/himdo/Fable-2-Recomp/issues/42), [#48](https://github.com/himdo/Fable-2-Recomp/issues/48).
 

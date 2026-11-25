@@ -1,6 +1,6 @@
 # Windows runtime fixes: overview
 
-**Status:** merged · **Commits:** 724495a, 359d3a1 (#148), e0c69c0 (#135), 5cc6513 (#229) · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** 724495a, 359d3a1 (#148), e0c69c0 (#135), 5cc6513 (#229) · **Last checked against:** 7863041
 
 A group of fixes in the project's own copy of the runtime (`himdo/rexglue-sdk`), plus how to build it. The technical file has the build instructions.
 

@@ -1,6 +1,6 @@
 # Fable 2 (ReXGlue) 30 fps cap — investigation log
 
-**Status:** merged · **Commits:** 73d89b0 (vsync off), 62b4db2, d28da25 (#143), e0c69c0 (#135) · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** 73d89b0 (vsync off), 62b4db2, d28da25 (#143), e0c69c0 (#135) · **Last checked against:** 7863041
 
 Goal: run the recompiled Fable 2 uncapped / at 60 fps instead of the native 30 fps lock.
 

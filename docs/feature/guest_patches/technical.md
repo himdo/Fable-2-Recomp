@@ -1,6 +1,6 @@
 # Guest-image patch system (Xenia patch format)
 
-**Status:** merged · **Commits:** cab738b, f146b02 (#208), bfe422d (#210), 8446622 (#228), 5f5f55f (#226) · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** cab738b, f146b02 (#208), bfe422d (#210), 8446622 (#228), 5f5f55f (#226) · **Last checked against:** 7863041
 
 Runtime patching of the loaded `default.xex` guest image, using the op shape
 of Xenia's game-patches (`patch.toml`) format.

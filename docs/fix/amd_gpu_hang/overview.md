@@ -1,6 +1,6 @@
 # AMD GPU hang in Wraithmarsh: overview
 
-**Status:** merged · **Commits:** SDK 0fe6654 (himdo/rexglue-sdk#29), first picked up by the master pin in 2df8825 (#158), shipped in 1.6.0 · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** SDK 0fe6654 (himdo/rexglue-sdk#29), first picked up by the master pin in 2df8825 (#158), shipped in 1.6.0 · **Last checked against:** 7863041
 
 Issue: [#126](https://github.com/himdo/Fable-2-Recomp/issues/126).
 

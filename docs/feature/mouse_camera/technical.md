@@ -1,6 +1,6 @@
 # Mouse camera (direct mouse look): technical notes
 
-**Status:** merged · **Commits:** 80e8361 (#177, which also carries the closed #175's smooth-stick commits), later fixes c5c80ff (#189, script start moved to the world thread) and aae1116 (#227, Steam controller-to-mouse layout) · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** 80e8361 (#177, which also carries the closed #175's smooth-stick commits), later fixes c5c80ff (#189, script start moved to the world thread) and aae1116 (#227, Steam controller-to-mouse layout) · **Last checked against:** 7863041
 
 Labels: **Verified** means read in the repo, the game scripts (paraphrased, never pasted) or a log. **Inference** means reasoned, not tested.
 

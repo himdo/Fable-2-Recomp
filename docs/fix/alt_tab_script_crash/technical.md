@@ -1,6 +1,6 @@
 # Alt-tab script crash: technical notes
 
-**Status:** merged · **Commits:** c5c80ff (#189, the fix), 266f181 (#195, the guard) · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** c5c80ff (#189, the fix), 266f181 (#195, the guard) · **Last checked against:** 7863041
 
 Labels: **Verified** means read in a log, the repo or the generated code. **Plan claim** means taken from a PR description or notes without re-checking. **Inference** means reasoned, not tested.
 

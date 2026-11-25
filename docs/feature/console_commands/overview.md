@@ -1,6 +1,6 @@
 # Developer console: overview
 
-**Status:** merged · **Commits:** 4f0afe5 (#127); later commands in #169, #177, #183, #184 · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** 4f0afe5 (#127); later commands in #169, #177, #183, #184 · **Last checked against:** 7863041
 
 ## What it is
 

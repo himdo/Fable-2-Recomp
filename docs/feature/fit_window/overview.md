@@ -1,6 +1,6 @@
 # Fit game to window (widescreen): overview
 
-**Status:** merged · **Commits:** 4f0afe5 (#127) · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** 4f0afe5 (#127) · **Last checked against:** 7863041
 
 ## What it does
 
