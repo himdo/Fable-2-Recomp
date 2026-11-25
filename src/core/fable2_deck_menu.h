@@ -143,11 +143,11 @@ inline const char* Explanation(const std::string& key) {
       {"menu_animation_speed", "How fast the menus slide and fade. Faster shows the result of a press sooner."},
       {"menu_instant_response", "Menus react in the same update as the press, about 0.1 s sooner than the original game."},
       {"menu_scroll_acceleration", "Holding a direction speeds up scrolling over 1.5 s, up to this many times the normal rate."},
-      {"skip_intro_videos", "Skips the Microsoft and Lionhead logo videos when the game starts."},
+      {"skip_intro_videos", "Skips the Microsoft and Lionhead logo videos when the game starts. This may also make the game start faster."},
       {"disable_motion_blur", "The camera's full-screen blur when it moves."},
       {"deck_button_prompts", "Button prompts as Steam Deck buttons in dark or light, or the original Xbox 360 buttons."},
       {"fps_limit", "The highest frame rate. 30 fps is the original game's lock. Unlimited removes the cap."},
-      {"async_pipelines", "New shaders are compiled in the background instead of pausing the game. This removes the stutters, but whatever needs a new shader (part of an object, or an effect) is left out for a moment the first time it appears."},
+      {"async_pipelines", "New shaders are compiled in the background instead of pausing the game. This reduces stutters, but whatever needs a new shader (part of an object, or an effect) is left out for a moment the first time it appears."},
   };
   for (const auto& [k, text] : kTexts) {
     if (key == k) return text;

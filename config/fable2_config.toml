@@ -205,7 +205,8 @@ unlock_ce = true
 
 # Skip Intro Videos (mid-asm hook fable2_hook_skip_intro_videos; just-harry's
 # "Skip intro videos" patch from his Unofficial Xenia femtofork): skips the
-# Microsoft and Lionhead logo videos at boot. false = videos play (original).
+# Microsoft and Lionhead logo videos at boot, which may also make the game
+# start faster. false = videos play (original).
 # Default: false
 skip_intro_videos = false
 
@@ -290,8 +291,8 @@ disable_msaa = false
 # object, effect or material), the game would stop for a moment to compile it:
 # a stutter, mostly in places you haven't been to yet (compiled shaders are
 # saved, so each happens once). true = compile it in the background and leave
-# whatever needs it (part of an object, or an effect) out until it's ready: no
-# stutter, but it can appear a moment late the first time it's seen. Also in
+# whatever needs it (part of an object, or an effect) out until it's ready:
+# fewer stutters, but it can appear a moment late the first time it's seen. Also in
 # the pause menu's Deck Recomp folder, where a change applies at once.
 # false = stop and compile, as original.
 # Default: true
