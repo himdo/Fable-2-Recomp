@@ -1,8 +1,10 @@
 # Mouse camera (direct mouse look): technical notes
 
-**Status:** merged · **Commits:** 80e8361 (#177, which also carries the closed #175's smooth-stick commits), later fixes c5c80ff (#189, script start moved to the world thread) and aae1116 (#227, Steam controller-to-mouse layout) · **Last checked against:** 7863041
+**Status:** merged · **Commits:** 80e8361 (#177), shipped in 1.6.0; follow-up fixes c5c80ff (#189) and aae1116 (#227) · **Last checked against:** 7863041
 
 Labels: **Verified** means read in the repo, the game scripts (paraphrased, never pasted) or a log. **Inference** means reasoned, not tested.
+
+80e8361 (#177) also carries the smooth-stick commits of the closed #175. The later fixes: c5c80ff (#189) moved the script start to the world thread, and aae1116 (#227) stopped Steam's controller-to-mouse layout from turning the camera.
 
 ## The problem
 

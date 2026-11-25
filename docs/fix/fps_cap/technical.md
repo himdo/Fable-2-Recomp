@@ -1,12 +1,12 @@
 # Fable 2 (ReXGlue) 30 fps cap — investigation log
 
-**Status:** merged · **Commits:** 73d89b0 (vsync off), 62b4db2, d28da25 (#143), e0c69c0 (#135) · **Last checked against:** 7863041
+**Status:** merged · **Commits:** 73d89b0, 62b4db2, d28da25 (#143), e0c69c0 (#135) · **Last checked against:** 7863041
 
 Goal: run the recompiled Fable 2 uncapped / at 60 fps instead of the native 30 fps lock.
 
 ## ✅ RESOLVED — uncapped (20–100 fps observed)
 
-**Fix:** run with the SDK `vsync` cvar disabled → env var **`REX_VSYNC=0`**.
+**Fix:** run with the SDK `vsync` cvar disabled (73d89b0) → env var **`REX_VSYNC=0`**.
 
 With `vsync=false` the ReXGlue vblank worker fires at ~1000 Hz instead of 60 Hz
 (`graphics_system.cpp` vblank worker: `vsync ? vsync_interval : guest_tick/1000`),

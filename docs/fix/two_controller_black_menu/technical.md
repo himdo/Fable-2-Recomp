@@ -1,6 +1,6 @@
 # Fix: Black main menu when a second controller presses a button
 
-**Status:** merged · **Commits:** a4b0274 (code in the SDK fork, `thirdparty/rexglue-sdk/src/kernel/xam/xam_input.cpp`) · **Last checked against:** 7863041
+**Status:** merged · **Commits:** a4b0274 · **Last checked against:** 7863041
 
 **Date:** 2026-10-21
 **Symptom:** With 2 controllers plugged in at launch, pressing **A on the
@@ -36,7 +36,7 @@ the XUID flow.
 ## Fix
 
 Guest-facing **primary-slot remap** in
-`src/kernel/xam/xam_input.cpp` (host convenience, not console behavior):
+`src/kernel/xam/xam_input.cpp` in the SDK fork, `thirdparty/rexglue-sdk` (host convenience, not console behavior):
 
 - On every **button press edge** (a bit 0→down on any host slot), that
   host slot is swapped into **guest user slot 0** — "whoever is pressing

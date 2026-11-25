@@ -1,6 +1,6 @@
 # Rendering and performance (1.6 speed-ups and the bugs they exposed): overview
 
-**Status:** merged · **Commits:** #149, #150, #151, #143, #148, #135, #158 and SDK #25–#28, all shipped in 1.6.0 · **Last checked against:** 7863041
+**Status:** merged · **Commits:** recomp 0b163fb (#149), 6e9f5c4 (#150), c2cad76 (#151), d28da25 (#143), 359d3a1 (#148), e0c69c0 (#135), 2df8825 (#158); SDK bda14fe (#25), e251d3a (#26), c04750f (#27), a56e5ae (#28), all shipped in 1.6.0 · **Last checked against:** 7863041
 
 ## What changed
 
