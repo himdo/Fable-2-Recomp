@@ -35,6 +35,7 @@ Game content (`default.xex`, `data/`) is supplied by the user and never committe
 | `build.cmd -clean [target]` | Deletes `out\build\<config>`, **including saves and any files placed there by hand**. Back them up first | Windows |
 | `build.cmd launcher` | Launcher only | .NET 8 |
 | `build.cmd package` | Release + launcher + zip in `out\dist` | Same as the Release build |
+| `./build.sh` | Linux Release build in `out/build/linux-amd64-release` (see `Linux.md`) | Linux, Clang 20 + lld, Ninja, CMake ≥ 3.25, game files |
 | `python tools/generate_game_versions.py --check` | Checks the generated version constants | Python, any OS |
 | `python -m pytest` | Python tests (`pip install -r tests/requirements.txt` first) | Python 3.11+, any OS |
 | `dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release` | Launcher logic tests | .NET 8 |
@@ -83,10 +84,11 @@ Commit subjects are sentence case and imperative, e.g. "Add a Disable MSAA optio
 - **Guest memory is big-endian.** Use `__builtin_bswap32/64`, `read_be`/`write_be` (`src/core/fable2_console.h`) or `REX_LOAD_*`/`REX_STORE_*`.
 - **An override of `sub_X` that calls `sub_X` calls itself.** Call `__imp__sub_X` (or `__imp__<name>`) instead.
 - **The ~3856 `BaseHeap::AllocFixed attempting to reserve an already reserved range` errors at startup are expected.** The game relies on those reserves failing; don't "fix" them (`docs/fix/main_menu_crash/`).
-- **Host `RunScript` only from the world-update service** (`console::service_world_thread`). Starting a game script from the render thread corrupts the Lua VM (`docs/fix/alt_tab_script_crash/`). `tests/core/test_world_thread_runscript.py` enforces this.
+- **Host `RunScript` only from the world-update service** (`console::service_world_thread`). Starting a game script from the render thread corrupts the Lua VM (the alt-tab crash fixed in #189 and `docs/fix/alt_tab_script_crash/`). `tests/core/test_world_thread_runscript.py` enforces this.
 - **Never register host scripts with `GeneralScriptManager`.** It writes them into save games, and loading the save brings them back. `tests/lua/test_recomp_scripts.py` enforces this (only `F5.lua` may).
 - **Hooks run on guest threads:** touch registers and guest memory only, no file I/O.
 - **The debug remote-control server** (`FABLE2_REMOTE_CONTROL`, port 8791) must stay compiled out of Release builds.
+- **The game also builds on Linux (Vulkan), which CI doesn't check.** Put Windows-only code (`windows.h`, `GetAsyncKeyState`, Win32 calls) behind `#ifdef _WIN32` with a working non-Windows branch, so the build doesn't break on other platforms.
 
 ## Never commit
 
