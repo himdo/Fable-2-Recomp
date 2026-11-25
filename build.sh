@@ -211,7 +211,11 @@ fi
 # --game-lto: call the recompiled functions directly (__imp__NAME) wherever
 # nothing overrides them, so the link-time optimizer can inline them. Only
 # calls not yet rewritten change, so a rebuild recompiles nothing extra.
+# Codegen is brought up to date first: the build below would otherwise
+# regenerate the sources after the rewrite (manifest or codegen config newer)
+# and compile them without direct calls.
 if [ "$GAME_LTO" = ON ] && [ -d "$ROOT/generated/default" ]; then
+    cmake --build "$BUILD" --target fable_2_codegen
     python3 "$ROOT/tools/direct_guest_calls.py" "$ROOT/generated/default" "$ROOT/src"
 fi
 if [ "$TARGET" = package ]; then
