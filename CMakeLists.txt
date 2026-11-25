@@ -111,6 +111,23 @@ target_include_directories(fable_2 PRIVATE
 # per-configuration variant: rexgpu-xenosd.dll for Debug, rexgpu-xenos.dll
 # for Release). Without it the game runs with no GPU emulation.
 rexglue_setup_target(fable_2 GPU_PLUGINS xenos)
+# In-tree SDK build (REXSDK_DIR, the Linux path): rex/rex_app.h includes
+# <imgui.h>, which an installed SDK ships in its include dir but the in-tree
+# rex::runtime target does not propagate.
+if(TARGET imgui)
+    target_include_directories(fable_2 PRIVATE
+        $<TARGET_PROPERTY:imgui,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
+# Linux: the exe resolves librexruntime.so through its $ORIGIN runpath, so the
+# runtime has to sit next to it (the SDK only stages the GPU plugin there).
+if(UNIX AND NOT APPLE)
+    add_custom_command(TARGET fable_2 POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:rex::runtime>
+            $<TARGET_FILE_DIR:fable_2>
+        COMMENT "Staging the ReXGlue runtime next to fable_2"
+        VERBATIM)
+endif()
 add_custom_command(TARGET fable_2 POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_BINARY_DIR}/fable2_build.json"
@@ -450,7 +467,7 @@ if(WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Release")
     # Prefer the source-built runtime/plugin pair over the prebuilt 0.10.0
     # pair (Release only): the source tree carries local fixes the prebuilt
     # SDK lacks (e.g. the vsync present gate in the UI presenter, see
-    # docs/FPS_CAP_INVESTIGATION.md). The source plugin is dual-backend, so a
+    # docs/fix/fps_cap/technical.md). The source plugin is dual-backend, so a
     # plain `fable_2.exe` launch stays D3D12 ("any" picks D3D12).
     if(FABLE2_VULKAN_PLUGIN AND FABLE2_VULKAN_RUNTIME)
         add_custom_command(TARGET fable_2 POST_BUILD

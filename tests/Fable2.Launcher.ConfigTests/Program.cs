@@ -257,6 +257,24 @@ try
             "Disc path escaped the output folder: " + unsafePath);
     }
     Console.WriteLine("Disc paths cannot escape the output folder passed.");
+
+    // A file that is not an Xbox 360 disc must be refused, not scanned forever.
+    // Each case runs with a time limit so a scan that never ends fails the test.
+    foreach (int size in new[] { 0, 10, 20, 21, 4096 })
+    {
+        string notADisc = Path.Combine(testDirectory, "not-a-disc-" + size + ".iso");
+        File.WriteAllBytes(notADisc, new byte[size]);
+        Exception? scanError = null;
+        var scan = Task.Run(() =>
+        {
+            try { X360Extract.X360Disc.Open(notADisc).Dispose(); }
+            catch (Exception ex) { scanError = ex; }
+        });
+        Require(scan.Wait(TimeSpan.FromSeconds(60)), "scanning a " + size + "-byte file without a disc header did not finish");
+        Require(scanError is InvalidDataException,
+            "a " + size + "-byte file without a disc header was not refused: " + (scanError?.GetType().Name ?? "no exception"));
+    }
+    Console.WriteLine("Files without a disc header are refused passed.");
     // A synthetic extra locale proves that no classifier branch needs adding.
     GameVersion extra = supported[0] with { Id = "synthetic-locale", Hash = new string('a', 64),
         Name = "Synthetic locale", Language = 6 };
@@ -320,6 +338,12 @@ try
     Require(launchPlan.Executable == Path.Combine(Path.GetFullPath(buildFolder), "fable_2.exe"), "launch plan does not run the build folder's fable_2.exe");
     Require(launchPlan.WorkingDirectory == Path.GetFullPath(buildFolder), "launch plan does not start in the build folder");
     Require(launchPlan.GameRoot == Path.GetFullPath(gameFolder), "launch plan does not point at the game folder");
+    Require(launchPlan.Arguments.SequenceEqual(new[] { "--game_data_root=" + Path.GetFullPath(gameFolder) }),
+        "launch plan does not tell the game where a separate game folder is");
+    Require(GameLaunchPlanner.Create(buildFolder, buildFolder, defaultEdition).Arguments.Count == 0,
+        "launch plan passes a game folder although the game files are next to fable_2.exe");
+    Require(GameLaunchPlanner.Create(buildFolder, buildFolder + Path.DirectorySeparatorChar, defaultEdition).Arguments.Count == 0,
+        "a trailing separator made the launch plan treat the build folder as a separate game folder");
 
     // It has a profile, so only the Supported flag can stop it.
     var unsupportedGame = new GameCompatibility("Title update detected", "This title update is not supported.", false, GameVersions.DefaultProfile);
@@ -375,12 +399,17 @@ try
         MouseLook = true,
         MouseLookScale = 512,
         MouseLookMode = "stick",
+        MouseAimMode = "detect",
+        MouseAimSens = 0.00125,
         UnlockWebsite = true,
         UnlockCe = false,
         SkipIntroVideos = true,
         HighTickRate = true,
         HigherHfTickRate = false,
+        GuiEveryHfTick = false,
+        Interpolation = false,
         DisableMotionBlur = true,
+        DisableMsaa = true,
         RealtimeTextureMorphing = true,
         HeroDogTextureReadback = false,
         HotFuncYieldEvery = 4,
@@ -402,11 +431,18 @@ try
     Require(readBack.MouseLookMode == "stick", "mouse look mode roundtrip failed");
     Require(writtenAdv.Contains("mouse_look_mode = \"stick\""), "mouse_look_mode is not a TOML string");
     Require(!writtenAdv.Contains("direct_mouse_look"), "the old direct_mouse_look key was written");
+    Require(readBack.MouseAimMode == "detect", "mouse aim mode roundtrip failed");
+    Require(writtenAdv.Contains("mouse_aim_mode = \"detect\""), "mouse_aim_mode is not a TOML string");
+    Require(readBack.MouseAimSens == 0.00125, "mouse aim sensitivity roundtrip failed");
+    Require(writtenAdv.Contains("mouse_aim_sens = 0.00125"), "mouse_aim_sens is not a TOML float");
     Require(!readBack.UnlockCe, "unlock_ce roundtrip failed");
     Require(readBack.SkipIntroVideos, "skip_intro_videos roundtrip failed");
     Require(readBack.DisableMotionBlur, "disable_motion_blur roundtrip failed");
+    Require(readBack.DisableMsaa, "disable_msaa roundtrip failed");
     Require(readBack.HighTickRate, "high_tick_rate roundtrip failed");
     Require(!readBack.HigherHfTickRate, "higher_hf_tick_rate roundtrip failed");
+    Require(!readBack.GuiEveryHfTick, "gui_every_hf_tick roundtrip failed");
+    Require(!readBack.Interpolation, "interpolation roundtrip failed");
     Require(readBack.HotFuncYieldEvery == 4, "hotfunc_yield_every roundtrip failed");
     Require(writtenAdv.Contains("[perf]"), "[perf] section was not written");
     Require(writtenAdv.Contains("[photo_mode]"), "[photo_mode] section was not written");
@@ -453,6 +489,20 @@ try
     string modeContent = File.ReadAllText(modePath);
     Require(modeContent.Contains("mouse_look_mode = \"direct\""), "mouse_look_mode was not rewritten");
     Require(modeContent.Contains("direct_mouse_look = true"), "the old direct_mouse_look line was changed");
+    // mouse_aim_mode: read in any case, like the game; unknown values fall back
+    // to "both". The aim keys the launcher doesn't show are left alone.
+    string aimPath = Path.Combine(testDirectory, "fable2_config_aim.toml");
+    File.WriteAllText(aimPath, "config_version = 1\n[input]\nmouse_aim_mode = \"RMB\"\nmouse_aim_invert_y = true\n");
+    var aimValues = Fable2ConfigFile.Read(aimPath);
+    Require(aimValues.MouseAimMode == "rmb", "mouse_aim_mode was not read in any case");
+    Require(aimValues.MouseAimSens == 0.0007, "a missing mouse_aim_sens did not keep its default");
+    Fable2ConfigFile.Write(aimPath, aimValues);
+    string aimContent = File.ReadAllText(aimPath);
+    Require(aimContent.Contains("mouse_aim_mode = \"rmb\""), "mouse_aim_mode was not rewritten");
+    Require(aimContent.Contains("mouse_aim_sens = 0.0007"), "a missing mouse_aim_sens was not added");
+    Require(aimContent.Contains("mouse_aim_invert_y = true"), "the unmanaged mouse_aim_invert_y line was changed");
+    File.WriteAllText(aimPath, "config_version = 1\n[input]\nmouse_aim_mode = \"always\"\n");
+    Require(Fable2ConfigFile.Read(aimPath).MouseAimMode == "both", "unknown mouse_aim_mode did not fall back to both");
     Console.WriteLine("Advanced options (fable2_config.toml) roundtrip and preservation passed.");
 
     if (args.Length > 0)

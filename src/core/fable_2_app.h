@@ -29,6 +29,7 @@
 
 #include "alloc_watch.h"
 #include "dir_manifest_heal.h"
+#include "recomp_scripts.h"
 #include "fable2_address_scan.h"
 #include "fable2_config.h"
 #include "fable2_fit_window.h"
@@ -42,6 +43,7 @@
 // #include "fps_probe.h"
 #include "keyboard_gamepad.h"
 #include "menu_items.h"
+#include "mouse_wheel_listener.h"
 // The console pad (f2 pad) uses the remote-pad driver in every build.
 #include "remote_gamepad_driver.h"
 #include "fable2_crash_log.h"  // host crash report (fable2_crash.log)
@@ -169,6 +171,11 @@ class Fable2App : public rex::ReXApp {
     });
     // Render at the window's aspect ratio (src/core/fable2_fit_window.h).
     fable2::fitwindow::Install(runtime()->memory(), window());
+    // Direct mouse aim's up/down sensitivity follows that aspect
+    // (src/input/mouse_aim.h).
+    fable2::mouseaim::AspectSource().store(&fable2::fitwindow::CurrentAspect);
+    // The wheel target hop of direct mouse aim (src/input/mouse_wheel_listener.h).
+    fable2::mouseaim::InstallWheelListener(window());
     // Hero/dog black-texture fix (see plans/hero-dog-texture-readback.md).
     // Approach + guest base 0x12704000 credit just-harry's Unofficial Xenia
     // femtofork for Fable II. readback_resolve_force_addresses is defined in the
@@ -194,7 +201,7 @@ class Fable2App : public rex::ReXApp {
         }
       }
     }
-    // Dog fur Z-fighting fix (docs/RUNTIME_FIXES.md): the shell-fur pixel shader
+    // Dog fur Z-fighting fix (docs/fix/runtime_fixes/technical.md): the shell-fur pixel shader
     // relies on exact 24-bit depth ties; a small host depth bias restores them.
     // depth_bias_shader is a GPU-plugin cvar, so it is seeded here too.
     if (fable2::config::Get().dog_fur_depth_bias &&
@@ -376,6 +383,8 @@ class Fable2App : public rex::ReXApp {
     // This describes the linked build, not a guarantee about DLLs replaced later.
     REXSYS_INFO("[native-build] configuration={} linked_sdk={}",
                 FABLE2_NATIVE_CONFIGURATION, FABLE2_NATIVE_SDK);
+    // Before anything mounts the game folder; see SyncRecompScripts.
+    SyncRecompScripts();
     const std::filesystem::path exe_dir =
         rex::filesystem::GetExecutableFolder();
     fable2::config::Load(exe_dir / "fable2_config.toml");
@@ -440,6 +449,28 @@ class Fable2App : public rex::ReXApp {
     seed_cvar("mouse_look_sens_y", std::to_string(cfg.mouse_look_sens_y));
     seed_cvar("mouse_look_invert_y", cfg.mouse_look_invert_y ? "true" : "false");
     seed_cvar("mouse_look_direct_smoothing", std::to_string(cfg.mouse_look_direct_smoothing));
+    // disable_msaa lives in fable2_config.toml ([patches], also written by the
+    // launcher), unlike the settings above: the F4 settings menu saves only
+    // values that differ from the default to fable_2.toml, so turning the
+    // option off there would not stick, and a value it saved once would hide
+    // later launcher changes. So the config value applies over fable_2.toml
+    // (the command line and REX_* environment variables still win), and a
+    // change in the menu is written back to fable2_config.toml.
+    {
+      const auto source = rex::cvar::GetFlagSource("disable_msaa");
+      if (source != rex::cvar::Source::kCommandLine && source != rex::cvar::Source::kEnvironment) {
+        rex::cvar::SetFlagByName("disable_msaa", cfg.disable_msaa ? "true" : "false");
+      }
+      rex::cvar::RegisterChangeCallback("disable_msaa", [](std::string_view, std::string_view value) {
+        fable2::config::SaveDisableMsaa(value == "true" || value == "1");
+      });
+    }
+    seed_cvar("mouse_aim_mode", cfg.mouse_aim_mode);
+    seed_cvar("mouse_aim_input", cfg.mouse_aim_input);
+    seed_cvar("mouse_aim_sens", std::to_string(cfg.mouse_aim_sens));
+    seed_cvar("mouse_aim_y_ratio", std::to_string(cfg.mouse_aim_y_ratio));
+    seed_cvar("mouse_aim_invert_y", cfg.mouse_aim_invert_y ? "true" : "false");
+    seed_cvar("mouse_aim_scale", std::to_string(cfg.mouse_aim_scale));
     // NOTE: the hero/dog readback fix (readback_resolve_force_addresses) is a
     // GPU-PLUGIN cvar, so it is seeded in OnPostSetup() (after the plugin is
     // loaded) rather than here - see plans/hero-dog-texture-readback.md.
@@ -474,6 +505,32 @@ class Fable2App : public rex::ReXApp {
     // debug builds.
     fable2::stateprobe::start();
 #endif  // FABLE2_REMOTE_CONTROL
+  }
+
+  // With the game files in another folder (--game_data_root), copies the
+  // recomp Lua scripts there: they ship next to the executable, but the guest
+  // loads them from the game folder (see src/core/recomp_scripts.h).
+  //
+  // Call it from OnPostInitLogging and nowhere later. The runtime lists the
+  // game folder once, when it mounts it (after this hook, before
+  // OnLoadXexImage), and the guest cannot open a file that appears after
+  // that: copied any later, the scripts only work from the next start.
+  void SyncRecompScripts() {
+    const std::filesystem::path loaded = game_data_root() / "data" / "scripts" / "recomp";
+    const fable2::recompscripts::SyncResult scripts =
+        fable2::recompscripts::Sync(rex::filesystem::GetExecutableFolder(), game_data_root());
+    if (scripts.source_missing) {
+      REXSYS_WARN("[recomp-scripts] no data/scripts/recomp folder next to the executable; F5, "
+                  "the console and the direct mouse camera need the scripts in {}",
+                  loaded.string());
+    }
+    if (scripts.copied > 0) {
+      REXSYS_INFO("[recomp-scripts] copied {} script(s) to {}", scripts.copied, loaded.string());
+    }
+    for (const std::string& name : scripts.failed) {
+      REXSYS_ERROR("[recomp-scripts] could not copy {} to {}; features that run it will not work",
+                   name, loaded.string());
+    }
   }
 
   void OnShutdown() override {
@@ -513,6 +570,8 @@ class Fable2App : public rex::ReXApp {
     // guest sees null (crashes at startup). Content migrated with an
     // mtime-respecting copy can leave a stale/truncated manifest in place;
     // this appends any file that is on disk but unlisted. Idempotent.
+    // This also lists the recomp Lua scripts that SyncRecompScripts copied
+    // into a separate game folder earlier in start-up.
     fable2::manifestheal::EnsureComplete(game_data_root());
     fable2::console::set_root(game_data_root());
     // Photo mode's pose cards run console lines (`pose`).

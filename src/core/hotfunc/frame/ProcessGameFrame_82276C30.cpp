@@ -122,7 +122,7 @@ extern "C" void __savefpr_21(PPCContext& ctx, uint8_t* base);
 extern "C" void __savegprlr_14(PPCContext& ctx, uint8_t* base);
 extern "C" void sub_82198860(PPCContext& ctx, uint8_t* base);
 extern "C" void sub_821EE858(PPCContext& ctx, uint8_t* base);
-extern "C" void sub_82278C90(PPCContext& ctx, uint8_t* base);
+extern "C" void GameFrame_HfTickUpdate_82278C90(PPCContext& ctx, uint8_t* base);
 extern "C" void sub_822A9B20(PPCContext& ctx, uint8_t* base);
 extern "C" void sub_822C1FB8(PPCContext& ctx, uint8_t* base);
 extern "C" void sub_822C93C0(PPCContext& ctx, uint8_t* base);
@@ -953,7 +953,7 @@ static __attribute__((noinline)) void process_frame_work(PPCContext& ctx, uint8_
 	ctx.f2.f64 = ctx.f28.f64;
 	// bl 0x82278c90
 	ctx.lr = 0x82277188;
-	sub_82278C90(ctx, base);
+	GameFrame_HfTickUpdate_82278C90(ctx, base);
 	// lwz r3,27108(r18)
 	ctx.r3.u64 = GV32(ctx.r18.u32 + 27108);
 	// mr r28,r29

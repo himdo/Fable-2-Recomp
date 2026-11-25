@@ -1,5 +1,7 @@
 # Guest-image patch system (Xenia patch format)
 
+**Status:** merged · **Commits:** cab738b, f146b02 (#208), bfe422d (#210), 8446622 (#228), 5f5f55f (#226) · **Last checked against:** 5f5f55f
+
 Runtime patching of the loaded `default.xex` guest image, using the op shape
 of Xenia's game-patches (`patch.toml`) format.
 
@@ -42,6 +44,58 @@ This is the fundamental recomp vs. emulator split: **data patches work, code
 patches don't** (a code patch here would mean editing the recompiled C++ at
 build time, which codegen would clobber on the next run), so every code op is
 a mid-asm hook.
+
+### GUI every HF tick (`gui_every_hf_tick`, on by default)
+
+The game updates gameplay, AI, scripts and the GUI only on LF ticks, which are
+every other HF tick. `GameFrame_HfTickUpdate_82278C90` calls the front-end GUI
+update (vtable[2], `GuiManager_Update_82286B40`: subtitles, HUD text) only
+when an LF boundary was crossed. The GUI measures its own elapsed time from
+the wall clock (`Timer_GetElapsed_822B6D70`), so the hook
+`fable2_hook_gui_every_tick` (0x82278D1C) runs it on every HF tick without
+changing its speed: text updates at 30 Hz instead of 15 Hz, or 60 Hz with
+`higher_hf_tick_rate`. This raises the update rate; it does not blend anything
+between ticks.
+
+### Interpolation (`interpolation`, on by default)
+
+Characters are already drawn blended between their last two LF poses at the
+render time (the engine's own interpolator at instance+176, applied by
+`Pose_BlendForDraw_8222E300`), and the camera is blended with the HF fraction.
+The cloth was not, and this option fixes it:
+
+- **Cloth colliders.** `Cloth_BuildColliders_82A895C0` builds the cloth's
+  collision shapes from the raw current pose, while the body is drawn blended,
+  so the colliders ran up to one LF tick ahead and jumped every LF tick.
+  `fable2_hook_cloth_collider_bone` (four sites, after `add r11,r11,r9`)
+  points each read at the same bone blended the way the renderer blends it
+  (sign-corrected quaternion lerp, normalized; translation and scale lerped).
+  - It blends only when the previous and current pose share the skeleton id
+    (pose+8, which `Pose_BlendForDraw_8222E300` checks) and bone count
+    (pose+12) and the bone index is below the count, so it never reads past
+    the previous pose's bones.
+  - The blended bone goes 256 bytes below the guest stack pointer. At all
+    four sites r11 is used only by the next four loads (+0, +8, +16, +32),
+    with no store or call in between, so nothing overwrites it first.
+- **Cloth movement (capes, coats).** The cloth itself is simulated every drawn
+  frame (the render traversal `Cloth_UpdateAll_821E2D40` queues a step with
+  the frame's wall-clock dt) in the character's local space, and the solver
+  turns the change of the cloth's world matrix between steps into inertia.
+  `Cloth_Step_8219ADD8` took that matrix from the entity matrix at inst+336,
+  copied before it is updated for the frame: one frame late, and on tick
+  frames the raw new tick position, up to a tick ahead of the drawn body.
+  While walking the cloth's position went back and forth (95.15, 95.03, 95.08,
+  95.29, 95.19, 95.43, ...), so the cloth was flung forward and back every
+  tick and visibly stepped while the body moved smoothly.
+  `fable2_hook_cloth_world_transform` (0x8219AEA0, after `addi r4,r1,80`,
+  before `bl 0x8218d730`) points r4 at owner+208 instead (owner =
+  `*(cloth+0)`): the drawn world matrix `Cloth_UpdateAll_821E2D40` stores
+  there just before queueing the step (`Instance_GetDrawnMatrix_821E1C98`, the
+  interpolator's matrix at the render time). The matrix now moves steadily,
+  and teleports still trigger `Cloth_SetWorldTransform_8218D730`'s own cloth
+  reset.
+
+Split from himdo/Fable-2-Recomp PR 72 without its dynamic tick rate.
 
 ## Validation (2026-09-15)
 
@@ -103,8 +157,8 @@ Currently **empty**.
 
 | Patch | Mechanism | Change | Measured effect |
 |---|---|---|---|
-| Unlock Website Items (Guy) | mid-asm hook `fable2_hook_unlock_website` @ 0x8256E384 (after `rlwinm r9,r10,0,25,25`); toggle: `[patches] unlock_website` | Forces `r9 = 0x40` (bit 6) in `sub_8256E368`, so the website/Guild-chest item lookup reads as unlocked and runs the real lookup. Re-derives the Xenia "Unlock Website Items" intent for THIS build (the stock ops target a different revision's bytes). | Hook confirmed in generated code + clean startup; in-game chest unlock pending manual test |
-| Unlock CE Content (Guy) | mid-asm hook `fable2_hook_unlock_ce` @ 0x824B3540 (after `rlwinm r10,r11,0,25,25`); toggle: `[patches] unlock_ce` | Forces `r10 = 0x40` (bit 6) in `sub_824B3528`, so the Collectors-Edition chest item lookup reads as unlocked and runs the real lookup. Same re-derivation approach. | Hook confirmed in generated code + clean startup; in-game chest unlock pending manual test |
+| Unlock Website Items (Guy) | mid-asm hooks `fable2_hook_website_g1` @ 0x8256E384 (r9, after the GATE-1 `rlwinm`), `fable2_hook_website_g1b` @ 0x8256E3AC (r8, after the GATE-1b `clrlwi`) and `fable2_hook_website_grantnew` @ 0x8256D9E4 (r3, the grant method's return); toggle: `[patches] unlock_website` | Forces both registration gate results in `sub_8256E368` to 1 and the grant method's return to 1, so the website/Guild-chest getter treats the player as registered, finds the item and reports it as granted. The getters run at save load, so the chest inventory is filled on load. Re-derives the Xenia "Unlock Website Items" intent for THIS build (the stock ops target a different revision's bytes). | Hook confirmed in generated code + clean startup; in-game chest unlock pending manual test |
+| Unlock CE Content (Guy) | mid-asm hooks `fable2_hook_ce_g1` @ 0x824B3540 (r10), `fable2_hook_ce_g1b` @ 0x824B3568 (r9) and `fable2_hook_ce_grantavail` @ 0x824ACAE0 (r3); toggle: `[patches] unlock_ce` | Same shape for the Collectors Edition chest in `sub_824B3528`: both gate results forced to 1, and the grant method's return forced to 1. | Hook confirmed in generated code + clean startup; in-game chest unlock pending manual test |
 
 To add a new code patch: a `[[entrypoint.midasm_hook]]` entry + hook
 function gated on a `[patches]` config key (preferred), or an
@@ -116,9 +170,11 @@ same key.
 
 `src/diagnostics/fps_meter.h` (included from main.cpp): strong override of the weak
 recompiled `MainRenderLoop_82B9CD68` (0x82B9CD68, main loop, one call per frame; renamed from `sub_82B9CD68`) that counts
-invocations in 5 s windows and appends `mainloop rate=NN.N/s` to
-`fps_meter.log` next to the exe. Forward-only (counts, then calls the
-original `__imp__` entry). Enabled with `FABLE2_FPS_METER=1`.
+invocations in 5 s windows and appends a line per window to `fps_meter.log`
+next to the exe: wall-clock time, seconds since start, `mainloop rate=NN.N/s`,
+the 1% low (`low1%`, the rate of the slowest 1% of frames), the longest frame
+(`worst`) and the number of frames over 50 ms (`hitches>50ms`). Forward-only
+(counts, then calls the original `__imp__` entry). Enabled with `FABLE2_FPS_METER=1`.
 
 ## Follow-ups
 
@@ -128,12 +184,18 @@ original `__imp__` entry). Enabled with `FABLE2_FPS_METER=1`.
 2. **Other Xenia patches** for this title (from
    `4D5307F1 - Fable II (GOTY).patch.toml`). Done as mid-asm hooks:
    **Unlock Website Items**, **Unlock CE Content** (all re-derived for THIS
-   build — see the recomp-level patches table above). Remaining (still to port,
-   each needs the same build-mismatch investigation — the stock ops target a
-   different revision): 1280x720 (be16 0x8238DF5A=0x0500), Disable MSAA
-   (be8 0x8238DF3F=0x01), Disable Texture Morphing (be16 0x8220EF10=0x4280),
-   21:9 / 32:9 widescreen — all .text/data-in-.text, so expect the same "applied
-   but inert" behavior for their code ops if applied to the guest image.
+   build — see the recomp-level patches table above). **Disable MSAA** is done
+   as a strong-symbol override of the render setup `InitRenderSettings_8238DE58` (was `sub_8238DE58`)
+   (`src/core/hotfunc/render/InitRenderSettings_8238DE58.cpp`, `[patches]
+   disable_msaa`): its ops do match this build — `0x8238DF3C` is `li r9,2`, the
+   MSAA mode stored at `+156` of the settings object in r3 (the patch makes it
+   `li r9,1`), next to the 1120x720 render size at `+148`/`+152` — but as
+   recompiled code it can't be patched in the image, so the override stores
+   mode 1 after the original runs. Remaining (still to port): 1280x720 (be16
+   0x8238DF5A=0x0500, the `li r11,1120` render width in the same function),
+   Disable Texture Morphing (be16 0x8220EF10=0x4280), 21:9 / 32:9 widescreen —
+   all .text/data-in-.text, so expect the same "applied but inert" behavior for
+   their code ops if applied to the guest image.
 3. **Oddity worth investigating (separate issue):** the recompiled C++ for
    `sub_8233AE50` (generated/default/fable_2_recomp.65.cpp:3211) was compiled
    from a word at 0x8233AEB4 of `0xD9009510` (stfd f0,0x9510(r8)), but the

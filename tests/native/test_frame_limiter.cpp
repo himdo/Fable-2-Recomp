@@ -1,32 +1,43 @@
 // Synthetic standalone test; no game or GPU.
 #include <rex/graphics/frame_limiter.h>
+
 #include <chrono>
-#include <iostream>
 #include <thread>
 
-int main() {
-  using Clock = std::chrono::steady_clock;
-  using namespace std::chrono_literals;
+#include "catch_amalgamated.hpp"
+
+using Clock = std::chrono::steady_clock;
+using namespace std::chrono_literals;
+
+TEST_CASE("FrameLimiter", "[graphics]") {
   rex::graphics::FrameLimiter limiter;
-  for (int rate : {30, 60, 144}) {
-    limiter.Pace(0);
-    auto start = Clock::now();
-    for (int i = 0; i < 7; ++i) limiter.Pace(rate);
-    auto elapsed = Clock::now() - start;
-    if (elapsed < std::chrono::duration<double>(5.9 / rate)) return 1;
-    std::cout << rate << " FPS: "
-              << std::chrono::duration<double>(elapsed).count() << " seconds for 6 intervals\n";
+
+  SECTION("caps 30, 60 and 144 FPS") {
+    for (int rate : {30, 60, 144}) {
+      CAPTURE(rate);
+      limiter.Pace(0);
+      const auto start = Clock::now();
+      for (int i = 0; i < 7; ++i) limiter.Pace(rate);
+      const double seconds = std::chrono::duration<double>(Clock::now() - start).count();
+      CHECK(seconds >= 5.9 / rate);  // six intervals
+    }
   }
-  // Disabled/invalid modes and changing rates reset without an old deadline.
-  for (int rate : {0, -1, 241, 30, 0, 60, 30, 60}) {
-    auto start = Clock::now();
-    limiter.Pace(rate);
-    if (Clock::now() - start > 15ms) return 2;
+
+  SECTION("never waits when disabled, out of range, or right after a rate change") {
+    for (int rate : {0, -1, 241, 30, 0, 60, 30, 60}) {
+      CAPTURE(rate);
+      const auto start = Clock::now();
+      limiter.Pace(rate);
+      CHECK(Clock::now() - start <= 15ms);
+    }
   }
-  std::this_thread::sleep_for(100ms);
-  limiter.Pace(60);
-  auto start = Clock::now();
-  limiter.Pace(60);
-  if (Clock::now() - start < 15ms) return 3;  // No late-frame catch-up burst.
-  std::cout << "PASS: caps, disabled mode, rate changes and late-frame reset\n";
+
+  SECTION("doesn't catch up with a burst after a late frame") {
+    limiter.Pace(60);
+    std::this_thread::sleep_for(100ms);
+    limiter.Pace(60);
+    const auto start = Clock::now();
+    limiter.Pace(60);
+    CHECK(Clock::now() - start >= 15ms);
+  }
 }

@@ -1,5 +1,7 @@
 # German GOTY support
 
+**Status:** merged · **Commits:** bfcc5d6, 724495a, 77059af · **Last checked against:** 5f5f55f
+
 The default `goty-compatible` profile accepts these two original XEXs:
 
 | Edition | SHA-256 |
@@ -47,7 +49,7 @@ confirmed normal hero/dog rendering with the matched upstream renderer.
 Extended play, region transitions, complete localization and exhaustive
 cross-edition/save-version compatibility remain unverified.
 Existing AllocFixed messages and a missing `de-de/lang.ini` lookup are not fixed
-by this change. See [runtime fixes and validation](RUNTIME_FIXES.md) for the
+by this change. See [runtime fixes and validation](../../fix/runtime_fixes/technical.md) for the
 additional SDK patch and frame-pacing/audio tests; no allocator fix is claimed.
 
 Tests require no distributed game files:

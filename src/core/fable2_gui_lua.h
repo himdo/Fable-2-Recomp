@@ -7,7 +7,7 @@
 // getChildren(el). Attributes include position.x/y, scale.x/y, rotation.z,
 // opacity, active, diffuse.r/g/b/a, textstring, textcolor.r/g/b.
 //
-// Addresses (read from the decrypted default.xex; see docs/console/GUI-LUA-BRIDGE.md):
+// Addresses (read from the decrypted default.xex; see docs/reference/gui_lua_bridge.md):
 //   0x82BB2528  GameFace registers its globals; r3 = context, lua_State* at ctx+4
 //   0x82BB68D8  native getElement      0x82BB7100  native setAttribute (r3 = L)
 //   0x82BC6130  lua_load(L, reader, data, chunkname)

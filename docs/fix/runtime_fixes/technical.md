@@ -1,5 +1,7 @@
 # Windows runtime fixes
 
+**Status:** merged · **Commits:** 724495a, 359d3a1 (#148), e0c69c0 (#135), 5cc6513 (#229) · **Last checked against:** 5f5f55f
+
 The source SDK is `himdo/rexglue-sdk`, pinned through the `thirdparty/rexglue-sdk`
 submodule. The audio, frame-pacing, Release FPS-counter and Windows export
 changes are part of that fork, as are the performance-counter and cvar exports
@@ -13,8 +15,8 @@ to generate and run the game.
 
 ## Build
 
-Use a Visual Studio x64 developer shell with LLVM 20+, Ninja, CMake, Python
-and the .NET 8 SDK on PATH. From the repository root:
+Use a Visual Studio x64 developer shell with LLVM 22+ (the STL of MSVC 14.52
+and later refuses older Clang), Ninja, CMake, Python and the .NET 8 SDK on PATH. From the repository root:
 
 ```cmd
 build.cmd -release fable_2

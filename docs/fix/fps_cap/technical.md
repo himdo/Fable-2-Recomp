@@ -1,5 +1,7 @@
 # Fable 2 (ReXGlue) 30 fps cap — investigation log
 
+**Status:** merged · **Commits:** 73d89b0 (vsync off), 62b4db2, d28da25 (#143), e0c69c0 (#135) · **Last checked against:** 5f5f55f
+
 Goal: run the recompiled Fable 2 uncapped / at 60 fps instead of the native 30 fps lock.
 
 ## ✅ RESOLVED — uncapped (20–100 fps observed)
@@ -31,7 +33,7 @@ CMake). It sets `REX_VSYNC=0` and calls `fable2.cmd`. To run capped (native
   `fable_2_app.h`); file kept for re-measurement.
 - SDK `command_processor.cpp` `[wrm]` instrumentation reverted (git clean).
 - Temp SDK build tree + script removed.
-- `FPS_CAP_INVESTIGATION.md` kept as the record.
+- This file (`docs/fix/fps_cap/technical.md`) is kept as the record.
 
 ---
 
@@ -159,7 +161,7 @@ Instrumentation added (temporary): logs every memory `WAIT_REG_MEM` with
 - `REX_VSYNC=0` is the shipped solution (fully uncapped).
 - `FrameLimiterWait_82242628` has a hand-tuned hot-function override at
   `src/core/hotfunc/vblank/FrameLimiterWait_82242628.cpp` (see
-  docs/hotfunc_overrides.md) — a behavior-identical goto-free rewrite; it no
+  docs/reference/hotfunc_overrides.md) — a behavior-identical goto-free rewrite; it no
   longer implements the vblank fast gate. Its loads stay volatile
   (`REX_LOAD_*`) because the counter it spins on is written by the GPU
   thread.

@@ -486,6 +486,196 @@ def describe_format_stats():
         assert "f2 mouse trace on" in text
 
 
+def aim_poll(t, cur, atk=0, aim=1, inj=(0, 0)):
+    """A P line from the aim stick swap: the mouse drove the left stick, cur= is the reticle."""
+    return poll(t, inj=inj) + f" dir=0 aim={aim} lx=0 ly=0 cur={cur[0]},{cur[1]} atk={atk}"
+
+
+def pad_stick(t, lx, ly, frames):
+    """The note `f2 pad stick` writes."""
+    return f"N t={t} padstick lx={lx} ly={ly} frames={frames}"
+
+
+def pad_released(t):
+    """The note the console writes when a `pad stick` is let go."""
+    return f"N t={t} padstick released"
+
+
+def aim_run():
+    """A one-second inject run while aiming, with the game updating the cursor at 15 Hz.
+
+    The reticle goes from 0.1,0 to 0.5,0.2, eases back a little in the tail, then springs
+    back to the middle by 2 s after.
+    """
+    return [aim_poll(-10_000, (0.1, 0.0), atk=99, aim=0),  # before the run
+            inject(0, 200, 0, 1000),
+            aim_poll(200_000, (0.2, 0.05), atk=102, inj=(10, 0)),
+            aim_poll(600_000, (0.4, 0.1), atk=108, inj=(10, 0)),
+            aim_poll(1_000_000, (0.5, 0.2), atk=114),
+            aim_poll(1_300_000, (0.45, 0.2), atk=118, aim=0),  # inside the 500 ms tail
+            aim_poll(2_000_000, (0.0, 0.0), atk=129, aim=0),   # settled, within 2 s
+            aim_poll(3_500_000, (0.3, 0.3), atk=151, aim=0)]   # too late to count
+
+
+def describe_reticle():
+    def test_should_measure_the_move_from_the_last_poll_before_the_run_to_its_end():
+        aim = analyse_first(aim_run())["reticle"]
+
+        assert aim["moved"] == [0.4, 0.2]
+
+    def test_should_count_the_games_cursor_updates_during_the_run():
+        aim = analyse_first(aim_run())["reticle"]
+
+        assert aim["updates"] == 15
+
+    def test_should_measure_from_the_first_poll_in_the_run_when_none_came_before():
+        aim = analyse_first(aim_run()[1:])["reticle"]
+
+        assert aim["moved"] == [0.3, 0.15]
+
+    def test_should_measure_the_drift_after_the_input_stopped_within_the_tail():
+        aim = analyse_first(aim_run())["reticle"]
+
+        assert (aim["after_stop"], aim["after_stop_updates"]) == ([-0.05, 0.0], 4)
+
+    def test_should_measure_where_the_reticle_settled_within_two_seconds():
+        aim = analyse_first(aim_run())["reticle"]
+
+        assert (aim["settled"], aim["settled_updates"]) == ([-0.5, -0.2], 15)
+
+    def test_should_not_count_a_frozen_reticle_as_staying_put():
+        # cur= only changes while the game aims: with no update after the run, the
+        # unchanged value says nothing.
+        lines = aim_run()[:5] + [aim_poll(1_300_000, (0.5, 0.2), atk=114, aim=0),
+                                 aim_poll(2_000_000, (0.5, 0.2), atk=114, aim=0)]
+
+        aim = analyse_first(lines)["reticle"]
+
+        assert (aim["after_stop"], aim["settled"]) == (None, None)
+
+    def test_should_stop_following_the_reticle_at_the_next_run():
+        lines = aim_run()[:6] + [inject(1_500_000, 100, 0, 500), aim_poll(2_000_000, (0.0, 0.0), atk=129)]
+
+        aim = analyse_first(lines)["reticle"]
+
+        assert aim["settled"] == [-0.05, 0.0]  # the tail reading, not the next run's poll
+
+    def test_should_report_where_the_reticle_ended():
+        aim = analyse_first(aim_run())["reticle"]
+
+        assert aim["end"] == [0.5, 0.2]
+
+    def test_should_report_the_share_of_polls_that_aimed():
+        aim = analyse_first(aim_run())["reticle"]
+
+        assert aim["aim_share"] == 1.0
+
+    def test_should_measure_the_cursor_rate_from_the_readings_own_times():
+        aim = analyse_first(aim_run())["reticle"]
+
+        assert aim["ticks_per_s"] == 15.0
+
+    def test_should_skip_a_reticle_value_that_is_not_a_number():
+        lines = aim_run()
+        lines.insert(4, aim_poll(800_000, ("nan", "0.1"), atk=111))
+
+        aim = analyse_first(lines)["reticle"]
+
+        assert aim["moved"] == [0.4, 0.2]
+
+    def test_should_report_a_run_where_only_the_game_moved_the_reticle():
+        # A `pad stick` run while aiming: no aim polls, but the cursor updated.
+        lines = [aim_poll(-10_000, (0.0, 0.0), atk=10, aim=0), pad_stick(0, 6000, 0, 30),
+                 aim_poll(500_000, (0.06, 0.0), atk=17, aim=0), pad_released(1_000_000)]
+
+        aim = analyse_first(lines)["reticle"]
+
+        assert (aim["moved"], aim["updates"], aim["aim_share"]) == ([0.06, 0.0], 7, 0.0)
+
+    def test_should_report_no_reticle_when_neither_the_mouse_nor_the_game_moved_it():
+        lines = [inject(0, 100, 0, 1000), aim_poll(100_000, (0.2, 0.0), atk=5, aim=0),
+                 aim_poll(900_000, (0.2, 0.0), atk=5, aim=0)]
+
+        assert analyse_first(lines)["reticle"] is None
+
+    def test_should_report_no_reticle_for_logs_from_before_the_aim_fields():
+        assert analyse_first(two_polls_per_update())["reticle"] is None
+
+    def test_should_print_the_reticle_line_for_an_aiming_run():
+        text = mouse_stats.format_stats(analyse_first(aim_run()))
+
+        assert ("  reticle moved 0.4,0.2 in 15 updates; after stop -0.05,0.0 in 4; "
+                "settled -0.5,-0.2 in 15; at 0.5,0.2; aim polls 1.0; cursor updates 15.0/s"
+                ) in text.splitlines()
+
+    def test_should_print_why_there_is_no_drift_when_aim_had_ended():
+        lines = aim_run()[:5]
+
+        text = mouse_stats.format_stats(analyse_first(lines))
+
+        assert "after stop n/a (no cursor updates: aim ended)" in text
+        assert "settled n/a (no cursor updates: aim ended)" in text
+
+    def test_should_not_print_a_reticle_line_for_a_run_that_did_not_aim():
+        text = mouse_stats.format_stats(analyse_first(two_polls_per_update()))
+
+        assert "reticle" not in text
+
+
+def describe_pad_stick_runs():
+    def test_should_start_a_run_at_the_note():
+        records = records_of([pad_stick(1_000, 6000, 0, 30), pad_released(501_000)])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert [(s.start, s.end) for s in segments] == [(1_000, 501_000)]
+
+    def test_should_name_the_run_after_the_stick_and_frames():
+        records = records_of([pad_stick(1_000, 6000, -200, 30), pad_released(501_000)])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert segments[0].label == "pad stick 6000,-200 for 30 frames"
+
+    def test_should_estimate_the_end_from_the_frames_without_a_release_note():
+        records = records_of([pad_stick(0, 3000, 0, 30)])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert segments[0].end == 30 * mouse_stats.PAD_FRAME_US
+
+    def test_should_sit_alongside_inject_runs_in_time_order():
+        records = records_of([pad_stick(0, 3000, 0, 30), pad_released(500_000),
+                              inject(1_000_000, 100, 0, 500)])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert [s.label for s in segments] == ["pad stick 3000,0 for 30 frames",
+                                               "inject 100,0 px over 500 ms"]
+
+    def test_should_end_where_the_next_run_begins():
+        records = records_of([pad_stick(0, 3000, 0, 30), pad_released(500_000),
+                              inject(1_000_000, 100, 0, 500)])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert (segments[0].until, segments[1].until) == (1_000_000, None)
+
+    def test_should_carry_the_mode_tags():
+        records = records_of(["N t=1 mode direct", "N t=2 aim detect", pad_stick(10, 3000, 0, 30)])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert segments[0].label == "pad stick 3000,0 for 30 frames [direct, aim detect]"
+
+    def test_should_ignore_a_release_note_with_no_stick_held():
+        records = records_of([inject(0, 100, 0, 500), pad_released(100_000)])
+
+        segments = mouse_stats.find_segments(records)
+
+        assert segments[0].end == 500_000
+
+
 def describe_main():
     def test_should_name_each_inject_run_in_the_text_report(run_main):
         code, out, _ = run_main([inject(0, 10, 0, 100), poll(10, inj=(10, 0))])

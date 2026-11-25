@@ -33,18 +33,49 @@ jobs:
       - name: Launcher tests
         run: dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release
       - name: Check out the SDK sources the native tests use
-        # Only the SDK and the three header libraries the tests include, not the
-        # SDK's other submodules (FFmpeg, SDL, the Vulkan libraries and so on).
+        # Only the SDK, the three header libraries the tests include and Catch2,
+        # not the SDK's other submodules (FFmpeg, SDL, the Vulkan libraries...).
         shell: bash
         run: |
           git submodule update --init --depth 1 thirdparty/rexglue-sdk
           git -C thirdparty/rexglue-sdk submodule update --init --depth 1 \
-            thirdparty/fmt thirdparty/simde thirdparty/spdlog
+            thirdparty/fmt thirdparty/simde thirdparty/spdlog thirdparty/catch2
+      - name: Install LLVM
+        # The runner's own LLVM (C:\Program Files\LLVM) lags behind its Visual
+        # Studio: the STL of MSVC 14.52 and later refuses Clang older than 22
+        # (error STL1000). Pinned to a release, checked against its SHA-256 from
+        # the GitHub release. The .tar.xz, not the smaller .tar.zst: Windows' tar
+        # can't unpack that one (it needs zstd's long window).
+        shell: pwsh
+        env:
+          LLVM_VERSION: "23.1.5"
+          LLVM_SHA256: "62fdada7f6fa2b73856486dfbbdba3d2c1882991621615bcb55c60207611c6d4"
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          $name = "clang+llvm-$env:LLVM_VERSION-x86_64-pc-windows-msvc"
+          $archive = Join-Path $env:RUNNER_TEMP "$name.tar.xz"
+          Invoke-WebRequest "https://github.com/llvm/llvm-project/releases/download/llvmorg-$env:LLVM_VERSION/$name.tar.xz" -OutFile $archive
+          $hash = (Get-FileHash $archive -Algorithm SHA256).Hash
+          if ($hash -ne $env:LLVM_SHA256) { throw "LLVM archive SHA-256 is $hash, expected $env:LLVM_SHA256" }
+          # Windows' tar, not Git's GNU tar, which reads C: as a remote host.
+          & "$env:SystemRoot\System32\tar.exe" -xf $archive -C $env:RUNNER_TEMP
+          if ($LASTEXITCODE -ne 0) { throw "tar failed with exit code $LASTEXITCODE" }
+          Remove-Item $archive
+          $bin = Join-Path $env:RUNNER_TEMP "$name\bin"
+          if (-not (Test-Path "$bin\clang++.exe")) { throw "clang++.exe not found in $bin" }
+          $bin | Out-File $env:GITHUB_PATH -Append -Encoding utf8
+          # The versions the native tests depend on, for when this breaks again.
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
+          "Visual Studio: $vs"
+          if ($vs -and (Test-Path "$vs\VC\Tools\MSVC")) {
+            "MSVC toolsets: " + ((Get-ChildItem "$vs\VC\Tools\MSVC" -Directory).Name -join ', ')
+          }
+          & "$bin\clang++.exe" --version
       - name: Native tests (with coverage)
         shell: cmd
         env:
           FABLE2_COVERAGE: "1"
         run: |
-          set "PATH=C:\Program Files\LLVM\bin;%PATH%"
+          where clang++
           clang++ --version
           tests\run_native_tests.cmd

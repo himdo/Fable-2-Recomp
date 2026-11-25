@@ -72,7 +72,11 @@ namespace fable2::photomode {
 
 namespace detail {
 
-// Guest addresses.
+// Guest addresses. The functions are named in fable_2_manifest.toml
+// ("Photo mode game calls"): LuaDebug_SetDrawGUI_823AC520,
+// LuaDebug_SetShouldDrawWorldIcons_823AC5B8,
+// LuaTiming_SetTimeOfDayAbsolute_8249A790, Theme_UpdateLighting_822BD510 and
+// Theme_Update_8218EB30.
 constexpr uint32_t kHub = 0x83496920;                 // *kHub + 12 = game
 constexpr uint32_t kDrawGuiFlag = 0x8331930E;         // byte SetDrawGUI writes
 constexpr uint32_t kIconsRoot = 0x834968A4;           // world-icons state root

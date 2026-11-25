@@ -3,6 +3,10 @@
 These tests check the launcher, the build tools and some runtime code. None of
 them need game files, a GPU or an audio device.
 
+The known bugs behind the strict xfails, the coverage gaps and the quirks of
+each suite are written up in
+[docs/feature/test_suite/technical.md](../docs/feature/test_suite/technical.md).
+
 ## Quick start
 
 From the repository root, with Python 3.11 or later. The first time, set up a
@@ -48,6 +52,7 @@ Checks that the generated files in `constants/` match
 | File | What it checks |
 |---|---|
 | `config/test_config_template.py` | The template in `src/core/fable2_config.cpp`, the launcher's default settings, and the game's own config reader and defaults all match `config/fable2_config.toml`. Each staged value is the kind the game accepts, and each setting is stored under its own name. Each cvar the game seeds from the config is seeded from the setting of the same name, and its default in `src/main.cpp` matches the staged value |
+| `core/test_recomp_scripts_startup.py` | The recomp Lua scripts are copied into a separate game folder (`--game_data_root`) from `OnPostInitLogging` and nowhere later. The SDK lists the game folder once, when it mounts it right after that hook, so a script copied later can't be opened by the game until the next start. Reads the C++ source |
 | `core/test_world_thread_runscript.py` | Every host RunScript (`f5lua::run_external`) is reached only from `console::service_world_thread`, which runs at the start of a world update on the world's own thread. That function is wired only to photo mode's world-update hook, inside the scope the runtime gate checks, and the MainRenderLoop hook `console::poll` starts no script. RunScript from any other thread corrupts the game's script engine (the 1.6 alt-tab crash, #189). Reads the C++ source and prints the call chain that breaks the rule |
 | `lua/test_recomp_scripts.py` | No recomp Lua script registers itself with the game's GeneralScriptManager, which writes its running scripts into save games, except the F5 menu, which ends itself when the menu closes. Only the F5 menu and the console's save cleanup touch the GeneralScriptManager |
 | `tools/repro/test_add_version_resource.py` | The release step that adds version info to a DLL writes the given company, product and version, keeps the existing manifest, moves the sections after `.rsrc` without changing them, and names the version after the file. It leaves a DLL alone when it has no resources, already has version info, or has no room to grow. Two known issues are marked as expected failures |
@@ -142,25 +147,58 @@ per count, when the mouse goes to the camera or the stick, the retries that
 start `mouse_direct.lua`, the numbers it returns to Lua, the fallback for a
 NaN or infinite setting, and the inject speed profiles), the RunScript gate
 (scripts only run inside the world-update service, per thread; see
-`src/core/world_thread.h`), and the version catalogue in each build profile.
+`src/core/world_thread.h`), the GUI bank file writes (a bank is replaced in
+full or left as it was; see `src/gui/bank_file.h`), and the version catalogue
+in each build profile.
 Test executables go under `out/tests`.
 
-A native test has no expected-failure marker like pytest's, so a confirmed bug
-is checked with `KNOWN_BUG(condition, reason)` instead of `CHECK`. It prints
-`KNOWN BUG` with the reason while the bug is there, and fails once the bug is
-fixed, as a reminder to turn it into a `CHECK`.
+`test_recomp_scripts.cpp` covers the copy of the recomp Lua scripts into a
+separate game folder (`src/core/recomp_scripts.h`), including the console's
+`console_run.lua`, which is only copied when the game folder has none.
+
+They use [Catch2](https://github.com/catchorg/Catch2) v3, from the SDK's own
+`thirdparty/catch2`, and read like the Python specs:
+
+```cpp
+TEST_CASE("DirectState", "[mouse][direct]") {
+  mdir::DirectState st;  // runs again, fresh, for each SECTION
+
+  SECTION("drops kept movement on Clear") {
+    ...
+    CHECK(dx == 0);
+  }
+}
+```
+
+- Each `TEST_CASE` covers one function or type, and each `SECTION` in it is
+  one behaviour, named as a sentence. Catch2 runs the test case once per
+  section, so the setup above the sections is fresh each time.
+- The run prints each test case with its sections marked `ok` or `FAIL`, like
+  pytest-spec (`native/catch_spec.cpp`). Catch2 then prints each failed check
+  with its values, such as `dx == 0` with expansion `3.0 == 0`, and a summary.
+- Write one comparison per `CHECK`: Catch2 can't show the values of `a && b`.
+  Use `CHECK_THAT(x, WithinAbs(want, tolerance))` for floating point.
+- A confirmed bug gets a `TEST_CASE` tagged `[!shouldfail]` that checks the
+  correct behaviour, the native form of pytest's strict xfail. It's marked
+  `known bug` while it fails, and the run fails once the bug is fixed, as a
+  reminder to remove the tag.
+- To run one test case or section, pass its name or tag to the executable, for
+  example `out\tests\runtime-unit-tests\mouse-direct.exe "DirectState"` or
+  `mouse.exe "[stick]"`. `-?` lists the options.
 
 The runner uses `thirdparty/rexglue-sdk` by default, and an optional first
 argument selects a different SDK source folder. The tests need the SDK's source
-and headers, unpatched, plus three of its own submodules (fmt, simde and spdlog).
-If they're missing, fetch only those, as CI does:
+and headers, unpatched, plus four of its own submodules (fmt, simde, spdlog and
+Catch2). If they're missing, fetch only those, as CI does:
 
 ```sh
 git submodule update --init --depth 1 thirdparty/rexglue-sdk
-git -C thirdparty/rexglue-sdk submodule update --init --depth 1 thirdparty/fmt thirdparty/simde thirdparty/spdlog
+git -C thirdparty/rexglue-sdk submodule update --init --depth 1 thirdparty/fmt thirdparty/simde thirdparty/spdlog thirdparty/catch2
 ```
 
-Clang must be on `PATH` (for example `C:\Program Files\LLVM\bin`). A Visual
+Clang 22 or newer must be on `PATH` (for example `C:\Program Files\LLVM\bin`):
+the STL of MSVC 14.52 and later refuses older Clang with error STL1000. CI
+installs a pinned LLVM for this (see `.github/workflows/tests.yml`). A Visual
 Studio developer shell isn't needed.
 
 To see how much of the project's own code (`src/`, `constants/`) the native
@@ -185,7 +223,7 @@ these files.
 
 ```cmd
 dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release -- <game folder>
-out\tests\runtime-unit-tests\xex-goty-compatible.exe <path to default.xex>
+out\tests\runtime-unit-tests\xex-goty-compatible.exe --xex <path to default.xex>
 ```
 
 Run `tests\run_native_tests.cmd` first to build the second one.

@@ -75,6 +75,26 @@ struct PollRecord {
   bool looking = false;            // focus + mouse_look + debug menu closed
   bool smoothing = false;          // mouse_look_smoothing (velocity window path)
   bool direct = false;             // movement kept for the direct mouse camera
+  bool aim = false;                // aim stick swap: the mouse drives the left stick
+  int32_t lx = 0, ly = 0;          // left stick reported to the game
+  float cur_x = 0, cur_y = 0;      // aim reticle after the game's last cursor update
+  uint64_t aim_ticks = 0;          // cursor updates so far (src/input/mouse_aim.h)
+  // Highlight state after the last cursor update (mouseaim::Targeting):
+  // hl -1 before the first update, else whether a highlight handle is set;
+  // the left-stick detector's flick/held/+234 flags; highlight age in ticks.
+  int32_t hl = -1;
+  bool flick = false, held = false, b234 = false;
+  uint32_t hage = 0;
+  // The highlighted target's position in cursor units (mouseaim::TargetPos):
+  // tf -1 not computed, -2 handle set but no live target, 0 behind the
+  // camera, 1 in front (only then are tgt_x/tgt_y numbers; else NaN).
+  float tgt_x = 0, tgt_y = 0;
+  int32_t tf = -1;
+  // Mouse release (mouse_aim_release) so far: highlights let go of (mrel),
+  // and target searches answered "nobody" while the mouse moved (msup).
+  uint64_t releases = 0, suppressed = 0;
+  uint64_t hops = 0;    // wheel target hops asked of the game (mhop)
+  uint64_t magnet = 0;  // updates given the magnetism stick nudge (mmag)
 };
 
 // Running sums for one reporting window (one second for S lines, or the time
@@ -152,14 +172,23 @@ class Diag {
     }
     if (!log) return;
     EnsureWriterLocked();
-    char buf[240];
+    char buf[640];  // the widest every field can print is under 580 bytes
     std::snprintf(buf, sizeof buf,
                   "P t=%lld tid=%llx gap=%lld dx=%d dy=%d inj=%d,%d rx=%d ry=%d clamp=%d look=%d "
-                  "sm=%d w=%d,%d dir=%d\n",
+                  "sm=%d w=%d,%d dir=%d aim=%d lx=%d ly=%d cur=%.5g,%.5g atk=%llu "
+                  "hl=%d fl=%d,%d f234=%d hage=%u tgt=%.5g,%.5g tf=%d mrel=%llu msup=%llu mhop=%llu mmag=%llu\n",
                   static_cast<long long>(t), static_cast<unsigned long long>(tid & 0xffffff),
                   static_cast<long long>(gap), r.dx, r.dy, r.inj_dx, r.inj_dy, r.rx, r.ry,
                   r.clamped ? 1 : 0, r.looking ? 1 : 0, r.smoothing ? 1 : 0, r.win_x, r.win_y,
-                  r.direct ? 1 : 0);
+                  r.direct ? 1 : 0, r.aim ? 1 : 0, r.lx, r.ly, static_cast<double>(r.cur_x),
+                  static_cast<double>(r.cur_y), static_cast<unsigned long long>(r.aim_ticks),
+                  static_cast<int>(r.hl), r.flick ? 1 : 0, r.held ? 1 : 0, r.b234 ? 1 : 0,
+                  static_cast<unsigned>(r.hage), static_cast<double>(r.tgt_x),
+                  static_cast<double>(r.tgt_y), static_cast<int>(r.tf),
+                  static_cast<unsigned long long>(r.releases),
+                  static_cast<unsigned long long>(r.suppressed),
+                  static_cast<unsigned long long>(r.hops),
+                  static_cast<unsigned long long>(r.magnet));
     AppendLocked(buf);
   }
 

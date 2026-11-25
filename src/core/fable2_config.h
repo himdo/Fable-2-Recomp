@@ -59,6 +59,14 @@ struct Values {
   double mouse_look_sens_y = 0.06;
   bool mouse_look_invert_y = false;
   double mouse_look_direct_smoothing = 0.0;  // 0..0.9
+  // Mouse aiming (src/input/mouse_aim.h). Seed the cvars of the same names;
+  // `f2 mouse aim|aiminput|aimsens|aiminvert|aimscale` change them live.
+  std::string mouse_aim_mode = "both";     // "off", "rmb", "detect" or "both"
+  std::string mouse_aim_input = "direct";  // "direct" or "stick"
+  double mouse_aim_sens = 0.0007;          // direct aim: cursor units per count
+  double mouse_aim_y_ratio = 1.0;          // range 0.1..10 (cvar constraint)
+  bool mouse_aim_invert_y = false;
+  int32_t mouse_aim_scale = 256;  // stick aim; range 1..4096 (cvar constraint)
   // Direct mouse-to-camera look (see src/input/mouse_look.h). EXPERIMENTAL.
   // When true, mouse movement bypasses the synthetic pad's right stick and is
   // applied directly to the active camera's orientation by
@@ -189,10 +197,22 @@ struct Values {
   // Rate" by Ultra; data write in src/core/fable2_patches.cpp + hook
   // fable2_hook_high_hf_tick_rate_skip_store). Requires high_tick_rate.
   bool higher_hf_tick_rate = false;
+  // [patches] gui_every_hf_tick: update the GUI (subtitles, HUD text) on every HF
+  // tick instead of every LF tick (hook fable2_hook_gui_every_tick).
+  // false = original.
+  bool gui_every_hf_tick = true;
+  // [patches] interpolation: blend cloth colliders between the last two
+  // animation poses at the render time, and move cloth with the drawn world
+  // matrix (hooks fable2_hook_cloth_collider_bone and
+  // fable2_hook_cloth_world_transform). false = original.
+  bool interpolation = true;
   // [patches] disable_motion_blur: zero the full-screen motion blur amount the
   // camera passes to the renderer (hook fable2_hook_disable_motion_blur in
   // src/core/fable2_hooks.cpp). false = original.
   bool disable_motion_blur = false;
+  // [patches] disable_msaa: render without the game's multisample anti-aliasing
+  // (override of InitRenderSettings_8238DE58, src/core/hotfunc/render/InitRenderSettings_8238DE58.cpp).
+  bool disable_msaa = false;
   // [patches] realtime_texture_morphing: build the hero/dog morphed skin
   // textures on the GPU (the game's own RealTimeTextureMorphing mode) instead
   // of CPU-compressing a resolved scratch texture, so they are not black on a
@@ -244,6 +264,13 @@ struct Values {
   float photo_mode_mouse_sensitivity = 0.0025f;  // radians per mouse pixel
   float photo_mode_max_distance = 0.0f;   // 0 = no limit
   std::string photo_mode_screenshot_folder = "screenshots";
+  // idle_yield_sleep_us: when a guest thread calls NtYieldExecution back to
+  // back with no work in between (it is polling for another thread), sleep
+  // this many microseconds per yield instead of spinning a core at 100%
+  // (see src/core/hotfunc/hotfunc_yield.h). 0 = never sleep (original).
+  // -1 = the platform default (see IdleYieldSleepUs() in
+  // src/core/hotfunc/hotfunc_idle_sleep.h).
+  int32_t idle_yield_sleep_us = -1;
 };
 
 // Load the config from `path`.
@@ -260,7 +287,13 @@ const Values& Get();
 
 // Change [photo_mode] gamepad_toggle in memory and in the file Load() read
 // (only that line is rewritten; comments and the rest are kept).
+// Rewrite one `key = value` line of fable2_config.toml in place (adding the
+// line, or the section, when missing), keeping the rest of the file and its
+// line endings. toml_value is written as given (quote strings yourself).
+bool SaveSetting(std::string_view section, std::string_view key, std::string_view toml_value);
 bool SavePhotoModeGamepadToggle(const std::string& combo);
+// [patches] disable_msaa, written back when the F4 settings menu changes it.
+bool SaveDisableMsaa(bool disable);
 
 // The default template written when the file is missing. Must match
 // config/fable2_config.toml in the repo (staged next to the exe by the build).
