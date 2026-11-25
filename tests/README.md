@@ -33,6 +33,7 @@ them up to print one line per test.
 | Suite | Command | Needs | In CI? |
 |---|---|---|---|
 | Version check | `python tools/generate_game_versions.py --check` | Python | Yes |
+| Manifest naming check | `python tools/check_manifest_names.py --base origin/master` | Python, git | Yes |
 | Python tests | `python -m pytest` | Python 3.11+ and `tests/requirements.txt` | Yes |
 | Launcher tests | `dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release` | .NET 8 SDK | Yes |
 | Native tests | `tests\run_native_tests.cmd` | Windows, Clang with the Visual Studio C++ tools installed, and the SDK submodule | Yes |
@@ -46,6 +47,16 @@ CI runs on Windows.
 Checks that the generated files in `constants/` match
 `constants/game_versions.json`. If it reports stale constants, run it without
 `--check` to regenerate them, then commit the result.
+
+### Manifest naming check
+
+Checks that the entries a branch adds to `fable_2_manifest.toml` or renames
+have a real name shaped like `Subsystem_WhatItDoes_ADDRESS`, with a comment
+above them, and that no name is used twice or ends in another entry's
+address. CI compares with master (`--base HEAD~1` on GitHub's merge commit).
+Without `--base` it checks the whole manifest and counts the older entries
+that don't follow the rules yet. See
+[docs/feature/manifest_naming_check/technical.md](../docs/feature/manifest_naming_check/technical.md).
 
 ### Python tests
 
@@ -65,6 +76,7 @@ Checks that the generated files in `constants/` match
 | `tools/test_game_versions.py` | Generated version files match the catalogue, invalid or duplicate entries are rejected, the default profile must be compatible and in the validated code group, only those versions get a CMake profile, and `--check` reports stale files. One known issue is marked as an expected failure |
 | `tools/test_make_hotfunc_overrides.py` | The override generator extracts and transforms functions correctly and never overwrites a hand-tuned file. Four known issues are marked as expected failures |
 | `tools/test_manifest_collisions.py` | The check for manifest names that clash with DLL exports reports every clash, ignores commented-out names, rejects a missing, unreadable or empty DLL, and the real manifest avoids the kernel wait names that once broke audio. One known issue is marked as an expected failure |
+| `tools/test_manifest_names.py` | The manifest naming check reads each entry's address, name and comment, and ignores hook tables. It fails on a name that ends in another address or is used twice, and on a new or renamed entry with a placeholder name, the wrong shape or no comment. It skips entries without a name and unchanged ones, and the real manifest passes the every-entry rules. Uses small throwaway git repos |
 | `tools/test_mouse_log_format.py` | The lines the game writes to `fable2_mouse.log` (poll lines from `src/input/mouse_diag.h`, camera updates from `mouse_diag.lua` with the direct mouse camera's turn, and the `f2 mouse inject` and `f2 mouse mode` notes) are read the way `mouse_stats.py` expects. Reads the format strings from the source, so a renamed field fails here |
 | `tools/test_mouse_stats.py` | The `fable2_mouse.log` summariser splits the log into one run per `f2 mouse inject`, counts polls and camera updates, works out how much movement the camera saw with and without smoothing, scores the steady yaw per update while leaving out the ends of a run, adds up the total turn (stick and direct mouse camera) with the share that coasted on after the input stopped and how fast the turn got going, labels each run with its speed profile and mouse mode, ends a run early at its `f2 mouse stop` note, and prints the text and JSON reports |
 | `tools/test_package_release.py` | The release zip holds only the listed files, its build info is stamped with the version while the build folder's copy stays unstamped, symbols stay separate, checksums match, files from an earlier package are removed, and a missing file, symbol file or recomp Lua script stops packaging before anything is written |

@@ -31,6 +31,7 @@ When you finish a fix or a feature, add or update its folder and its row below. 
 | [function_naming](feature/function_naming/overview.md) | merged | f451b72 (#238) | Manifest names for the 22 functions recent PRs relied on |
 | [german_goty_support](feature/german_goty_support/overview.md) | merged | bfcc5d6, 77059af | Accept the German GOTY XEX alongside USA/Europe |
 | [guest_patches](feature/guest_patches/overview.md) | merged | cab738b, #208, #210, #226, #228 | Xenia-style guest patches, mid-asm hook patches and their `[patches]` switches |
+| [manifest_naming_check](feature/manifest_naming_check/overview.md) | no commit yet | — | A CI check that new and renamed manifest names follow the naming rules and have a comment |
 | [mouse_aim](feature/mouse_aim/overview.md) | merged | 49c70ab (#183) | The mouse moves the ranged aim reticle; highlight release |
 | [mouse_camera](feature/mouse_camera/overview.md) | merged | 80e8361 (#177) | Direct mouse camera: a fixed angle per count, no stick top speed or coast |
 | [test_suite](feature/test_suite/overview.md) | merged | 8957735 (#166), be11165 (#174), 5cc6513 (#229) | Known bugs (strict xfails), coverage gaps and quirks of the test suite |
