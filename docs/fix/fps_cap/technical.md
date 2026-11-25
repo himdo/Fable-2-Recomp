@@ -60,8 +60,10 @@ CMake). It sets `REX_VSYNC=0` and calls `fable2.cmd`. To run capped (native
 
 ## Key guest functions (recompiled, `generated/default/`)
 
-Naming: `Role_<address>` (originals were `sub_<address>`; see `MainRenderLoop_82B9CD68`).
-These are document-level names only; the recompiled sources keep `sub_` symbols.
+All names below are in `fable_2_manifest.toml`. `BeginFrame_82B9BA58`, `FrameWaitPoller_82BA2568`,
+`GpuInterruptCallback_82CC2948` and `RenderThreadMain_82B9F598` started as names in this doc and
+were added to the manifest later, with this doc's evidence. The `recomp.N:line` locations are from
+the generated code at the time and move with every codegen.
 
 | Addr | Role |
 |---|---|

@@ -38869,7 +38869,7 @@ name = "ProcessAndProcessAndProcess476_82CAC3D0"
 [entrypoint.functions."0x82CAC480"]
 name = "ProcessAndProcessAndProcess477_82CAC480"
 
-# Set a thread's affinity mask via the Windows kernel API (four hundred and seventy-eighth form). It takes a value (a); when it is under 6 it references the current thread object by handle, sets its affinity mask (scaled by the value) via KeSetAffinityThread, and dereferences the object. This is the "process this data" routine (four hundred and seventy-eighth form), part of the 0x82CBB process cluster. 106 lines. 4 callees (__imp__ObReferenceObjectByHandle, __imp__KeSetAffinityThread, __imp__ObDereferenceObject, and sub_82CC1C18). 12 callers (sub_822D05C8, sub_82EF5510, sub_82C72950, sub_8236C360, sub_82B45528, sub_82B38590, sub_822EA928, sub_82A8B778, sub_832B8E50, sub_82BE3960, sub_82B44D10, and sub_82B9F598).
+# Set a thread's affinity mask via the Windows kernel API (four hundred and seventy-eighth form). It takes a value (a); when it is under 6 it references the current thread object by handle, sets its affinity mask (scaled by the value) via KeSetAffinityThread, and dereferences the object. This is the "process this data" routine (four hundred and seventy-eighth form), part of the 0x82CBB process cluster. 106 lines. 4 callees (__imp__ObReferenceObjectByHandle, __imp__KeSetAffinityThread, __imp__ObDereferenceObject, and sub_82CC1C18). 12 callers (sub_822D05C8, sub_82EF5510, sub_82C72950, sub_8236C360, sub_82B45528, sub_82B38590, sub_822EA928, sub_82A8B778, sub_832B8E50, sub_82BE3960, sub_82B44D10, and RenderThreadMain_82B9F598).
 [entrypoint.functions."0x82CBBE20"]
 name = "ProcessAndProcessAndProcess478_82CBBE20"
 
@@ -40837,7 +40837,7 @@ name = "ProcessAndProcessAndProcess900_82236FD0"
 [entrypoint.functions."0x821CD298"]
 name = "ProcessAndProcessAndProcess901_821CD298"
 
-# Process a structure by wrapping a sub-operation (seven hundred and one hundred and ninety-second form). It takes a structure and drives a sub-operation (ProcessAndProcessAndProcess771). Part of the 0x82B9B process cluster. 142 lines. 1 callee. 2 callers (sub_82B9BA58 and sub_82B9E848).
+# Process a structure by wrapping a sub-operation (seven hundred and one hundred and ninety-second form). It takes a structure and drives a sub-operation (ProcessAndProcessAndProcess771). Part of the 0x82B9B process cluster. 142 lines. 1 callee. 2 callers (BeginFrame_82B9BA58 and sub_82B9E848).
 [entrypoint.functions."0x82B9B7E8"]
 name = "ProcessAndProcessAndProcess902_82B9B7E8"
 
@@ -41569,7 +41569,7 @@ name = "ProcessAndProcessAndProcess1079_82B9ED28"
 [entrypoint.functions."0x82B9F0A8"]
 name = "ProcessAndProcessAndProcess1080_82B9F0A8"
 
-# Dispatch a process operation (seven hundred and one hundred and one hundred and one hundred and eighty-first form). It takes a structure, checks its state, and drives sub-operations (ProcessAndProcessAndProcess679, ProcessAndProcessAndProcess1079, ProcessAndProcessAndProcess1080) based on the result. This is the dispatcher of the 0x82B9F process cluster. 471 lines. 3 callees. 1 caller (sub_82B9F598).
+# Dispatch a process operation (seven hundred and one hundred and one hundred and one hundred and eighty-first form). It takes a structure, checks its state, and drives sub-operations (ProcessAndProcessAndProcess679, ProcessAndProcessAndProcess1079, ProcessAndProcessAndProcess1080) based on the result. This is the dispatcher of the 0x82B9F process cluster. 471 lines. 3 callees. 1 caller (RenderThreadMain_82B9F598).
 [entrypoint.functions."0x82B9F280"]
 name = "ProcessAndProcessAndProcess1081_82B9F280"
 
@@ -42301,7 +42301,7 @@ name = "ProcessAndProcessAndProcess1258_82B9C7F8"
 [entrypoint.functions."0x82B9C9D8"]
 name = "ProcessAndProcessAndProcess1259_82B9C9D8"
 
-# Process a structure by driving sub-operations (seven hundred and one hundred and one hundred and one hundred and one hundred and two hundred and sixtieth form). It takes a structure and drives sub-operations (sub_82BA21F8, sub_82BA2568, sub_82BA29B8) based on the result. Part of the render-loop process path in the 0x82BA3 cluster. 138 lines. 3 callees. 1 caller (MainRenderLoop).
+# Process a structure by driving sub-operations (seven hundred and one hundred and one hundred and one hundred and one hundred and two hundred and sixtieth form). It takes a structure and drives sub-operations (sub_82BA21F8, FrameWaitPoller_82BA2568, sub_82BA29B8) based on the result. Part of the render-loop process path in the 0x82BA3 cluster. 138 lines. 3 callees. 1 caller (MainRenderLoop).
 [entrypoint.functions."0x82BA32C8"]
 name = "ProcessAndProcessAndProcess1260_82BA32C8"
 
@@ -48140,6 +48140,32 @@ name = "DispatchOsNotifications_82185080"
 # 60 FPS dispatch function (0x82B9C7F8). fps_meter.h hooks this symbol.
 [entrypoint.functions."0x82B9CD68"]
 name = "MainRenderLoop_82B9CD68"
+# Begin frame: the only writer of the frame limiter's deadline field
+# (+10908 on the video struct). It sets the vblank counter to that deadline
+# minus 2 and calls FrameLimiterWait_82242628 (r5 = 4); EndFrame_822981F0
+# adds 2 to the deadline each frame, so the limiter waits 2 vblanks (30 fps).
+# Read in the generated code and traced with src/diagnostics/fps_probe.h
+# during the fps cap investigation (docs/fix/fps_cap/technical.md); not
+# re-read for this entry.
+[entrypoint.functions."0x82B9BA58"]
+name = "BeginFrame_82B9BA58"
+# Frame-wait poller: polls KeQuerySystemTime; called by the per-frame helper
+# ProcessAndProcessAndProcess1260_82BA32C8. Probe-traced during the fps cap
+# investigation: never called on the title screen (its enable flag at +23968
+# is off), so it is not the 30 fps limiter.
+[entrypoint.functions."0x82BA2568"]
+name = "FrameWaitPoller_82BA2568"
+# GPU CPU-interrupt callback: signals an event with KeSetEvent, probably to
+# wake the render thread (RenderThreadMain_82B9F598). Probe-traced during the
+# fps cap investigation: never fires on the title screen. Role inferred from
+# its kernel calls; not re-read for this entry.
+[entrypoint.functions."0x82CC2948"]
+name = "GpuInterruptCallback_82CC2948"
+# Render thread main loop: waits with KeWaitForSingleObject, then renders.
+# Probe-traced during the fps cap investigation: never runs on the title
+# screen. Role inferred from its kernel calls; not re-read for this entry.
+[entrypoint.functions."0x82B9F598"]
+name = "RenderThreadMain_82B9F598"
 # Render settings setup: fills the main render settings object (r3, kept in
 # r31), including the render size (+148 width 1120, 960 in 4:3; +152 height
 # 720) and the MSAA mode (+156, 2 = 2x, from li r9,2 at 0x8238DF3C). Called
