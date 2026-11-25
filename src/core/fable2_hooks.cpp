@@ -30,9 +30,8 @@
 // ---------------------------------------------------------------------------
 // Guild chest unlock (fable2.com website items + Collectors Edition content).
 //
-// An unregistered player who clicks the Guild chest sees "Go to www.fable2.com
-// for information on how to access the gold and items your heroic ancestors
-// left behind." The chest contents are decided by two getter functions that
+// An unregistered player who clicks the Guild chest gets a message pointing them
+// to the fable2.com website to claim the gold and items. The chest contents are decided by two getter functions that
 // run at save load:
 //   - GuildChest_GetWebsiteItem_8256E368 (website items)
 //   - GuildChest_GetCEContent_824B3528    (CE content)
