@@ -33,6 +33,7 @@
 #pragma once
 
 #include "fable2_config.h"
+#include "fable2_deck_menu.h"
 #include "fable2_ui_events.h"
 #include <rex/cvar.h>
 #include <rex/logging.h>
@@ -164,7 +165,9 @@ pcall(function()
   end
 end)
 -- Menu response and scroll acceleration ([patches] menu_instant_response /
--- menu_scroll_acceleration), wrapped once per screen.
+-- menu_scroll_acceleration), wrapped once per screen; the wrappers check
+-- menuQuick / menuAccel each time, so the pause menu's Deck Recomp settings
+-- can switch them on the open screen.
 pcall(function()
   if type(GUI) ~= "table" or rawget(_G, "__f2menuWrap") then return end
   rawset(_G, "__f2menuWrap", true)
@@ -173,10 +176,10 @@ pcall(function()
   -- the game's rate (SUBSEQUENT_NAVIGATE_INTERVAL, rounded up to whole GUI
   -- updates as the game runs it) to menuAccel times as fast over 1.5 s, and
   -- keep the time a step overshot so the rate isn't rounded to whole updates.
-  if menuAccel and menuAccel > 1 and type(GUI.DoNavigate) == "function" and
-      type(GUI.Timing) == "table" then
+  if type(GUI.DoNavigate) == "function" and type(GUI.Timing) == "table" then
     local navigate, holdStart = GUI.DoNavigate, 0
     GUI.DoNavigate = function(...)
+      if not menuAccel or menuAccel <= 1 then return navigate(...) end
       local t, inp = GUI.Timing, GUI.Input
       local over = (t.TimeSinceLastNavigate or 0) - (t.NavigateInterval or 0)
       navigate(...)
@@ -193,7 +196,6 @@ pcall(function()
       if over > 0 then t.TimeSinceLastNavigate = math.min(over, interval * 0.9) end
     end
   end
-  if not menuQuick then return end
   -- A press arrives after the menu's own per-update check (g_Menu.onUpdate)
   -- has run, so the step waited for the next GUI update: run the check as
   -- soon as a direction goes down.
@@ -204,7 +206,7 @@ pcall(function()
       local was = type(inp) == "table" and (inp.PushingUpHeld or inp.PushingDownHeld)
       held(...)
       local m = rawget(_G, "g_Menu")
-      if not was and type(m) == "table" and type(m.onUpdate) == "function" then
+      if menuQuick and not was and type(m) == "table" and type(m.onUpdate) == "function" then
         pcall(m.onUpdate, m)
       end
     end
@@ -217,6 +219,7 @@ pcall(function()
     local function kick(scroll)
       return function(self, ...)
         scroll(self, ...)
+        if not menuQuick then return end
         pcall(function()
           local now = getElapsedTime()
           self:ProcessAnimationList()
@@ -816,7 +819,9 @@ inline std::string BuildScript(float aspect, bool move_hud, bool log_tree) {
                 log_tree ? "true" : "false", cfg.menu_repeat_delay,
                 cfg.menu_animation_speed, cfg.menu_instant_response ? "true" : "false",
                 cfg.menu_scroll_acceleration);
-  return std::string(header) + kScript;
+  // The Deck Recomp menu first: kScript returns early on screens without a
+  // Scene element or with the HUD fit off.
+  return std::string(header) + "\n" + fable2::deckmenu::BuildScript() + kScript;
 }
 
 }  // namespace detail
@@ -846,7 +851,8 @@ inline void OnPresentationLoaded(PPCContext& ctx, uint8_t* base,
   const auto& cfg = fable2::config::Get();
   const bool menu_timing = cfg.menu_repeat_delay > 0.0 || cfg.menu_animation_speed != 1.0 ||
                            cfg.menu_instant_response || cfg.menu_scroll_acceleration > 1.0;
-  if (!move_hud && !log_tree && !menu_timing) return;
+  // (The pause menu's Deck Recomp settings always need the script.)
+  (void)menu_timing;
 
   const uint32_t index = detail::g_presentations.fetch_add(1) + 1;
   REXSYS_INFO("[fit-window] UI screen #{} loaded (0x{:08X}): running the HUD "
@@ -906,6 +912,11 @@ inline void OnGamefaceMessage(uint32_t level, uint32_t text) {
   std::string message;
   if (!detail::ReadGuestString(text, message) || message.empty()) return;
   fable2::uievents::OnMessage(message);  // for the console's waitui / boot
+  if (fable2::deckmenu::OnMessage(message)) return;  // "[f2set] key=value"
+  if (message.rfind("[f2deck]", 0) == 0) {
+    REXSYS_WARN("{}", message);  // the Deck Recomp menu's own reports
+    return;
+  }
   if (message.rfind("[fitwin-menu]", 0) == 0) {
     g_menu_ms.store(std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now().time_since_epoch())

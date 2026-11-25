@@ -304,6 +304,9 @@ bool Load(const std::filesystem::path& path);
 
 // Parsed values (in-memory defaults until Load() succeeds).
 const Values& Get();
+// The same values for changing in memory (the in-game Deck Recomp menu,
+// src/core/fable2_deck_menu.h); save the change with SaveSetting.
+Values& Mutable();
 
 // Called once the GPU backend is known to be Vulkan, before the GPU plugin's
 // cvars are seeded: applies vulkan_texture_morph_fallback.

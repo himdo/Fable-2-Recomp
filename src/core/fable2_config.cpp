@@ -837,6 +837,7 @@ bool Load(const std::filesystem::path& path) {
 }
 
 const Values& Get() { return g_values; }
+Values& Mutable() { return g_values; }
 
 void ApplyVulkanRendererOverrides() {
   if (!g_values.vulkan_texture_morph_fallback || !g_values.realtime_texture_morphing) {
