@@ -1,6 +1,6 @@
 # German GOTY support: overview
 
-**Status:** merged · **Commits:** bfcc5d6, 724495a, 77059af · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** bfcc5d6, 724495a, 77059af · **Last checked against:** 7863041
 
 ## What it does
 

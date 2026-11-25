@@ -1,6 +1,6 @@
 # Test suite: technical notes
 
-**Status:** merged · **Commits:** 8957735 (#166), be11165 (#174), ffa15b3 (#196), c764cba (#197), 5cc6513 (#229) · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** 8957735 (#166), be11165 (#174), ffa15b3 (#196), c764cba (#197), 5cc6513 (#229) · **Last checked against:** 7863041
 
 These notes record what the test suite knows that the test code doesn't say out loud: known bugs, coverage gaps, quirks and open questions. For how to run the tests and the per-file summaries, see `tests/README.md`.
 
@@ -15,7 +15,7 @@ These notes record what the test suite knows that the test code doesn't say out 
 
 None of them need game files. CI (`.github/workflows/tests.yml`) runs all four on `windows-latest` for every PR and every push to master.
 
-Baseline at 5f5f55f: **429 passed, 1 skipped, 15 xfailed.**
+Baseline at 7863041: **429 passed, 1 skipped, 15 xfailed** on Windows (CI). On macOS it's 430 passed, 15 xfailed: the symlink test in `tests/tools/test_prepare_renderer_mspack.py` is skipped only on Windows.
 
 ## Conventions
 
