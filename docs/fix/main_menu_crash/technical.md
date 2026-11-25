@@ -1,6 +1,6 @@
 # Fix: D3D12 / Vulkan source builds crashed at the main menu
 
-**Status:** merged · **Commits:** afebcc5 · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** afebcc5 · **Last checked against:** 7863041
 
 **Date:** 2026-09-05
 **Symptom:** `fable2.cmd d3d12` and `fable2.cmd vulkan` (the source-built
@@ -82,11 +82,11 @@ The GPU plugin was not changed.
 
 ## Verification
 
-`tools/run_timed.ps1 <mode>` launches via `fable2.cmd` and auto-kills after
-30 s:
+Each mode was launched through `fable2.cmd` and killed after 30 s (with a
+local timed-launch script that was never committed):
 
-- `d3d12`  → no guest AV, survives 30 s, main menu visible
-  (`menu_proof_d3d12.png`).
+- `d3d12`  → no guest AV, survives 30 s, main menu visible (checked with a
+  local screenshot, not committed).
 - `vulkan` → no guest AV, survives 30 s+ (menu shader compilation is slower;
   first present arrives later than D3D12 — see note below).
 - `prebuilt` → unchanged (stock DLLs, not touched by this fix).
@@ -99,6 +99,5 @@ The GPU plugin was not changed.
 - If the source runtime is rebuilt, stage it as
   `out/build/win-amd64-release/rexruntime-vulkan.dll` (the launcher copies it
   over `rexruntime.dll` on every launch).
-- `tools/run_timed.ps1` (timed launch + log summary) and
-  `tools/capture_menu.ps1` / `tools/capture_multi.ps1` (menu screenshots)
-  were added for this debugging.
+- The timed-launch and menu-screenshot scripts used for this debugging were
+  local PowerShell scripts and are not in the repo.

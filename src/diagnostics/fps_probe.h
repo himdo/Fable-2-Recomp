@@ -28,10 +28,10 @@ extern "C" void __imp__Yield_82CBD098(PPCContext& ctx, uint8_t* base);  // NtYie
 extern "C" void __imp__sub_83004C20(PPCContext& ctx, uint8_t* base);  // NtSetTimerEx wrapper
 extern "C" void __imp__sub_83004C90(PPCContext& ctx, uint8_t* base);  // NtCreateTimer wrapper
 extern "C" void __imp__ProcessAndProcessAndProcess1260_82BA32C8(PPCContext& ctx, uint8_t* base);  // per-frame helper (calls the frame-wait)
-extern "C" void __imp__sub_82BA2568(PPCContext& ctx, uint8_t* base);  // frame-wait (KeQuerySystemTime poller)
+extern "C" void __imp__FrameWaitPoller_82BA2568(PPCContext& ctx, uint8_t* base);  // frame-wait (KeQuerySystemTime poller)
 extern "C" void __imp__sub_82B9B8D8(PPCContext& ctx, uint8_t* base);  // vblank/GPU interrupt callback
-extern "C" void __imp__sub_82CC2948(PPCContext& ctx, uint8_t* base);  // GPU CPU-interrupt cb: KeSetEvent (render thread waker?)
-extern "C" void __imp__sub_82B9F598(PPCContext& ctx, uint8_t* base);  // main render thread loop (KeWaitForSingleObject + render)
+extern "C" void __imp__GpuInterruptCallback_82CC2948(PPCContext& ctx, uint8_t* base);  // GPU CPU-interrupt cb: KeSetEvent (render thread waker?)
+extern "C" void __imp__RenderThreadMain_82B9F598(PPCContext& ctx, uint8_t* base);  // main render thread loop (KeWaitForSingleObject + render)
 // Helpers called directly by the main render loop - measured to find the 33ms wait.
 extern "C" void __imp__ProcessAndProcessAndProcess1261_82BA6F08(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__ProcessAndProcessAndProcess1256_82BA8630(PPCContext& ctx, uint8_t* base);
@@ -186,21 +186,21 @@ extern "C" void ProcessAndProcessAndProcess1260_82BA32C8(PPCContext& ctx, uint8_
   fable2::fpsprobe::note(fable2::fpsprobe::probe_frame_helper, ctx);
   __imp__ProcessAndProcessAndProcess1260_82BA32C8(ctx, base);
 }
-extern "C" void sub_82BA2568(PPCContext& ctx, uint8_t* base) {
+extern "C" void FrameWaitPoller_82BA2568(PPCContext& ctx, uint8_t* base) {
   fable2::fpsprobe::note(fable2::fpsprobe::probe_frame_wait, ctx);
-  __imp__sub_82BA2568(ctx, base);
+  __imp__FrameWaitPoller_82BA2568(ctx, base);
 }
 extern "C" void sub_82B9B8D8(PPCContext& ctx, uint8_t* base) {
   fable2::fpsprobe::note(fable2::fpsprobe::probe_vblank, ctx);
   __imp__sub_82B9B8D8(ctx, base);
 }
-extern "C" void sub_82CC2948(PPCContext& ctx, uint8_t* base) {
+extern "C" void GpuInterruptCallback_82CC2948(PPCContext& ctx, uint8_t* base) {
   fable2::fpsprobe::note(fable2::fpsprobe::probe_gpu_cb, ctx);
-  __imp__sub_82CC2948(ctx, base);
+  __imp__GpuInterruptCallback_82CC2948(ctx, base);
 }
-extern "C" void sub_82B9F598(PPCContext& ctx, uint8_t* base) {
+extern "C" void RenderThreadMain_82B9F598(PPCContext& ctx, uint8_t* base) {
   fable2::fpsprobe::note(fable2::fpsprobe::probe_render_thread, ctx);
-  __imp__sub_82B9F598(ctx, base);
+  __imp__RenderThreadMain_82B9F598(ctx, base);
 }
 
 // ---- Limiter context inspection ----
@@ -281,7 +281,7 @@ extern "C" void ProcessAndProcessAndProcess1087_82242628(PPCContext& ctx, uint8_
 // NOTE: the 30 fps cap is lifted at runtime with REX_VSYNC=0 (see
 // tools/fable2-uncapped.cmd); no guest code patch is needed or applied here.
 // This file is measurement-only. An earlier experiment patched the begin-frame
-// deadline (sub_82B9BA58) to wait 1 vblank instead of 2 - superseded and
+// deadline (BeginFrame_82B9BA58) to wait 1 vblank instead of 2 - superseded and
 // removed; the vblank counter gate is host-side and the env var is the fix.
 
 #define FPS_PROBE_HOOK(name, probe, orig)                                   \

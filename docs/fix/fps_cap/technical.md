@@ -1,12 +1,12 @@
 # Fable 2 (ReXGlue) 30 fps cap — investigation log
 
-**Status:** merged · **Commits:** 73d89b0 (vsync off), 62b4db2, d28da25 (#143), e0c69c0 (#135) · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** 73d89b0, 62b4db2, d28da25 (#143), e0c69c0 (#135) · **Last checked against:** 7863041
 
 Goal: run the recompiled Fable 2 uncapped / at 60 fps instead of the native 30 fps lock.
 
 ## ✅ RESOLVED — uncapped (20–100 fps observed)
 
-**Fix:** run with the SDK `vsync` cvar disabled → env var **`REX_VSYNC=0`**.
+**Fix:** run with the SDK `vsync` cvar disabled (73d89b0) → env var **`REX_VSYNC=0`**.
 
 With `vsync=false` the ReXGlue vblank worker fires at ~1000 Hz instead of 60 Hz
 (`graphics_system.cpp` vblank worker: `vsync ? vsync_interval : guest_tick/1000`),
@@ -60,8 +60,10 @@ CMake). It sets `REX_VSYNC=0` and calls `fable2.cmd`. To run capped (native
 
 ## Key guest functions (recompiled, `generated/default/`)
 
-Naming: `Role_<address>` (originals were `sub_<address>`; see `MainRenderLoop_82B9CD68`).
-These are document-level names only; the recompiled sources keep `sub_` symbols.
+All names below are in `fable_2_manifest.toml`. `BeginFrame_82B9BA58`, `FrameWaitPoller_82BA2568`,
+`GpuInterruptCallback_82CC2948` and `RenderThreadMain_82B9F598` started as names in this doc and
+were added to the manifest later, with this doc's evidence. The `recomp.N:line` locations are from
+the generated code at the time and move with every codegen.
 
 | Addr | Role |
 |---|---|

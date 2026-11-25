@@ -1,6 +1,6 @@
 # Fable 2 Developer Console: Command Reference
 
-**Status:** merged · **Commits:** 4f0afe5 (#127); later commands in #169, #177, #183, #184 · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** 4f0afe5 (#127); later commands in #169, #177, #183, #184 · **Last checked against:** 7863041
 
 Build: **console-v9**. Source: `src/core/fable2_console.h` (host commands) and `src/lua/console_cmds.lua` (Lua commands).
 

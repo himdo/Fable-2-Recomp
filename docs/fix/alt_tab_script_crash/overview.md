@@ -1,6 +1,6 @@
 # Alt-tab script crash: overview
 
-**Status:** merged · **Commits:** c5c80ff (#189, the fix), 266f181 (#195, the guard) · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** c5c80ff (#189, the fix), 266f181 (#195, the guard) · **Last checked against:** 7863041
 
 ## What players saw
 
