@@ -34,6 +34,14 @@ def run_check(root):
         generator.main()
 
 
+def run_write(root):
+    """Run the generator without --check against a fake repo, so it writes the generated files."""
+    argv = ["generate_game_versions.py"]
+    with patch.object(generator, "ROOT", root), patch("sys.argv", argv), \
+            contextlib.redirect_stdout(io.StringIO()):
+        generator.main()
+
+
 @pytest.fixture
 def catalogue():
     """A fresh copy of the real catalogue, which each test may change."""
@@ -179,3 +187,46 @@ def describe_check():
 
         with pytest.raises(SystemExit, match="Stale constants: game_versions.h"):
             run_check(root)
+
+    def test_should_report_a_missing_generated_file(catalogue, tmp_path):
+        root = make_root(tmp_path, catalogue)
+        (root / "constants/GameVersions.cs").unlink()
+
+        with pytest.raises(SystemExit, match="Stale constants: GameVersions.cs"):
+            run_check(root)
+
+
+def describe_write():
+    # --- Happy flow -------------------------------------------------------
+
+    def test_should_write_the_generated_files(catalogue, tmp_path):
+        # A fake repo with only the catalogue, as after a fresh edit to game_versions.json.
+        (tmp_path / "constants").mkdir()
+        (tmp_path / "constants/game_versions.json").write_text(json.dumps(catalogue), encoding="utf-8")
+
+        run_write(tmp_path)
+
+        assert (tmp_path / "constants/GameVersions.cs").is_file()
+        assert (tmp_path / "constants/game_versions.h").is_file()
+        assert (tmp_path / "constants/game_versions.cmake").is_file()
+        run_check(tmp_path)  # raises SystemExit if anything is stale
+
+    def test_should_rewrite_a_stale_file(catalogue, tmp_path):
+        root = make_root(tmp_path, catalogue)
+        (root / "constants/game_versions.h").write_text("// edited by hand\n", encoding="utf-8")
+
+        run_write(root)
+
+        run_check(root)  # raises SystemExit if anything is stale
+
+    # --- Edge cases -------------------------------------------------------
+
+    def test_should_write_lf_line_endings(catalogue, tmp_path):
+        # Python writes CRLF on Windows unless told otherwise; the tracked files are LF.
+        root = make_root(tmp_path, catalogue)
+
+        run_write(root)
+
+        assert b"\r" not in (root / "constants/GameVersions.cs").read_bytes()
+        assert b"\r" not in (root / "constants/game_versions.h").read_bytes()
+        assert b"\r" not in (root / "constants/game_versions.cmake").read_bytes()
