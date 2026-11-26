@@ -1,6 +1,6 @@
 # Test suite: technical notes
 
-**Status:** merged · **Commits:** 8957735 (#166), be11165 (#174), ffa15b3 (#196), c764cba (#197), 5cc6513 (#229) · **Last checked against:** 7863041
+**Status:** merged · **Commits:** 8957735 (#166), be11165 (#174), ffa15b3 (#196), c764cba (#197), 5cc6513 (#229), 2f46d83 (#249), 1a5bc57 (#250), c2a9d12 (#251) · **Last checked against:** c2a9d12
 
 These notes record what the test suite knows that the test code doesn't say out loud: known bugs, coverage gaps, quirks and open questions. For how to run the tests and the per-file summaries, see `tests/README.md`.
 
@@ -15,7 +15,7 @@ These notes record what the test suite knows that the test code doesn't say out 
 
 None of them need game files. CI (`.github/workflows/tests.yml`) runs all four on `windows-latest` for every PR and every push to master.
 
-Baseline at 7863041: **429 passed, 1 skipped, 15 xfailed** on Windows (CI). On macOS it's 430 passed, 15 xfailed: the symlink test in `tests/tools/test_prepare_renderer_mspack.py` is skipped only on Windows.
+Baseline at c2a9d12: **494 passed, 15 xfailed** on macOS. Windows CI should show 493 passed, 1 skipped, 15 xfailed: the symlink test in `tests/tools/test_prepare_renderer_mspack.py` is the only one skipped on Windows (the Windows count wasn't rerun for this doc).
 
 ## Conventions
 
@@ -63,6 +63,8 @@ Baseline at 7863041: **429 passed, 1 skipped, 15 xfailed** on Windows (CI). On m
 - **One `prepare_renderer_mspack` test is skipped on Windows** (it needs symlinks).
 - **The launcher test program stops at the first failing `Require`**, so one failure hides later ones. Its output lines don't map one to one to its 14 groups: group 8's checks print under "Extraction hash gate", group 3's anti-aliasing checks under the frame-rate line.
 - **Bad-flow tests in `game_versions`** assert `ValueError` without `match=`, so a different validation firing first would still pass.
+- **`tests/test_tracked_files.py` skips its real check outside a git checkout** (a source zip, for example), since there is no `git ls-files` to read. CI always has a checkout.
+- **`test_should_write_lf_line_endings` (game_versions) can only fail on Windows,** where Python writes CRLF unless told otherwise. On macOS and Linux it passes either way.
 - **pytest-spec display:** a `describe_main` that follows another file's `describe_main` prints without a heading, and test names starting with `describe` lose that word. The code is fine.
 
 ## Open questions for the maintainer

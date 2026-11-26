@@ -1,6 +1,6 @@
 # Legal risk and clean distribution: overview
 
-**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** 7863041
+**Status:** research; its proposed test merged · **Commits:** 1a5bc57 (#250, the tracked-files test) · **Last checked against:** c2a9d12
 
 ## What this is
 
@@ -14,7 +14,7 @@ A summary of the takedowns of fan PC ports in late 2026, and the rules that keep
 
 ## How this project stays safe
 
-- **No game files in the project.** The project's files are set up so that the game itself, its data, the converted game code and your saves can't be added by accident. Today nothing from the game is stored there.
+- **No game files in the project.** The project's files are set up so that the game itself, its data, the converted game code and your saves can't be added by accident. Today nothing from the game is stored there, and an automatic test fails if a game file is ever added.
 - **The download only holds the project's own work.** The release is built from a fixed list: the program, the launcher, the settings file, the project's own small scripts, a font and the licences. An automatic test fails if anything else, such as a game file or a save, ends up in it.
 - **The automatic checks never need the game.** They run on every change without game files, so the game never reaches the build servers.
 - **It only works with a real disc.** The launcher checks your disc image against a list of known retail versions before it copies anything.
@@ -24,7 +24,7 @@ A summary of the takedowns of fan PC ports in late 2026, and the rules that keep
 
 ## What could be better
 
-- Nothing automatically checks that a game file was never added to the project, only that none ends up in the download. A small extra check would cover that.
+- The automatic check that no game file was added knows the game's main file types. Comparing it with a full copy of the disc, to see whether other types should be added, is still to do.
 
 ## What players need to do
 

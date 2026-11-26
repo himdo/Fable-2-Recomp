@@ -1,6 +1,6 @@
 # Legal risk and clean distribution: technical notes
 
-**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** 7863041
+**Status:** research; its proposed test merged · **Commits:** 1a5bc57 (#250, the tracked-files test) · **Last checked against:** c2a9d12
 
 Claims are labelled **Verified** (checked in this repo or a primary source), **Reported** (a source says so, not checked here) or **Inference** (reasoned, not tested). This came out of the [November 2026 research](../../reference/research/README.md). These are notices and news reports, not legal advice or court judgments.
 
@@ -45,6 +45,10 @@ All **Verified** (read in the repo at 7863041).
 
 Saves live in the build folder (`out/build/<preset>/saves/`, per the README), so they are covered by `out`.
 
+### What git tracks
+
+`tests/test_tracked_files.py` (1a5bc57, #250) runs `git ls-files` and fails if git tracks anything in the rip's folders at the repo root (`data/`, `nxeart`, `$SystemUpdate/`, `Gamefiles/`, the same list as `.gitignore`) or any `.xex`, `.bnk` or `.bik` file, in any letter case. So `git add -f` or an oddly named rip folder can't slip past `.gitignore` unnoticed. A guard test checks that the tracked-file list isn't empty. The three file types are the only game types the repo's own tools mention; whether the disc has other game-only types worth adding hasn't been checked against an unpacked disc yet.
+
 ### What a release contains
 
 `tools/package_release.py` (run by `build.cmd package`) builds the player zip from an **allowlist**, not by copying the build folder:
@@ -62,7 +66,7 @@ Symbols (`*.pdb`) go into a separate zip, and `SHA256SUMS` covers both. Anything
 
 ### CI
 
-`.github/workflows/tests.yml` runs on every pull request and on pushes to `master`, on `windows-latest`, with read-only repository permissions. It runs the version-constant check, pytest, the launcher tests and the native tests. **It never builds the game**, so CI needs no game files and none ever reach a runner.
+`.github/workflows/tests.yml` runs on every pull request and on pushes to `master`, on `windows-latest`, with read-only repository permissions. It runs the version-constant check, the manifest naming check, pytest (which includes the tracked-files test), the launcher tests and the native tests. **It never builds the game**, so CI needs no game files and none ever reach a runner.
 
 ### Only real discs are accepted
 
@@ -85,7 +89,7 @@ The remote-control server (localhost TCP port 8791, injects gamepad input) is co
 
 ### Gaps (Inference)
 
-- No test checks that no game file is tracked in git. `.gitignore` only covers the usual names, and `git add -f` or an oddly named rip folder would get past it. A small pytest that fails if `git ls-files` lists `*.xex`, `*.bnk` or anything under `data/` would close that gap.
+- **Closed in #250:** nothing used to check that no game file is tracked in git; `tests/test_tracked_files.py` does now (see "What git tracks"). Still open: checking its file-type list against an unpacked disc.
 - `tools/xex_image.py` contains the retail XEX AES key in plain text. It is the key the Xbox 360 emulators already publish, but it is worth knowing it's there if the repo is ever reviewed.
 - The README links an external extractor tool. That's fine, but any link to disc images would break the project's own rule.
 
@@ -94,11 +98,11 @@ The remote-control server (localhost TCP port 8791, injects gamepad input) is co
 - Keep `generated/` out of releases and forks, as now.
 - Never ship assets. Anything restored (see [cut_content](../cut_content/technical.md)) must be read from the player's own `data/` files at runtime.
 - Don't target unreleased or current IP.
-- Add the git-tracked-files test described under Gaps.
+- Add the git-tracked-files test described under Gaps. Done in #250; confirm its file-type list against an unpacked disc.
 
 ## What changed
 
-Nothing. This is research only.
+This doc is research. The one change it proposed, the tracked-files test, merged as 1a5bc57 (#250): `tests/test_tracked_files.py` and its row in `tests/README.md`.
 
 ## Verification
 
@@ -107,7 +111,8 @@ Nothing. This is research only.
 ## Not tested
 
 - No legal review. The Microsoft position rests on one secondary source.
-- The packager test was read, not run, for this doc. `git ls-files` showed no game files tracked at 7863041.
+- The packager test was read, not run, for this doc. `git ls-files` showed no game files tracked at 7863041, and `tests/test_tracked_files.py` passes at c2a9d12.
+- The tracked-files test's file types haven't been compared with an unpacked disc.
 
 ## Sources
 
