@@ -22,7 +22,7 @@
 // freeze, unfreeze, trace, status, hosthelp, cvars, dumpmem; v6 adds cvar,
 // history, again, repeat, every, autoexec, peekf, pokef, freezef, peekstr,
 // findstr, findf, fill, scan; v11 adds widescreen (ws), pause and step; v12 adds mouse
-// (diag, trace, inject) and pad rstick. Addresses are Xbox 360 guest
+// (diag, trace, inject) and pad rstick; shot saves a screenshot. Addresses are Xbox 360 guest
 // virtual addresses (hex, with or without 0x); values are big-endian as in the game.
 
 #pragma once
@@ -57,6 +57,7 @@
 #include "mouse_stick.h"
 #include "remote_input_state.h"
 #include "photo_mode_state.h"
+#include "fable2_frame_capture.h"  // `shot` (photo mode's PNG capture)
 #include "fable2_ui_events.h"
 
 // The SDK's `~` console (ImGui overlay) logs through REXLOG_* and can register
@@ -209,6 +210,13 @@ struct State {
   std::atomic<uint64_t> lua_done{0};
   bool lua_wait = false;        // a dispatched line has not reported done yet
   Clock::time_point lua_deadline{};
+  // `shot`: the capture runs on its own thread (it waits for a GPU readback)
+  // and stores its number in shot_done when the file is written; until then
+  // the queue holds, so the next command sees the file.
+  uint64_t shot_seq = 0;
+  std::atomic<uint64_t> shot_done{0};
+  bool shot_wait = false;
+  Clock::time_point shot_deadline{};
   uint64_t pad_frames = 0;      // `pad` releases its buttons when this reaches 0
   // `pad hold`: buttons and triggers kept held under every other `pad` input
   // until `pad off`, without holding up the queue (so a test can aim with Y
@@ -686,14 +694,14 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
   }
   if (name == "help") {
     out("help", "host commands: wait waitfor exec echo peek poke expect find <number> freeze unfreeze trace status cvars dumpmem "
-                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad mouse boot waitui photo traceworld. "
+                "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad mouse boot waitui photo traceworld shot. "
                 "Chain with ';'. Lua commands follow (their text appears in the log).");
     return false;  // Lua prints its own command list too
   }
   if (name == "hosthelp") {
     out("help",
         "host commands: wait waitfor exec echo peek poke expect find freeze unfreeze trace status cvars dumpmem "
-        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad mouse boot waitui photo traceworld. "
+        "cvar history again repeat every autoexec peekf pokef freezef peekstr findstr findf fill scan widescreen pause step pad mouse boot waitui photo traceworld shot. "
         "Everything else (warp, god, gold, giveall, ...) runs in Lua: type help. "
         "Separate commands with ';'. Addresses are hex guest addresses.");
     return true;
@@ -775,6 +783,58 @@ inline bool run_host_command(const std::string& line, uint8_t* base) {
     if (W.size() > 1 && !parse_i(W[1], n)) n = 1;
     fable2::photomode::trace_world_request().store(int(std::clamp<int64_t>(n, 1, 120)));
     out("traceworld", "tracing the next " + std::to_string(std::clamp<int64_t>(n, 1, 120)) + " world update(s)");
+    return true;
+  }
+  // shot [file]: save the game's current frame as a PNG, by default as
+  // console\shots\shot_<date>_<time>.png (a relative file is relative to
+  // console\, like exec). It uses photo mode's capture, so it works in Release
+  // builds and outside photo mode. Replies "saved <path> <w>x<h>", the form
+  // tools/run_scenario.py lists; the queue holds until the file is written.
+  if (name == "shot") {
+    auto provider = fable2::photomode::presenter_provider();
+    rex::ui::Presenter* presenter = provider ? provider() : nullptr;
+    if (!presenter) {
+      out("shot", "no renderer to capture from yet", true);
+      return true;
+    }
+    const size_t p = line.find_first_of(" \t");
+    std::string arg = p == std::string::npos ? "" : line.substr(p + 1);
+    arg.erase(0, arg.find_first_not_of(" \t"));
+    arg.erase(arg.find_last_not_of(" \t") + 1);
+    fs::path file;
+    if (arg.empty()) {
+      const std::time_t now = std::time(nullptr);
+      std::tm tm{};
+#ifdef _WIN32
+      localtime_s(&tm, &now);
+#else
+      localtime_r(&now, &tm);
+#endif
+      char stamp[32];
+      std::strftime(stamp, sizeof(stamp), "shot_%Y%m%d_%H%M%S", &tm);
+      const fs::path dir = s.root / "console" / "shots";
+      file = dir / (std::string(stamp) + ".png");
+      for (int i = 2; fs::exists(file) && i < 100; ++i)
+        file = dir / (std::string(stamp) + "_" + std::to_string(i) + ".png");
+    } else {
+      file = arg;
+      if (file.is_relative()) file = s.root / "console" / file;
+    }
+    std::error_code ec;
+    fs::create_directories(file.parent_path(), ec);
+    const uint64_t seq = ++s.shot_seq;
+    s.shot_wait = true;
+    s.shot_deadline = Clock::now() + std::chrono::seconds(15);
+    std::thread([presenter, file, seq]() {
+      const auto r = fable2::framecapture::CaptureGuestOutputToPng(presenter, file.string());
+      if (r.ok) {
+        out("shot", "saved " + file.string() + " " + std::to_string(r.width) + "x" + std::to_string(r.height));
+        if (r.looked_black) out("shot", "the frame looks black (a loading screen or a fade?)");
+      } else {
+        out("shot", "capture failed: " + r.error, true);
+      }
+      S().shot_done.store(seq);  // last, so the reply is in out.txt before the queue moves on
+    }).detach();
     return true;
   }
   // f5: what the F5 key does (runs the F5 Lua file on the next world update).
@@ -2486,7 +2546,7 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
       std::lock_guard<std::mutex> lock(s.qmu);
       empty = s.queue.empty();
     }
-    if (empty && !s.waitfor && !s.waitui && s.boot.step < 0 && !s.wait_frames && !s.wait_time && !s.lua_wait && s.lua_pending.empty())
+    if (empty && !s.waitfor && !s.waitui && s.boot.step < 0 && !s.wait_frames && !s.wait_time && !s.lua_wait && !s.shot_wait && s.lua_pending.empty())
       out("console", "IDLE");
   };
 
@@ -2515,6 +2575,16 @@ inline void poll(PPCContext& ctx, uint8_t* base) {
     } else if (Clock::now() >= s.lua_deadline) {
       s.lua_wait = false;
       out("lua", "no reply from the Lua command within 30 s", true);
+      idle_if_empty();
+    }
+  } else if (s.shot_wait) {
+    // A `shot` is still writing its PNG on its own thread.
+    if (s.shot_done.load() == s.shot_seq) {
+      s.shot_wait = false;
+      idle_if_empty();
+    } else if (Clock::now() >= s.shot_deadline) {
+      s.shot_wait = false;
+      out("shot", "the capture didn't finish within 15 s", true);
       idle_if_empty();
     }
   } else if (s.wait_frames > 0) {

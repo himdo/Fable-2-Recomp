@@ -30,6 +30,7 @@ When you finish a fix or a feature, add or update its folder and its row below. 
 | --- | --- | --- | --- |
 | [ai_assisted_naming](feature/ai_assisted_naming/overview.md) | no commit yet (research only) | — | What 2026 research says about AI agents naming functions, and the project's AI disclosure |
 | [console_commands](feature/console_commands/overview.md) | merged | 4f0afe5 (#127) | The `f2` developer console and its command reference |
+| [console_screenshot](feature/console_screenshot/overview.md) | no commit yet | — | A console `shot` command that saves the game's frame as a PNG, in Release builds and in scenarios |
 | [cut_content](feature/cut_content/overview.md) | no commit yet (research only) | — | Cut-content leads ranked by evidence: the Singing Sword's scripts are on the disc; website and CE unlocks already ship |
 | [fit_window](feature/fit_window/overview.md) | merged | 4f0afe5 (#127) | Render at the window's aspect ratio, with the HUD and menus following |
 | [function_mapping](feature/function_mapping/overview.md) | no commit yet (research only) | — | Proposed evidence levels E0–E5, session template, metrics and mapping priorities |
