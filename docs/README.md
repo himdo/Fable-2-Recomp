@@ -41,6 +41,7 @@ When you finish a fix or a feature, add or update its folder and its row below. 
 | [mouse_aim](feature/mouse_aim/overview.md) | merged | 49c70ab (#183) | The mouse moves the ranged aim reticle; highlight release |
 | [mouse_camera](feature/mouse_camera/overview.md) | merged | 80e8361 (#177) | Direct mouse camera: a fixed angle per count, no stick top speed or coast |
 | [player_complaints](feature/player_complaints/overview.md) | no commit yet (research only) | — | What players complained about in 2008–2009, and what the recomp already covers |
+| [probe_timeline](feature/probe_timeline/overview.md) | no commit yet | — | Lines up console notes from a playthrough with the functions first seen and the ones much busier after each note, for naming |
 | [qol_candidates](feature/qol_candidates/overview.md) | no commit yet (research only) | — | Reasonable (R1–R19) and out-of-scope (U1–U10) fixes and features, with what each builds on; achievements and website items already work |
 | [recomp_landscape](feature/recomp_landscape/overview.md) | no commit yet (research only) | — | Other Xbox 360 recomps and what Fable 2 Recomp can borrow from them |
 | [test_suite](feature/test_suite/overview.md) | merged | 8957735 (#166), be11165 (#174), 5cc6513 (#229) | Known bugs (strict xfails), coverage gaps and quirks of the test suite |
