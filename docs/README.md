@@ -37,13 +37,13 @@ When you finish a fix or a feature, add or update its folder and its row below. 
 | [german_goty_support](feature/german_goty_support/overview.md) | merged | bfcc5d6, 77059af | Accept the German GOTY XEX alongside USA/Europe |
 | [guest_patches](feature/guest_patches/overview.md) | merged | cab738b, #208, #210, #226, #228 | Xenia-style guest patches, mid-asm hook patches and their `[patches]` switches |
 | [legal_and_distribution](feature/legal_and_distribution/overview.md) | research; its proposed test merged | 1a5bc57 (#250) | Late-2026 recomp takedowns, the no-game-data distribution rules, and the test that git tracks no game files |
-| [manifest_naming_check](feature/manifest_naming_check/overview.md) | no commit yet | — | A CI check that new and renamed manifest names follow the naming rules and have a comment |
+| [manifest_naming_check](feature/manifest_naming_check/overview.md) | merged | 2f46d83 (#249) | A CI check that new and renamed manifest names follow the naming rules and have a comment |
 | [mouse_aim](feature/mouse_aim/overview.md) | merged | 49c70ab (#183) | The mouse moves the ranged aim reticle; highlight release |
 | [mouse_camera](feature/mouse_camera/overview.md) | merged | 80e8361 (#177) | Direct mouse camera: a fixed angle per count, no stick top speed or coast |
 | [player_complaints](feature/player_complaints/overview.md) | no commit yet (research only) | — | What players complained about in 2008–2009, and what the recomp already covers |
 | [qol_candidates](feature/qol_candidates/overview.md) | no commit yet (research only) | — | Reasonable (R1–R19) and out-of-scope (U1–U10) fixes and features, with what each builds on; achievements and website items already work |
 | [recomp_landscape](feature/recomp_landscape/overview.md) | no commit yet (research only) | — | Other Xbox 360 recomps and what Fable 2 Recomp can borrow from them |
-| [test_suite](feature/test_suite/overview.md) | merged | 8957735 (#166), be11165 (#174), 5cc6513 (#229), #249–#251 | Known bugs (strict xfails), coverage gaps and quirks of the test suite |
+| [test_suite](feature/test_suite/overview.md) | merged | 8957735 (#166), be11165 (#174), ffa15b3 (#196), c764cba (#197), 5cc6513 (#229), #249–#251 | Known bugs (strict xfails), coverage gaps and quirks of the test suite |
 
 ## Reference
 

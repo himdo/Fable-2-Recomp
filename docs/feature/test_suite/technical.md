@@ -9,13 +9,14 @@ These notes record what the test suite knows that the test code doesn't say out 
 | Suite | Command | Needs |
 |---|---|---|
 | Version check | `python tools/generate_game_versions.py --check` | Python |
+| Manifest naming check | `python tools/check_manifest_names.py --base origin/master` (CI uses `--base HEAD~1`) | Python, git |
 | Python tests | `python -m pytest` (CI adds `--cov=tools --cov-report=term`) | Python 3.11+, `pip install -r tests/requirements.txt` |
 | Launcher tests | `dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release` | .NET 8 |
 | Native tests | `tests\run_native_tests.cmd` (`FABLE2_COVERAGE=1` for coverage) | Windows, clang ≥ 22 on PATH, VS C++ tools, SDK submodule |
 
-None of them need game files. CI (`.github/workflows/tests.yml`) runs all four on `windows-latest` for every PR and every push to master.
+None of them need game files. CI (`.github/workflows/tests.yml`) runs all five on `windows-latest` for every PR and every push to master.
 
-Baseline at c2a9d12: **494 passed, 15 xfailed** on macOS. Windows CI should show 493 passed, 1 skipped, 15 xfailed: the symlink test in `tests/tools/test_prepare_renderer_mspack.py` is the only one skipped on Windows (the Windows count wasn't rerun for this doc).
+Baseline at c2a9d12: **494 passed, 15 xfailed** on macOS, and **493 passed, 1 skipped, 15 xfailed** on Windows (run by hand on 26 Nov 2026). The symlink test in `tests/tools/test_prepare_renderer_mspack.py` is the only one skipped on Windows. On the same Windows machine, the launcher tests all passed.
 
 ## Conventions
 
@@ -82,4 +83,11 @@ Baseline at c2a9d12: **494 passed, 15 xfailed** on macOS. Windows CI should show
 
 ## Not covered by these notes
 
-Suites added after the restyle: `tests/tools/test_merge_dir_manifest.py`, `test_mouse_log_format.py`, `test_mouse_stats.py`, `tests/core/*`, `tests/lua/*` (`test_recomp_scripts*.py`, `test_world_thread_runscript.py`) and the 15 Catch2 files in `tests/native/`.
+Suites added after the restyle:
+
+- `tests/tools/test_mouse_log_format.py` and `test_mouse_stats.py`;
+- `tests/core/` (`test_recomp_scripts_startup.py`, `test_world_thread_runscript.py`) and `tests/lua/test_recomp_scripts.py`;
+- `tests/test_tracked_files.py` (only its quirk is above);
+- the 13 test files in `tests/native/`: 12 Catch2 files plus `test_mouse_aim.cpp`, which isn't converted to Catch2 yet. `catch_main.cpp` and `catch_spec.cpp` are support files, not tests.
+
+`test_merge_dir_manifest.py` (#224), `test_manifest_names.py` (#249) and `test_lua_callshapes.py` aren't covered here either, apart from the questions and quirks above.

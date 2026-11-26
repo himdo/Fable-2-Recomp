@@ -1,6 +1,6 @@
 # Manifest naming check: technical notes
 
-**Status:** no commit yet · **Commits:** none · **Last checked against:** 7863041
+**Status:** merged · **Commits:** 2f46d83 (#249) · **Last checked against:** c2a9d12
 
 Labels: **Verified** means read in the repo or measured with the tool. **Inference** means reasoned, not tested.
 
@@ -69,10 +69,11 @@ All Verified, on macOS (Apple Silicon):
 | `fix/docs-last-checked` merged into master, `--base HEAD~1` (what CI would run on that PR) | exit 0; its 4 new names checked |
 | The manifest of `feature/game-difficulty` merged into master, checked against master | 67 new or renamed entries, 0 problems |
 
+On Windows (26 Nov 2026, at c2a9d12): without `--base` the tool exits 0 with 5,080 named functions and the same 2,642 / 56 / 381 counts. The CI step has passed on every push to master since #249 merged (run 45696294630 onwards).
+
 ## Not tested
 
-- The step hasn't run on GitHub yet. The PR's own CI run is the first real check.
-- The tool hasn't been run on Windows by hand. CI runs both it and its tests there.
+- Nothing open: the step runs in CI on GitHub, and the tool runs on Windows by hand.
 
 ## Follow-ups
 

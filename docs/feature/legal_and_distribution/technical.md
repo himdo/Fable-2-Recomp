@@ -35,7 +35,7 @@ All **Verified** (read in the repo at 7863041).
 
 | Entry | What it keeps out |
 |---|---|
-| `default.xex`, `/data/`, `/nxeart`, `/$SystemUpdate/`, `/Gamefiles/` | The ripped disc: the executable, the game data and the extra disc folders `tools/x360extract` writes. |
+| `default.xex`, `/data/`, `/nxeart`, `/$SystemUpdate/`, `/Gamefiles/` | The ripped disc: the executable, the game data and the extra disc folders. `tools/x360extract`'s README names `nxeart` and `$SystemUpdate`; `Gamefiles` came in with the German GOTY support (bfcc5d6), and no tool in the repo writes it. |
 | `out`, `generated` | All build output, including the recompiled C++ (`generated/default/`). Only `generated/rexglue.cmake` is tracked (force-added). |
 | `.fable2_image.bin` | The raw decrypted guest image that `tools/xex_image.py` and the Lua API analysis produce. |
 | `/console/`, `fps_probe.log`, `fable2_func_*.log` | Runtime logs and console files that can land in the root. |
@@ -47,7 +47,17 @@ Saves live in the build folder (`out/build/<preset>/saves/`, per the README), so
 
 ### What git tracks
 
-`tests/test_tracked_files.py` (1a5bc57, #250) runs `git ls-files` and fails if git tracks anything in the rip's folders at the repo root (`data/`, `nxeart`, `$SystemUpdate/`, `Gamefiles/`, the same list as `.gitignore`) or any `.xex`, `.bnk` or `.bik` file, in any letter case. So `git add -f` or an oddly named rip folder can't slip past `.gitignore` unnoticed. A guard test checks that the tracked-file list isn't empty. The three file types are the only game types the repo's own tools mention; whether the disc has other game-only types worth adding hasn't been checked against an unpacked disc yet.
+`tests/test_tracked_files.py` (1a5bc57, #250) runs `git ls-files` and fails if git tracks anything in the rip's folders at the repo root (`data/`, `nxeart`, `$SystemUpdate/`, `Gamefiles/`, the same list as `.gitignore`) or any `.xex`, `.bnk` or `.bik` file, in any letter case. So `git add -f` or an oddly named rip folder can't slip past `.gitignore` unnoticed. A guard test checks that the tracked-file list isn't empty. The three file types are the only game types the repo's own tools mention.
+
+**Verified against an unpacked disc** (GOTY USA/Europe, identified by its `default.xex` hash; Windows, 26 Nov 2026). The disc's `data/` folder holds these file types:
+
+| Kind | Types | Covered by the test? |
+|---|---|---|
+| Already in the test | `.bnk` (127 files, about 5.7 GB), `.bik` (40, about 860 MB) | Yes |
+| Game-only types | `.adb` (114), `.bft` (12), `.babel` (7), `.gdb` (7), `.sbk` (2), `.animation_data`, `.animation_toc`, `.loco`, `.amp`, `.vfsconfig` (1 each) | Only inside `data/`. Elsewhere in the repo they would pass |
+| Common types | `.xml` (56), `.lua` (42), `.txt` (15), `.dds` (14), `.swf` (7), `.list` (6), `.csv` (2), `.manifest` (1) | No, on purpose: the repo has its own `.lua` files (13 in `src/lua/`), and blocking the others would block the repo's own files |
+
+None of the game-only types is tracked on master. Adding them to the test's list is a follow-up. The `.lua` count includes the recomp's own scripts, which the build stages into `data/scripts/recomp/`.
 
 ### What a release contains
 
@@ -79,17 +89,26 @@ The remote-control server (localhost TCP port 8791, injects gamepad input) is co
 ### Docs and generated references
 
 - The "Never commit" list in `CLAUDE.md` forbids game files, XEX dumps, saves, shader dumps, game text, dialogue, scripts, asset data, logs with player or local paths, and personal AI files. The docs index (`docs/README.md`) repeats the rule for docs.
-- `FABLE2_LUA_API.md` and `docs/reference/lua_call_shapes.md` were generated from the script banks, but they hold names, call counts and argument shapes, not script code. A skim of the quoted values in `lua_call_shapes.md` found key codes and file names, not dialogue.
+- `FABLE2_LUA_API.md` and `docs/reference/lua_call_shapes.md` were generated from the script banks. They hold names, call counts and argument shapes, not script code.
+  - **Corrected on 26 Nov 2026:** `lua_call_shapes.md` did hold game text. Its example argument lists quoted 62 multi-word strings from the scripts, such as on-screen objectives, yes/no prompts, info-box text and developer debug messages.
+  - `tools/lua_callshapes.py` now prints a string literal only when it looks like a key, an ID or a path. Anything else is printed as `"…"`. The doc was regenerated from the disc, and only those strings changed. `tests/tools/test_lua_callshapes.py` guards the rule.
+  - The old text is still in git history (from #240).
+  - `FABLE2_LUA_API.md` holds no quoted text.
 - The README's opening note says the project doesn't condone piracy, and that mentions or links lead to removal and a ban.
 
 ### Licences
 
 - `LICENSE` (repo root): MIT, copyright 2026 Himdo. It covers the project's own code, not the game.
 - `thirdparty/XenosTiling/LICENSE.txt` and `thirdparty/tomlplusplus/LICENSE` are the bundled third-party licences. The release ships the XenosTiling one, and the keycap font ships with its OFL text.
+- **Inference:** the release zip is missing two licences.
+  - It ships `rexruntime.dll` and `rexgpu-xenos.dll` from the SDK, but not `thirdparty/rexglue-sdk/LICENSE`, which covers the Xenia-derived code.
+  - `fable_2.exe` is built with toml++ (MIT), but its licence isn't in the zip either.
+  - `tools/package_release.py` adds only `licenses/XenosTiling-LICENSE.txt`.
 
 ### Gaps (Inference)
 
-- **Closed in #250:** nothing used to check that no game file is tracked in git; `tests/test_tracked_files.py` does now (see "What git tracks"). Still open: checking its file-type list against an unpacked disc.
+- **Closed in #250:** nothing used to check that no game file is tracked in git; `tests/test_tracked_files.py` does now (see "What git tracks"). Its file-type list has now been compared with an unpacked disc. Still open: adding the ten game-only types found there.
+- The release zip is missing two licences (see "Licences").
 - `tools/xex_image.py` contains the retail XEX AES key in plain text. It is the key the Xbox 360 emulators already publish, but it is worth knowing it's there if the repo is ever reviewed.
 - The README links an external extractor tool. That's fine, but any link to disc images would break the project's own rule.
 
@@ -98,7 +117,8 @@ The remote-control server (localhost TCP port 8791, injects gamepad input) is co
 - Keep `generated/` out of releases and forks, as now.
 - Never ship assets. Anything restored (see [cut_content](../cut_content/technical.md)) must be read from the player's own `data/` files at runtime.
 - Don't target unreleased or current IP.
-- Add the git-tracked-files test described under Gaps. Done in #250; confirm its file-type list against an unpacked disc.
+- Add the git-tracked-files test described under Gaps. Done in #250. Next: add the ten game-only disc types from "What git tracks" to its list.
+- Ship `thirdparty/rexglue-sdk/LICENSE` and `thirdparty/tomlplusplus/LICENSE` in the release zip.
 
 ## What changed
 
@@ -107,12 +127,16 @@ This doc is research. The one change it proposed, the tracked-files test, merged
 ## Verification
 
 - **Verified in this repo:** `.gitignore`, `tools/package_release.py` and `tests/tools/test_package_release.py`, `.github/workflows/tests.yml`, `constants/game_versions.json`, the `FABLE2_REMOTE_CONTROL` gate in `CMakeLists.txt`, the licence files, the README notes and the "Never commit" list in `CLAUDE.md`.
+- **Verified on Windows with the disc** (26 Nov 2026):
+  - the disc's file types (see "What git tracks");
+  - `python -m pytest` passes, including the packager and tracked-files tests (493 passed, 1 skipped, 15 xfailed at c2a9d12);
+  - `tools/lua_callshapes.py` run on the disc's banks reproduces the committed `lua_call_shapes.md` exactly, before the redaction change.
 
 ## Not tested
 
 - No legal review. The Microsoft position rests on one secondary source.
-- The packager test was read, not run, for this doc. `git ls-files` showed no game files tracked at 7863041, and `tests/test_tracked_files.py` passes at c2a9d12.
-- The tracked-files test's file types haven't been compared with an unpacked disc.
+- `git ls-files` showed no game files tracked at 7863041, and `tests/test_tracked_files.py` passes at c2a9d12.
+- Only the GOTY USA/Europe disc was checked. Other versions (such as the German GOTY) may have more file types.
 
 ## Sources
 
