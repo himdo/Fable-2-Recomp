@@ -1,8 +1,8 @@
 # High tick rate side effects: technical notes
 
-**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** 7863041
+**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** c2a9d12
 
-Claims are labelled **Verified** (checked in this repo or a primary source), **Reported** (a source says so, not checked here) or **Inference** (reasoned, not tested). This came out of the [November 2026 research](../../reference/research/README.md). Code was read in `src/`, the hand-tuned overrides and `fable_2_manifest.toml`; `generated/` isn't available on the machine this was written on, so nothing here was read in the generated code itself.
+Claims are labelled **Verified** (checked in this repo or a primary source), **Reported** (a source says so, not checked here) or **Inference** (reasoned, not tested). This came out of the [November 2026 research](../../reference/research/README.md). Code was read in `src/`, the hand-tuned overrides and `fable_2_manifest.toml`. The first version was written without `generated/`. On 26 Nov 2026 the generated-code claims were checked on Windows; those are marked "read in the generated code".
 
 ## Symptom
 
@@ -20,12 +20,12 @@ All three live in `[patches]` of `config/fable2_config.toml`, with the same text
 | `higher_hf_tick_rate` | `false` | HF tick 30 → 60 Hz (Xenia "Higher HF Tick Rate" by Ultra). Ignored unless `high_tick_rate` is on | `[tick-rate] HF tick forced to 60 Hz (higher_hf_tick_rate)`, or a warning that it was ignored |
 | `gui_every_hf_tick` | `true` | Runs the GUI update on every HF tick instead of every LF tick | `[gui-every-hf-tick] on: GUI updates every HF tick` |
 
-- **Launcher (Verified):** `launcher/Fable2.Launcher/MainWindow.xaml.cs` lists "High Tick Rate" and "Higher HF Tick Rate" as **(unstable)** patch rows (red accent). Ticking Higher HF ticks High Tick Rate; unticking High Tick Rate unticks Higher HF. `Fable2ConfigFile.cs` reads and writes both keys (`HighTickRate` is commented `// unstable`).
+- **Launcher (Verified):** `launcher/Fable2.Launcher/MainWindow.xaml.cs` lists "High Tick Rate" and "Higher HF Tick Rate" as **(unstable)** patch rows (red accent). Ticking Higher HF ticks High Tick Rate; unticking High Tick Rate unticks Higher HF. `Fable2ConfigFile.cs` reads and writes both keys (both `HighTickRate` and `HigherHfTickRate` are commented `// unstable`).
 - **Restart needed (Verified):** each hook caches its config value in a function-local `static` on first use (`src/core/fable2_hooks.cpp`), and the data patch is applied once at load, so changing a key takes effect on the next launch.
 
 ### How the rates are set (Verified)
 
-Two guest doubles hold the rates: the **LF rate at 0x83319510** (15.0) and the **HF rate at 0x83319518** (30.0, copied from 0x833194F0). Game init (`sub_8233AE50`, still unnamed) writes both every time it runs: the HF store at 0x8233AE98, the LF store at 0x8233AEB4.
+Two guest doubles hold the rates: the **LF rate at 0x83319510** (15.0) and the **HF rate at 0x83319518** (30.0, copied from 0x833194F0). Game init (`Game_InitTickRatesAndSystems_8233AE50`) writes both every time it runs: the HF store at 0x8233AE98, the LF store at 0x8233AEB4 (read in the generated code).
 
 Each option has two halves, gated on the same key:
 
@@ -61,7 +61,7 @@ The 2:1 HF:LF ratio matters: with `high_tick_rate` alone both run at 30 Hz (1:1)
 | Job minigames (blacksmith, woodcutter, bartender) and expression holds (#216) | Feel easier/different at the higher rate (Reported). The meter or cursor probably steps a fixed amount per LF tick while its window keeps its width | Native code not located yet |
 | Script timers built on `Timing.GetWorldFrame` | 548 calls in 106 files (Reported, `FABLE2_LUA_API.md`). A world frame is a tick count, so "N frames since" means half the time at 30 Hz unless the script converts with `GetTickRate` | `GetCombatInfo.LastAttackTick` and `Combat.GetLastEnrageTick` are stored as ticks (Reported, `lua_call_shapes.md`) |
 | `Navigation.PreventMovementForXFrames` | Takes frames, not seconds | Reported, `FABLE2_LUA_API.md` |
-| Rent and income | **Reported** on branch `feature/game-difficulty` (its `docs/feature/difficulty_settings/technical.md`): `Ownership_PayDueRent_828AEA50` / `Ownership_UpdateIncome_828AECD0` pay out once "the game tick passes" a stored value. If that is an LF tick count, rent arrives twice as fast | Names exist on that branch only |
+| Rent and income | **Read in the generated code:** `Ownership_PayDueRent_828AEA50` (named on branch `feature/game-difficulty` only) compares the int at 0x8331950C with a due value at +132 of the property. `GameWorldState_Update_821D43D8` adds 1 to that int at the end of every world update; it sits next to the LF rate double at 0x83319510. So rent is counted in world updates, not seconds. **Inference:** world updates run at the LF rate, so rent arrives twice as fast with `high_tick_rate` on. `Ownership_UpdateIncome_828AECD0` doesn't read the counter itself | The in-game speed-up hasn't been timed |
 | Time of day and world clock | `Timing.GetWorldSecondsPerSecond`, `SetDaySpeed`; unknown whether the clock advances per tick or per second | Testable with the `time` console command |
 | Ring-buffer/pad tick objects | `RingBuffer_TickPadWithFillByte_832B68A0` limits itself by a tick rate in ms (manifest comment), so it already uses time (Inference) | Probably unaffected |
 
@@ -121,19 +121,20 @@ Existing coverage (Verified): `tests/config/test_config_template.py` checks the 
 ## Verification
 
 - **Verified in this repo:** the keys, defaults and log lines above; `BuildPatches()` in `src/core/fable2_patches.cpp`; the three hooks in `src/core/fable2_hooks.cpp` and their `[[entrypoint.midasm_hook]]` entries; the scheduler in `src/core/hotfunc/frame/ProcessGameFrame_82276C30.cpp`; `DefaultWindowUs()` and its test; the launcher rows.
+- **Read in the generated code** (Windows, 26 Nov 2026): the two rate stores in `Game_InitTickRatesAndSystems_8233AE50`, the rent counter, and the 95 callers of `GetTimebase_8221EB58`.
 - Nothing was run in game for this doc.
 
 ## Not tested
 
 - The blacksmithing explanation, and which other systems are affected, haven't been measured.
 - What `Timing.GetTickRate`, `Timing.Wait` and `Timing.GetWorldFrame` do under the patch.
-- Whether rent is counted in ticks (the difficulty branch's wording suggests it).
+- Whether rent really arrives twice as fast in game. The code counts it in world updates (see the table), but no payout was timed.
 - The constant at 0x8209FFD8 wasn't read; 1.0 is assumed.
 
 ## Follow-ups
 
-- Name `sub_8233AE50` (writes both rate doubles) and the Lua `Timing.*` natives with `/name-functions`.
-- Unnamed callers of `GetTimebase_8221EB58` (manifest comment) are candidates for "already real time": `sub_82BBB2A8`, `sub_82D02A88`, `sub_82A3E7C0`, `sub_82CFECA8`, `sub_82A57418`, `sub_82AA2E80`, `sub_82AB2968`, `sub_82BE3E00`, `sub_8238A2D8`. The named ones are `Timer_GetElapsed_822B6D70`, `PresentFrame_82B69488` and `GpuInterruptHandler_82B9C530`.
+- Name the Lua `Timing.*` natives with `/name-functions`. (`sub_8233AE50`, which writes both rate doubles, is now `Game_InitTickRatesAndSystems_8233AE50`.)
+- Callers of `GetTimebase_8221EB58` are candidates for "already real time". The manifest comment lists 12, but the generated code has **95** (counted on Windows, 26 Nov 2026). The named ones are `Timer_GetElapsed_822B6D70`, `PresentFrame_82B69488`, `GpuInterruptHandler_82B9C530`, `UpdateCamerasTimebase_821B9320`, `TextureMorph_Render_82A69728`, `ProcessGameFrame_82276C30`, `FrontMenu_PressBitDispatch` and `Game_InitTickRatesAndSystems_8233AE50`. The other 87 still have `sub_` or `ProcessAnd…` names; the nine the manifest comment lists (`sub_82BBB2A8`, `sub_82D02A88`, `sub_82A3E7C0`, `sub_82CFECA8`, `sub_82A57418`, `sub_82AA2E80`, `sub_82AB2968`, `sub_82BE3E00`, `sub_8238A2D8`) are among them.
 - [mouse_camera](../../feature/mouse_camera/technical.md) lists `high_tick_rate` as not tested at merge; the camera script runs per LF tick, so it should be part of the same test pass.
 
 ## Sources
