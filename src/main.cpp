@@ -11,6 +11,11 @@
 // screenshots. Defines strong overrides of three recompiled functions and must
 // come before fable2_state_probe.h (which chains the pad-read override).
 #include "fable2_photo_mode.h"
+// Live minimap (Back / View): region map, hero and dog read after each world
+// update; overrides two recompiled functions. After photo mode (whose
+// world-update and pad-read overrides call it), before fable_2_app.h (the
+// overlay uses its cvars).
+#include "fable2_minimap.h"
 
 #include "fable_2_app.h"
 #include "fps_meter.h"

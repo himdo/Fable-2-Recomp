@@ -49,6 +49,7 @@
 #include "fable2_crash_log.h"  // host crash report (fable2_crash.log)
 #include "photo_mode_dialog.h"  // photo mode settings panel (ImGui)
 #include "deck_settings_page.h"  // Options > Deck Recomp Settings page
+#include "minimap_dialog.h"  // live minimap overlay (Back / View)
 #ifdef FABLE2_REMOTE_CONTROL
 #include "remote_control_server.h"
 // 1-second game-state classifier (src/diagnostics/fable2_state_probe.h, single-TU inline).
@@ -114,6 +115,7 @@ class Fable2App : public rex::ReXApp {
   // The Deck Recomp page (src/core/deck_settings_page.h), opened from the
   // pause menu's Options (src/menu/main_menu.cpp).
   std::unique_ptr<fable2::decksettings::DeckSettingsPage> deck_settings_page_;
+  std::unique_ptr<fable2::minimap::MinimapDialog> minimap_dialog_;
 
   // Emulate the Xbox 360 Xenos GPU. Two plugins are staged next to the exe:
   //   rexgpu-xenos[d].dll        -> D3D12 (prebuilt SDK plugin; the default)
@@ -575,6 +577,7 @@ class Fable2App : public rex::ReXApp {
     // destroys right after this hook.
     photo_dialog_.reset();
     deck_settings_page_.reset();
+    minimap_dialog_.reset();
 #ifdef FABLE2_REMOTE_CONTROL
     // Stop the state classifier thread, then the remote control server
     // threads, before anything else tears down.
@@ -845,6 +848,8 @@ class Fable2App : public rex::ReXApp {
     // fable2::deadbeef_overlay::register_overlay(drawer);
     photo_dialog_ = std::make_unique<fable2::photomode::PhotoModeDialog>(drawer);
     deck_settings_page_ = std::make_unique<fable2::decksettings::DeckSettingsPage>(drawer);
+    deck_settings_page_->SetGameRoot(game_data_root());
+    minimap_dialog_ = std::make_unique<fable2::minimap::MinimapDialog>(drawer, game_data_root());
 #ifdef _WIN32
     fable2::crashlog::Install();  // again, after the SDK set up its own handlers
 #endif

@@ -477,3 +477,24 @@ max_distance = 0.0
 # are named Fable2_YYYYMMDD_HHMMSS.png.
 # Default: "screenshots"
 screenshot_folder = "screenshots"
+
+[minimap]
+# Minimap: the region map from the pause menu, drawn in the top-right corner
+# while you play, with your hero and dog on it. The Back button (View on a
+# Steam Deck, M on the keyboard) shows and hides it.
+# false = no minimap, and Back does nothing.
+# Default: true
+enabled = true
+
+# Whether the minimap is showing. The Back button changes it and the choice is
+# saved here.
+# Default: true
+shown = true
+
+# Size of the minimap: "small", "medium" or "large".
+# Default: "medium"
+size = "medium"
+
+# How solid the minimap is drawn, in percent: 10 to 100 in steps of 10.
+# Default: 100
+opacity = 100

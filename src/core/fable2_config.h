@@ -296,6 +296,13 @@ struct Values {
   float photo_mode_mouse_sensitivity = 0.0025f;  // radians per mouse pixel
   float photo_mode_max_distance = 0.0f;   // 0 = no limit
   std::string photo_mode_screenshot_folder = "screenshots";
+  // [minimap] (src/core/fable2_minimap.h): the pause menu's region map, drawn in
+  // the top-right corner during play and shown / hidden with the Back (View)
+  // button. `shown` is remembered when the button changes it.
+  bool minimap_enabled = true;
+  bool minimap_shown = true;
+  std::string minimap_size = "medium";  // "small", "medium" or "large"
+  int32_t minimap_opacity = 100;        // percent, 10 to 100 in steps of 10
 };
 
 // Load the config from `path`.

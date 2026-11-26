@@ -1274,8 +1274,17 @@ inline void on_pad_read(uint8_t* base, uint32_t user, uint32_t state_ptr, uint32
 }  // namespace fable2::photomode
 
 // --- Strong overrides of the recompiled functions --------------------------------------------
+// The live minimap (src/core/fable2_minimap.h, included after this header).
+namespace fable2::minimap {
+inline void on_world_update(PPCContext& ctx, uint8_t* base, uint32_t self);
+inline void on_pad_read(uint8_t* base, uint32_t user, uint32_t state_ptr, uint32_t result);
+}  // namespace fable2::minimap
+
 extern "C" void GameWorldState_Update_821D43D8(PPCContext& ctx, uint8_t* base) {
+  const uint32_t self = ctx.r3.u32;
   fable2::photomode::on_world_update(ctx, base);
+  // The minimap reads the hero after the world (and its camera) updated.
+  fable2::minimap::on_world_update(ctx, base, self);
 }
 
 extern "C" void CECCameraUpdateFrame_822A47C0(PPCContext& ctx, uint8_t* base) {
@@ -1293,5 +1302,7 @@ extern "C" void InputGetPadState_822B2D60(PPCContext& ctx, uint8_t* base) {
   fable2::photomode::on_pad_read(base, user, state_ptr, ctx.r3.u32);
   // The Deck Recomp page reads the pad here too, and blanks it while open.
   fable2::decksettings::on_pad_read(base, user, state_ptr, ctx.r3.u32);
+  // Back (View) shows / hides the minimap.
+  fable2::minimap::on_pad_read(base, user, state_ptr, ctx.r3.u32);
 }
 #endif

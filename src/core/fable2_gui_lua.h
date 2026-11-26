@@ -38,6 +38,7 @@
 #include <vector>
 
 #include "fable2_f5_lua.h"
+#include "minimap_state.h"
 
 namespace fable2::guilua {
 
@@ -454,6 +455,19 @@ extern "C" void ProcessAndHandleType_82BB6CA0(PPCContext& ctx, uint8_t* base) {
 }
 
 extern "C" void ProcessAndReadAndProcess_82BB7100(PPCContext& ctx, uint8_t* base) {
+  // The minimap's HUD reports (setAttribute(el, "__f2mm_?", v), see
+  // src/core/fable2_minimap_hud_lua.h): taken here, never passed to GameFace.
+  {
+    namespace ta = fable2::textappend;
+    const bool taken = fable2::minimap::capture_set_attribute(
+        ctx.r3.u32, [base](uint32_t a) { return ta::load_be(base, a); },
+        [base](uint32_t a, size_t n) { return ta::rdable2(base, a, n); },
+        [base](uint32_t a) { return reinterpret_cast<const uint8_t*>(ta::host_addr(base, a)); });
+    if (taken) {
+      ctx.r3.u64 = 0;  // a Lua C function's result count
+      return;
+    }
+  }
   auto& s = fable2::guilua::S();
   if (s.armed.load(std::memory_order_relaxed) && !s.busy) {
     fable2::guilua::note_state(base, ctx.r3.u32, true);

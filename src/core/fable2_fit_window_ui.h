@@ -34,6 +34,7 @@
 
 #include "fable2_config.h"
 #include "fable2_deck_menu.h"
+#include "fable2_minimap_hud_lua.h"
 #include "fable2_ui_events.h"
 #include <rex/cvar.h>
 #include <rex/logging.h>
@@ -820,7 +821,10 @@ inline std::string BuildScript(float aspect, bool move_hud, bool log_tree) {
                 cfg.menu_scroll_acceleration);
   // The Deck Recomp row first: kScript returns early on screens without a
   // Scene element or with the HUD fit off.
-  return std::string(header) + "\n" + fable2::deckmenu::kOptionsRowLua + kScript;
+  // Then the minimap's HUD report (src/core/fable2_minimap_hud_lua.h), which
+  // only does something in the HUD.
+  return std::string(header) + "\n" + fable2::deckmenu::kOptionsRowLua +
+         fable2::minimap::kHudReportLua + kScript;
 }
 
 }  // namespace detail

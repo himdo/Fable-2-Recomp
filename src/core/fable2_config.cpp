@@ -12,6 +12,7 @@
 
 #include "fable2_config.h"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <format>
@@ -513,6 +514,27 @@ max_distance = 0.0
 # are named Fable2_YYYYMMDD_HHMMSS.png.
 # Default: "screenshots"
 screenshot_folder = "screenshots"
+
+[minimap]
+# Minimap: the region map from the pause menu, drawn in the top-right corner
+# while you play, with your hero and dog on it. The Back button (View on a
+# Steam Deck, M on the keyboard) shows and hides it.
+# false = no minimap, and Back does nothing.
+# Default: true
+enabled = true
+
+# Whether the minimap is showing. The Back button changes it and the choice is
+# saved here.
+# Default: true
+shown = true
+
+# Size of the minimap: "small", "medium" or "large".
+# Default: "medium"
+size = "medium"
+
+# How solid the minimap is drawn, in percent: 10 to 100 in steps of 10.
+# Default: 100
+opacity = 100
 )TOML_EOF";
 
 std::string_view TypeName(toml::node_type t) {
@@ -583,8 +605,8 @@ bool Load(const std::filesystem::path& path) {
 
   // Warn about unknown top-level sections (usually a typo or a file written
   // for a newer build).
-  static constexpr std::array<std::string_view, 5> kKnownSections = {
-      "general", "input", "patches", "perf", "photo_mode"};
+  static constexpr std::array<std::string_view, 6> kKnownSections = {
+      "general", "input", "patches", "perf", "photo_mode", "minimap"};
   for (const auto& [key, value] : root) {
     const bool known =
         std::ranges::find(kKnownSections, key.str()) != kKnownSections.end();
@@ -829,6 +851,28 @@ bool Load(const std::filesystem::path& path) {
     values.photo_mode_screenshot_folder =
         Read<std::string>(photo_table, "photo_mode", "screenshot_folder", "string",
                           values.photo_mode_screenshot_folder);
+  }
+  const toml::path minimap_path{"minimap"};
+  const auto minimap = root[minimap_path];
+  if (minimap.is_table()) {
+    const toml::table& minimap_table = *minimap.as_table();
+    values.minimap_enabled =
+        Read<bool>(minimap_table, "minimap", "enabled", "boolean", values.minimap_enabled);
+    values.minimap_shown =
+        Read<bool>(minimap_table, "minimap", "shown", "boolean", values.minimap_shown);
+    std::string size =
+        Read<std::string>(minimap_table, "minimap", "size", "string", values.minimap_size);
+    for (auto& c : size) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (size == "small" || size == "medium" || size == "large") {
+      values.minimap_size = size;
+    } else {
+      REXSYS_WARN("[fable2-config] minimap.size should be \"small\", \"medium\" or \"large\"; using {}",
+                  values.minimap_size);
+    }
+    values.minimap_opacity = static_cast<int32_t>(Read<int64_t>(
+        minimap_table, "minimap", "opacity", "integer", values.minimap_opacity));
+    // 10 to 100 in steps of 10, as the Deck Recomp page offers.
+    values.minimap_opacity = std::clamp((values.minimap_opacity + 5) / 10 * 10, 10, 100);
   }
 
   // Platform defaults the file leaves open.

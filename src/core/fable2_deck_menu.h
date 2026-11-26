@@ -19,6 +19,7 @@
 
 #include "fable2_config.h"
 #include "fable2_patches.h"
+#include "minimap_state.h"
 
 #include <rex/cvar.h>
 #include <rex/logging.h>
@@ -156,6 +157,25 @@ inline const std::vector<Setting>& Settings() {
        {{"false", "Off"}, {"true", "On"}},
        [] { return std::string(BoolText(Get().skip_intro_videos)); },
        [](Values& v, const std::string& s) { v.skip_intro_videos = s == "true"; }},
+      // [minimap] (src/core/fable2_minimap.h): keys "enabled" and "size".
+      {"enabled", "minimap", "Minimap", kInterface, When::kLive,
+       {{"true", "On"}, {"false", "Off"}},
+       [] { return std::string(BoolText(Get().minimap_enabled)); },
+       [](Values& v, const std::string& s) { v.minimap_enabled = s == "true"; }, nullptr, false,
+       [](const std::string& s) { fable2::minimap::feature_enabled().store(s == "true"); }},
+      {"size", "minimap", "Minimap Size", kInterface, When::kLive,
+       {{"small", "Small"}, {"medium", "Medium"}, {"large", "Large"}},
+       [] { return Get().minimap_size; },
+       [](Values& v, const std::string& s) { v.minimap_size = s; }, nullptr, true,
+       [](const std::string& s) {
+         fable2::minimap::size_fraction().store(fable2::minimap::SizeFraction(s));
+       }},
+      {"opacity", "minimap", "Minimap Opacity", kInterface, When::kLive,
+       {{"100", "100%"}, {"90", "90%"}, {"80", "80%"}, {"70", "70%"}, {"60", "60%"},
+        {"50", "50%"}, {"40", "40%"}, {"30", "30%"}, {"20", "20%"}, {"10", "10%"}},
+       [] { return std::to_string(Get().minimap_opacity); },
+       [](Values& v, const std::string& s) { v.minimap_opacity = std::stoi(s); }, nullptr, false,
+       [](const std::string& s) { fable2::minimap::opacity().store(std::stoi(s) / 100.0f); }},
   };
   return settings;
 }
@@ -168,6 +188,9 @@ inline const char* Explanation(const std::string& key) {
       {"menu_animation_speed", "How fast the menus slide and fade. Faster shows the result of a press sooner."},
       {"menu_instant_response", "Menus react in the same update as the press, about 0.1 s sooner than the original game."},
       {"menu_scroll_acceleration", "Holding a direction speeds up scrolling over 1.5 s, up to this many times the normal rate."},
+      {"enabled", "The region map from the pause menu, in the top-right corner while you play, with your hero and dog on it. The {BACK} button shows and hides it."},
+      {"size", "How big the minimap is drawn."},
+      {"opacity", "How solid the minimap is drawn. Lower lets more of the game show through."},
       {"skip_intro_videos", "Skips the Microsoft and Lionhead logo videos when the game starts. This may also make the game start faster."},
       {"disable_motion_blur", "The camera's full-screen blur when it moves."},
       {"view_distance_multiplier", "How far away objects, buildings, villagers and creatures are drawn before they pop out. Above 3x is not recommended: busy places like Bowerstone lose a lot of frame rate."},

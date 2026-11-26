@@ -30,6 +30,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -38,9 +40,11 @@
 #include <rex/logging/macros.h>
 #include <rex/ui/imgui_dialog.h>
 #include <rex/ui/imgui_drawer.h>
+#include <rex/ui/immediate_drawer.h>
 #include <rex/ui/window.h>
 #include <rex/ui/windowed_app_context.h>
 
+#include "back_button_icons.h"
 #include "deck_settings_state.h"
 #include "fable2_config.h"
 #include "fable2_deck_menu.h"
@@ -89,6 +93,9 @@ inline int ChoiceIndex(const deckmenu::Setting& s, const std::string& value) {
 
 class DeckSettingsPage final : public rex::ui::ImGuiDialog {
  public:
+  // The game data folder (for the Back button icons in the Minimap description).
+  void SetGameRoot(std::filesystem::path root) { game_root_ = std::move(root); }
+
   explicit DeckSettingsPage(rex::ui::ImGuiDrawer* drawer) : rex::ui::ImGuiDialog(drawer) {
 #ifndef _WIN32
     // A registered dialog makes the presenter repaint the window at the
@@ -172,6 +179,12 @@ class DeckSettingsPage final : public rex::ui::ImGuiDialog {
   std::vector<std::string> values_;   // as shown (changes applied)
   std::vector<std::string> in_file_;  // as saved when the page opened
   std::vector<std::string> saved_;    // what the file holds (kept across visits)
+
+  // The Back button's icon per button-icon scheme (src/core/back_button_icons.h),
+  // made the first time a description shows it.
+  std::filesystem::path game_root_;
+  std::unique_ptr<rex::ui::ImmediateTexture> back_tex_[backicon::kSchemeCount];
+  bool back_tried_ = false;
 
   int tab_ = 0;
   int sel_ = 0;  // row on the tab
@@ -288,7 +301,7 @@ class DeckSettingsPage final : public rex::ui::ImGuiDialog {
         {"disable_motion_blur", "false"}, {"deck_button_prompts", "dark"}, {"menu_repeat_delay", "0.18"},
         {"menu_animation_speed", "2.5"}, {"menu_instant_response", "true"}, {"menu_scroll_acceleration", "1.5"},
         {"skip_intro_videos", "false"}, {"view_distance_multiplier", "1"}, {"lod_distance_multiplier", "1"},
-        {"disable_msaa", "false"},
+        {"disable_msaa", "false"}, {"enabled", "true"}, {"size", "medium"}, {"opacity", "100"},
     };
     for (const auto& [k, v] : kDefaults)
       if (std::strcmp(k, s.key) == 0) return v;
@@ -421,6 +434,70 @@ class DeckSettingsPage final : public rex::ui::ImGuiDialog {
   void TextRight(float right, float y, float size, ImU32 col, const char* t) {
     Text(ImVec2(right - TextW(t, size), y), size, col, t);
   }
+  // "{BACK}" in a description: the Back button's icon in the button-icon
+  // scheme chosen on the Display tab (the game's own Xbox icon, or the Steam
+  // Deck View button, dark or light).
+  static constexpr const char* kBackToken = "{BACK}";
+  rex::ui::ImmediateTexture* BackIcon() {
+    if (!back_tried_) {
+      back_tried_ = true;
+      rex::ui::ImmediateDrawer* drawer = imgui_drawer()->immediate_drawer();
+      fable2::gameicons::Image img[backicon::kSchemeCount];
+      std::string log;
+      const int made = drawer && !game_root_.empty() ? backicon::Build(game_root_, img, log) : 0;
+      for (int s = 0; s < backicon::kSchemeCount; ++s) {
+        if (!img[s].loaded) continue;
+        back_tex_[s] = drawer->CreateTexture(uint32_t(img[s].w), uint32_t(img[s].h),
+                                             rex::ui::ImmediateTextureFilter::kLinear, false,
+                                             img[s].rgba.data());
+      }
+      if (made < backicon::kSchemeCount) REXSYS_WARN("[deck-menu] Back button icons: {} of 3{}", made, log);
+    }
+    std::string scheme = fable2::config::Get().deck_button_prompts;
+    for (size_t i = 0; i < list_.size() && i < values_.size(); ++i)
+      if (std::strcmp(list_[i].key, "deck_button_prompts") == 0) scheme = values_[i];
+    return back_tex_[backicon::SchemeFor(scheme)].get();
+  }
+  float IconW(float size) const { return X(size) * 1.3f; }
+  // Width of a line in which each {BACK} is an icon.
+  float LineW(const std::string& s, float size) {
+    std::string t = s;
+    float extra = 0.0f;
+    for (size_t p; (p = t.find(kBackToken)) != std::string::npos;) {
+      t.erase(p, std::strlen(kBackToken));
+      extra += IconW(size);
+    }
+    return TextW(t.c_str(), size) + extra;
+  }
+  // A line of text with its {BACK} icons ("Back" if the icon is missing).
+  void TextLine(ImVec2 p, float size, ImU32 col, const std::string& s) {
+    if (s.find(kBackToken) == std::string::npos) return Text(p, size, col, s.c_str());
+    rex::ui::ImmediateTexture* icon = BackIcon();
+    float x = p.x;
+    size_t i = 0;
+    while (i <= s.size()) {
+      const size_t j = s.find(kBackToken, i);
+      const std::string seg = s.substr(i, j == std::string::npos ? std::string::npos : j - i);
+      if (!seg.empty()) {
+        Text(ImVec2(x, p.y), size, col, seg.c_str());
+        x += TextW(seg.c_str(), size);
+      }
+      if (j == std::string::npos) break;
+      const float w = IconW(size);
+      if (icon) {
+        const float top = p.y + X(size) * 0.5f - w * 0.5f;
+        const int a = int((col >> IM_COL32_A_SHIFT) & 0xFF);
+        dl_->AddImage(ImTextureRef(reinterpret_cast<ImTextureID>(icon)), ImVec2(x, top),
+                      ImVec2(x + w, top + w), ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, a));
+        x += w;
+      } else {
+        Text(ImVec2(x, p.y), size, col, "Back");
+        x += TextW("Back", size);
+      }
+      i = j + std::strlen(kBackToken);
+    }
+  }
+
   // Word-wrapped text; returns the height used. Lines that would end below
   // `bottom` are left out, the last one shown ending in "...".
   float TextWrapped(ImVec2 p, float size, float width, ImU32 col, const std::string& all, float bottom = 1e9f) {
@@ -431,7 +508,7 @@ class DeckSettingsPage final : public rex::ui::ImGuiDialog {
       const size_t j = all.find(' ', i);
       const std::string word = all.substr(i, j == std::string::npos ? std::string::npos : j - i);
       const std::string trial = line.empty() ? word : line + " " + word;
-      if (!line.empty() && TextW(trial.c_str(), size) > width) {
+      if (!line.empty() && LineW(trial, size) > width) {
         lines.push_back(line);
         line = word;
       } else {
@@ -450,7 +527,7 @@ class DeckSettingsPage final : public rex::ui::ImGuiDialog {
         while (!text.empty() && TextW((text + "...").c_str(), size) > width) text.pop_back();
         text += "...";
       }
-      Text(ImVec2(p.x, y), size, col, text.c_str());
+      TextLine(ImVec2(p.x, y), size, col, text);
       y += step;
     }
     return y - p.y;
