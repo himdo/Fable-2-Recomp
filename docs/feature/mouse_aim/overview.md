@@ -1,6 +1,6 @@
 # Mouse aim (ranged aim reticle): overview
 
-**Status:** merged · **Commits:** 49c70ab (#183) · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** 49c70ab (#183) · **Last checked against:** 7863041
 
 ## What players saw before
 

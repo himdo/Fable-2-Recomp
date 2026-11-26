@@ -1,6 +1,6 @@
 # Rendering and performance (1.6 speed-ups and the bugs they exposed): technical notes
 
-**Status:** merged · **Commits:** recomp 0b163fb (#149), 6e9f5c4 (#150), c2cad76 (#151), d28da25 (#143), 359d3a1 (#148), e0c69c0 (#135), 2df8825 (#158); SDK bda14fe (#25), e251d3a (#26), c04750f (#27), a56e5ae (#28), all shipped in 1.6.0 · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** recomp 0b163fb (#149), 6e9f5c4 (#150), c2cad76 (#151), d28da25 (#143), 359d3a1 (#148), e0c69c0 (#135), 2df8825 (#158); SDK bda14fe (#25), e251d3a (#26), c04750f (#27), a56e5ae (#28), all shipped in 1.6.0 · **Last checked against:** 7863041
 
 Line numbers refer to recomp `e0c69c0` and SDK `85d96f2`, where this was first written. SDK paths are relative to `thirdparty/rexglue-sdk/`. Labels: **Verified** means read in code, git history or a PR description. **Reported** means said by a developer and not checked. **Inference** means reasoned, not tested.
 

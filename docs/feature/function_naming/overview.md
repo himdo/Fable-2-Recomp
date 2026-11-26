@@ -1,6 +1,6 @@
 # Function naming for recent PRs: overview
 
-**Status:** merged · **Commits:** f451b72 (#238) · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** f451b72 (#238) · **Last checked against:** 7863041
 
 ## What it is
 
