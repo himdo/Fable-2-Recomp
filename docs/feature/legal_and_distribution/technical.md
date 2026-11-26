@@ -66,7 +66,7 @@ None of the game-only types is tracked on master. Checked against every file on 
 - the build's `fable_2.exe`, `rexruntime.dll`, `rexgpu-xenos.dll` and `fable2_build.json` (with the version stamped in);
 - `Fable2Launcher.exe`;
 - the repo's `README.md` and `config/fable2_config.toml` (the repo copy, not the build folder's, which may hold a developer's own settings);
-- `licenses/XenosTiling-LICENSE.txt`;
+- the third-party licences in `licenses/`: `XenosTiling-LICENSE.txt`, `rexglue-sdk-LICENSE.txt` (from the SDK submodule) and `tomlplusplus-LICENSE.txt`, listed in `LICENSES` in the tool (the last two added in #252);
 - the recomp's own Lua scripts from `data/scripts/recomp/*.lua` (written in `src/lua/`), but not `dir.manifest`, which comes from the disc;
 - the bundled keycap font under `assets/fonts/`, with its OFL licence next to it.
 
@@ -99,16 +99,17 @@ The remote-control server (localhost TCP port 8791, injects gamepad input) is co
 ### Licences
 
 - `LICENSE` (repo root): MIT, copyright 2026 Himdo. It covers the project's own code, not the game.
-- `thirdparty/XenosTiling/LICENSE.txt` and `thirdparty/tomlplusplus/LICENSE` are the bundled third-party licences. The release ships the XenosTiling one, and the keycap font ships with its OFL text.
-- **Inference:** the release zip is missing two licences.
-  - It ships `rexruntime.dll` and `rexgpu-xenos.dll` from the SDK, but not `thirdparty/rexglue-sdk/LICENSE`, which covers the Xenia-derived code.
-  - `fable_2.exe` is built with toml++ (MIT), but its licence isn't in the zip either.
-  - `tools/package_release.py` adds only `licenses/XenosTiling-LICENSE.txt`.
+- The release ships three third-party licences, and the keycap font ships with its OFL text:
+  - `thirdparty/XenosTiling/LICENSE.txt`, for Xenia's tiling code in `src/gui/xenos_tiling.h`;
+  - `thirdparty/rexglue-sdk/LICENSE` (BSD-3-Clause, which asks binary releases to reproduce the notice), for `rexruntime.dll` and `rexgpu-xenos.dll` and the Xenia-derived code in them;
+  - `thirdparty/tomlplusplus/LICENSE` (MIT), for the config reader compiled into `fable_2.exe`.
+- **Fixed in #252:** until then, `tools/package_release.py` shipped only the XenosTiling licence. Packaging now stops if any of the three is missing, so an unfetched SDK submodule can't produce a zip without the SDK's notice.
+- **Inference, still open:** the SDK's own `thirdparty/` folder bundles about 25 more libraries with their own licences (for example fmt, spdlog, imgui, SDL3, FFmpeg). Some of them are probably linked into the runtime DLLs. Which ones, and which of their licences the release must carry, hasn't been worked out. `stb`, `vulkan` and `vk_video` in this repo's `thirdparty/` have no licence file of their own.
 
 ### Gaps (Inference)
 
 - **Closed in #250:** nothing used to check that no game file is tracked in git; `tests/test_tracked_files.py` does now (see "What git tracks"). Its file-type list has been compared with an unpacked disc, and the ten other game-only types found there were added in #252.
-- The release zip is missing two licences (see "Licences").
+- Which of the SDK's bundled libraries end up in the runtime DLLs, and so need their licences in the release, hasn't been checked (see "Licences").
 - `tools/xex_image.py` contains the retail XEX AES key in plain text. It is the key the Xbox 360 emulators already publish, but it is worth knowing it's there if the repo is ever reviewed.
 - The README links an external extractor tool. That's fine, but any link to disc images would break the project's own rule.
 
@@ -118,7 +119,7 @@ The remote-control server (localhost TCP port 8791, injects gamepad input) is co
 - Never ship assets. Anything restored (see [cut_content](../cut_content/technical.md)) must be read from the player's own `data/` files at runtime.
 - Don't target unreleased or current IP.
 - Add the git-tracked-files test described under Gaps. Done in #250; the disc's other game-only types were added in #252.
-- Ship `thirdparty/rexglue-sdk/LICENSE` and `thirdparty/tomlplusplus/LICENSE` in the release zip.
+- Ship `thirdparty/rexglue-sdk/LICENSE` and `thirdparty/tomlplusplus/LICENSE` in the release zip. Done in #252. Next: work out which of the SDK's bundled libraries are in the DLLs and ship their licences too.
 
 ## What changed
 

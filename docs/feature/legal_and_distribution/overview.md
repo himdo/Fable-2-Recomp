@@ -26,7 +26,7 @@ A summary of the takedowns of fan PC ports in late 2026, and the rules that keep
 
 - The automatic check that no game file was added knows the game's main file types. A full copy of the disc turned out to hold about ten more types that only the game uses, and the check now knows those too.
 - A reference page listing how the game's scripts call the engine quoted some of the game's own on-screen text and messages. That text has been taken out, and the tool that writes the page now leaves it out by itself.
-- The download doesn't yet include the licences of two pieces of borrowed code: the toolkit the port is built on and a small settings reader.
+- The download now includes the licences of the toolkit the port is built on and of a small settings reader, which were missing before. That toolkit itself uses many smaller libraries, and which of their licences belong in the download hasn't been worked out yet.
 
 ## What players need to do
 
