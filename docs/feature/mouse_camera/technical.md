@@ -1,6 +1,6 @@
 # Mouse camera (direct mouse look): technical notes
 
-**Status:** merged · **Commits:** 80e8361 (#177), shipped in 1.6.0; follow-up fixes c5c80ff (#189) and aae1116 (#227) · **Last checked against:** 7863041
+**Status:** merged · **Commits:** 80e8361 (#177), shipped in 1.6.0; follow-up fixes c5c80ff (#189) and aae1116 (#227) · **Last checked against:** c2a9d12
 
 Labels: **Verified** means read in the repo, the game scripts (paraphrased, never pasted) or a log. **Inference** means reasoned, not tested.
 

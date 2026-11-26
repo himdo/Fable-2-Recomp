@@ -1,6 +1,6 @@
 # Main menu crash on source builds: overview
 
-**Status:** merged · **Commits:** afebcc5 · **Last checked against:** 7863041
+**Status:** merged · **Commits:** afebcc5 · **Last checked against:** c2a9d12
 
 ## What players saw
 

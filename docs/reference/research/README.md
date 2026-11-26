@@ -35,6 +35,18 @@ For Fable II specifically, the best candidates are code- and Lua-level QoL fixes
 6. Add evidence levels and progress metrics to `/name-functions` and the collision-check tool. ([function_mapping](../../feature/function_mapping/technical.md))
 7. Check that the SDK's achievement tracking (pop-ups, the F7 list) survives a restart; the commented-out overrides are only optional replacements for its overlay. ([qol_candidates](../../feature/qol_candidates/technical.md), R12)
 
+## Corrections since the report
+
+The report is kept as written. These points in it are out of date or wrong, checked on Windows on 26 Nov 2026 (the topic docs above already use the corrected facts):
+
+- **Console:** it has 134 top-level commands (`src/lua/console_cmds.lua`), not "about 110".
+- **Mouse aim:** #183 isn't a draft. It merged on 20 Nov 2026 (49c70ab), stick swap included.
+- **Achievements:** there are no achievement hooks to re-enable. The SDK already tracks achievements, shows pop-ups and has the F7 overlay; the commented-out overrides only replace that overlay (see item 7 above).
+- **Function count:** the ~60,700 the report gives is right. A Release build has 60,753 functions ([function_mapping](../../feature/function_mapping/technical.md)).
+- **Naming check:** the report's convention check now exists as `tools/check_manifest_names.py` (#249).
+- **Disc data:** the Pub Games prize records and the Dunecrest names are on the disc, and the Singing Sword quest has no dialogue audio ([cut_content](../../feature/cut_content/technical.md)).
+- **Game text:** `docs/reference/lua_call_shapes.md` quoted game text; #252 removes it and changes its generator so it stays out ([legal_and_distribution](../../feature/legal_and_distribution/technical.md)).
+
 ## Caveats
 
 - Many 2026 sources are secondary aggregators (HeldGames, CDKeyPrices, explainx). The DMCA dates are corroborated across several of them, but Microsoft's "Xbox Labs" framing comes from one secondary source.
