@@ -214,6 +214,29 @@ class Fable2App : public rex::ReXApp {
                     "(SDK without depth_bias_shader?)");
       }
     }
+    // [patches] shadow_fine_grain / shadow_filter_radius (docs/feature/shadow_quality/):
+    // constants of the sun shadow pass, applied by the GPU plugin while it builds that
+    // shader's constant buffer (pixel_shader_constant_overrides, a GPU-plugin cvar).
+    {
+      const auto& cfg = fable2::config::Get();
+      std::string ops;
+      if (cfg.shadow_fine_grain) {
+        ops += "c47.z*rsx,c47.w*rsy";
+      }
+      if (cfg.shadow_filter_radius != 1.0f) {
+        ops += (ops.empty() ? "" : ",") + std::format("c77.x*{}", cfg.shadow_filter_radius);
+      }
+      if (!ops.empty() && rex::cvar::GetFlagSource("pixel_shader_constant_overrides") ==
+                              rex::cvar::Source::kDefault) {
+        const std::string spec = "0F99810F072BF0FC:" + ops;
+        if (rex::cvar::SetFlagByName("pixel_shader_constant_overrides", spec)) {
+          REXSYS_INFO("[fable2-config] seeded shadow settings ({})", spec);
+        } else {
+          REXSYS_WARN("[fable2-config] pixel_shader_constant_overrides cvar missing "
+                      "(SDK without it?); shadow_fine_grain / shadow_filter_radius inactive");
+        }
+      }
+    }
     if (!fable2::config::Get().refresh_gpu_memory_each_frame &&
         rex::cvar::GetFlagSource("clear_memory_page_state") == rex::cvar::Source::kDefault &&
         !rex::cvar::SetFlagByName("clear_memory_page_state", "false")) {
