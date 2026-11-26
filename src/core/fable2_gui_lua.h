@@ -78,12 +78,13 @@ struct State {
   bool gui_tid_known = false;
   std::thread::id main_tid{};
   std::deque<Pending> pending;
+  std::atomic<bool> work_pending{false};
   std::deque<std::string> results;
   std::vector<uint32_t> probed;
   uint32_t buf = 0, buf_size = 0;
   uint64_t runs = 0, errors = 0;
   std::atomic<uint64_t> frame{0};  // console frames (poll calls), for Pending::expires
-  bool busy = false;              // re-entrancy guard (our chunk calls the natives too)
+  std::atomic<bool> busy{false};  // only one drain, including calls from inside a chunk
   std::atomic<bool> armed{false}; // set once the console is in use; native hooks pass through until then
 };
 inline State& S() {
@@ -268,24 +269,23 @@ inline void push_result(const std::string& r) {
 // Runs every pending chunk that targets a state this thread may touch.
 inline void drain(PPCContext& ctx, uint8_t* base) {
   State& s = S();
-  if (s.busy) return;
   // Run only on the state that is calling the hooked native right now: it is
   // inside a C call, so loading and calling a chunk on it is safe. Other
   // captured states can be coroutines in the middle of a resume, and running
   // code on those corrupted the VM (in-game crash, console-v10).
   const uint32_t L = ctx.r3.u32;
-  if (!valid_state(base, L)) return;
-  s.busy = true;
+  if (!valid_state(base, L) || s.busy.exchange(true, std::memory_order_acquire)) return;
   const PPCContext saved = ctx;
   Pending p;
   {
     std::lock_guard<std::mutex> lock(s.mu);
     if (s.pending.empty()) {
-      s.busy = false;
+      s.busy.store(false, std::memory_order_release);
       return;
     }
     p = s.pending.front();
     s.pending.pop_front();
+    s.work_pending.store(!s.pending.empty(), std::memory_order_release);
   }
   bool ok = false;
   std::string r;
@@ -302,9 +302,12 @@ inline void drain(PPCContext& ctx, uint8_t* base) {
     }
     {
       std::lock_guard<std::mutex> lock(s.mu);
-      if (s.frame < p.expires && p.tried.size() < s.states.size()) s.pending.push_back(p);
+      if (s.frame < p.expires && p.tried.size() < s.states.size()) {
+        s.pending.push_back(p);
+        s.work_pending.store(true, std::memory_order_release);
+      }
     }
-    s.busy = false;
+    s.busy.store(false, std::memory_order_release);
     return;
   }
   try {
@@ -326,17 +329,23 @@ inline void drain(PPCContext& ctx, uint8_t* base) {
   // state that calls in once before giving up.
   const bool missing = r.rfind("error no element '", 0) == 0;
   if (missing && std::find(p.tried.begin(), p.tried.end(), L) == p.tried.end()) p.tried.push_back(L);
-  const bool retry = r == "ok __f2_wrong_state" || (missing && p.tried.size() < s.states.size());
-  if (retry) {
+  {
     std::lock_guard<std::mutex> lock(s.mu);
-    if (s.frame < p.expires) s.pending.push_front(p);
-    else s.results.push_back(missing ? r + " (in " + std::to_string(p.tried.size()) + " GUI states)"
-                                     : "error no GUI Lua state met 'gui where " + s.where + "' (is that screen up?)");
-  } else {
-    if (r.rfind("ok", 0) == 0) s.hud = L;  // the state that last answered
-    push_result(r);
+    if (r == "ok __f2_wrong_state" || (missing && p.tried.size() < s.states.size())) {
+      if (s.frame < p.expires) {
+        s.pending.push_front(p);
+        s.work_pending.store(true, std::memory_order_release);
+      } else {
+        s.results.push_back(missing ? r + " (in " + std::to_string(p.tried.size()) + " GUI states)"
+                                    : "error no GUI Lua state met 'gui where " + s.where + "' (is that screen up?)");
+      }
+      s.busy.store(false, std::memory_order_release);
+      return;
+    }
   }
-  s.busy = false;
+  if (r.rfind("ok", 0) == 0) s.hud = L;  // the state that last answered
+  push_result(r);
+  s.busy.store(false, std::memory_order_release);
 }
 
 inline void note_main_thread() { S().main_tid = std::this_thread::get_id(); }
@@ -365,6 +374,7 @@ inline void enqueue(const std::string& code, uint32_t L = 0, bool probe = false)
     p.probe = probe;
     p.expires = s.frame + 300;
     s.pending.push_back(p);
+    s.work_pending.store(true, std::memory_order_release);
   }
 }
 
@@ -381,6 +391,7 @@ inline void enqueue_all(const std::string& tag, const std::string& code) {
   p.tag = tag;
   p.expires = s.frame + 300;
   s.pending.push_back(p);
+  s.work_pending.store(true, std::memory_order_release);
 }
 
 inline std::vector<std::string> take_results() {
@@ -408,6 +419,7 @@ inline void note_state(const uint8_t* base, uint32_t L, bool active) {
 
 inline std::string status_line(const uint8_t* base) {
   State& s = S();
+  std::lock_guard lock(s.mu);
   char b[320];
   std::snprintf(b, sizeof b,
                 "states %zu, target 0x%08X (hud 0x%08X, chosen 0x%08X, last active 0x%08X), gui thread %s, "
@@ -435,9 +447,9 @@ extern "C" void ProcessAndProcessAndProcess53_82BB2528(PPCContext& ctx, uint8_t*
 // here when that thread is not the console's.
 extern "C" void ProcessAndHandleType3_82BB68D8(PPCContext& ctx, uint8_t* base) {
   auto& s = fable2::guilua::S();
-  if (s.armed.load(std::memory_order_relaxed) && !s.busy) {
+  if (s.armed.load(std::memory_order_relaxed) && !s.busy.load(std::memory_order_relaxed)) {
     fable2::guilua::note_state(base, ctx.r3.u32, true);
-    if (!s.pending.empty()) fable2::guilua::drain(ctx, base);
+    if (s.work_pending.load(std::memory_order_acquire)) fable2::guilua::drain(ctx, base);
   }
   __imp__ProcessAndHandleType3_82BB68D8(ctx, base);
 }
@@ -447,9 +459,9 @@ extern "C" void ProcessAndHandleType3_82BB68D8(PPCContext& ctx, uint8_t* base) {
 // that keeps queued GUI commands moving.
 extern "C" void ProcessAndHandleType_82BB6CA0(PPCContext& ctx, uint8_t* base) {
   auto& s = fable2::guilua::S();
-  if (s.armed.load(std::memory_order_relaxed) && !s.busy) {
+  if (s.armed.load(std::memory_order_relaxed) && !s.busy.load(std::memory_order_relaxed)) {
     fable2::guilua::note_state(base, ctx.r3.u32, true);
-    if (!s.pending.empty()) fable2::guilua::drain(ctx, base);
+    if (s.work_pending.load(std::memory_order_acquire)) fable2::guilua::drain(ctx, base);
   }
   __imp__ProcessAndHandleType_82BB6CA0(ctx, base);
 }
@@ -469,9 +481,9 @@ extern "C" void ProcessAndReadAndProcess_82BB7100(PPCContext& ctx, uint8_t* base
     }
   }
   auto& s = fable2::guilua::S();
-  if (s.armed.load(std::memory_order_relaxed) && !s.busy) {
+  if (s.armed.load(std::memory_order_relaxed) && !s.busy.load(std::memory_order_relaxed)) {
     fable2::guilua::note_state(base, ctx.r3.u32, true);
-    if (!s.pending.empty()) fable2::guilua::drain(ctx, base);
+    if (s.work_pending.load(std::memory_order_acquire)) fable2::guilua::drain(ctx, base);
   }
   __imp__ProcessAndReadAndProcess_82BB7100(ctx, base);
 }

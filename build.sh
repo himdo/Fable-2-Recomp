@@ -23,6 +23,7 @@
 #                    files while the game runs)
 #   --pgo-use <file> optimize the runtime libraries with a profile merged
 #                    from those files (llvm-profdata merge -o <file> ...)
+#   --deck-release <file>  Zen 2 Release with PGO and ThinLTO for game and SDK.
 #   --lto            ThinLTO for the GPU plugin library (needs lld)
 #   --game-lto       ThinLTO for the game code too (the recompiled code and the
 #                    app; needs lld): lets the compiler inline across the
@@ -64,6 +65,17 @@ GAME_PGO=OFF
 GAME_PGO_PROFILE=
 while [ $# -gt 0 ]; do
     case "$1" in
+        --deck-release)
+            shift
+            CPU=deck
+            CONFIG=Release
+            PGO=USE
+            GAME_PGO=USE
+            LTO=ON
+            GAME_LTO=ON
+            PGO_PROFILE="$(readlink -f "${1:?--deck-release needs a .profdata file}")"
+            GAME_PGO_PROFILE="$PGO_PROFILE"
+            ;;
         -debug|-d) CONFIG=Debug ;;
         -release|-r) CONFIG=Release ;;
         -clean|-c) CLEAN=1 ;;
@@ -166,6 +178,16 @@ SDKSRC="$(cd "$SDKSRC" && pwd)"
 [ -f "$SDKSRC/CMakeLists.txt" ] || { echo "Error: no SDK source tree at $SDKSRC" >&2; exit 1; }
 echo "ReXGlue SDK: $SDKSRC ($(git -C "$SDKSRC" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?') @ $(git -C "$SDKSRC" rev-parse --short HEAD 2>/dev/null || echo '?'))"
 echo "CPU target:  $CPU ($ARCH_FLAGS)"
+echo "Game revision: $(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+if ! git diff --quiet HEAD -- 2>/dev/null; then echo "Game worktree has local changes"; fi
+echo "SDK revision: $(git -C "$SDKSRC" rev-parse HEAD 2>/dev/null || echo 'unknown')"
+if ! git -C "$SDKSRC" diff --quiet HEAD -- 2>/dev/null; then echo "SDK worktree has local changes"; fi
+"$CXX" --version | sed -n '1p'
+echo "Build options: $CONFIG, game PGO=$GAME_PGO ThinLTO=$GAME_LTO, SDK PGO=$PGO ThinLTO=$LTO"
+if [ "$PGO" = USE ]; then sha256sum "$PGO_PROFILE"; fi
+if [ "$GAME_PGO" = USE ] && { [ "$PGO" != USE ] || [ "$GAME_PGO_PROFILE" != "$PGO_PROFILE" ]; }; then
+    sha256sum "$GAME_PGO_PROFILE"
+fi
 
 # Fetch the SDK's own submodules and fix its libmspack pin (no-op once done).
 python3 "$ROOT/tools/prepare_runtime_sdk.py" "$SDKSRC"

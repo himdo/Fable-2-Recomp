@@ -247,11 +247,6 @@ inline void check_transform(uint8_t* base, uint32_t out, uint32_t self, uint32_t
               px, py, ox - ex, oy - ey, mx, my, extent, north, irot, ix, iy, iscale, arg, ex, ey);
 }
 
-inline void save_shown(bool on) {
-  std::thread([on] { fable2::config::SaveSetting("minimap", "shown", on ? "true" : "false"); })
-      .detach();
-}
-
 }  // namespace detail
 
 // After every world update (game thread). self = the world state object.
@@ -347,7 +342,7 @@ inline void on_pad_read(uint8_t* base, uint32_t user, uint32_t state_ptr, uint32
   if (!HudLive(now_ms()) || fable2::photomode::active() || fable2::decksettings::active()) return;
   const bool on = !shown().load(std::memory_order_relaxed);
   shown().store(on, std::memory_order_relaxed);
-  save_shown(on);
+  fable2::config::SaveSetting("minimap", "shown", on ? "true" : "false");
   REXSYS_INFO("[minimap] {} (Back)", on ? "shown" : "hidden");
 }
 

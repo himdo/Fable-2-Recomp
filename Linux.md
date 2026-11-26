@@ -109,6 +109,7 @@ jobs, for example `CMAKE_BUILD_PARALLEL_LEVEL=8 ./build.sh`.
 |---|---|
 | `./build.sh` | Release build, for any x86-64 CPU from about 2009 on (`--cpu generic`) |
 | `./build.sh --cpu deck` | Tuned for the Steam Deck (Zen 2: AVX2, FMA) |
+| `./build.sh --sdk ../rexglue-sdk --deck-release /path/to/deck.profdata package` | Deck release flags with PGO and ThinLTO for the game and SDK. Supply a merged LLVM profile recorded on the Deck. The build logs the compiler, revisions, effective options and profile checksum. |
 | `./build.sh --cpu native` | Tuned for the CPU you build on |
 | `./build.sh --cpu deck package` | Portable package, see [below](#portable-package-build-once-copy-anywhere) |
 | `./build.sh --sdk ../rexglue-sdk` | Build the SDK from another source tree instead of the submodule |

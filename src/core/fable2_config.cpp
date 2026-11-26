@@ -19,6 +19,7 @@
 #include <fstream>
 #include <type_traits>
 #include <iterator>
+#include <mutex>
 #include <string_view>
 
 #include <rex/logging/macros.h>
@@ -30,6 +31,7 @@ namespace fable2::config {
 namespace {
 
 Values g_values;
+std::mutex g_save_mutex;
 std::filesystem::path g_path;  // file Load() read (for SavePhotoModeGamepadToggle)
 
 // Kept in sync with config/fable2_config.toml (staged next to the exe by the
@@ -924,6 +926,7 @@ void ApplyVulkanRendererOverrides() {
 }
 
 bool SaveSetting(std::string_view section, std::string_view key, std::string_view toml_value) {
+  std::lock_guard lock(g_save_mutex);
   if (g_path.empty()) return false;
   std::string text;
   {
@@ -969,11 +972,23 @@ bool SaveSetting(std::string_view section, std::string_view key, std::string_vie
       text.insert(at, line + eol);
     }
   }
-  std::ofstream out(g_path, std::ios::binary | std::ios::trunc);
+  auto temporary_path = g_path;
+  temporary_path += ".tmp";
+  std::ofstream out(temporary_path, std::ios::binary | std::ios::trunc);
   if (!out) return false;
   out << text;
-  REXSYS_INFO("[fable2-config] {}.{} = {} saved to {}", section, key, toml_value, g_path.string());
-  return bool(out);
+  out.close();
+  std::error_code error;
+  if (out) {
+    std::filesystem::rename(temporary_path, g_path, error);
+    if (!error) {
+      REXSYS_INFO("[fable2-config] {}.{} = {} saved to {}", section, key, toml_value, g_path.string());
+      return true;
+    }
+  }
+  REXSYS_WARN("[fable2-config] couldn't save {}.{} to {}", section, key, g_path.string());
+  std::filesystem::remove(temporary_path, error);
+  return false;
 }
 
 bool SavePhotoModeGamepadToggle(const std::string& combo) {
