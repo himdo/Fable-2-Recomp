@@ -47,17 +47,17 @@ Saves live in the build folder (`out/build/<preset>/saves/`, per the README), so
 
 ### What git tracks
 
-`tests/test_tracked_files.py` (1a5bc57, #250) runs `git ls-files` and fails if git tracks anything in the rip's folders at the repo root (`data/`, `nxeart`, `$SystemUpdate/`, `Gamefiles/`, the same list as `.gitignore`) or any `.xex`, `.bnk` or `.bik` file, in any letter case. So `git add -f` or an oddly named rip folder can't slip past `.gitignore` unnoticed. A guard test checks that the tracked-file list isn't empty. The three file types are the only game types the repo's own tools mention.
+`tests/test_tracked_files.py` (1a5bc57, #250) runs `git ls-files` and fails if git tracks anything in the rip's folders at the repo root (`data/`, `nxeart`, `$SystemUpdate/`, `Gamefiles/`, the same list as `.gitignore`) or any file of a game-only type, in any letter case. So `git add -f` or an oddly named rip folder can't slip past `.gitignore` unnoticed. A guard test checks that the tracked-file list isn't empty. #250 started with `.xex`, `.bnk` and `.bik`, the only game types the repo's own tools mention. The ten other game-only types found on the disc (below) were added in #252.
 
 **Verified against an unpacked disc** (GOTY USA/Europe, identified by its `default.xex` hash; Windows, 26 Nov 2026). The disc's `data/` folder holds these file types:
 
-| Kind | Types | Covered by the test? |
+| Kind | Types | Caught by the test anywhere in the repo? |
 |---|---|---|
 | Already in the test | `.bnk` (127 files, about 5.7 GB), `.bik` (40, about 860 MB) | Yes |
-| Game-only types | `.adb` (114), `.bft` (12), `.babel` (7), `.gdb` (7), `.sbk` (2), `.animation_data`, `.animation_toc`, `.loco`, `.amp`, `.vfsconfig` (1 each) | Only inside `data/`. Elsewhere in the repo they would pass |
+| Game-only types | `.adb` (114), `.bft` (12), `.babel` (7), `.gdb` (7), `.sbk` (2), `.animation_data`, `.animation_toc`, `.loco`, `.amp`, `.vfsconfig` (1 each) | Yes, since #252. Before, only inside `data/` |
 | Common types | `.xml` (56), `.lua` (42), `.txt` (15), `.dds` (14), `.swf` (7), `.list` (6), `.csv` (2), `.manifest` (1) | No, on purpose: the repo has its own `.lua` files (13 in `src/lua/`), and blocking the others would block the repo's own files |
 
-None of the game-only types is tracked on master. Adding them to the test's list is a follow-up. The `.lua` count includes the recomp's own scripts, which the build stages into `data/scripts/recomp/`.
+None of the game-only types is tracked on master. Checked against every file on the disc with its path moved out of `data/`: the test catches all 316 game-only files, and lets through only the common types and two `.bnk.orig` backups that the GUI bank rewrite leaves in `data/art/gui/`. The `.lua` count includes the recomp's own scripts, which the build stages into `data/scripts/recomp/`.
 
 ### What a release contains
 
@@ -107,7 +107,7 @@ The remote-control server (localhost TCP port 8791, injects gamepad input) is co
 
 ### Gaps (Inference)
 
-- **Closed in #250:** nothing used to check that no game file is tracked in git; `tests/test_tracked_files.py` does now (see "What git tracks"). Its file-type list has now been compared with an unpacked disc. Still open: adding the ten game-only types found there.
+- **Closed in #250:** nothing used to check that no game file is tracked in git; `tests/test_tracked_files.py` does now (see "What git tracks"). Its file-type list has been compared with an unpacked disc, and the ten other game-only types found there were added in #252.
 - The release zip is missing two licences (see "Licences").
 - `tools/xex_image.py` contains the retail XEX AES key in plain text. It is the key the Xbox 360 emulators already publish, but it is worth knowing it's there if the repo is ever reviewed.
 - The README links an external extractor tool. That's fine, but any link to disc images would break the project's own rule.
@@ -117,7 +117,7 @@ The remote-control server (localhost TCP port 8791, injects gamepad input) is co
 - Keep `generated/` out of releases and forks, as now.
 - Never ship assets. Anything restored (see [cut_content](../cut_content/technical.md)) must be read from the player's own `data/` files at runtime.
 - Don't target unreleased or current IP.
-- Add the git-tracked-files test described under Gaps. Done in #250. Next: add the ten game-only disc types from "What git tracks" to its list.
+- Add the git-tracked-files test described under Gaps. Done in #250; the disc's other game-only types were added in #252.
 - Ship `thirdparty/rexglue-sdk/LICENSE` and `thirdparty/tomlplusplus/LICENSE` in the release zip.
 
 ## What changed
