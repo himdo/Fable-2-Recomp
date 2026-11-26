@@ -2,9 +2,9 @@
 
 A native **Steam Deck / Linux** version of [**Fable 2 Recomp**](https://github.com/himdo/Fable-2-Recomp), himdo's static recompilation of Fable II for PC. It runs directly on SteamOS with Vulkan, without Proton or an emulator, and is tuned for the Deck's CPU, GPU and 15 W power budget.
 
-**[⬇ Download the latest release](https://github.com/darokk/Fable-2-Recomp/releases/latest)** · [Install](#install) · [Playing](#playing) · [Settings](#settings) · [Performance](#performance) · [What this fork changes](#what-this-fork-changes) · [Credits](#credits)
+**[⬇ Download the latest release](https://github.com/darokk/Fable-2-Recomp/releases/latest)** · [Install](#install) · [Playing](#playing) · [Minimap](#minimap) · [Settings](#settings) · [Performance](#performance) · [What this fork changes](#what-this-fork-changes) · [Credits](#credits)
 
-**A smooth 60 fps on the Steam Deck, even in the game's heaviest scenes** (apart from brief work the first time an area's shaders are seen), Steam Deck button icons, and an in-game **Deck Recomp Settings** page in the game's Options.
+**A smooth 60 fps on the Steam Deck, even in the game's heaviest scenes** (apart from brief work the first time an area's shaders are seen), a live **minimap**, Steam Deck button icons, and an in-game **Deck Recomp Settings** page in the game's Options.
 
 <p align="center">
   <img src="docs/screenshots/deck-recomp-settings.jpg" alt="The Deck Recomp Settings page in Fable II's Options on a Steam Deck" width="49%">
@@ -48,6 +48,7 @@ Delete the `Fable2-SteamDeck` folder (it holds everything: game files, saves, se
 
 - **Controls:** the Deck's controls work like an Xbox 360 controller, with the Steam Deck's own buttons shown in the game's prompts.
 - **Saves** are kept in `Fable2-SteamDeck/saves`. Back up that folder to keep your progress.
+- **Minimap:** press the **View** button to show or hide the map in the top-right corner (see [Minimap](#minimap)).
 - **Settings in the game:** pause the game and open *Options* → **Deck Recomp Settings** (see [Settings](#settings)).
 - **First visits:** the first time an area's shaders are seen, they are prepared for the Deck's GPU, which can cause brief stalls. They are compiled in the background, so this is much reduced, and later visits are smooth.
 - **Battery:** the game runs at up to 60 fps. For longer battery life, set the Quick Access Menu's Performance tab to 40 Hz with a 40 fps limit, or choose 30 or 40 fps under *Frame Rate Cap* in Deck Recomp Settings.
@@ -58,6 +59,20 @@ Delete the `Fable2-SteamDeck` folder (it holds everything: game files, saves, se
 - On start-up the window can stay white for up to several minutes before the first video. Enabling the Skip Intro Videos setting seems to improve this.
 
 If something goes wrong, the game shows an error with the path of its log file. For a bug report, set `log_level = "info"` in `fable_2.toml`, reproduce the problem and [open an issue](https://github.com/darokk/Fable-2-Recomp/issues) with the newest file from `logs/`.
+
+## Minimap
+
+<p align="center">
+  <img src="docs/screenshots/minimap-ingame.jpg" alt="Bowerstone Market on a Steam Deck with the live minimap in the top-right corner" width="80%">
+</p>
+
+The map from the pause menu, live in the top-right corner while you play: the region's own map in its wooden frame, with your hero's arrow and your dog on it, updated every frame. Press the **View** button (Back on an Xbox controller, M on the keyboard) to show or hide it; the choice is remembered.
+
+- Every region has its own map, the same one the pause menu shows, including the chapter versions, caves and dungeons.
+- When a message shows in the bar across the top of the screen, the map moves down with it, as the health bar does.
+- It hides itself in menus, on loading screens, in photo mode and whenever the game hides its HUD.
+- Size (small, medium, large) and opacity (100% to 10%) are in *Deck Recomp Settings* → Interface, and it can be turned off there.
+- The frame rate the Deck's performance overlay shows stays the game's own while the map is on screen.
 
 ## Settings
 
@@ -80,6 +95,9 @@ Pause the game and open *Options* → **Deck Recomp Settings**, after the game's
 | Interface | Instant Menu Response | On | Menus react in the same update as the press |
 | Interface | Menu Scroll Acceleration | 1.5x | Holding a direction speeds up scrolling |
 | Interface | Skip Intro Videos | Off | Skips the logo videos at start-up, which may also make the game start faster |
+| Interface | Minimap | On | The live map in the top-right corner; the View button shows and hides it |
+| Interface | Minimap Size | Medium | Small, medium or large |
+| Interface | Minimap Opacity | 100% | How solid it is drawn, 100% to 10% |
 
 ### In the settings file
 
@@ -113,6 +131,7 @@ How it gets there, on top of Fable 2 Recomp and its native Linux build (renderer
 On top of Fable 2 Recomp and its native Linux build, besides the [performance work](#performance):
 
 **Steam Deck experience**
+- **Live minimap:** the pause menu's region map in the top-right corner, with your hero and dog, shown and hidden with the View button.
 - **Deck Recomp Settings** in the game's Options: change the build's settings in the game, on a page in the game's own style, with an explanation for each.
 - Steam Deck button icons in Fable II's own style, in the game and the pub games (dark, light or off).
 - Faster, more responsive menus: instant response, a shorter hold delay, scroll acceleration and quicker animations, each adjustable.
@@ -129,6 +148,7 @@ On top of Fable 2 Recomp and its native Linux build, besides the [performance wo
 
 | Version | Date | Highlights |
 |---|---|---|
+| [1.0.7](https://github.com/darokk/Fable-2-Recomp/releases/tag/steamdeck-1.0.7) | 2026-11-26 | Live minimap (View button), with size and opacity settings |
 | [1.0.6](https://github.com/darokk/Fable-2-Recomp/releases/tag/steamdeck-1.0.6) | 2026-11-25 | Deck Recomp Settings page in Options, Draw and Detail Distance, Anti-Aliasing setting |
 | [1.0.5](https://github.com/darokk/Fable-2-Recomp/releases/tag/steamdeck-1.0.5) | 2026-11-25 | Deck Recomp settings menu, smooth 60 fps in heavy scenes, async shader compilation |
 | [1.0.4](https://github.com/darokk/Fable-2-Recomp/releases/tag/steamdeck-1.0.4) | 2026-11-23 | Faster in heavy scenes, optional MSAA off |
