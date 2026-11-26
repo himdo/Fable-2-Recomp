@@ -1,6 +1,6 @@
 # Black menu with two controllers: overview
 
-**Status:** merged · **Commits:** a4b0274 · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** a4b0274 · **Last checked against:** 7863041
 
 ## What players saw
 

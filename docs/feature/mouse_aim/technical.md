@@ -1,8 +1,10 @@
 # Mouse aim (ranged aim reticle): technical notes
 
-**Status:** merged · **Commits:** 49c70ab (#183, squash of the stick swap, direct aim, config/launcher settings, the highlight release and the function names) · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** 49c70ab (#183) · **Last checked against:** 7863041
 
 Labels: **Verified** means read in the repo, the generated code or a log. **Inference** means reasoned, not tested. Game scripts are paraphrased, never pasted.
+
+49c70ab is the squash of #183: the stick swap, direct aim, the config and launcher settings, the highlight release and the function names.
 
 ## Goal
 

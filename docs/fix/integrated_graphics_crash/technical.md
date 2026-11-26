@@ -1,6 +1,6 @@
 # Integrated graphics crash: technical notes
 
-**Status:** merged for hybrid laptops; open for iGPU-only machines · **Commits:** 4d58a5f (#55), shipped in 1.5.0 · **Last checked against:** 5f5f55f
+**Status:** merged for laptops with a graphics card; open for machines with only built-in graphics · **Commits:** 4d58a5f (#55), shipped in 1.5.0 · **Last checked against:** 7863041
 
 Issues: [#42](https://github.com/himdo/Fable-2-Recomp/issues/42) (main thread), [#48](https://github.com/himdo/Fable-2-Recomp/issues/48), [#63](https://github.com/himdo/Fable-2-Recomp/issues/63) (closed as a duplicate). SDK line numbers refer to `85d96f2`; paths are relative to `thirdparty/rexglue-sdk/`. Labels: **Verified**, **Reported**, **Inference** as in the other fix notes.
 

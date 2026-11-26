@@ -12,6 +12,7 @@ The point is to compare: run the suites **before** changing anything (the baseli
 | Suite | Command | Runs on |
 | --- | --- | --- |
 | Version check | `python tools/generate_game_versions.py --check` | Any OS with Python |
+| Manifest naming check | `python tools/check_manifest_names.py --base origin/master` | Any OS with Python and git |
 | Python tests | `python -m pytest -q` | Any OS with Python 3.11+ and `pip install -r tests/requirements.txt` |
 | Launcher tests | `dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release` | Any OS with the .NET 8 SDK (CI runs it on Windows) |
 | Native tests | `tests\run_native_tests.cmd` | Windows only: clang ≥ 22 on PATH, VS C++ tools, the SDK submodule checked out |
