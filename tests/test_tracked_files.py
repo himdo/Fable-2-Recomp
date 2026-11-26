@@ -21,12 +21,16 @@ GAME_FOLDERS = {"data", "nxeart", "$systemupdate", "gamefiles"}
 # databases and sound banks (.adb, .sbk, .amp), fonts (.bft), text (.babel),
 # game databases such as globals.gdb (.gdb), animation data
 # (.animation_data, .animation_toc), locomotion data (.loco) and the virtual
-# file system config (.vfsconfig). Common types the disc also holds (.xml,
+# file system config (.vfsconfig). .bnk.orig is the untouched copy of a GUI
+# bank that the keyboard-prompt swap (src/gui/prompt_textures.h) keeps in
+# data/art/gui/ when it rewrites the bank.
+# Common types the disc also holds (.xml,
 # .lua, .txt, .dds, .swf, .list, .csv, .manifest) are left out: the repo has
 # files of those types of its own.
 GAME_FILE_TYPES = (".xex", ".bnk", ".bik",
                    ".adb", ".bft", ".babel", ".gdb", ".sbk",
-                   ".animation_data", ".animation_toc", ".loco", ".amp", ".vfsconfig")
+                   ".animation_data", ".animation_toc", ".loco", ".amp", ".vfsconfig",
+                   ".bnk.orig")
 # One example path per added type, for the tests below.
 DISC_EXAMPLES = ["audio/animals.adb", "fonts/body.bft", "language/en-uk/text/book.babel",
                  "Globals/globals.gdb", "audio/music.sbk", "fable2_anims.animation_data",
@@ -74,6 +78,13 @@ def describe_game_files():
         moved = "scratch/" + path.rsplit("/", 1)[-1]
 
         assert game_files([moved]) == [moved]
+
+    def test_should_find_a_backed_up_gui_bank():
+        assert game_files(["scratch/gui_textures.bnk.orig"]) == ["scratch/gui_textures.bnk.orig"]
+
+    def test_should_pass_other_orig_files():
+        # .orig alone is a common patch-tool leftover, not game content.
+        assert game_files(["src/main.cpp.orig"]) == []
 
     def test_should_find_files_in_the_data_folder():
         assert game_files(["data/levels/level.txt"]) == ["data/levels/level.txt"]

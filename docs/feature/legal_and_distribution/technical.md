@@ -47,7 +47,7 @@ Saves live in the build folder (`out/build/<preset>/saves/`, per the README), so
 
 ### What git tracks
 
-`tests/test_tracked_files.py` (1a5bc57, #250) runs `git ls-files` and fails if git tracks anything in the rip's folders at the repo root (`data/`, `nxeart`, `$SystemUpdate/`, `Gamefiles/`, the same list as `.gitignore`) or any file of a game-only type, in any letter case. So `git add -f` or an oddly named rip folder can't slip past `.gitignore` unnoticed. A guard test checks that the tracked-file list isn't empty. #250 started with `.xex`, `.bnk` and `.bik`, the only game types the repo's own tools mention. The ten other game-only types found on the disc (below) were added in #252.
+`tests/test_tracked_files.py` (1a5bc57, #250) runs `git ls-files` and fails if git tracks anything in the rip's folders at the repo root (`data/`, `nxeart`, `$SystemUpdate/`, `Gamefiles/`, the same list as `.gitignore`) or any file of a game-only type, in any letter case. So `git add -f` or an oddly named rip folder can't slip past `.gitignore` unnoticed. A guard test checks that the tracked-file list isn't empty. #250 started with `.xex`, `.bnk` and `.bik`, the only game types the repo's own tools mention. The ten other game-only types found on the disc (below) were added in #252, plus `.bnk.orig`, the untouched copy of a GUI bank that the keyboard-prompt swap keeps next to the bank it rewrites.
 
 **Verified against an unpacked disc** (GOTY USA/Europe, identified by its `default.xex` hash; Windows, 26 Nov 2026). The disc's `data/` folder holds these file types:
 
@@ -57,7 +57,7 @@ Saves live in the build folder (`out/build/<preset>/saves/`, per the README), so
 | Game-only types | `.adb` (114), `.bft` (12), `.babel` (7), `.gdb` (7), `.sbk` (2), `.animation_data`, `.animation_toc`, `.loco`, `.amp`, `.vfsconfig` (1 each) | Yes, since #252. Before, only inside `data/` |
 | Common types | `.xml` (56), `.lua` (42), `.txt` (15), `.dds` (14), `.swf` (7), `.list` (6), `.csv` (2), `.manifest` (1) | No, on purpose: the repo has its own `.lua` files (13 in `src/lua/`), and blocking the others would block the repo's own files |
 
-None of the game-only types is tracked on master. Checked against every file on the disc with its path moved out of `data/`: the test catches all 316 game-only files, and lets through only the common types and two `.bnk.orig` backups that the GUI bank rewrite leaves in `data/art/gui/`. The `.lua` count includes the recomp's own scripts, which the build stages into `data/scripts/recomp/`.
+None of the game-only types is tracked on master. Checked against every file on the disc with its path moved out of `data/`: the test catches all 318 game-only files (the 316 disc files plus the two `.bnk.orig` backups in `data/art/gui/`), and lets through only the common types. The `.lua` count includes the recomp's own scripts, which the build stages into `data/scripts/recomp/`.
 
 ### What a release contains
 
