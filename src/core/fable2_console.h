@@ -32,6 +32,7 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -39,6 +40,7 @@
 #include <deque>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -270,6 +272,55 @@ inline bool enabled() {
 
 //--- Output -----------------------------------------------------------------
 
+// Remote captures: the remote-control server's `console` command (Debug builds,
+// src/input/remote_control_server.h, through run_remote below) queues lines
+// and collects every reply out() writes until its own end marker. out() runs
+// on several threads, so the captures have their own lock; the count lets
+// out() skip that lock when nobody is listening (always, in Release builds).
+struct Capture {
+  std::string marker;              // "[echo] __remote_done <n>"
+  std::vector<std::string> lines;  // what out() wrote before the marker
+  bool done = false;
+  bool truncated = false;          // more than kCaptureMaxLines replies
+};
+inline constexpr size_t kCaptureMaxLines = 2000;
+inline std::mutex& capture_mu() {
+  static std::mutex m;
+  return m;
+}
+inline std::condition_variable& capture_cv() {
+  static std::condition_variable cv;
+  return cv;
+}
+inline std::vector<Capture*>& captures() {
+  static std::vector<Capture*> v;
+  return v;
+}
+inline std::atomic<int>& capture_count() {
+  static std::atomic<int> n{0};
+  return n;
+}
+
+inline void feed_captures(const std::string& line) {
+  if (capture_count().load(std::memory_order_acquire) == 0) return;
+  bool finished = false;
+  {
+    std::lock_guard<std::mutex> lock(capture_mu());
+    for (Capture* c : captures()) {
+      if (c->done) continue;
+      if (line == c->marker) {
+        c->done = true;
+        finished = true;
+      } else if (c->lines.size() < kCaptureMaxLines) {
+        c->lines.push_back(line);
+      } else {
+        c->truncated = true;
+      }
+    }
+  }
+  if (finished) capture_cv().notify_all();
+}
+
 inline void out(const std::string& tag, const std::string& msg, bool err = false) {
   State& s = S();
   // Called from the console thread and, through the cprint hook, from the
@@ -286,6 +337,7 @@ inline void out(const std::string& tag, const std::string& msg, bool err = false
   fs::create_directories(s.root / "console", ec);
   std::ofstream f(s.root / "console" / "out.txt", std::ios::app);
   f << line << "\n";
+  feed_captures(line);
 }
 
 //--- Parsing helpers --------------------------------------------------------
@@ -475,6 +527,47 @@ inline void enqueue_text(const std::string& text, bool front = false) {
   } else {
     for (auto& l : lines) s.queue.push_back(l);
   }
+}
+
+// Runs console lines for the remote-control server's `console` command and
+// returns the replies they printed. Called on the server's connection thread,
+// it only queues the lines (enqueue_text locks the queue), so every command
+// still runs where a typed one does: host commands on the game thread, Lua on
+// the world thread (never RunScript from here; see CLAUDE.md). Waits until the
+// lines' end marker is printed, `timeout` passes, or keep_waiting() returns
+// false (the server is stopping). On a timeout the queued lines still run.
+struct RemoteResult {
+  bool finished = false;
+  bool truncated = false;
+  std::vector<std::string> lines;
+};
+inline RemoteResult run_remote(const std::string& text, std::chrono::milliseconds timeout,
+                               const std::function<bool()>& keep_waiting) {
+  static std::atomic<uint64_t> next{0};
+  const std::string id = std::to_string(++next);
+  Capture capture;
+  capture.marker = "[echo] __remote_done " + id;
+  {
+    std::lock_guard<std::mutex> lock(capture_mu());
+    captures().push_back(&capture);
+    capture_count().fetch_add(1, std::memory_order_release);
+  }
+  S().active.store(true, std::memory_order_relaxed);  // like typing `f2`: runs with the file transport off too
+  enqueue_text(text + "\necho __remote_done " + id);
+
+  std::unique_lock<std::mutex> lock(capture_mu());
+  const auto deadline = Clock::now() + timeout;
+  // Wake at least every 250 ms to ask keep_waiting(), and never past the deadline.
+  while (!capture.done && Clock::now() < deadline && (!keep_waiting || keep_waiting()))
+    capture_cv().wait_until(lock, std::min(deadline, Clock::now() + std::chrono::milliseconds(250)));
+  auto& list = captures();
+  list.erase(std::remove(list.begin(), list.end(), &capture), list.end());
+  capture_count().fetch_sub(1, std::memory_order_release);
+  RemoteResult result;
+  result.finished = capture.done;
+  result.truncated = capture.truncated;
+  result.lines = std::move(capture.lines);
+  return result;
 }
 
 //--- GameFace (GUI) Lua commands ---------------------------------------------

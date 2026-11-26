@@ -493,6 +493,14 @@ class Fable2App : public rex::ReXApp {
     remote_server_.SetPresenterProvider(
         [this]() -> rex::ui::Presenter* { return GetWindowPresenter(window()); });
 
+    // The `console` command runs f2 console lines through the console's own
+    // queue (so Lua still runs on the world thread) and returns their replies.
+    remote_server_.SetConsoleRunner(
+        [](const std::string& text, int64_t timeout_ms, const std::function<bool()>& keep_waiting) {
+          auto r = fable2::console::run_remote(text, std::chrono::milliseconds(timeout_ms), keep_waiting);
+          return fable2::remote::ConsoleReply{r.finished, r.truncated, std::move(r.lines)};
+        });
+
     // Observe remote A-presses (the state machine's input transition). The
     // press is brief, so latch its timestamp here (on the server thread) and
     // compare against it in the 1-second classifier sample.

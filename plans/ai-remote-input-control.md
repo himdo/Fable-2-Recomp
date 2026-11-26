@@ -397,6 +397,7 @@ Commands:
 | `{"cmd":"get_state"}` | — | Reply with current resolved snapshot: `{buttons:["A","RT"], triggers:{...}, sticks:{...}, packet_number, ms_until_release: {A: 120}}`. |
 | `{"cmd":"screenshot","path":"C:/shots/step1.png"}` | `path` (required) | Save the current game frame as a PNG (reads the renderer's guest output from the GPU, so it is complete even while other windows cover the game). Reply `{ok, path, width, height, bytes, avg_luma}`. Blocks for a few hundred ms. |
 | `{"cmd":"cvar","name":"mouse_look_scale","value":"512"}` | `name`, optional `value` | Get/set any cvar by name via `rex::cvar` — gives the AI access to the existing knob surface (input map, patches toggles, etc.) for free. |
+| `{"cmd":"console","line":"money; stats","timeout_ms":30000}` | `line` (required; several lines or `;` chains, as typed after `f2`), optional `timeout_ms` (1..600000, default 30000) | Run f2 console commands through the console's own queue and reply once they finish: `{ok, finished, failing, truncated, lines:[...]}`. `ok` is false when they didn't finish in time or a reply is an error (`[tag] ERR ...`, `[lua] error: ...`). The connection is busy until then. Added later; see `docs/feature/remote_console/`. |
 | `{"cmd":"enable"}` / `{"cmd":"disable"}` | — | Toggle the remote pad device (reconnect/disconnect from the guest's view). |
 | `{"cmd":"ping"}` | — | `{"ok":true,"ms":<server processing time>}`. |
 

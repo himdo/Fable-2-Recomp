@@ -27,6 +27,8 @@
 //                 captures the game's own frame even while other windows
 //                 cover it)
 //   cvar      -> get/set any cvar by name (existing SDK knob surface)
+//   console   -> run f2 console commands ("line") and return their replies,
+//                waiting until they finish (timeout_ms, default 30000)
 //   enable/disable -> toggle the remote pad (zero state when disabled)
 //
 // Input names match the keyboard_gamepad_map vocabulary (A/B/X/Y, LB/RB,
@@ -578,6 +580,27 @@ inline InputSnapshot ResolveTimeline(const Timeline& tl,
 // Server
 //=============================================================================
 
+// What the `console` command gets back from the f2 console
+// (src/core/fable2_console.h, run_remote). Fable2App connects the two with
+// SetConsoleRunner, so this header doesn't include the console.
+struct ConsoleReply {
+  bool finished = false;   // the lines' end marker came back in time
+  bool truncated = false;  // more replies than the console keeps for one request
+  std::vector<std::string> lines;
+};
+using ConsoleRunner = std::function<ConsoleReply(
+    const std::string& text, int64_t timeout_ms, const std::function<bool()>& keep_waiting)>;
+
+// A console reply that reports a failure: one the console marked as an error
+// ("[tag] ERR ...", e.g. a failed `expect`) or a Lua error ("[lua] error: ...").
+// The same rule as tools/run_scenario.py.
+inline bool IsFailingConsoleLine(std::string_view line) {
+  if (line.rfind("[lua] error:", 0) == 0) return true;
+  if (line.empty() || line[0] != '[') return false;
+  const size_t close = line.find(']');
+  return close != std::string_view::npos && close > 1 && line.substr(close + 1, 5) == " ERR ";
+}
+
 class ControlServer {
  public:
   struct Config {
@@ -673,10 +696,16 @@ class ControlServer {
     presenter_provider_ = std::move(provider);
   }
 
+  // Runs f2 console lines and collects their replies. Backs the "console"
+  // command; without it the command answers "not available".
+  void SetConsoleRunner(ConsoleRunner runner) { console_runner_ = std::move(runner); }
+
  private:
   using Clock = std::chrono::steady_clock;
   static constexpr size_t kMaxIntervals = 10000;
   static constexpr int64_t kMaxHoldMs = 3600000;
+  static constexpr int64_t kConsoleDefaultMs = 30000;
+  static constexpr int64_t kConsoleMaxMs = 600000;
 
   static void ShutdownSock(sock_t s) {
     if (s == kSockInvalid) return;
@@ -888,11 +917,12 @@ class ControlServer {
     if (cmd == "game_state") return HandleGameState(v);
     if (cmd == "screenshot") return HandleScreenshot(v);
     if (cmd == "cvar") return HandleCvar(v);
+    if (cmd == "console") return HandleConsole(v);
 
     return Err(std::format(
         "unknown command '{}'; expected one of: ping, info, auth, press, "
         "release, stick, state, clear, script, get_state, game_state, "
-        "screenshot, cvar, enable, disable", cmd));
+        "screenshot, cvar, console, enable, disable", cmd));
   }
 
   // "input" name -> slot; value defaults per slot (buttons 1, triggers 255,
@@ -1202,12 +1232,46 @@ class ControlServer {
                        json_min::JEsc(*name), json_min::JEsc(current), IdEcho(v));
   }
 
+  // console: run f2 console commands ("line": one or more lines, ';' chains
+  // work, as typed after `f2`) through the console's queue and return the
+  // replies they printed. Waits until they finish (timeout_ms, default 30 s),
+  // so this connection is busy meanwhile; timed pad releases still happen on
+  // the timer thread. ok is false when they didn't finish or a reply failed.
+  std::string HandleConsole(const json_min::Value& v) {
+    if (!console_runner_) return Err("console commands are not available");
+    const std::string* text = v.FindStr("line");
+    if (!text || text->find_first_not_of(" \t\r\n") == std::string::npos)
+      return Err("'line' required");
+    const int64_t timeout_ms = v.GetInt("timeout_ms", kConsoleDefaultMs);
+    if (timeout_ms < 1 || timeout_ms > kConsoleMaxMs)
+      return Err("timeout_ms out of range (1.." + std::to_string(kConsoleMaxMs) + ")");
+
+    const ConsoleReply r =
+        console_runner_(*text, timeout_ms, [this] { return running_.load(); });
+    std::string lines;
+    int failing = 0;
+    for (const std::string& line : r.lines) {
+      if (!lines.empty()) lines += ',';
+      lines += "\"" + json_min::JEsc(line) + "\"";
+      if (IsFailingConsoleLine(line)) ++failing;
+    }
+    std::string error;
+    if (!r.finished)
+      error = std::format(R"(,"error":"the commands didn't finish within {} ms")", timeout_ms);
+    else if (failing > 0)
+      error = std::format(R"(,"error":"{} failing line(s)")", failing);
+    return std::format(
+        R"({{"ok":{},"finished":{},"failing":{},"truncated":{},"lines":[{}]{}{}}})",
+        r.finished && failing == 0, r.finished, failing, r.truncated, lines, error, IdEcho(v));
+  }
+
   //--- State -----------------------------------------------------------------
 
   InputStateStore* state_;
   std::atomic<bool>* pad_enabled_;
   Config cfg_{};
   std::function<rex::ui::Presenter*()> presenter_provider_;  // renderer presenter
+  ConsoleRunner console_runner_;                             // the f2 console
 
   std::atomic<bool> running_{false};
   std::atomic<int32_t> port_{0};

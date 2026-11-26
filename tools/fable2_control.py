@@ -15,7 +15,13 @@ Examples:
   python tools/fable2_control.py cvar mouse_look_scale 512
   python tools/fable2_control.py screenshot shot.png
   python tools/fable2_control.py script --file repro.json
+  python tools/fable2_control.py console "money; stats"
+  python tools/fable2_control.py console --file scenario.txt --timeout-ms 120000
   python tools/fable2_control.py raw '{"cmd":"info"}'
+
+`console` runs f2 console commands (as typed after `f2`, or a file as for
+`f2 exec`) and prints their replies. It fails when a reply is an error or the
+commands don't finish within --timeout-ms (default 30000).
 
 repro.json for `script` is either a bare list of steps or {"steps": [...]}:
   [
@@ -31,6 +37,9 @@ import argparse
 import json
 import socket
 import sys
+
+CONSOLE_TIMEOUT_MS = 30000  # the server's default for `console`
+REPLY_GRACE_S = 5.0         # extra socket time for the server to answer after the timeout
 
 INPUT_NAMES = (
     "A B X Y LB RB Up Down Left Right Start Back L3 R3 "
@@ -57,9 +66,9 @@ def exchange(sock: socket.socket, request: dict) -> dict:
     return json.loads(buf.decode("utf-8").strip())
 
 
-def run(host: str, port: int, token: str, request: dict) -> int:
+def run(host: str, port: int, token: str, request: dict, timeout: float = 10.0) -> int:
     try:
-        with conn(host, port) as s:
+        with conn(host, port, timeout) as s:
             if token:
                 resp = exchange(s, {"cmd": "auth", "token": token})
                 if not resp.get("ok"):
@@ -91,6 +100,23 @@ def build_state(args) -> dict:
             if val is not None:
                 req["stk"][key] = val
     return req
+
+
+def build_console(args) -> dict:
+    """The `console` request: the commands from the argument or from --file."""
+    if (args.line is None) == (args.file is None):
+        raise ValueError("give either the commands or --file")
+    if args.timeout_ms < 1:
+        raise ValueError("--timeout-ms must be at least 1")
+    if args.file is not None:
+        try:
+            with open(args.file, "r", encoding="utf-8") as f:
+                text = f.read()
+        except OSError as e:
+            raise ValueError(str(e)) from e
+    else:
+        text = args.line
+    return {"cmd": "console", "line": text, "timeout_ms": args.timeout_ms}
 
 
 def main() -> int:
@@ -157,6 +183,13 @@ def main() -> int:
     sp.add_argument("--file", required=True,
                     help="JSON file: list of steps or {'steps': [...]}")
 
+    sp = sub.add_parser("console", help="run f2 console commands and print their replies")
+    sp.add_argument("line", nargs="?", default=None,
+                    help="console commands, as typed after `f2` (';' chains them)")
+    sp.add_argument("--file", default=None, help="a file of console commands, as for `f2 exec`")
+    sp.add_argument("--timeout-ms", type=int, default=CONSOLE_TIMEOUT_MS,
+                    help="how long the commands may take (default 30000)")
+
     sp = sub.add_parser("raw", help="send a raw JSON command object")
     sp.add_argument("json")
 
@@ -200,6 +233,14 @@ def main() -> int:
         if isinstance(data, dict) and "steps" in data:
             data = data["steps"]
         req = {"cmd": "script", "steps": data}
+    elif args.command == "console":
+        try:
+            req = build_console(args)
+        except ValueError as e:
+            p.error(f"console: {e}")
+        # The server answers only once the commands finish, so wait that long.
+        return run(args.host, args.port, args.token, req,
+                   timeout=args.timeout_ms / 1000 + REPLY_GRACE_S)
     elif args.command == "raw":
         req = json.loads(args.json)
     else:  # pragma: no cover

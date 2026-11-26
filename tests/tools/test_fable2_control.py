@@ -30,6 +30,23 @@ def request_for(*command):
     return run.call_args.args[3]
 
 
+def console_call_for(*command):
+    """Run the tool's console command and return the call it makes to run()."""
+    argv = ["fable2_control.py", "console", *command]
+    with patch("sys.argv", argv), patch.object(control, "run", return_value=0) as run:
+        control.main()
+    return run.call_args
+
+
+def console_error_for(*command):
+    """Run the tool's console command, expecting a usage error; return the exit code and message."""
+    argv = ["fable2_control.py", "console", *command]
+    errors = io.StringIO()
+    with patch("sys.argv", argv), contextlib.redirect_stderr(errors), pytest.raises(SystemExit) as caught:
+        control.main()
+    return caught.value.code, errors.getvalue()
+
+
 def script_request_for(folder, contents):
     """Save contents as a script file in folder and return the request the script command sends."""
     script = folder / "steps.json"
@@ -358,6 +375,27 @@ def describe_main():
 
         assert response == expected
 
+    def test_should_send_console_commands_with_the_default_timeout():
+        expected = {"cmd": "console", "line": "money; stats", "timeout_ms": 30000}
+        response = console_call_for("money; stats").args[3]
+
+        assert response == expected
+
+    def test_should_send_the_console_commands_in_a_file(tmp_path):
+        scenario = tmp_path / "scenario.txt"
+        scenario.write_text("boot slot 1\n# start\nmoney\n", encoding="utf-8")
+        expected = {"cmd": "console", "line": "boot slot 1\n# start\nmoney\n", "timeout_ms": 120000}
+        response = console_call_for("--file", str(scenario), "--timeout-ms", "120000").args[3]
+
+        assert response == expected
+
+    def test_should_wait_for_the_console_reply_as_long_as_the_timeout_and_a_grace():
+        # The server only answers once the commands finish, so the socket must wait that long.
+        expected = 120 + control.REPLY_GRACE_S
+        response = console_call_for("money", "--timeout-ms", "120000").kwargs["timeout"]
+
+        assert response == expected
+
     # --- Bad flow ---------------------------------------------------------
 
     def test_should_reject_a_non_integer_state_value():
@@ -382,11 +420,49 @@ def describe_main():
 
         assert caught.value.code == 2
 
+    def test_should_reject_console_without_commands_or_a_file():
+        code, message = console_error_for()
+
+        assert (code, "give either the commands or --file" in message) == (2, True)
+
+    def test_should_reject_console_with_both_commands_and_a_file(tmp_path):
+        scenario = tmp_path / "scenario.txt"
+        scenario.write_text("money\n", encoding="utf-8")
+        code, message = console_error_for("stats", "--file", str(scenario))
+
+        assert (code, "give either the commands or --file" in message) == (2, True)
+
+    def test_should_reject_a_console_file_that_is_missing(tmp_path):
+        code, message = console_error_for("--file", str(tmp_path / "missing.txt"))
+
+        assert (code, "missing.txt" in message) == (2, True)
+
+    def test_should_reject_a_console_timeout_below_one_millisecond():
+        code, message = console_error_for("money", "--timeout-ms", "0")
+
+        assert (code, "--timeout-ms must be at least 1" in message) == (2, True)
+
     # --- Edge cases -------------------------------------------------------
 
     def test_should_keep_a_press_value_of_zero():
         expected = {"cmd": "press", "input": "LT", "value": 0}
         response = request_for("press", "LT", "--value", "0")
+
+        assert response == expected
+
+    def test_should_send_console_commands_with_a_timeout_of_one_millisecond():
+        expected = 1
+        response = console_call_for("money", "--timeout-ms", "1").args[3]["timeout_ms"]
+
+        assert response == expected
+
+    def test_should_keep_other_commands_on_the_default_socket_timeout():
+        # Only `console` waits longer; every other command keeps run()'s own 10 s.
+        expected = {}
+        argv = ["fable2_control.py", "ping"]
+        with patch("sys.argv", argv), patch.object(control, "run", return_value=0) as run:
+            control.main()
+        response = run.call_args.kwargs
 
         assert response == expected
 
@@ -400,6 +476,14 @@ def describe_run():
         response = run_against(server)
 
         assert response == expected
+
+    def test_should_open_the_connection_with_the_timeout_given():
+        server = FakeSocket(b'{"ok": true}\n')
+        with patch.object(control, "conn", return_value=server) as conn, contextlib.redirect_stdout(io.StringIO()):
+            control.run("127.0.0.1", 8791, "", {"cmd": "console", "line": "money"}, timeout=35.0)
+        response = conn.call_args.args
+
+        assert response == ("127.0.0.1", 8791, 35.0)
 
     def test_should_send_only_the_command_without_a_token():
         server = FakeSocket(b'{"ok": true}\n')
