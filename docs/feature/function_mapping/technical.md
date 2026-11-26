@@ -179,7 +179,7 @@ Today's numbers (**Verified**, at 7863041) are in the table under "Where the man
 
 ### Tie-in with the automated checking loop
 
-Scenario files (input sequences plus console reads) sent through the debug-build remote-control server serve two purposes:
+Scenario files (input sequences plus console reads), played through the f2 console's file transport with `tools/run_scenario.py` ([scenario_runner](../scenario_runner/technical.md)), serve two purposes:
 
 - They are E5 evidence for names.
 - They are regression tests for features, for example "buy item X at shop Y on Hardcore; assert gold delta = price × 1.3", or "run 60 s at high_tick_rate; assert the in-game clock advanced 60 s".
@@ -188,18 +188,28 @@ Keep scenarios small and deterministic: start from a fixed save, and disable ran
 
 **What exists today (Verified):**
 
-- **The server** is `src/input/remote_control_server.h`, started from `src/core/fable_2_app.h`. `CMakeLists.txt` defines `FABLE2_REMOTE_CONTROL` only for Debug builds, so Release never opens the port. It listens on 127.0.0.1:8791 (or the next free port up to +9), speaks one JSON object per line, and has an optional shared token (`auth`).
+- **The f2 console's file transport** (`src/core/fable2_console.h`, on by default, in Release builds too) already covers most of what a scenario needs:
+  - **Input:** lines written to `<game root>\console\in.txt` are read about every 10 frames and queued.
+  - **Output:** replies are appended to `console\out.txt` as `[tag] msg`, and failures as `[tag] ERR msg`. Lua results arrive there too, as `[lua] …` lines.
+  - **Setup:** `boot slot <n>` loads a save from the start-up screens.
+  - **Input:** `pad` holds buttons and sticks.
+  - **Reads:** `peek`, and Lua commands such as `money` or `stats`.
+  - **Checks:** `expect <addr> <value>` prints `ok` or `ERR`, and `waitfor ram` waits for a value, with a timeout.
+  - **Files:** `exec` plays a file of commands.
+- **The remote-control server** is `src/input/remote_control_server.h`, started from `src/core/fable_2_app.h`. `CMakeLists.txt` defines `FABLE2_REMOTE_CONTROL` only for Debug builds, so Release never opens the port. It listens on 127.0.0.1:8791 (or the next free port up to +9), speaks one JSON object per line, and has an optional shared token (`auth`).
 - **Its commands:** `ping`, `auth`, `info`, `enable`/`disable`, `press`, `release`, `stick`, `state`, `clear`, `script`, `get_state` (the pad), `game_state` (PreMainMenu / PressAScreen / MainMenuMovie / MainMenu / unknown), `screenshot` (a PNG of the game frame) and `cvar` (get or set).
 - **`script`** runs a timed list of steps atomically. Each step is `{"delay_ms", "op": "press"|"release"|"stick", "input", "hold_ms"}`.
 - **The client** is `tools/fable2_control.py` (stdlib only; `script --file repro.json`), copied next to the exe only in Debug builds. **The smoke test** `tools/remote_smoke.cmd` waits for the port, pings, presses A, and checks the pad state.
 
-**What's missing for scenario files (Inference):**
+**What's missing for scenario files:**
 
-- **Reading game state.** Nothing returns gold, health, the clock or any guest memory, so a scenario can drive input but can't assert anything beyond the menu state and a screenshot.
-- **A console channel.** The f2 console already runs host commands (`run_host_command` in `src/core/fable2_console.h`) and queues Lua for the world-update thread (`service_world_thread`). A `console` server command that forwards a line there, and returns what it prints, would give scenarios both reads (Lua queries, memory peeks) and setup (warps, giving items). It must not start scripts from the server's own thread; see the alt-tab crash rule in `CLAUDE.md`.
-- **Assertions and a runner.** `script` has no `expect` step. A small runner in `tools/` could play a scenario file, issue console reads, and compare them with expected values.
-- **A fixed starting point.** There's no command to load a given save, so "start from a fixed save" is manual today.
-- **Running it.** The server is Debug-only and needs the game files, so these scenarios can never run in CI. They would be a local check each contributor runs, with the result written into the manifest comment (E5).
+An earlier version of this list said nothing could read game state, run checks or load a save. The console above already does all three (Verified in the code). What is still missing:
+
+- **A runner.** Something that hands a scenario to the console, waits until it's done, and reports pass or fail. Added as `tools/run_scenario.py` ([scenario_runner](../scenario_runner/technical.md)).
+- **Checks on Lua values (Inference).** `expect` compares guest memory, so a Lua reading such as `money` can be printed but not compared yet. Either the runner or the console needs a way to compare it.
+- **Screenshots from the console.** Only the Debug-only server has `screenshot`. Photo mode saves PNGs in Release builds with the same capture code (`fable2::photomode::take_screenshot`), so a console `shot` command could reuse it.
+- **A console command in the server (optional).** A `console` server command that forwards a line to the console queue would let tools that already use the server run console commands too. It must not start scripts from the server's own thread; see the alt-tab crash rule in `CLAUDE.md`.
+- **Running it.** Scenarios need the game files, so they can never run in CI. They would be a local check each contributor runs, with the result written into the manifest comment (E5).
 
 ### Decompilation vs. recompilation
 

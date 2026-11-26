@@ -31,7 +31,7 @@ The difficulty settings work (not finished yet) already worked this way. It pick
 
 ## Automatic test runs
 
-Debug builds of the game can already be driven by a script: it can press buttons, move the sticks, take screenshots and see which menu is showing. It can't yet read anything from the game itself, such as how much gold the hero has. So it can play a sequence but can't check the result. Adding that is the missing piece for tests like "buy this item on Hardcore and check the price". These tests need the game files, so they would run on contributors' own machines, not on the project's automatic checks.
+The game can already be driven by a list of developer-console commands, in normal builds too. The list can load a save, press buttons, read values such as the hero's gold, and check a value in the game's memory. A new tool hands such a list to the running game and reports whether every step went well ([scenario_runner](../scenario_runner/overview.md)). Still missing are a way to compare values read through the game's scripts, such as gold, and screenshots taken from the console. These tests need the game files, so they would run on contributors' own machines, not on the project's automatic checks.
 
 ## Why it matters
 
