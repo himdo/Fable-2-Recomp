@@ -21,6 +21,8 @@
 //   RotCCW((north + iconRot) deg) * ((pos / extent - 0.5) * iconScale * 240)
 //   + (IconTransformX, IconTransformZ)
 // from its centre; the wooden rim and the north keystone on top.
+// Heading-up mode rotates the texture and marker positions about the centre
+// of the region map. The hero arrow stays upright and the frame is fixed.
 //
 // Art from the user's gui_textures.bnk (decoded off the UI thread):
 //   the region map: the bank entry whose FNV-1 name hash is the record's id
@@ -216,6 +218,7 @@ class MinimapDialog final : public rex::ui::ImGuiDialog {
     shown().store(cfg.minimap_shown);
     size_fraction().store(SizeFraction(cfg.minimap_size));
     opacity().store(cfg.minimap_opacity / 100.0f);
+    rotation_enabled().store(cfg.minimap_rotation);
 #ifndef _WIN32
     imgui_drawer()->RemoveDialog(this);
 #else
@@ -366,18 +369,26 @@ class MinimapDialog final : public rex::ui::ImGuiDialog {
     const float kmap = D / units;
     constexpr float kDeg = 0.017453292f;
 
-    // GameFace turns the image counter-clockwise by its rotation.z (north),
-    // the same way the icon positions turn.
-    Quad(dl, map, c, R, -rsign * s.north_deg * kDeg, col(1.0f));
-
-    // Icons, placed as the pause menu places them.
+    // Start with the pause map's texture orientation and marker offsets.
+    const float map_angle = -rsign * s.north_deg * kDeg;
     const float ang = rsign * (s.north_deg + s.icon_rot_deg) * kDeg;
     const float ca = std::cos(ang), sa = std::sin(ang);
-    auto place = [&](float wx, float wy) {
+    auto offset = [&](float wx, float wy) {
       const float m = s.icon_scale * 240.0f;
       const ImVec2 r = Rot(ImVec2((wx / s.extent - 0.5f) * m, (wy / s.extent - 0.5f) * m), ca, sa);
-      ImVec2 p(c.x + (r.x + s.icon_x) * kmap, c.y + ysign * (r.y + s.icon_y) * kmap);
-      // Keep markers inside the rim.
+      return ImVec2((r.x + s.icon_x) * kmap, ysign * (r.y + s.icon_y) * kmap);
+    };
+    // Heading is clockwise from world +y. Subtract the pause map's marker
+    // rotation for the arrow, then undo the result across the map contents.
+    const float hero_angle = rsign * s.hero_heading - ang;
+    const bool heading_up = rotation_enabled().load(std::memory_order_relaxed);
+    const float turn = heading_up ? -hero_angle : 0.0f;
+    const float cos_turn = std::cos(turn), sin_turn = std::sin(turn);
+    Quad(dl, map, c, R, map_angle + turn, col(1.0f));
+
+    auto place = [&](float wx, float wy) {
+      const ImVec2 p_offset = Rot(offset(wx, wy), cos_turn, sin_turn);
+      ImVec2 p = Add(c, p_offset);
       const float dx = p.x - c.x, dy = p.y - c.y, len = std::sqrt(dx * dx + dy * dy), lim = R * 0.9f;
       if (len > lim) p = ImVec2(c.x + dx * lim / len, c.y + dy * lim / len);
       return p;
@@ -386,16 +397,13 @@ class MinimapDialog final : public rex::ui::ImGuiDialog {
       if (ImmediateTexture* paw = Texture(kDogIcon))
         Quad(dl, paw, place(s.dog_x, s.dog_y), 0.05f * D, 0.0f, col(0.95f));
     }
-    if (ImmediateTexture* arrow = Texture(kHeroIcon)) {
-      // The heading is atan2(fwd.x, fwd.y): clockwise from world +y. Turned
-      // onto the map (counter-clockwise by north + iconRot) it is clockwise
-      // from up on screen, as the arrow art (pointing up) needs.
-      const float hero = rsign * (s.hero_heading - (s.north_deg + s.icon_rot_deg) * kDeg);
-      Quad(dl, arrow, place(s.hero_x, s.hero_y), 0.065f * D, hero, col(1.0f));
-    }
+    if (ImmediateTexture* arrow = Texture(kHeroIcon))
+      Quad(dl, arrow, place(s.hero_x, s.hero_y), 0.065f * D, heading_up ? 0.0f : hero_angle, col(1.0f));
     if (ImmediateTexture* rim = Texture(kRim)) Quad(dl, rim, c, rim_half, 0.0f, col(1.0f));
-    if (ImmediateTexture* north = Texture(kNorthIcon))
-      Quad(dl, north, ImVec2(c.x, c.y - outer + 0.012f * D), 0.09f * D, 0.0f, col(1.0f));
+    if (!heading_up) {
+      if (ImmediateTexture* north = Texture(kNorthIcon))
+        Quad(dl, north, ImVec2(c.x, c.y - outer + 0.012f * D), 0.09f * D, 0.0f, col(1.0f));
+    }
   }
 
   static inline std::atomic<MinimapDialog*> instance_{nullptr};

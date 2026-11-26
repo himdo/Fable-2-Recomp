@@ -498,3 +498,7 @@ size = "medium"
 # How solid the minimap is drawn, in percent: 10 to 100 in steps of 10.
 # Default: 100
 opacity = 100
+
+# Rotate the region map in place and keep the hero arrow pointing up.
+# Default: false
+rotation = false

@@ -302,6 +302,7 @@ class DeckSettingsPage final : public rex::ui::ImGuiDialog {
         {"menu_animation_speed", "2.5"}, {"menu_instant_response", "true"}, {"menu_scroll_acceleration", "1.5"},
         {"skip_intro_videos", "false"}, {"view_distance_multiplier", "1"}, {"lod_distance_multiplier", "1"},
         {"disable_msaa", "false"}, {"enabled", "true"}, {"size", "medium"}, {"opacity", "100"},
+        {"rotation", "false"},
     };
     for (const auto& [k, v] : kDefaults)
       if (std::strcmp(k, s.key) == 0) return v;
@@ -380,16 +381,16 @@ class DeckSettingsPage final : public rex::ui::ImGuiDialog {
   static constexpr float kTabsY = 96.0f;
   static constexpr float kListY = 140.0f;
   static constexpr float kRow = 34.0f;
-  static constexpr int kMaxRows = 8;
+  static constexpr float kListHeight = kRow * 8;
   static constexpr float kPromptInset = 30.0f;  // the prompt row's gap from the text column's right end
 
   float X(float v) const { return v * k_; }
   // The page moves with the game's right cover on a wide screen, and slides.
   float PageX0() const { return cx_ + po_ + X(kPageLeft); }
   float PageX1() const { return cx_ + po_ + X(kPageRight); }
-  Box RowBox(int i) const {
-    const float y = X(kListY + kRow * i);
-    return Box{ImVec2(ox_ - X(12), y), ImVec2(ox_ + X(kWidth + 12), y + X(kRow))};
+  Box RowBox(int i, float row_height) const {
+    const float y = X(kListY + row_height * i);
+    return Box{ImVec2(ox_ - X(12), y), ImVec2(ox_ + X(kWidth + 12), y + X(row_height))};
   }
   float ValueRight() const { return ox_ + X(kWidth); }
 
@@ -703,10 +704,11 @@ class DeckSettingsPage final : public rex::ui::ImGuiDialog {
     const std::vector<deckmenu::Setting>& L = list_;
     const std::vector<std::string>& startup = deckmenu::StartupValues();
     const std::vector<int> rows = Rows();
-    for (int r = 0; r < int(rows.size()) && r < kMaxRows; ++r) {
+    const float row_height = std::min(kRow, kListHeight / float(std::max<size_t>(1, rows.size())));
+    for (int r = 0; r < int(rows.size()); ++r) {
       const int i = rows[r];
       const deckmenu::Setting& s = L[i];
-      const Box box = RowBox(r);
+      const Box box = RowBox(r, row_height);
       const bool cur = r == sel_;
       const float cy = (box.Min.y + box.Max.y) * 0.5f;
       if (cur) {
@@ -737,7 +739,7 @@ class DeckSettingsPage final : public rex::ui::ImGuiDialog {
     }
 
     // Description of the selected line, and when a change takes effect.
-    float y = X(kListY + kRow * kMaxRows + 14);
+    float y = X(kListY + kListHeight + 14);
     Rule(ox_ - X(10), ox_ + X(kWidth + 10), y, 0.5f, kAccent);
     y += X(10);
     const float bottom = H - X(88);  // nothing runs into the prompts

@@ -535,6 +535,10 @@ size = "medium"
 # How solid the minimap is drawn, in percent: 10 to 100 in steps of 10.
 # Default: 100
 opacity = 100
+
+# Rotate the region map in place and keep the hero arrow pointing up.
+# Default: false
+rotation = false
 )TOML_EOF";
 
 std::string_view TypeName(toml::node_type t) {
@@ -873,6 +877,8 @@ bool Load(const std::filesystem::path& path) {
         minimap_table, "minimap", "opacity", "integer", values.minimap_opacity));
     // 10 to 100 in steps of 10, as the Deck Recomp page offers.
     values.minimap_opacity = std::clamp((values.minimap_opacity + 5) / 10 * 10, 10, 100);
+    values.minimap_rotation =
+        Read<bool>(minimap_table, "minimap", "rotation", "boolean", values.minimap_rotation);
   }
 
   // Platform defaults the file leaves open.

@@ -80,6 +80,11 @@ inline std::atomic<float>& opacity() {
   return v;
 }
 
+inline std::atomic<bool>& rotation_enabled() {
+  static std::atomic<bool> v{false};
+  return v;
+}
+
 // Called (game thread) when the overlay should appear: it registers itself with
 // the drawer on the UI thread. Overlays stay unregistered while hidden.
 inline std::atomic<void (*)()>& show_hook() {

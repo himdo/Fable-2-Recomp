@@ -303,6 +303,7 @@ struct Values {
   bool minimap_shown = true;
   std::string minimap_size = "medium";  // "small", "medium" or "large"
   int32_t minimap_opacity = 100;        // percent, 10 to 100 in steps of 10
+  bool minimap_rotation = false;
 };
 
 // Load the config from `path`.

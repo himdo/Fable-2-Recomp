@@ -157,7 +157,7 @@ inline const std::vector<Setting>& Settings() {
        {{"false", "Off"}, {"true", "On"}},
        [] { return std::string(BoolText(Get().skip_intro_videos)); },
        [](Values& v, const std::string& s) { v.skip_intro_videos = s == "true"; }},
-      // [minimap] (src/core/fable2_minimap.h): keys "enabled" and "size".
+      // [minimap] (src/core/fable2_minimap.h)
       {"enabled", "minimap", "Minimap", kInterface, When::kLive,
        {{"true", "On"}, {"false", "Off"}},
        [] { return std::string(BoolText(Get().minimap_enabled)); },
@@ -176,6 +176,11 @@ inline const std::vector<Setting>& Settings() {
        [] { return std::to_string(Get().minimap_opacity); },
        [](Values& v, const std::string& s) { v.minimap_opacity = std::stoi(s); }, nullptr, false,
        [](const std::string& s) { fable2::minimap::opacity().store(std::stoi(s) / 100.0f); }},
+      {"rotation", "minimap", "Minimap Rotation", kInterface, When::kLive,
+       {{"false", "Off"}, {"true", "On"}},
+       [] { return std::string(BoolText(Get().minimap_rotation)); },
+       [](Values& v, const std::string& s) { v.minimap_rotation = s == "true"; }, nullptr, false,
+       [](const std::string& s) { fable2::minimap::rotation_enabled().store(s == "true"); }},
   };
   return settings;
 }
@@ -191,6 +196,7 @@ inline const char* Explanation(const std::string& key) {
       {"enabled", "The region map from the pause menu, in the top-right corner while you play, with your hero and dog on it. The {BACK} button shows and hides it."},
       {"size", "How big the minimap is drawn."},
       {"opacity", "How solid the minimap is drawn. Lower lets more of the game show through."},
+      {"rotation", "Rotates the map in place. Your arrow moves across it and always points up."},
       {"skip_intro_videos", "Skips the Microsoft and Lionhead logo videos when the game starts. This may also make the game start faster."},
       {"disable_motion_blur", "The camera's full-screen blur when it moves."},
       {"view_distance_multiplier", "How far away objects, buildings, villagers and creatures are drawn before they pop out. Above 3x is not recommended: busy places like Bowerstone lose a lot of frame rate."},
