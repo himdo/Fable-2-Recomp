@@ -60,6 +60,9 @@ void RequestInGameDialog();
 void Choose(int index);
 // Called by the dialog when it is closed without a choice (in game only).
 void CloseDialog();
+// Called by the dialog on B on the New Game cards: closes them and, on the next pad read
+// on the card thread, puts the game's boy and girl cards back (FE_20 plays again).
+void BackToGenderCards();
 
 // Called by the pad read (fable2_photo_mode.h on_pad_read) for user 0 on the
 // game's thread, after the game's read: feeds the dialog, runs the New Game replay

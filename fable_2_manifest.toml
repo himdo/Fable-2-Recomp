@@ -35715,12 +35715,12 @@ name = "ProcessAndVcallAndProcess10_82C0B768"
 [entrypoint.functions."0x82277AF8"]
 name = "ProcessAndSetjmpAndProcess_82277AF8"
 
-# A processor that performs a vcall and clears the data (third form). It takes a structure (a: fields at a->0 and a->4). It reads a->4 (a pointer); when the pointer is non-zero it reads the
-# pointer's +0 field and performs a vcall via the +0 field's +4 entry (bctrl). It then stores 0 into a->4 and a->0. This is the "perform a vcall and clear this data" routine (third form), part
-# of the 0x822AD process cluster. 49 lines. 0 callees (leaf function). 12 callers (sub_82479C28, sub_828DAAF8, sub_82173280, sub_826EF1D0, sub_825832B0, sub_82C43AB8, sub_82819740, sub_826C9460,
-# sub_826E5D10, sub_82405088, sub_827B6FA8, and sub_8240C950).
+# Releases an 8-byte handle {+0, +4}: when +4 is non-zero, a vcall through slot 1 (+4) of
+# the vtable at *(+4); then +0 = +4 = 0. A leaf, 12 callers; on the front end it releases
+# the handle Speech_PlayByKey_82306098 filled (e.g. at 0x826C7A58, 0x826C9640). Read in the
+# generated code; what the other callers' handles hold wasn't checked.
 [entrypoint.functions."0x822ADE08"]
-name = "ProcessAndVcallAndClear3_822ADE08"
+name = "Handle_Release_822ADE08"
 
 # A processor that computes and processes the data (twelfth form). It takes a value (a), a structure (b: field at b->4), a value (c), and a value (d). It lazily gets the data (LazyGetData_822F2088,
 # with d, c, and a). It then searches and computes (sub_822F5BC8, with a local buffer, b, and a local buffer). This is the "compute and process this data" routine (twelfth form), part of the 0x82375
@@ -35821,7 +35821,7 @@ name = "InitializeAndStoreFloats_82C16158"
 
 # A processor that performs a vcall and processes the data (eleventh form). It takes a value (a) and a structure (b: field at b->0). It reads b->0 (a pointer) and performs a vcall via the pointer's +20 field (bctrl). It then calls
 # VcallTriple_AllSuccess_82C011E8 (with b, a .data pointer, and a). When the result is non-zero it calls VcallTriple_AllSuccess_82C011E8 again (with b, a .data pointer, and a+4). This is the "perform a vcall and process this data"
-# routine (eleventh form), part of the 0x82C16 process cluster. 402 lines. 7 callees (DispatchVcallTriple, ProcessAndJumpTo, ProcessAndVcallAndClear3, ProcessAndVcallAndProcess10, VcallChain_AllSuccess, VcallTriple_AllSuccess, and
+# routine (eleventh form), part of the 0x82C16 process cluster. 402 lines. 7 callees (DispatchVcallTriple, ProcessAndJumpTo, Handle_Release, ProcessAndVcallAndProcess10, VcallChain_AllSuccess, VcallTriple_AllSuccess, and
 # ProcessAndComputeAndProcess17). 1 caller (sub_82C192D8).
 [entrypoint.functions."0x82C161D8"]
 name = "ProcessAndVcallAndProcess11_82C161D8"
@@ -38986,7 +38986,7 @@ name = "InterpolateFloatArray_82C62548"
 [entrypoint.functions."0x832B6110"]
 name = "ProcessAndProcessAndProcess499_832B6110"
 
-# Issue a virtual call on a structure, then clear its fields (five hundredth form). It takes a structure (a: fields at a->80, a->96, and a->88); it issues a virtual call on a->80, then clears a->96 and a->88 to zero. This is the "process this data" routine (five hundredth form), part of the 0x822A2 process cluster. 66 lines. 1 callee (ProcessAndVcallAndClear3). 0 callers (unresolved — body is recovered but no callers found; likely a vtable method or indirect entry).
+# Issue a virtual call on a structure, then clear its fields (five hundredth form). It takes a structure (a: fields at a->80, a->96, and a->88); it issues a virtual call on a->80, then clears a->96 and a->88 to zero. This is the "process this data" routine (five hundredth form), part of the 0x822A2 process cluster. 66 lines. 1 callee (Handle_Release). 0 callers (unresolved — body is recovered but no callers found; likely a vtable method or indirect entry).
 [entrypoint.functions."0x822A2A40"]
 name = "ProcessAndProcessAndProcess500_822A2A40"
 
@@ -43781,7 +43781,7 @@ name = "ProcessAndProcessAndProcess1622_822BE890"
 [entrypoint.functions."0x826CB338"]
 name = "ProcessAndProcessAndProcess1623_826CB338"
 
-# Process a structure by constructing a 12-byte object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and twenty-fourth form). It takes a structure and constructs a 12-byte object (Construct12Byte). Part of the 0x826CB process cluster. 95 lines. 1 callee. 2 callers (sub_826C9460 and ProcessAndProcessAndProcess1623).
+# Process a structure by constructing a 12-byte object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and twenty-fourth form). It takes a structure and constructs a 12-byte object (Construct12Byte). Part of the 0x826CB process cluster. 95 lines. 1 callee. 2 callers (FrontMenu_HandleUnfreeze_826C9460 and ProcessAndProcessAndProcess1623).
 [entrypoint.functions."0x826CBC78"]
 name = "ProcessAndProcessAndProcess1624_826CBC78"
 
@@ -44596,9 +44596,16 @@ name = "ProcessAndProcessAndProcess1817_82C55338"
 [entrypoint.functions."0x8241C538"]
 name = "ProcessAndProcessAndProcess1818_8241C538"
 
-# Process a very large data structure by constructing a refcounted object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and one hundred and nineteenth form). It takes a structure, constructs a refcounted object (ConstructRefCounted), copies a refcounted object (CopyAssign_RefCounted), destructs a refcounted object (DestructRefCounted), replaces a refcounted object (ProcessAndReplaceRefCounted), releases a global reference (ReleaseGlobalRef), hashes a C string (HashCstring), increments a counter (ProcessAndIncrementCounter), and drives sub-operations (ProcessAndDispatchAndProcess25, ProcessAndVcallAndClear3, ProcessAndVcallAndProcess16, ProcessAndProcessAndProcess26, and many others) based on the result. This is one of the largest functions in the binary in the 0x826C7 process cluster. 2204 lines. 29 callees. 0 callers.
+# Front-end card input on the New Game boy and girl cards. r3 = the front-end object.
+# Left / right move between the cards (slides 2-5). A flips the highlighted one: boy ->
+# choosecard slide 6 and the destiny line TEXT_QUEST_QC010_FRONT_END_30_HM through
+# Speech_PlayByKey_82306098 (the call returns to 0x826C7A50), girl -> slide 7 and _30_HF
+# (0x826C7B98), with +24 = 1 while the card flips; the card's behaviour chunk then fires
+# BOY_SELECTED / GIRL_SELECTED (FrontMenu_HandleCardEvent_826C9188). It sits in the
+# front-end vtable next to FrontMenu_HandleEvent (word at 0x820CD530). Read in the generated
+# code (docs/feature/difficulty_settings/technical.md sections 7 and 19.2).
 [entrypoint.functions."0x826C72A8"]
-name = "ProcessAndProcessAndProcess1819_826C72A8"
+name = "FrontMenu_HandleCardInput_826C72A8"
 
 # Process a very large data structure by allocating fresh memory (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and one hundred and twentieth form). It takes a structure, allocates fresh memory (Allocate_OrDbgBreak), sets a string (SetString), and drives sub-operations (ProcessAndFreeAndProcess9, sub_822F1F00, sub_826C3EF0, sub_826C3FA8, sub_829FDF90, sub_829FE010) based on the result. Part of the 0x8217F process cluster. 343 lines. 8 callees. 1 caller (ProcessAndProcessAndProcess1821).
 [entrypoint.functions."0x8217F708"]
@@ -45156,7 +45163,7 @@ name = "ProcessAndProcessAndProcess1957_82C22FB0"
 [entrypoint.functions."0x82B38AA8"]
 name = "ProcessAndProcessAndProcess1958_82B38AA8"
 
-# Process a large structure by performing a vcall (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and two hundred and fifty-ninth form). It takes a structure, performs a vcall (ProcessAndVcallAndClear3), and drives a sub-operation (sub_82C0CF68) based on the result. Part of the 0x82C0E process cluster. 106 lines. 2 callees. 0 callers.
+# Process a large structure by performing a vcall (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and two hundred and fifty-ninth form). It takes a structure, performs a vcall (Handle_Release), and drives a sub-operation (sub_82C0CF68) based on the result. Part of the 0x82C0E process cluster. 106 lines. 2 callees. 0 callers.
 [entrypoint.functions."0x82C0E108"]
 name = "ProcessAndProcessAndProcess1959_82C0E108"
 
@@ -45556,7 +45563,7 @@ name = "ProcessAndProcessAndProcess2057_82C56B98"
 [entrypoint.functions."0x82C3FD50"]
 name = "ProcessAndProcessAndProcess2058_82C3FD50"
 
-# Process a structure by wrapping a sub-operation (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and three hundred and fifty-ninth form). It takes a structure and drives a sub-operation (ProcessAndVcallAndClear3). Part of the 0x82C41 process cluster. 84 lines. 1 callee. 0 callers.
+# Process a structure by wrapping a sub-operation (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and three hundred and fifty-ninth form). It takes a structure and drives a sub-operation (Handle_Release). Part of the 0x82C41 process cluster. 84 lines. 1 callee. 0 callers.
 [entrypoint.functions."0x82C410B0"]
 name = "ProcessAndProcessAndProcess2059_82C410B0"
 
@@ -45762,7 +45769,7 @@ name = "ProcessAndProcessAndProcess2108_82BCC2C8"
 [entrypoint.functions."0x82286008"]
 name = "ProcessAndProcessAndProcess2109_82286008"
 
-# Process a structure by wrapping sub-operations (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and four hundred and tenth form). It takes a structure, checks its state, and drives sub-operations (ProcessAndProcessAndProcess1881, ProcessAndProcessAndProcess1991, ProcessAndVcallAndClear3, sub_82C10A10) based on the result. Part of the 0x82C10 process cluster. 96 lines. 4 callees. 0 callers.
+# Process a structure by wrapping sub-operations (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and four hundred and tenth form). It takes a structure, checks its state, and drives sub-operations (ProcessAndProcessAndProcess1881, ProcessAndProcessAndProcess1991, Handle_Release, sub_82C10A10) based on the result. Part of the 0x82C10 process cluster. 96 lines. 4 callees. 0 callers.
 [entrypoint.functions."0x82C10AE0"]
 name = "ProcessAndProcessAndProcess2110_82C10AE0"
 
@@ -46635,15 +46642,15 @@ name = "ProcessAndProcessAndProcess2316_82C4E890"
 [entrypoint.functions."0x82C4E9B8"]
 name = "ProcessAndProcessAndProcess2317_82C4E9B8"
 
-# Process a structure by checking its state and driving sub-operations (two thousand three hundred and nineteenth form). It takes a structure (a: fields at a->48, a->32, a->52, a->56, and a->72); it checks the structure's state, and drives sub-operations (ProcessAndVcallAndClear3) based on the result. This is the "process this data" routine (two thousand three hundred and nineteenth form), part of the 0x82C4E process cluster. 236 lines. 1 callee. 2 callers (sub_82C4ECB0 and ProcessAndProcessAndProcess1591).
+# Process a structure by checking its state and driving sub-operations (two thousand three hundred and nineteenth form). It takes a structure (a: fields at a->48, a->32, a->52, a->56, and a->72); it checks the structure's state, and drives sub-operations (Handle_Release) based on the result. This is the "process this data" routine (two thousand three hundred and nineteenth form), part of the 0x82C4E process cluster. 236 lines. 1 callee. 2 callers (sub_82C4ECB0 and ProcessAndProcessAndProcess1591).
 [entrypoint.functions."0x82C4EB08"]
 name = "ProcessAndProcessAndProcess2318_82C4EB08"
 
-# Process a structure by checking its state and driving many sub-operations (two thousand three hundred and twentieth form). It takes a structure (a: fields at a->32, a->248, and a->128) and a value (b); it checks the structure's state, and drives many sub-operations (ProcessAndVcallAndClear3, ProcessAndVcallAndProcess10, ProcessAndProcessAndProcess2295, ProcessAndProcessAndProcess2314, ProcessAndProcessAndProcess2318, and more) based on the result. This is the "process this data" routine (two thousand three hundred and twentieth form), part of the 0x82C4E process cluster. 427 lines. 7 callees. 2 callers (ProcessAndProcessAndProcess1591 and sub_82C4F240).
+# Process a structure by checking its state and driving many sub-operations (two thousand three hundred and twentieth form). It takes a structure (a: fields at a->32, a->248, and a->128) and a value (b); it checks the structure's state, and drives many sub-operations (Handle_Release, ProcessAndVcallAndProcess10, ProcessAndProcessAndProcess2295, ProcessAndProcessAndProcess2314, ProcessAndProcessAndProcess2318, and more) based on the result. This is the "process this data" routine (two thousand three hundred and twentieth form), part of the 0x82C4E process cluster. 427 lines. 7 callees. 2 callers (ProcessAndProcessAndProcess1591 and sub_82C4F240).
 [entrypoint.functions."0x82C4ECB0"]
 name = "ProcessAndProcessAndProcess2319_82C4ECB0"
 
-# Process a structure by checking its state and driving many sub-operations (two thousand three hundred and twenty-first form). It takes a structure (a: fields at a->156 and a->128), a value (b), a value (c), and a value (d); it checks the structure's state, and drives many sub-operations (ProcessAndProcessAndProcess1955, Allocate_OrDbgBreak, AtomicIncrement3, CopyAssign_RefCounted2, DestructRefCounted, ProcessAndVcallAndClear3, ProcessAndProcessAndProcess2319, and many more) based on the result. This is the "process this data" routine (two thousand three hundred and twenty-first form), part of the 0x82C4F process cluster. 755 lines. 15 callees. 2 callers (sub_82C1F910 and sub_82C1E878).
+# Process a structure by checking its state and driving many sub-operations (two thousand three hundred and twenty-first form). It takes a structure (a: fields at a->156 and a->128), a value (b), a value (c), and a value (d); it checks the structure's state, and drives many sub-operations (ProcessAndProcessAndProcess1955, Allocate_OrDbgBreak, AtomicIncrement3, CopyAssign_RefCounted2, DestructRefCounted, Handle_Release, ProcessAndProcessAndProcess2319, and many more) based on the result. This is the "process this data" routine (two thousand three hundred and twenty-first form), part of the 0x82C4F process cluster. 755 lines. 15 callees. 2 callers (sub_82C1F910 and sub_82C1E878).
 [entrypoint.functions."0x82C4F240"]
 name = "ProcessAndProcessAndProcess2320_82C4F240"
 
@@ -47307,7 +47314,7 @@ name = "ProcessAndProcessAndProcess2479_82C10908"
 [entrypoint.functions."0x82C10D00"]
 name = "ProcessAndProcessAndProcess2480_82C10D00"
 
-# Process a structure by checking its state and driving many sub-operations (two thousand four hundred and eighty-second form). It takes a structure (a: fields at a->0 and a->4), a structure (b: fields at b->52 and b->80), and a value (c); it checks the structure's state, and drives many sub-operations (ProcessAndVcallAndClear3, ProcessAndProcessAndProcess1802, ProcessAndProcessAndProcess1881, ProcessAndProcessAndProcess2060, ProcessAndProcessAndProcess2470, ProcessAndProcessAndProcess2477, ProcessAndProcessAndProcess2480, and more) based on the result. This is the "process this data" routine (two thousand four hundred and eighty-second form), part of the 0x82C10 process cluster. 144 lines. 7 callees. 0 callers.
+# Process a structure by checking its state and driving many sub-operations (two thousand four hundred and eighty-second form). It takes a structure (a: fields at a->0 and a->4), a structure (b: fields at b->52 and b->80), and a value (c); it checks the structure's state, and drives many sub-operations (Handle_Release, ProcessAndProcessAndProcess1802, ProcessAndProcessAndProcess1881, ProcessAndProcessAndProcess2060, ProcessAndProcessAndProcess2470, ProcessAndProcessAndProcess2477, ProcessAndProcessAndProcess2480, and more) based on the result. This is the "process this data" routine (two thousand four hundred and eighty-second form), part of the 0x82C10 process cluster. 144 lines. 7 callees. 0 callers.
 [entrypoint.functions."0x82C10F18"]
 name = "ProcessAndProcessAndProcess2481_82C10F18"
 
@@ -47319,13 +47326,19 @@ name = "ProcessAndProcessAndProcess2482_8217AD80"
 [entrypoint.functions."0x821D5050"]
 name = "ProcessAndProcessAndProcess2483_821D5050"
 
-# Process a structure by checking its state and driving many sub-operations (two thousand four hundred and eighty-fifth form). It takes a value (a), a structure (b: fields at b->40 and b->32), a value (c), and a value (d); it checks the structure's state, and drives many sub-operations (CriticalSection_EnterOrTry, DestructRefCounted, CopyAssign_RefCounted, ProcessAndVcallAndClear3, ProcessAndVcallAndProcess10, ProcessAndProcessAndProcess2483, and more) based on the result. This is the "process this data" routine (two thousand four hundred and eighty-fifth form), part of the 0x821E0 process cluster. 278 lines. 7 callees. 4 callers (sub_82306098, sub_829F8158, sub_825AAF30, and sub_821D9258).
+# Process a structure by checking its state and driving many sub-operations (two thousand four hundred and eighty-fifth form). It takes a value (a), a structure (b: fields at b->40 and b->32), a value (c), and a value (d); it checks the structure's state, and drives many sub-operations (CriticalSection_EnterOrTry, DestructRefCounted, CopyAssign_RefCounted, Handle_Release, ProcessAndVcallAndProcess10, ProcessAndProcessAndProcess2483, and more) based on the result. This is the "process this data" routine (two thousand four hundred and eighty-fifth form), part of the 0x821E0 process cluster. 278 lines. 7 callees. 4 callers (sub_82306098, sub_829F8158, sub_825AAF30, and sub_821D9258).
 [entrypoint.functions."0x821E0B08"]
 name = "ProcessAndProcessAndProcess2484_821E0B08"
 
-# Process a structure by checking its state and driving many sub-operations (two thousand four hundred and eighty-sixth form). It takes a value (a), a structure (b: fields at b->156 and b->160), and a value (c); it checks the structure's state, and drives many sub-operations (ProcessAndProcessAndProcess1802, ProcessAndProcessAndProcess1864, ProcessAndProcessAndProcess2194, ProcessAndProcessAndProcess2464, ProcessAndProcessAndProcess2484, and more) based on the result. This is the "process this data" routine (two thousand four hundred and eighty-sixth form), part of the 0x82306 process cluster. 64 lines. 5 callees. 12 callers (sub_82833A90, sub_82583140, sub_82583938, and more).
+# Plays a speech line by key. r3 = an 8-byte handle to fill, r4 = the speaker (on the front
+# end *(*(*(0x83496928)+8)+80)), r5 = &key (a global hash, e.g. 0x834A0000 - 20340 for
+# TEXT_QUEST_QC010_FRONT_END_20), r6 = 0. The front-end callers release the handle right
+# after with Handle_Release_822ADE08 and the line goes on playing. Read at the calls in
+# FrontMenu_HandleCardInput_826C72A8, FrontMenu_HandleUnfreeze_826C9460 and
+# FrontMenu_HandleEvent (Theresa's lines play); the body itself wasn't read. The difficulty
+# feature overrides it to play the destiny line after the difficulty pick (technical.md 19.2).
 [entrypoint.functions."0x82306098"]
-name = "ProcessAndProcessAndProcess2485_82306098"
+name = "Speech_PlayByKey_82306098"
 
 # Process a value by checking its state and driving sub-operations (two thousand four hundred and eighty-seventh form). It takes a value (a) and a value (b); it checks the value's state, and drives sub-operations (Free_SizeBucketed_Thunk, ProcessAndProcessAndProcess2482, and more) based on the result. This is the "process this data" routine (two thousand four hundred and eighty-seventh form), part of the 0x82A00 process cluster. 50 lines. 2 callees. 0 callers.
 [entrypoint.functions."0x82A00530"]
@@ -49851,6 +49864,18 @@ name = "FrontMenu_StartNewGame_8237A0C8"
 # generated code).
 [entrypoint.functions."0x826C9188"]
 name = "FrontMenu_HandleCardEvent_826C9188"
+
+# Front-end UNFREEZE and DIALOG_ACTIVE handler. Registered for both events with the
+# front-end object as `this` (code at 0x826C6EB0 / 0x826C6ED0, the same way
+# FrontMenu_HandleCardEvent_826C9188 is registered). r3 = the front-end object, r4 = the
+# event, hash at +4. DIALOG_ACTIVE (-20428) sets +24 = 6. UNFREEZE (-20432), only while
+# +101 is set and +192 / +212 are clear, replays the card screen by state +104: 0 with
+# +108 == 2 -> choosecard slide 1 and FE_20 (the New Game start); 3 / 4 with +100 set ->
+# slide 6 / 7 and the destiny line (Speech_PlayByKey_82306098 returning to 0x826C9638 /
+# 0x826C96B0); 5 with +108 == 0 -> the load cards; then +24 = +108. With +101 clear it
+# goes to slide 8 instead. Read in the generated code (technical.md 19.2).
+[entrypoint.functions."0x826C9460"]
+name = "FrontMenu_HandleUnfreeze_826C9460"
 
 # Selects a save card on the Continue screen. r3 = the front-end object, r4 = the
 # card index (clamped to 6). Moves the old and new cards' slides, plays a sound and

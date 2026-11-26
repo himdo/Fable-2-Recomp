@@ -80,8 +80,12 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
         return;
       }
     }
-    if (d.back.exchange(0) > 0 && !new_game) {
-      CloseDialog();
+    if (d.back.exchange(0) > 0) {
+      if (new_game) {
+        BackToGenderCards();  // back to boy or girl
+      } else {
+        CloseDialog();
+      }
       return;
     }
 
@@ -334,7 +338,7 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
       Prompt(px, py, "A", "Close");
     } else {
       Prompt(px, py, "A", "Choose");
-      if (!new_game) Prompt(px, py, "B", "Back");
+      Prompt(px, py, "B", "Back");
     }
   }
 };

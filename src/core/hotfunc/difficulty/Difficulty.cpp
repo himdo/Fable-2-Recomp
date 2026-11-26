@@ -59,6 +59,9 @@
 #include "fable2_ui_events.h" // FINISHED_TRANSITIONING_TO_GAME
 
 extern "C" void __imp__FrontMenu_HandleCardEvent_826C9188(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__FrontMenu_HandleUnfreeze_826C9460(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__Speech_PlayByKey_82306098(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__Handle_Release_822ADE08(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__sub_823F8268(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__Difficulty_GetMultiplier_823C92F0(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__LuaExperience_Modify_8251C8E0(PPCContext& ctx, uint8_t* base);
@@ -335,15 +338,44 @@ extern "C" void MoneyComp_Modify_8239E698(PPCContext& __restrict ctx, uint8_t* b
 // holds the event back and opens the cards; once a card is chosen, the pad read replays
 // the same handler with an 8-byte event of the same hash, built on the guest stack.
 // The level is written to the new hero after FINISHED_TRANSITIONING_TO_GAME.
+//
+// Theresa's destiny line ("his/her destiny unfolds") plays when the difficulty card is
+// chosen, not on the boy or girl choice: Speech_PlayByKey_82306098 skips the game's own
+// calls for it, and the pad read plays it just before the replay, then waits as long as
+// the game waited between the line and the SELECTED event. B on the cards puts the boy and
+// girl cards back the way the game does after a dialog (technical.md 19.2).
 
 namespace {
 
-// Event hash globals at 0x834A0000 + offset (technical.md section 7).
+// Event hash and speech key globals at 0x834A0000 + offset (technical.md section 7).
 constexpr int32_t kBoySelected = -20448;
 constexpr int32_t kGirlSelected = -20444;
+constexpr int32_t kUnfreeze = -20432;
+constexpr int32_t kDestinyLineBoy = -20336;   // TEXT_QUEST_QC010_FRONT_END_30_HM
+constexpr int32_t kDestinyLineGirl = -20332;  // TEXT_QUEST_QC010_FRONT_END_30_HF
 uint32_t EventHash(int32_t offset) {
   return U32(0x834A0000u + static_cast<uint32_t>(offset));
 }
+
+// Return addresses of the game's Speech_PlayByKey_82306098 calls for the destiny line
+// (Verified in the generated code): the card input on the boy / girl confirm, and the
+// UNFREEZE replays for card states 3 / 4 after a dialog.
+constexpr std::array<uint32_t, 4> kDestinyLineCalls = {
+    0x826C7A50u,  // FrontMenu_HandleCardInput_826C72A8, boy (key -20336)
+    0x826C7B98u,  // FrontMenu_HandleCardInput_826C72A8, girl (key -20332)
+    0x826C9638u,  // FrontMenu_HandleUnfreeze_826C9460, state 3 (boy)
+    0x826C96B0u,  // FrontMenu_HandleUnfreeze_826C9460, state 4 (girl)
+};
+
+bool IsDestinyLineCall(uint32_t lr) {
+  for (const uint32_t a : kDestinyLineCalls) {
+    if (a == lr) return true;
+  }
+  return false;
+}
+
+// The longest wait between our destiny line and the start of the game.
+constexpr int64_t kMaxLineLeadMs = 4000;
 
 size_t ThreadKey() { return std::hash<std::thread::id>{}(std::this_thread::get_id()); }
 
@@ -357,15 +389,26 @@ std::atomic<int> g_newgame_level{-1};   // card index to write to the new hero
 std::atomic<int64_t> g_newgame_ms{0};   // when the new game was started
 std::atomic<uint32_t> g_hero_at_start{0};
 
+// The destiny line (see the top of this section).
+std::atomic<int64_t> g_line_held_ms{0};    // when the game's own line was skipped
+std::atomic<int64_t> g_line_gap_ms{0};     // from then to the SELECTED event
+std::atomic<int64_t> g_line_played_ms{0};  // when ours was played, 0 = not yet
+
+// B on the New Game cards.
+std::atomic<bool> g_back_requested{false};
+std::atomic<int64_t> g_back_ms{0};
+
 // Pad edges (pad-read thread only).
 uint16_t g_prev_buttons = 0;
 bool g_prev_left = false;
 bool g_prev_right = false;
 
-void ReplayCardEvent(PPCContext& ctx, uint8_t* base, uint32_t self, uint32_t hash) {
+using GuestFn = void (*)(PPCContext&, uint8_t*);
+
+// Calls fn(self, &event) with an 8-byte event {0, hash} on a fresh guest stack frame below
+// the caller's: back chain at sp, the event at sp + 0x100. fn's own frame goes below sp.
+void CallWithEvent(PPCContext& ctx, uint8_t* base, GuestFn fn, uint32_t self, uint32_t hash) {
   const PPCContext saved = ctx;
-  // A fresh frame below the caller's: back chain at sp, the event at sp + 0x100. The
-  // handler's own frame goes below sp.
   const uint32_t sp = (ctx.r1.u32 - 0x200u) & ~0xFu;
   W32(sp, ctx.r1.u32);
   const uint32_t ev = sp + 0x100u;
@@ -374,10 +417,70 @@ void ReplayCardEvent(PPCContext& ctx, uint8_t* base, uint32_t self, uint32_t has
   ctx.r1.u64 = sp;
   ctx.r3.u64 = self;
   ctx.r4.u64 = ev;
-  t_replaying = true;
-  __imp__FrontMenu_HandleCardEvent_826C9188(ctx, base);
-  t_replaying = false;
+  fn(ctx, base);
   ctx = saved;
+}
+
+void ReplayCardEvent(PPCContext& ctx, uint8_t* base, uint32_t self, uint32_t hash) {
+  t_replaying = true;
+  CallWithEvent(ctx, base, __imp__FrontMenu_HandleCardEvent_826C9188, self, hash);
+  t_replaying = false;
+}
+
+// Plays the destiny line the way the card input does (fable_2_recomp.0.cpp at 0x826C7A50):
+// Speech_PlayByKey_82306098(r3 = an 8-byte handle on the stack, r4 =
+// *(*(*(0x83496928)+8)+80), r5 = &key, r6 = 0), then Handle_Release_822ADE08(handle).
+// The line goes on playing after the release.
+bool PlayDestinyLine(PPCContext& ctx, uint8_t* base, int32_t key_offset) {
+  uint32_t speaker = U32(0x83496928u);
+  for (const uint32_t off : {8u, 80u}) {
+    if (!Ptr(speaker)) return false;
+    speaker = U32(speaker + off);
+  }
+  const PPCContext saved = ctx;
+  const uint32_t sp = (ctx.r1.u32 - 0x200u) & ~0xFu;
+  W32(sp, ctx.r1.u32);
+  const uint32_t handle = sp + 0x100u;
+  W32(handle, 0);
+  W32(handle + 4, 0);
+  ctx.r1.u64 = sp;
+  ctx.r3.u64 = handle;
+  ctx.r4.u64 = speaker;
+  ctx.r5.u64 = 0x834A0000u + static_cast<uint32_t>(key_offset);
+  ctx.r6.u64 = 0;
+  __imp__Speech_PlayByKey_82306098(ctx, base);
+  ctx.r3.u64 = handle;
+  __imp__Handle_Release_822ADE08(ctx, base);
+  ctx = saved;
+  return true;
+}
+
+// The front-end fields the card screen uses (technical.md 19.2), for the log.
+std::string CardFields(uint32_t self) {
+  if (!Ptr(self)) return "?";
+  return fmt::format("+24={} +100={} +101={} +104={} +108={} +112={} +192={} +212={}",
+                     static_cast<int32_t>(U32(self + 24)), U8(self + 100), U8(self + 101),
+                     static_cast<int32_t>(U32(self + 104)), static_cast<int32_t>(U32(self + 108)),
+                     static_cast<int32_t>(U32(self + 112)), U8(self + 192), U8(self + 212));
+}
+
+// B: put the boy and girl cards back. The game does the same after its "overwrite a save"
+// dialog on New Game: +104 = 0, +108 = 2, +112 = 0 (fable_2_recomp.167.cpp, just before
+// 0x826C863C), then UNFREEZE. FrontMenu_HandleUnfreeze_826C9460 then, for +104 = 0 and
+// +108 = 2, goes to slide 1 of choosecard, plays FE_20 ("who is the hero") and sets +24 =
+// +108 = 2, as New Game does. It only gets that far while +101 is set and +192 / +212 are
+// clear (Verified in the generated code), so those are logged.
+void BackToGenderCardsNow(PPCContext& ctx, uint8_t* base, uint32_t self) {
+  REXSYS_INFO("[difficulty] New Game: back to boy or girl ({})", CardFields(self));
+  if (!Ptr(self)) return;
+  if (U8(self + 101) == 0) {
+    REXSYS_INFO("[difficulty] New Game: +101 is 0, so UNFREEZE won't put the cards back");
+  }
+  W32(self + 104, 0);
+  W32(self + 108, 2);
+  W32(self + 112, 0);
+  CallWithEvent(ctx, base, __imp__FrontMenu_HandleUnfreeze_826C9460, self, EventHash(kUnfreeze));
+  REXSYS_INFO("[difficulty] New Game: after UNFREEZE ({})", CardFields(self));
 }
 
 }  // namespace
@@ -390,6 +493,11 @@ extern "C" void FrontMenu_HandleCardEvent_826C9188(PPCContext& __restrict ctx, u
   if ((boy || girl) && !t_replaying) {
     namespace d = fable2::difficulty;
     if (g_held_event.load() == 0) {
+      const int64_t now = fable2::uievents::NowMs();
+      const int64_t line = g_line_held_ms.exchange(0);
+      g_line_gap_ms.store(line > 0 ? std::clamp<int64_t>(now - line, 0, kMaxLineLeadMs) : 0);
+      g_line_played_ms.store(0);
+      g_back_requested.store(false);
       g_held_self.store(ctx.r3.u32);
       g_card_thread.store(ThreadKey());
       d::Dialog().chosen.store(-1);
@@ -398,12 +506,33 @@ extern "C" void FrontMenu_HandleCardEvent_826C9188(PPCContext& __restrict ctx, u
       d::Dialog().back.store(0);
       g_held_event.store(hash);
       d::Dialog().mode.store(int(d::DialogMode::kNewGame));
-      REXSYS_INFO("[difficulty] New Game: {} chosen, showing the difficulty cards (thread {:X})",
-                  boy ? "boy" : "girl", ThreadKey());
+      REXSYS_INFO(
+          "[difficulty] New Game: {} chosen, showing the difficulty cards (thread {:X}, destiny line "
+          "{} ms before)",
+          boy ? "boy" : "girl", ThreadKey(), line > 0 ? now - line : -1);
     }
     return;  // the game starts once a card is chosen (OnPadRead)
   }
   __imp__FrontMenu_HandleCardEvent_826C9188(ctx, base);
+}
+
+// r3 = an 8-byte sound handle to fill, r4 = the speaker, r5 = &key, r6 = 0. Every caller
+// releases the handle right after (Handle_Release_822ADE08). The destiny line's calls
+// are skipped: the handle stays empty, so the release does nothing, and the line plays
+// when a difficulty card is chosen.
+extern "C" void Speech_PlayByKey_82306098(PPCContext& __restrict ctx, uint8_t* base) {
+  const uint32_t lr = static_cast<uint32_t>(ctx.lr);
+  if (IsDestinyLineCall(lr)) {
+    const uint32_t handle = ctx.r3.u32;
+    if (Ptr(handle)) {
+      W32(handle, 0);
+      W32(handle + 4, 0);
+    }
+    g_line_held_ms.store(fable2::uievents::NowMs());
+    REXSYS_INFO("[difficulty] New Game: destiny line held back until a card is chosen (call {:08X})", lr);
+    return;
+  }
+  __imp__Speech_PlayByKey_82306098(ctx, base);
 }
 
 namespace fable2::difficulty {
@@ -455,24 +584,60 @@ void CloseDialog() {
   REXSYS_INFO("[difficulty] in-game cards closed, level unchanged");
 }
 
+void BackToGenderCards() {
+  DialogState& d = Dialog();
+  if (d.mode.load() != int(DialogMode::kNewGame)) return;
+  g_back_ms.store(fable2::uievents::NowMs());
+  g_back_requested.store(true);
+  d.suppress_pad.store(true);  // the B must not reach the game (B there = back to the menu)
+  d.mode.store(int(DialogMode::kClosed));
+  REXSYS_INFO("[difficulty] New Game cards: B, back to boy or girl");
+}
+
 bool OnPadRead(PPCContext& ctx, uint8_t* base, uint16_t buttons, int16_t lx) {
   DialogState& d = Dialog();
 
-  // A card was chosen on New Game: start the game on the thread that sent the event.
+  // New Game: act on the thread that sent the card event (after 2 s on any thread).
   const uint32_t held = g_held_event.load();
-  if (held != 0 && !DialogOpen() && d.chosen.load() >= 0 &&
-      d.chosen_mode.load() == int(DialogMode::kNewGame)) {
+  if (held != 0 && !DialogOpen()) {
     const bool same_thread = ThreadKey() == g_card_thread.load();
-    const bool late = fable2::uievents::NowMs() - g_choice_ms.load() > 2000;
-    if (same_thread || late) {
-      const int level = d.chosen.exchange(-1);
-      g_held_event.store(0);
-      g_hero_at_start.store(Player1Entity());
-      g_newgame_level.store(level);
-      g_newgame_ms.store(fable2::uievents::NowMs());
-      REXSYS_INFO("[difficulty] New Game on {}: starting the game ({} thread {:X}, card thread {:X})",
-                  Level(level).name, same_thread ? "same" : "OTHER", ThreadKey(), g_card_thread.load());
-      ReplayCardEvent(ctx, base, g_held_self.load(), held);
+    const int64_t now = fable2::uievents::NowMs();
+    if (g_back_requested.load()) {
+      // B: the boy and girl cards again.
+      if (same_thread || now - g_back_ms.load() > 2000) {
+        g_back_requested.store(false);
+        g_line_played_ms.store(0);
+        g_held_event.store(0);
+        BackToGenderCardsNow(ctx, base, g_held_self.load());
+      }
+    } else if (d.chosen.load() >= 0 && d.chosen_mode.load() == int(DialogMode::kNewGame)) {
+      // A card was chosen: the destiny line first, then, as long after it as the game
+      // waited between the line and the SELECTED event, the start of the game.
+      const int64_t gap = g_line_gap_ms.load();
+      const bool late = now - g_choice_ms.load() > 2000 + gap;
+      if (same_thread || late) {
+        const int64_t played = g_line_played_ms.load();
+        if (played == 0) {
+          const bool boy = held == EventHash(kBoySelected);
+          const bool ok = PlayDestinyLine(ctx, base, boy ? kDestinyLineBoy : kDestinyLineGirl);
+          g_line_played_ms.store(now);
+          REXSYS_INFO("[difficulty] New Game: destiny line ({}) {}, the game starts in {} ms",
+                      boy ? "boy" : "girl", ok ? "played" : "NOT played (no speaker)", gap);
+        }
+        if (played != 0 || gap == 0) {
+          if (now - g_line_played_ms.load() >= gap) {
+            const int level = d.chosen.exchange(-1);
+            g_held_event.store(0);
+            g_line_played_ms.store(0);
+            g_hero_at_start.store(Player1Entity());
+            g_newgame_level.store(level);
+            g_newgame_ms.store(now);
+            REXSYS_INFO("[difficulty] New Game on {}: starting the game ({} thread {:X}, card thread {:X})",
+                        Level(level).name, same_thread ? "same" : "OTHER", ThreadKey(), g_card_thread.load());
+            ReplayCardEvent(ctx, base, g_held_self.load(), held);
+          }
+        }
+      }
     }
   }
 

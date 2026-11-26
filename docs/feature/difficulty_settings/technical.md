@@ -345,15 +345,15 @@ The `choosecard` layer of `art\gui\gameface\frontendmainmenu.bgf` (`guiscripts.b
 | --- | --- |
 | `FrontMenu_HandleEvent` 0x826C81A0 (`.167`) | New Game → `loc_826C863C`: `choosecard` slide 1, plays `FE_20` (~11467–11494) |
 | `sub_826C61B8` (`.266` ~11187) | internal event 36 → slide 3, plays `FE_10` |
-| `ProcessAndProcessAndProcess1819_826C72A8` (`.0:10435`) | input: toggles cards (slides 2–5). Confirm Boy sets state `+104` and `+108` = 3, slide 6, plays `FE_30_HM` (~11553). Confirm Girl sets them to 4, slide 7, plays `FE_30_HF` (~11738). |
-| `sub_826C9460` (`.124`) | `UNFREEZE` replays per state: 0 → slide 1 + `FE_20`; 3 → slide 6 + `_30_HM`; 4 → slide 7 + `_30_HF`; 5 → load-card screen. `DIALOG_ACTIVE` → 6 |
+| `FrontMenu_HandleCardInput_826C72A8` (`.0:10435`) | input: toggles cards (slides 2–5). Confirm Boy goes to slide 6 and plays `FE_30_HM` (~11553); Confirm Girl goes to slide 7 and plays `FE_30_HF` (~11738). Both set `+24` = 1 while the card flips. |
+| `FrontMenu_HandleUnfreeze_826C9460` (`.124`) | `UNFREEZE` replays per state `+104` (only while `+101` is set and `+192` / `+212` are clear): 0 with `+108` = 2 → slide 1 + `FE_20`; 3 / 4 with `+100` set → slide 6 / 7 + `_30_HM` / `_30_HF`; 5 with `+108` = 0 → load-card screen; then `+24` = `+108`. `DIALOG_ACTIVE` → `+24` = 6 (19.2) |
 | `FrontMenu_HandleCardEvent_826C9188` (`.98`) | events: `BOY_ACTIVE` → 3, `GIRL_ACTIVE` → 4, `UNFREEZE` → 0. `BOY_SELECTED` → `FrontMenu_StartNewGame_8237A0C8("CreatureHeroChild")`; `GIRL_SELECTED` → `FrontMenu_StartNewGame_8237A0C8("CreatureHeroFemaleChild")` |
 | `FrontMenu_StartNewGame_8237A0C8` | the actual new-game start (`GUI_SCREEN_FRONT_END_NEW_GAME`, `QC010_ChildhoodStart`). **The natural hook for the difficulty step.** |
 
 **Inference:** the "destiny" line plays on the A press, together with the card flip, before the `_SELECTED` event.
 
 **Helpers (Inference):**
-- `ProcessAndProcessAndProcess2485_82306098` plays a speech or sound event by key (r5).
+- `Speech_PlayByKey_82306098` plays a speech line by key (r5), into a handle (r3) that the caller releases straight away with `Handle_Release_822ADE08` (19.2).
 - `sub_823F8C30` + `sub_823F9140(r5 = slide)` look up an element and go to a slide.
 
 #### Event and element globals
@@ -504,23 +504,18 @@ delta4o asked whether collecting the 5 gold and paying for the music box still w
 - **The start.** Once a card is chosen, the pad read (`on_pad_read` in `fable2_photo_mode.h`, user 0) replays the original handler with an 8-byte event `{0, hash}` on a fresh guest stack frame. It runs on the thread that sent the event (checked by thread id; after 2 s it runs anyway, and the log says `OTHER`). The game's own path then builds the name and starts the game.
 - **The level.** After `FINISHED_TRANSITIONING_TO_GAME` (newer than the start), on the world update, the chosen level is written to player 1's type-33 `+80` and the type-57 `+2164` cache is cleared. It's written directly, **without** the changed flag `+38` that `Player.SetDifficultyLevel` sets, so the Masochist question (open question 5) stays open. Easy writes nothing and only logs the fresh hero's default level.
 - **Input.** The dialog has its own counters, fed from the pad read, which also blanks the pad for the game while the cards are up and until it is released. The keyboard map reaches the same pad state, so the keys that drive the game's menus drive the cards.
-- **Not done:** B to go back to the gender cards (the cards flip before `_SELECTED`, so the game's state would have to be replayed too). Theresa's destiny line still plays on the gender choice, before the cards. delta4o (2026-11-24) wants both.
-- **Plan for Theresa's line (read in the generated code, not built):**
-  - The line plays from `ProcessAndProcessAndProcess1819_826C72A8` (card input) at exactly two calls of `ProcessAndProcessAndProcess2485_82306098(r3 = an 8-byte handle on the stack, r4 = *(*(*(0x83496928)+8)+80), r5 = &key, r6 = 0)`.
-    - Boy: returns to `0x826C7A50`, key at `0x834A0000 - 20336` (`FE_30_HM`).
-    - Girl: returns to `0x826C7B98`, key at `-20332` (`FE_30_HF`).
-  - Each call is followed by `ProcessAndVcallAndClear3_822ADE08(handle)`, which calls through `+4` only when it is non-zero, then zeroes the handle (`.243:2077`).
-  - So an override of `82306098` can skip those two calls (zero the handle, remember the key) and play the line itself once a difficulty card is chosen, right before the New Game replay, then release its own handle.
-- **Plan for B (not built):**
-  - The cards' state is `+24` / `+104` / `+108` of the same front-end object (the card input writes `+24` at `0x826C7A44`).
-  - `sub_826C9460` handles `UNFREEZE` (`-20432`). For `+104` = 0 it rebuilds the start of the card screen: slide 1 plus `FE_20` (the "who is the hero" line), as after a dialog. It also reads the flags `+101`, `+192` and `+212`, which aren't decoded.
-  - On B: close the cards, set `+104` / `+108` / `+24` to 0, and replay `UNFREEZE` through `sub_826C9460` with the held `r3`.
-  - Fallback: back to the main menu.
-- **Names to give then:**
-  - `ProcessAndProcessAndProcess2485_82306098` → `Speech_PlayByKey`;
-  - `ProcessAndVcallAndClear3_822ADE08` → `SoundHandle_Release`;
-  - `ProcessAndProcessAndProcess1819_826C72A8` → `FrontMenu_HandleCardInput`;
-  - `sub_826C9460` → `FrontMenu_HandleUnfreeze`.
+- **Theresa's destiny line after the pick (built 2026-11-26, delta4o's request of 2026-11-24).** Read in the generated code:
+  - The game plays the line from `FrontMenu_HandleCardInput_826C72A8` on the A press that flips the card, with `Speech_PlayByKey_82306098(r3 = an 8-byte handle on the stack, r4 = *(*(*(0x83496928)+8)+80), r5 = &key, r6 = 0)`. The boy's call returns to `0x826C7A50` (key at `0x834A0000 - 20336`, `FE_30_HM`), the girl's to `0x826C7B98` (`-20332`, `FE_30_HF`). `FrontMenu_HandleUnfreeze_826C9460` replays the same lines for card states 3 / 4 after a dialog (returns `0x826C9638` / `0x826C96B0`).
+  - Each call is followed by `Handle_Release_822ADE08(handle)`, which does a vcall through `*(handle+4)` only when `+4` is non-zero, then zeroes `+0` and `+4`. Nothing reads the call's result.
+  - The feature overrides `Speech_PlayByKey_82306098`. At those four return addresses it zeroes the handle and returns, so nothing plays and the release does nothing. Every other line goes to the original.
+  - Once a difficulty card is chosen, the pad read (on the card thread) plays the line itself, with the same arguments, and releases its handle. The key is picked from the held event (boy or girl).
+  - The game itself plays the line on the A press and starts the game some time later, after the card has flipped. To keep that lead, the time from the skipped call to the `_SELECTED` event is measured and logged, and the start waits that long after our line (at most 4 s).
+- **B on the New Game cards (built 2026-11-26).** Read in the generated code:
+  - `FrontMenu_HandleCardEvent_826C9188` and `FrontMenu_HandleUnfreeze_826C9460` are both registered with the front-end object as `this` (code at 0x826C6D0C… and 0x826C6EB0 / 0x826C6ED0), so the `r3` held back with the `_SELECTED` event is the object both work on.
+  - `+24` is the card screen's input state: New Game sets it to 2; `BOY_ACTIVE` / `GIRL_ACTIVE` (`FrontMenu_HandleCardEvent_826C9188`) set 3 / 4; the A press sets 1; UNFREEZE in the card handler sets 0.
+  - The game's own way back to the gender cards is after its "overwrite a save?" dialog on New Game: it sets `+104` = 0, `+108` = 2, `+112` = 0 (just before `0x826C863C`), and the dialog's UNFREEZE then reaches `FrontMenu_HandleUnfreeze_826C9460`, which for `+104` = 0 and `+108` = 2 goes to slide 1 of `choosecard`, plays `FE_20` and sets `+24` = `+108` = 2, as New Game does. That only happens while `+101` is set and `+192` / `+212` are clear; with `+101` clear it goes to slide 8 instead (not decoded).
+  - So B closes the cards, blanks the pad until B is released (B on the gender cards goes back to the main menu), and on the next pad read on the card thread writes those three fields and calls `FrontMenu_HandleUnfreeze_826C9460` with an UNFREEZE event on a fresh guest stack frame. The fields are logged before and after (`[difficulty] New Game: back to boy or girl (...)`).
+  - The New Game cards now show "B Back" too.
 - **Seen in game (2026-11-24, `fable_2_071.log` and `fable_2_072.log`):** four new games, on Medium (twice), Hard and Hardcore.
   - Each started on the thread that sent the card event, so the 2 s fallback never ran.
   - A fresh hero has game level 1 with the changed flag 0. After the start, the level was 2, 3 and 4.
@@ -1162,6 +1157,15 @@ Functions named on 2026-11-22 from sections 15 and 16. All were generic `sub_` n
 | 0x8251D958 | `LuaExperience_Register_8251D958` | Verified (17.1) |
 | 0x8251C8E0 | `LuaExperience_Modify_8251C8E0` | Verified (17.1) |
 | 0x8251C0A8 | `Experience_Add_8251C0A8` | Verified for the calls (17.1) |
+
+Functions named on 2026-11-26 for B and the destiny line (19.2). Read in the generated code:
+
+| Address | Name | Was | Evidence |
+| --- | --- | --- | --- |
+| 0x826C72A8 | `FrontMenu_HandleCardInput_826C72A8` | `ProcessAndProcessAndProcess1819_826C72A8` | Verified (7, 19.2) |
+| 0x826C9460 | `FrontMenu_HandleUnfreeze_826C9460` | `sub_826C9460` | Verified (19.2) |
+| 0x82306098 | `Speech_PlayByKey_82306098` | `ProcessAndProcessAndProcess2485_82306098` | Verified at its front-end calls; the body wasn't read (19.2) |
+| 0x822ADE08 | `Handle_Release_822ADE08` | `ProcessAndVcallAndClear3_822ADE08` | Verified (19.2) |
 
 These stay unnamed until their role is confirmed:
 - the co-op partner getter `sub_828BEEC0` (Inference);

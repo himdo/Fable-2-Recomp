@@ -240,7 +240,8 @@ Details are in technical.md sections 15 (code reading) and 16 (in-game results).
   - Easy, Medium and Hard can be switched.
   - Hardcore can't be picked there ("New Game only"), and a Hardcore hero can't change level (decision 2).
   - Not tested in game yet. There's no controller shortcut yet.
-- **Theresa's destiny line** still plays on the boy or girl choice, before the cards.
+- **Theresa's destiny line** now plays once a difficulty card is chosen, not on the boy or girl choice. The game then starts as long after the line as it did before. Built 2026-11-26.
+- **B on the New Game cards** goes back to boy or girl, and Theresa asks again who the hero is. Built 2026-11-26.
 
 ### The level on the Continue screen
 - **Confirmed in game:** each save now writes the hero's level into a small file in its slot folder.
@@ -255,7 +256,7 @@ Details are in technical.md sections 15 (code reading) and 16 (in-game results).
    - F8 Easy → Hard → Easy in game;
    - round 4a: an unowned shop's buy and sell, buying a house;
    - backgrounds on the cards;
-   - B to go back to boy or girl, and Theresa's destiny line after the cards (delta4o wants both; the plans are in technical.md 19.2);
+   - ~~B to go back to boy or girl, and Theresa's destiny line after the cards~~ (built 2026-11-26, technical.md 19.2);
    - a controller shortcut for F8.
 1. ~~**Decide the starting multipliers**~~: done 2026-11-22 (decision 6). Easy is the original game.
 2. ~~**Name the functions**~~: done 2026-11-22. 44 functions now have real names, among them the gold callers, the shop and property price steps, rent, and the combat checks (technical.md "What changed").
