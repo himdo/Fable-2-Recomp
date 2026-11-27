@@ -506,6 +506,15 @@ Enemy health is the last multiplier without code (decision 6: ×1.25 / 1.5 / 2.0
 - ~~Delete the probe and its seven temporary hooks (14.4), which frees `HealthComp_Modify_8268BD90`~~ (done 2026-11-27).
 - Check in game: a guard made hostile, a bandit, a beetle or hollow man, the dog's bites, a spell, a crossbow bolt, and a scripted kill (it must still kill).
 
+#### 21.5 Built and checked in game (2026-11-27, design A)
+
+- **Code** (`Difficulty.cpp`): an override of `HealthComp_Modify_8268BD90`. For the hit call (return 0x8268AF98) with `f1 < 0`, on a level whose enemy health isn't 1.0, a target without a type-33 component (not a player) is checked with `Faction_GetRelationship_822040D0(target's type-133 component, player 1)`. On 4 (enemy) `f1` is divided by the enemy health. Every such hit is logged: `[difficulty] hit -157.7 -> -105.1 on <target> by <attacker> (enemy)`, or "ally, kept", "neutral, kept", "no faction, kept". The difficulty cards list "Enemy health ×1.25 / ×1.5 / ×2" now. The probe was deleted first (251eb48).
+- **Seen in game (`fable_2_083.log`, the slot 1 hero at Bandit Coast; delta4o played Medium, Hard and Easy):** 150 logged hits.
+  - 146 enemy hits, all divided: ÷1.25 on Medium (26), ÷1.5 on Hard (120). They were the hero's melee (-157.7), big hits and flourishes (-430 to -480), **crossbow bolts** (-102, 28 on Hard), **burning** after the fireballs (about -10 each, 58 on Hard: fire damage goes through the same hit path), and an ally's bites (-333.3, 9).
+  - That ally (`42B1DB50`) was hit by two bandits 3 times: "ally, kept", unchanged. delta4o had no henchmen, so it is almost certainly **the dog**: its bites on enemies are scaled, the hits it takes aren't.
+  - One crossbow hit on something without a faction component (a barrel or a body): kept.
+  - delta4o: on Hard bandits took more bolts than on Easy; the damage taken on Hard was much higher (enemy damage ×2); the XP orbs were smaller (×0.7).
+- **Not separated in the log:** the fireball's direct hits on Hard (Easy logs nothing, and on Hard they can't be told from the flourishes). A scripted kill and a hostile guard weren't tried (a guard who fights the hero is an enemy, so his hits are scaled like a bandit's).
 ### 20. Round 4 in game (2026-11-27, `fable_2_082.log`)
 
 The topic 3 leftovers, on the slot 1 hero (Bowerstone Market), which loaded on Medium. delta4o read out the prices; the level changes and gold lines are from the log.
@@ -1135,7 +1144,7 @@ The log has `gold +2123 from 0x828B0438` (inside `Ownership_SellProperty_828B01C
 
 On `feature/game-difficulty`. Nothing here is meant for master yet.
 
-- `src/core/hotfunc/difficulty/Difficulty.cpp` (2026-11-22): **feature code, step 1** (section 18). It applies the decision-6 multipliers for gold gained, prices, damage taken and collected XP, from the hero's game level.
+- `src/core/hotfunc/difficulty/Difficulty.cpp` (2026-11-22): **feature code, step 1** (section 18). It applies the decision-6 multipliers for gold gained, prices, damage taken and collected XP, from the hero's game level. Since 2026-11-27 also enemy health (21.5).
 - `src/core/hotfunc/unsorted/DifficultyProbe.cpp`: the research probe (14.4). bd6846a holds round 1; round 2 is the rewrite on 2026-11-21. On 2026-11-22 its overrides of `Difficulty_GetMultiplier_823C92F0`, both item price functions and `MoneyComp_Modify_8239E698` moved to the feature file. **Deleted on 2026-11-27** (before the enemy-health code, which needs `HealthComp_Modify_8268BD90`); its log lines (`[difficulty-probe]`) are only in the older logs.
 - `fable_2_manifest.toml`: a "Difficulty settings" block at the end with:
   - the names below;

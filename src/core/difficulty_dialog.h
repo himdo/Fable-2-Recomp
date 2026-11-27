@@ -226,7 +226,8 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
       TextCentred(cx, y, kSmall, Alpha(kCreamDim, a), "always was", fs);
     } else {
       for (const std::string& s : {Factor("Gold earned", L.gold), Factor("Prices", L.prices),
-                                   Factor("Enemy damage", L.enemy_damage), Factor("XP", L.xp)}) {
+                                   Factor("Enemy damage", L.enemy_damage),
+                                   Factor("Enemy health", L.enemy_health), Factor("XP", L.xp)}) {
         TextCentred(cx, y, kSmall, Alpha(kCream, a), s.c_str(), fs);
         y += line;
       }

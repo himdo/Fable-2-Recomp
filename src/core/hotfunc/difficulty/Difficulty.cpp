@@ -1,6 +1,6 @@
 // Difficulty settings (docs/feature/difficulty_settings/, decision 6): applies the
-// per-level multipliers to gold gained, prices, the damage the hero takes and the XP
-// the hero collects. Enemy health is not done yet (decision 0).
+// per-level multipliers to gold gained, prices, the damage the hero takes, enemy health
+// and the XP the hero collects.
 //
 // The level is the game's own per-hero difficulty level: the int at +80 of player 1's
 // type-33 (player) component, which LuaPlayer_SetDifficultyLevel_823C9458 writes and
@@ -22,6 +22,9 @@
 //     Property_GetBuyPrice_8274DD78 (x) and Property_GetSellPrice_8274DFD0 (/).
 //   - Gold: MoneyComp_Modify_8239E698, positive changes to player 1 only, except sales
 //     (already priced), transfers, refunds and network copies (section 2).
+//   - Enemy health: HealthComp_Modify_8268BD90, the hit handler's health change on a
+//     target that is an enemy of player 1 takes health / enemy health (decision 7,
+//     technical.md 21).
 //
 // Every line it logs starts with "[difficulty]".
 #include "fable_2_pch.h"
@@ -76,6 +79,8 @@ extern "C" void __imp__Item_GetSellPrice_828E8320(PPCContext& ctx, uint8_t* base
 extern "C" void __imp__Property_GetBuyPrice_8274DD78(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__Property_GetSellPrice_8274DFD0(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__MoneyComp_Modify_8239E698(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__HealthComp_Modify_8268BD90(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__Faction_GetRelationship_822040D0(PPCContext& ctx, uint8_t* base);
 
 namespace {
 
@@ -170,8 +175,9 @@ const Multipliers& Current() {
   const Multipliers& m = kLevels[LevelIndex(game_level)];
   if (Ptr(comp) && g_logged_level.exchange(game_level) != game_level) {
     REXSYS_INFO(
-        "[difficulty] level {} (game level {}): gold x{} prices x{} enemy damage x{} XP x{}",
-        m.name, game_level, m.gold, m.prices, m.enemy_damage, m.xp);
+        "[difficulty] level {} (game level {}): gold x{} prices x{} enemy damage x{} enemy "
+        "health x{} XP x{}",
+        m.name, game_level, m.gold, m.prices, m.enemy_damage, m.enemy_health, m.xp);
   }
   return m;
 }
@@ -261,6 +267,59 @@ extern "C" void LuaExperience_Modify_8251C8E0(PPCContext& __restrict ctx, uint8_
   t_scripted_xp = true;
   __imp__LuaExperience_Modify_8251C8E0(ctx, base);
   t_scripted_xp = previous;
+}
+
+// --- Enemy health (decision 7, design A; technical.md 21) ------------------------------
+//
+// Combat_ApplyHit_8268AB30 takes a hit's health through HealthComp_Modify_8268BD90(r3 = the
+// target's health component, f1 = -damage, r5 = the attacker); that call returns to
+// 0x8268AF98. Scripted damage and kills, regeneration and damage over time come from other
+// callers and stay as they are. A hit is divided by the level's enemy health when the target
+// isn't a player (no type-33 component: player 1 and co-op player 2) and its faction regards
+// player 1 as an enemy: Faction_GetRelationship_822040D0(target's type-133 component,
+// player 1) == 4, the test Lua Faction.IsMyEnemy makes. So every attacker's hits count (the
+// hero, the dog, henchmen, allies), and villagers, friendly guards and allies are left alone.
+// The life-steal (0x8268B968) is worked out from the hit's damage before this, so it doesn't
+// change. Health is a float, so nothing is rounded.
+
+namespace {
+
+constexpr uint32_t kHitHealthChange = 0x8268AF98u;  // in Combat_ApplyHit_8268AB30
+constexpr int32_t kEnemy = 4;                       // Faction_GetRelationship_822040D0
+
+// How the target's faction regards `other`: 1 neutral, 2 ally, 4 enemy; 0 without a
+// faction component. Called at the start of HealthComp_Modify_8268BD90, before the callee
+// has a frame, so the callee's frame goes below the caller's r1 as on a normal call.
+int32_t Relationship(const PPCContext& ctx, uint8_t* base, uint32_t target, uint32_t other) {
+  const uint32_t faction = FindComponent(target, 133);
+  if (!Ptr(faction) || !Ptr(other)) return 0;
+  PPCContext c = ctx;
+  c.r3.u64 = faction;
+  c.r4.u64 = other;
+  __imp__Faction_GetRelationship_822040D0(c, base);
+  return c.r3.s32;
+}
+
+}  // namespace
+
+extern "C" void HealthComp_Modify_8268BD90(PPCContext& __restrict ctx, uint8_t* base) {
+  if (static_cast<uint32_t>(ctx.lr) == kHitHealthChange && ctx.f1.f64 < 0.0) {
+    const double health = Current().enemy_health;
+    const uint32_t comp = ctx.r3.u32;
+    const uint32_t target = Ptr(comp) ? U32(comp + 4) : 0;
+    const uint32_t hero = Player1Entity();
+    if (health != 1.0 && Ptr(target) && Ptr(hero) && !Ptr(FindComponent(target, 33))) {
+      const int32_t rel = Relationship(ctx, base, target, hero);
+      const double before = ctx.f1.f64;
+      if (rel == kEnemy) {
+        ctx.f1.f64 = static_cast<double>(static_cast<float>(before / health));
+      }
+      REXSYS_INFO("[difficulty] hit {:.1f} -> {:.1f} on {:08X} by {:08X} ({})", before, ctx.f1.f64,
+                  target, ctx.r5.u32,
+                  rel == kEnemy ? "enemy" : rel == 2 ? "ally, kept" : rel == 1 ? "neutral, kept" : "no faction, kept");
+    }
+  }
+  __imp__HealthComp_Modify_8268BD90(ctx, base);
 }
 
 // --- Prices ---------------------------------------------------------------------------

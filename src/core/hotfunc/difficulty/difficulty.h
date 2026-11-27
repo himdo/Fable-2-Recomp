@@ -24,7 +24,7 @@ struct LevelInfo {
   double gold;          // gold gained
   double prices;        // shop items and property: buy x, sell /
   double enemy_damage;  // damage the hero takes
-  double enemy_health;  // not applied yet
+  double enemy_health;  // hits on the hero's enemies take health / this
   double xp;            // XP the hero collects
 };
 constexpr int kLevelCount = 4;
