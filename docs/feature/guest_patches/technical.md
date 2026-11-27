@@ -1,6 +1,6 @@
 # Guest-image patch system (Xenia patch format)
 
-**Status:** merged · **Commits:** cab738b, f146b02 (#208), bfe422d (#210), 8446622 (#228), 5f5f55f (#226) · **Last checked against:** 7863041
+**Status:** merged · **Commits:** cab738b, f146b02 (#208), bfe422d (#210), 8446622 (#228), 5f5f55f (#226) · **Last checked against:** c2a9d12
 
 Runtime patching of the loaded `default.xex` guest image, using the op shape
 of Xenia's game-patches (`patch.toml`) format.
@@ -34,7 +34,7 @@ of Xenia's game-patches (`patch.toml`) format.
 | `high_tick_rate` | High Tick Rate (Guy) | be8 0x83319511 = 0x3E (LF tick double 0x83319510: 15.0 → 30.0) | NOP of the store at 0x8233AEB4 → `fable2_hook_high_tick_rate_skip_store` |
 | `higher_hf_tick_rate` | Higher HF Tick Rate (Ultra) | be8 0x83319519 = 0x4E (HF tick double 0x83319518: 30.0 → 60.0) | NOP of the store at 0x8233AE98 → `fable2_hook_high_hf_tick_rate_skip_store` |
 
-Both stores are in `sub_8233AE50` (game init) and are the only writers of
+Both stores are in `Game_InitTickRatesAndSystems_8233AE50` (game init) and are the only writers of
 those doubles; without the hooks the game overwrote the patched values and
 the data ops had no effect. The game runs HF at twice LF (30:15). With only
 `high_tick_rate` the ratio becomes 1:1 (30:30) and cloth physics misbehaves,
@@ -157,8 +157,8 @@ Currently **empty**.
 
 | Patch | Mechanism | Change | Measured effect |
 |---|---|---|---|
-| Unlock Website Items (Guy) | mid-asm hooks `fable2_hook_website_g1` @ 0x8256E384 (r9, after the GATE-1 `rlwinm`), `fable2_hook_website_g1b` @ 0x8256E3AC (r8, after the GATE-1b `clrlwi`) and `fable2_hook_website_grantnew` @ 0x8256D9E4 (r3, the grant method's return); toggle: `[patches] unlock_website` | Forces both registration gate results in `GuildChest_GetWebsiteItem_8256E368` to 1 and the grant method's return to 1, so the website/Guild-chest getter treats the player as registered, finds the item and reports it as granted. The getters run at save load, so the chest inventory is filled on load. Re-derives the Xenia "Unlock Website Items" intent for THIS build (the stock ops target a different revision's bytes). | Hook confirmed in generated code + clean startup; in-game chest unlock pending manual test |
-| Unlock CE Content (Guy) | mid-asm hooks `fable2_hook_ce_g1` @ 0x824B3540 (r10), `fable2_hook_ce_g1b` @ 0x824B3568 (r9) and `fable2_hook_ce_grantavail` @ 0x824ACAE0 (r3); toggle: `[patches] unlock_ce` | Same shape for the Collectors Edition chest in `GuildChest_GetCEContent_824B3528`: both gate results forced to 1, and the grant method's return forced to 1. | Hook confirmed in generated code + clean startup; in-game chest unlock pending manual test |
+| Unlock Website Items (Guy) | mid-asm hooks `fable2_hook_website_g1` @ 0x8256E384 (r9, after the GATE-1 `rlwinm`), `fable2_hook_website_g1b` @ 0x8256E3AC (r8, after the GATE-1b `clrlwi`) and `fable2_hook_website_grantnew` @ 0x8256D9E4 (r3, the return of `GuildChestWebsite_HasItem_8256D940`); toggle: `[patches] unlock_website` | Forces both registration gate results in `GuildChest_GetWebsiteItem_8256E368` to 1 and the grant method's return to 1, so the website/Guild-chest getter treats the player as registered, finds the item and reports it as granted. The getters run at save load, so the chest inventory is filled on load. Re-derives the Xenia "Unlock Website Items" intent for THIS build (the stock ops target a different revision's bytes). | Hook confirmed in generated code + clean startup; in-game chest unlock pending manual test |
+| Unlock CE Content (Guy) | mid-asm hooks `fable2_hook_ce_g1` @ 0x824B3540 (r10), `fable2_hook_ce_g1b` @ 0x824B3568 (r9) and `fable2_hook_ce_grantavail` @ 0x824ACAE0 (r3, the return of `GuildChestCE_GetAvailableFlag_824ACAE0`); toggle: `[patches] unlock_ce` | Same shape for the Collectors Edition chest in `GuildChest_GetCEContent_824B3528`: both gate results forced to 1, and the grant method's return forced to 1. | Hook confirmed in generated code + clean startup; in-game chest unlock pending manual test |
 
 To add a new code patch: a `[[entrypoint.midasm_hook]]` entry + hook
 function gated on a `[patches]` config key (preferred), or an
@@ -196,24 +196,16 @@ the 1% low (`low1%`, the rate of the slowest 1% of frames), the longest frame
    Disable Texture Morphing (be16 0x8220EF10=0x4280), 21:9 / 32:9 widescreen —
    all .text/data-in-.text, so expect the same "applied but inert" behavior for
    their code ops if applied to the guest image.
-3. **Oddity worth investigating (separate issue):** the recompiled C++ for
-   `sub_8233AE50` (generated/default/fable_2_recomp.65.cpp:3211) was compiled
-   from a word at 0x8233AEB4 of `0xD9009510` (stfd f0,0x9510(r8)), but the
-   current `default.xex` image contains `0xD8089510` (stfd f8,0x1510(r0))
-   there — verified two independent ways: an independent AES-CBC +
-   basic-compression-block expansion of default.xex, and a live read of the
-   running process's guest arena (see scratch/fable2_image_decrypted_expanded.bin
-   for the fully expanded image). Neighboring words 0x8233AE54 and
-   0x8233AE98 differ too. Same file (SHA-verified, unchanged since
-   2026-08-26) and the v0.10.0 XEX loader source is byte-identical to the
-   nightly's — so the prebuilt codegen tool's image and the runtime image
-   differ by a handful of bytes (register fields transposed / stray bits).
-   Possibly a `be<enum>` struct-layout difference in
-   `xex2_opt_file_format_info` between the prebuilt 0.10.0 tool and the
-   source-built nightly runtime (block table at +8 vs +12). If any recompiled
-   function's data operands come from those bytes, the recompiled code is
-   subtly out of sync with what the runtime loads. Low priority (the game
-   plays fine), but worth a dedicated look if anything mysterious happens.
+3. **Resolved (26 Nov 2026): there is no codegen/image mismatch.** This note
+   used to say that the recompiled `Game_InitTickRatesAndSystems_8233AE50`
+   was compiled from a different word at 0x8233AEB4 than `default.xex`
+   holds. The two decodings were swapped. `0xD8089510`, the word in the
+   image, is `stfd f0,-27376(r8)` (FRS = f0, RA = r8, D = 0x9510), which is
+   exactly what the generated code contains. `0xD9009510` would be
+   `stfd f8,-27376(r0)`. The neighbouring stores read the same way in the
+   generated code (`stfd f0,-27368(r9)` at 0x8233AE98). Checked by reading
+   the generated code on Windows; the expanded image file the note cited was
+   local and is not in the repo.
 
 ## XEX2 decoding notes (for future reference)
 

@@ -1,6 +1,6 @@
 # AMD GPU hang in Wraithmarsh: overview
 
-**Status:** merged · **Commits:** SDK 0fe6654 (himdo/rexglue-sdk#29), first picked up by the master pin in 2df8825 (#158), shipped in 1.6.0 · **Last checked against:** 7863041 (SDK pin 22ef700)
+**Status:** merged · **Commits:** SDK 0fe6654 (himdo/rexglue-sdk#29), first picked up by the master pin in 2df8825 (#158), shipped in 1.6.0 · **Last checked against:** c2a9d12 (SDK pin 22ef700)
 
 Issue: [#126](https://github.com/himdo/Fable-2-Recomp/issues/126).
 
@@ -27,5 +27,5 @@ Update to 1.6.0 or later. If an AMD card still freezes, post the game log and yo
 
 ## Not the same problem
 
-- **Laptops and integrated graphics** show the same "device hung" message, but for a different reason. See `docs/fix/integrated_graphics_crash/`.
+- **Laptops and integrated graphics** show the same "device hung" message, but for a different reason. See [the integrated graphics crash](../integrated_graphics_crash/overview.md).
 - **Low frame rates on AMD** are a performance question, not this crash.
