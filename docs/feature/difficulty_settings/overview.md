@@ -265,7 +265,7 @@ Details are in technical.md sections 15 (code reading) and 16 (in-game results).
 4. **Feature code, next steps:** ~~the New Game difficulty cards~~ (done 2026-11-24), the pause-menu entry (F8 for now), Hardcore saving, the slot label (started), then enemy health.
 5. ~~Next research: enemy health and telling friend from foe~~ (done 2026-11-27, technical.md 21; decision 7 below is open), then where the pause menu gets its items.
 6. Tidy up before anything goes to master:
-   - delete the probe and its temporary hooks;
+   - ~~delete the probe and its temporary hooks~~ (done 2026-11-27);
    - delete the marker files in the slot folders;
    - remove the `saves.backup-difficulty-2026-11-20` backup.
 
@@ -395,7 +395,7 @@ The hero can buy about 0.74× as much on Medium, 0.54× on Hard and 0.46× on Ha
 8. ~~**Property prices**~~: decided 2026-11-22, yes, buying and selling (decision 6). The gold-gain rule skips property sales.
 9. ~~**Which gold gains scale**~~: decided 2026-11-22, earned gold but not sales (decision 6). Script-paid gold is all earned gold, so no script changes are needed.
 10. **Decision 7, enemy health (technical.md 21.3):** how should enemies get tougher?
-    - **A (recommended):** every hit on an enemy of the hero takes less health (÷ 1.25 / 1.5 / 2.0), whoever lands it: the hero, the dog, henchmen or allies. Villagers, friendly guards and scripted kills aren't affected. The research probe has to be removed first, because it uses the same function.
+    - **A (recommended):** every hit on an enemy of the hero takes less health (÷ 1.25 / 1.5 / 2.0), whoever lands it: the hero, the dog, henchmen or allies. Villagers, friendly guards and scripted kills aren't affected. The research probe has to be removed first, because it uses the same function. **Chosen by delta4o on 2026-11-27; the probe is removed.**
     - **B:** only the hero's own hits do less damage, on every target, villagers and chickens included. Much simpler, but the dog and allies hit as hard as on Easy.
     - Raising enemies' maximum health at spawn was ruled out: it would be written into the save.
 

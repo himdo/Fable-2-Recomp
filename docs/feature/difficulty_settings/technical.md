@@ -503,7 +503,7 @@ Enemy health is the last multiplier without code (decision 6: ×1.25 / 1.5 / 2.0
 #### 21.4 Before the code
 
 - **Decision 7 (open, for delta4o):** design A or B (overview).
-- Delete the probe and its seven temporary hooks (14.4), which frees `HealthComp_Modify_8268BD90`.
+- ~~Delete the probe and its seven temporary hooks (14.4), which frees `HealthComp_Modify_8268BD90`~~ (done 2026-11-27).
 - Check in game: a guard made hostile, a bandit, a beetle or hollow man, the dog's bites, a spell, a crossbow bolt, and a scripted kill (it must still kill).
 
 ### 20. Round 4 in game (2026-11-27, `fable_2_082.log`)
@@ -1136,10 +1136,10 @@ The log has `gold +2123 from 0x828B0438` (inside `Ownership_SellProperty_828B01C
 On `feature/game-difficulty`. Nothing here is meant for master yet.
 
 - `src/core/hotfunc/difficulty/Difficulty.cpp` (2026-11-22): **feature code, step 1** (section 18). It applies the decision-6 multipliers for gold gained, prices, damage taken and collected XP, from the hero's game level.
-- `src/core/hotfunc/unsorted/DifficultyProbe.cpp`: the research probe (14.4). bd6846a holds round 1; round 2 is the rewrite on 2026-11-21. On 2026-11-22 its overrides of `Difficulty_GetMultiplier_823C92F0`, both item price functions and `MoneyComp_Modify_8239E698` moved to the feature file. **Temporary: remove it before any PR to master.**
+- `src/core/hotfunc/unsorted/DifficultyProbe.cpp`: the research probe (14.4). bd6846a holds round 1; round 2 is the rewrite on 2026-11-21. On 2026-11-22 its overrides of `Difficulty_GetMultiplier_823C92F0`, both item price functions and `MoneyComp_Modify_8239E698` moved to the feature file. **Deleted on 2026-11-27** (before the enemy-health code, which needs `HealthComp_Modify_8268BD90`); its log lines (`[difficulty-probe]`) are only in the older logs.
 - `fable_2_manifest.toml`: a "Difficulty settings" block at the end with:
   - the names below;
-  - seven TEMPORARY `fable2_probe_*` midasm hooks (14.4), to remove together with the probe.
+  - until 2026-11-27, seven TEMPORARY `fable2_probe_*` midasm hooks (14.4); deleted together with the probe.
 - `docs/feature/difficulty_settings/`: these docs. They moved here on 2026-11-21 from a personal notes folder (decision 4), and there's a row in `docs/README.md`.
 
 Functions named on 2026-11-21. All were generic `sub_` names before:
@@ -1294,6 +1294,6 @@ Run on Windows 11 (the dev machine) on 2026-11-21, before and after the round 2 
 3. Next research after that: enemy health and the friend-or-foe check (decision 0b), and the pause-menu population point.
 4. Find the game's spelling of "Guildmaster" (section 13.7).
 5. **Clean-up** before any PR to master:
-   - the probe file and the TEMPORARY hooks;
+   - ~~the probe file and the TEMPORARY hooks~~ (deleted 2026-11-27);
    - the `difficulty-probe-marker.txt` files in `Hero000`–`Hero004`;
    - the `saves.backup-difficulty-2026-11-20` backup. Slot 1's hero has the changed flag set and was saved again on 2026-11-22 (16.6); restore it from the backup if that matters.
