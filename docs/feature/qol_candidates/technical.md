@@ -1,6 +1,6 @@
 # Quality-of-life candidates: technical notes
 
-**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** 7863041
+**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** c2a9d12
 
 Claims are labelled **Verified** (checked in this repo or a primary source), **Reported** (a source says so, not checked here) or **Inference** (reasoned, not tested). This came out of the [November 2026 research](../../reference/research/README.md).
 
@@ -80,14 +80,14 @@ Sort the [player complaints](../player_complaints/technical.md) into fixes a rec
 
 #### R8: rent clock exploit
 
-- **Verified (difficulty branch):** in-game rent is paid when the game tick passes a due time stored on the ownership component.
+- **Verified (difficulty branch):** in-game rent is paid when the game tick passes a due time stored on the ownership component. **Verified in the generated code** (Windows, 26 Nov 2026): that "tick" is a counter at 0x8331950C that `GameWorldState_Update_821D43D8` adds 1 to on every world update, so rent counts world updates, not seconds (see [high_tick_rate_side_effects](../../fix/high_tick_rate_side_effects/technical.md)).
 - **Verified (binding):** `Timing.GetRealWorldHour` exists; the console's `clock` prints frames, tick rate, day, time of day and real-world time.
 - **Inference:** the exploit (changing the system clock to collect rent) needs a real-time read on load or resume, which hasn't been found. In the recomp the guest's clock is the PC's clock as passed through the SDK kernel, so a fix would either clamp that clock for the game or cap the payout in the rent functions. Find the real-time read first.
 
 #### R9: save backups and slots
 
 - **Verified:** saves live in `saves/` next to the exe (`src/core/fable_2_app.h`, `OnConfigurePaths`: `user_data_root = exe_dir / "saves"`). The README tells players to back up that folder. No backup code exists.
-- **Verified (difficulty branch):** every save goes through `SaveManager_Save_824E8990`, with the Lua bindings `LuaSaveManager_SaveGame_824E8978` and `LuaSaveManager_AutoSaveGame_824E8D28`. One slot is a `Hero000` folder holding the main, hero, chapter and fail-quest saves plus a header. The SDK may recreate the whole folder on each save.
+- **Verified (difficulty branch):** every save goes through `SaveManager_Save_824E8990`, with the Lua bindings `LuaSaveManager_SaveGame_824E8978` and `LuaSaveManager_AutoSaveGame_824E8D28`. One slot is a `Hero<NNN>` folder holding `mainsave.bin`, `herosave.bin`, `chaptersave.bin`, `saveuid.bin` and `texturemorphs.bin`, plus `failquestsave.bin` once a quest has been failed (**Verified** in local saves on Windows; no file there is a separate header). The SDK may recreate the whole folder on each save.
 - **Inference:** a backup is a host-side copy of `saves/` triggered after a save finishes. It can't happen inside a hook, because hooks run on guest threads and must not do file I/O (`CLAUDE.md`). An in-game slot picker is larger and needs the front-end save screens mapped.
 
 #### R10: collectibles tracker
@@ -111,8 +111,8 @@ Sort the [player complaints](../player_complaints/technical.md) into fixes a rec
 #### R13: Pub Games items
 
 - **Verified:** `AddDebugPubItems` is registered in the engine but never called by a shipped script (`FABLE2_LUA_API.md`, section 4).
-- **Verified (difficulty branch):** a `Fable2PubInfo.xml` sits in each save slot, and pub-game winnings are paid by `PubGame_PayResult_825ABDC0`.
-- **Inference:** `Fable2PubInfo.xml` may be where the cross-title Pub Games flag was read from. `f2 dbg list Pub` would show whether `AddDebugPubItems` is a `Debug` function; calling it would answer whether the items are on disc. See [cut_content](../cut_content/technical.md).\[4\]
+- **Verified (difficulty branch):** pub-game winnings are paid by `PubGame_PayResult_825ABDC0`. A `Fable2PubInfo.xml` (UTF-16) sits in the save slot, but not in every one: in four local slots on Windows only `Hero000` had it. Its character record has `Name`, `GoldBalance`, `Debt`, `Rating`, `BestTournamentRank` and `SharedInventoryMask` fields.
+- **Inference:** `SharedInventoryMask` in `Fable2PubInfo.xml` is probably where the cross-title Pub Games prizes were recorded. The 15 prize item records are on the disc (see [cut_content](../cut_content/technical.md)). `f2 dbg list Pub` would show whether `AddDebugPubItems` is a `Debug` function; calling it would answer whether the items are on disc. See [cut_content](../cut_content/technical.md).\[4\]
 
 #### R14: fog, LOD and pop-in
 

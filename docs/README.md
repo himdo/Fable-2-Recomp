@@ -15,7 +15,7 @@ When you finish a fix or a feature, add or update its folder and its row below. 
 | --- | --- | --- | --- |
 | [alt_tab_script_crash](fix/alt_tab_script_crash/overview.md) | merged | c5c80ff (#189), 266f181 (#195) | Crash after alt-tab: the direct mouse camera started a game script from the render thread |
 | [amd_gpu_hang](fix/amd_gpu_hang/overview.md) | merged | SDK 0fe6654 (rexglue-sdk#29), pin in 2df8825 (#158) | RX 7000/9000 GPU hang in Wraithmarsh: negative relative constant index read 4 GB away |
-| [fps_cap](fix/fps_cap/overview.md) | merged | 73d89b0, d28da25 (#143), e0c69c0 (#135) | The game's 30 FPS lock, and vsync presenting at refresh + 30 |
+| [fps_cap](fix/fps_cap/overview.md) | merged | 73d89b0, 62b4db2, d28da25 (#143), e0c69c0 (#135) | The game's 30 FPS lock, and vsync presenting at refresh + 30 |
 | [high_tick_rate_side_effects](fix/high_tick_rate_side_effects/overview.md) | no commit yet (research only) | — | Job minigames and other tick-counted timers run fast with High Tick Rate; per-system plan |
 | [integrated_graphics_crash](fix/integrated_graphics_crash/overview.md) | merged (hybrid laptops); iGPU-only open | 4d58a5f (#55) | Crash after the opening cutscene on integrated graphics |
 | [main_menu_crash](fix/main_menu_crash/overview.md) | merged | afebcc5 | Source builds crashed at the main menu; repeated memory reserves must fail |
@@ -40,7 +40,7 @@ When you finish a fix or a feature, add or update its folder and its row below. 
 | [legal_and_distribution](feature/legal_and_distribution/overview.md) | no commit yet (research only) | — | Late-2026 recomp takedowns and the no-game-data distribution rules |
 | [manifest_naming_check](feature/manifest_naming_check/overview.md) | no commit yet | — | A CI check that new and renamed manifest names follow the naming rules and have a comment |
 | [mouse_aim](feature/mouse_aim/overview.md) | merged | 49c70ab (#183) | The mouse moves the ranged aim reticle; highlight release |
-| [mouse_camera](feature/mouse_camera/overview.md) | merged | 80e8361 (#177) | Direct mouse camera: a fixed angle per count, no stick top speed or coast |
+| [mouse_camera](feature/mouse_camera/overview.md) | merged | 80e8361 (#177); follow-ups c5c80ff (#189), aae1116 (#227) | Direct mouse camera: a fixed angle per count, no stick top speed or coast |
 | [player_complaints](feature/player_complaints/overview.md) | no commit yet (research only) | — | What players complained about in 2008–2009, and what the recomp already covers |
 | [qol_candidates](feature/qol_candidates/overview.md) | no commit yet (research only) | — | Reasonable (R1–R19) and out-of-scope (U1–U10) fixes and features, with what each builds on; achievements and website items already work |
 | [recomp_landscape](feature/recomp_landscape/overview.md) | no commit yet (research only) | — | Other Xbox 360 recomps and what Fable 2 Recomp can borrow from them |

@@ -1,6 +1,6 @@
 # High tick rate side effects: overview
 
-**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** 7863041
+**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** c2a9d12
 
 ## What the options do
 

@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import re
 import shutil
 from types import SimpleNamespace
 import zipfile
@@ -83,7 +84,42 @@ def describe_package():
             "README.md", "licenses/XenosTiling-LICENSE.txt", "fable2_config.toml", "data/scripts/recomp/F5.lua",
             "assets/fonts/Google Sans/GoogleSans.ttf", "assets/fonts/Google Sans/OFL.txt")}
         assert config == "repo config"
-        assert build_info == {"profiles": ["goty"], "version": "1.6.0"}
+        assert build_info["profiles"] == ["goty"]
+        assert build_info["version"] == "1.6.0"
+
+    def test_should_list_every_file_with_its_checksum_for_the_in_place_upgrade(inputs):
+        # The launcher checks a downloaded release against this list before it installs anything,
+        # and uses the installed release's list to remove the files a newer release dropped.
+        release, _ = package(inputs)
+
+        with zipfile.ZipFile(release) as archive:
+            contents = {name.removeprefix("Fable 2 1.6.0/"): hashlib.sha256(archive.read(name)).hexdigest()
+                        for name in archive.namelist()}
+            listed = json.loads(archive.read("Fable 2 1.6.0/fable2_build.json"))["release"]
+
+        # The build info can't hold its own checksum, so it is the one file not in the list.
+        del contents["fable2_build.json"]
+        assert listed["files"] == contents
+
+    def test_should_mark_the_settings_file_as_the_players_own(inputs):
+        # An upgrade installs these files only when they are missing, so it never resets settings.
+        release, _ = package(inputs)
+
+        with zipfile.ZipFile(release) as archive:
+            listed = json.loads(archive.read("Fable 2 1.6.0/fable2_build.json"))["release"]
+
+        assert listed["user_files"] == ["fable2_config.toml"]
+
+    def test_should_use_the_package_layout_the_launcher_accepts(inputs):
+        # Installed launchers refuse any other number and send the player to the release page.
+        launcher = (ROOT / "launcher/Fable2.Launcher/ReleaseUpgrade.cs").read_text(encoding="utf8")
+        accepted = int(re.search(r"const int SupportedFormat = (\d+);", launcher).group(1))
+        release, _ = package(inputs)
+
+        with zipfile.ZipFile(release) as archive:
+            listed = json.loads(archive.read("Fable 2 1.6.0/fable2_build.json"))["release"]
+
+        assert listed["format"] == accepted
 
     def test_should_put_the_symbols_in_their_own_zip(inputs):
         _, symbols = package(inputs)
