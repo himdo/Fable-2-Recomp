@@ -3,6 +3,7 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import shutil
 from types import SimpleNamespace
 import zipfile
 
@@ -49,6 +50,22 @@ def inputs(tmp_path):
 
 def package(inputs):
     return packager.package(inputs.root, inputs.build, inputs.launcher, inputs.dist, "1.6.0")
+
+
+def fake_package(calls):
+    """A stand-in for package() that records what main() passes it instead of building zips."""
+    def record(root, build, launcher, output, version):
+        calls.append(SimpleNamespace(root=root, build=build, launcher=launcher, output=output, version=version))
+        return [Path("release.zip")]
+    return record
+
+
+def fake_git(commands, output):
+    """A stand-in for subprocess.check_output that records the command and prints `output`."""
+    def run(command, **kwargs):
+        commands.append(command)
+        return output
+    return run
 
 
 def describe_package():
@@ -147,6 +164,42 @@ def describe_package():
 
         assert not inputs.dist.exists()
 
+    def test_should_stop_when_the_font_folder_is_missing(inputs):
+        # The keycap prompts read the bundled font at runtime, so a release without it is broken.
+        shutil.rmtree(inputs.root / "assets/fonts")
+
+        with pytest.raises(SystemExit, match="missing assets/fonts"):
+            package(inputs)
+
+        assert not inputs.dist.exists()
+
+    def test_should_stop_when_the_font_folder_is_empty(inputs):
+        # Only an empty "Google Sans" subfolder is left: no font file to ship.
+        (inputs.root / "assets/fonts/Google Sans/GoogleSans.ttf").unlink()
+        (inputs.root / "assets/fonts/Google Sans/OFL.txt").unlink()
+
+        with pytest.raises(SystemExit, match="assets/fonts is empty"):
+            package(inputs)
+
+        assert not inputs.dist.exists()
+
+    def test_should_stop_when_the_repo_config_is_missing(inputs):
+        # The build folder's copy may hold a developer's own settings, so it must never stand in.
+        (inputs.root / "config/fable2_config.toml").unlink()
+
+        with pytest.raises(SystemExit, match="fable2_config.toml"):
+            package(inputs)
+
+        assert not inputs.dist.exists()
+
+    def test_should_stop_when_the_launcher_is_missing(inputs):
+        inputs.launcher.unlink()
+
+        with pytest.raises(SystemExit, match="Fable2Launcher.exe"):
+            package(inputs)
+
+        assert not inputs.dist.exists()
+
     # --- Edge cases -------------------------------------------------------
 
     def test_should_remove_old_dist_files(inputs):
@@ -165,3 +218,32 @@ def describe_package():
         package(inputs)
 
         assert (inputs.build / "fable2_build.json").read_text() == '{"profiles": ["goty"]}'
+
+
+def describe_main():
+    # --- Happy flow -------------------------------------------------------
+
+    def test_should_package_the_version_given(monkeypatch, capsys):
+        calls = []
+        monkeypatch.setattr(packager, "package", fake_package(calls))
+        monkeypatch.setattr("sys.argv", ["package_release.py", "--version", "1.7.0"])
+
+        packager.main()
+
+        assert calls[0].version == "1.7.0"
+        assert calls[0].build == packager.ROOT / "out/build/win-amd64-release"
+        assert calls[0].launcher == packager.ROOT / "out/tests/launcher-build/Fable2Launcher.exe"
+        assert calls[0].output == packager.ROOT / "out/dist"
+        assert "Packaged release.zip" in capsys.readouterr().out
+
+    def test_should_default_to_the_git_tag(monkeypatch):
+        # build.cmd package runs the tool without --version, so this is how real releases get theirs.
+        calls, commands = [], []
+        monkeypatch.setattr(packager, "package", fake_package(calls))
+        monkeypatch.setattr(packager.subprocess, "check_output", fake_git(commands, "v1.6.1-3-gabc1234\n"))
+        monkeypatch.setattr("sys.argv", ["package_release.py"])
+
+        packager.main()
+
+        assert commands[0] == ["git", "-C", str(packager.ROOT), "describe", "--tags"]
+        assert calls[0].version == "v1.6.1-3-gabc1234"

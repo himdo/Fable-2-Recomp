@@ -16,6 +16,8 @@ spec.loader.exec_module(collisions)
 SECTION_OFFSET = 0x400
 SECTION_RVA = 0x1000
 EXPORT_DIRECTORY_SIZE = 40
+# Where the PE header says where the export table is: its address, then its size (4 bytes each).
+EXPORT_DIRECTORY_ENTRY = 0x58 + 112
 
 
 def build_pe(exports):
@@ -39,7 +41,7 @@ def build_pe(exports):
     headers[0x40:0x44] = b"PE\0\0"
     struct.pack_into("<HHIIIHH", headers, 0x44, 0x8664, 1, 0, 0, 0, 240, 0x22)  # one section
     struct.pack_into("<H", headers, 0x58, 0x20B)  # 64-bit optional header
-    struct.pack_into("<II", headers, 0x58 + 112, SECTION_RVA, len(section))  # export directory
+    struct.pack_into("<II", headers, EXPORT_DIRECTORY_ENTRY, SECTION_RVA, len(section))
     struct.pack_into("<IIII", headers, 0x148 + 8, len(section), SECTION_RVA, len(section), SECTION_OFFSET)
     return bytes(headers) + section
 
@@ -80,6 +82,14 @@ def describe_pe_exports():
             exports = collisions.pe_exports(dll)
 
         assert exports == {"__imp__NtClose", "RealExport"}
+
+    def test_should_read_no_exports_from_a_dll_without_an_export_table(dll):
+        # Address 0 in the header's export entry means "this DLL has no export table".
+        data = bytearray(build_pe(["__imp__NtClose"]))
+        struct.pack_into("<II", data, EXPORT_DIRECTORY_ENTRY, 0, 0)
+        dll.write_bytes(data)
+
+        assert collisions.pe_exports(dll) == set()
 
 
 def describe_main():
@@ -158,6 +168,19 @@ def describe_main():
         code, output = run_check(manifest, dll)
 
         assert code == 2
+        assert "could not read any DLL exports" in output
+
+    def test_should_give_a_usage_error_for_a_corrupt_export_table(manifest, dll):
+        # The header points the export table at an address far past the DLL's only section,
+        # so the tool can't find it in the file. It skips the DLL instead of crashing.
+        data = bytearray(build_pe(["__imp__NtClose"]))
+        struct.pack_into("<II", data, EXPORT_DIRECTORY_ENTRY, 0x900000, EXPORT_DIRECTORY_SIZE)
+        dll.write_bytes(data)
+
+        code, output = run_check(manifest, dll)
+
+        assert code == 2
+        assert "skip" in output
         assert "could not read any DLL exports" in output
 
     # --- Known issues -----------------------------------------------------

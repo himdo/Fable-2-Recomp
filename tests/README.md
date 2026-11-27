@@ -33,6 +33,7 @@ them up to print one line per test.
 | Suite | Command | Needs | In CI? |
 |---|---|---|---|
 | Version check | `python tools/generate_game_versions.py --check` | Python | Yes |
+| Manifest naming check | `python tools/check_manifest_names.py --base origin/master` | Python, git | Yes |
 | Python tests | `python -m pytest` | Python 3.11+ and `tests/requirements.txt` | Yes |
 | Launcher tests | `dotnet run --project tests/Fable2.Launcher.ConfigTests -c Release` | .NET 8 SDK | Yes |
 | Native tests | `tests\run_native_tests.cmd` | Windows, Clang with the Visual Studio C++ tools installed, and the SDK submodule | Yes |
@@ -47,6 +48,16 @@ Checks that the generated files in `constants/` match
 `constants/game_versions.json`. If it reports stale constants, run it without
 `--check` to regenerate them, then commit the result.
 
+### Manifest naming check
+
+Checks that the entries a branch adds to `fable_2_manifest.toml` or renames
+have a real name shaped like `Subsystem_WhatItDoes_ADDRESS`, with a comment
+above them, and that no name is used twice or ends in another entry's
+address. CI compares with master (`--base HEAD~1` on GitHub's merge commit).
+Without `--base` it checks the whole manifest and counts the older entries
+that don't follow the rules yet. See
+[docs/feature/manifest_naming_check/technical.md](../docs/feature/manifest_naming_check/technical.md).
+
 ### Python tests
 
 | File | What it checks |
@@ -55,6 +66,7 @@ Checks that the generated files in `constants/` match
 | `core/test_recomp_scripts_startup.py` | The recomp Lua scripts are copied into a separate game folder (`--game_data_root`) from `OnPostInitLogging` and nowhere later. The SDK lists the game folder once, when it mounts it right after that hook, so a script copied later can't be opened by the game until the next start. Reads the C++ source |
 | `core/test_world_thread_runscript.py` | Every host RunScript (`f5lua::run_external`) is reached only from `console::service_world_thread`, which runs at the start of a world update on the world's own thread. That function is wired only to photo mode's world-update hook, inside the scope the runtime gate checks, and the MainRenderLoop hook `console::poll` starts no script. RunScript from any other thread corrupts the game's script engine (the 1.6 alt-tab crash, #189). Reads the C++ source and prints the call chain that breaks the rule |
 | `lua/test_recomp_scripts.py` | No recomp Lua script registers itself with the game's GeneralScriptManager, which writes its running scripts into save games, except the F5 menu, which ends itself when the menu closes. Only the F5 menu and the console's save cleanup touch the GeneralScriptManager |
+| `test_tracked_files.py` | Git tracks no game files: nothing in the disc rip's folders at the root (`data/`, `nxeart`, `$SystemUpdate/`, `Gamefiles/`) and no `.xex`, `.bnk` or `.bik` file anywhere, in any letter case. Other `data` folders and similar-looking names pass. A guard checks that the tracked-file list isn't empty |
 | `tools/repro/test_add_version_resource.py` | The release step that adds version info to a DLL writes the given company, product and version, keeps the existing manifest, moves the sections after `.rsrc` without changing them, and names the version after the file. It leaves a DLL alone when it has no resources, already has version info, or has no room to grow. Two known issues are marked as expected failures |
 | `tools/repro/test_clean_pe.py` | The release build's post-build step trims `rexruntime.dll` to what the game and the GPU plugin import plus the `rex::` API, keeps each name pointing at its own function, and pins every timestamp. It reports a broken DLL and carries on, skips a runtime without exports, leaves other DLLs' exports alone, and changes nothing on a second run |
 | `tools/repro/test_gen_def.py` | The `.def` generator keeps what every consumer imports from the runtime plus the `rex::` API, in sorted order. It drops imports the runtime doesn't export, skips missing consumers, and honors `--tag` |
@@ -62,9 +74,11 @@ Checks that the generated files in `constants/` match
 | `tools/repro/test_trim_exports.py` | The standalone export trimmer keeps only the names in a `.def`, keeps each pointing at its own function, and leaves a file alone when it isn't a PE, has no exports or matches nothing in the `.def` |
 | `tools/test_apply_recomp_patches.py` | The patch step applies each patch once, fails on a missing anchor and honors its on/off switch. One known issue is marked as an expected failure |
 | `tools/test_fable2_control.py` | Each command sends the request the server expects, `state` strips spaces from button names and keeps values of 0, a token login goes first and stops on a bad token, and connection errors and timeouts are reported as JSON. One known issue is marked as an expected failure |
-| `tools/test_game_versions.py` | Generated version files match the catalogue, invalid or duplicate entries are rejected, the default profile must be compatible and in the validated code group, only those versions get a CMake profile, and `--check` reports stale files. One known issue is marked as an expected failure |
+| `tools/test_game_versions.py` | Generated version files match the catalogue, invalid or duplicate entries are rejected, the default profile must be compatible and in the validated code group, only those versions get a CMake profile, and `--check` reports stale or missing files. Without `--check` it writes them, with LF line endings even on Windows. One known issue is marked as an expected failure |
 | `tools/test_make_hotfunc_overrides.py` | The override generator extracts and transforms functions correctly and never overwrites a hand-tuned file. Four known issues are marked as expected failures |
 | `tools/test_manifest_collisions.py` | The check for manifest names that clash with DLL exports reports every clash, ignores commented-out names, rejects a missing, unreadable or empty DLL, and the real manifest avoids the kernel wait names that once broke audio. One known issue is marked as an expected failure |
+| `tools/test_manifest_names.py` | The manifest naming check reads each entry's address, name and comment, and ignores hook tables. It fails on a name that ends in another address or is used twice, and on a new or renamed entry with a placeholder name, the wrong shape or no comment. It skips entries without a name and unchanged ones, and the real manifest passes the every-entry rules. Uses small throwaway git repos |
+| `tools/test_merge_dir_manifest.py` | Content staging's `dir.manifest` merge copies the disc manifest when none is staged, and otherwise keeps every disc line in disc order (repeats included) followed by the lines only the staged manifest has, each written once. Every line is written with CRLF, whatever the input used and even without a final line ending; blank lines are dropped and names in any encoding pass through. An empty disc manifest keeps the staged lines, a second run changes nothing, and no temporary file is left behind, even one from an earlier run. A missing disc manifest or the wrong arguments fail |
 | `tools/test_mouse_log_format.py` | The lines the game writes to `fable2_mouse.log` (poll lines from `src/input/mouse_diag.h`, camera updates from `mouse_diag.lua` with the direct mouse camera's turn, and the `f2 mouse inject` and `f2 mouse mode` notes) are read the way `mouse_stats.py` expects. Reads the format strings from the source, so a renamed field fails here |
 | `tools/test_mouse_stats.py` | The `fable2_mouse.log` summariser splits the log into one run per `f2 mouse inject`, counts polls and camera updates, works out how much movement the camera saw with and without smoothing, scores the steady yaw per update while leaving out the ends of a run, adds up the total turn (stick and direct mouse camera) with the share that coasted on after the input stopped and how fast the turn got going, labels each run with its speed profile and mouse mode, ends a run early at its `f2 mouse stop` note, and prints the text and JSON reports |
 | `tools/test_make_upgrade_test_zip.py` | The tool that turns a published release zip into a test release for the in-place upgrade keeps the files, stamps the new version, adds the file list with checksums, swaps in or leaves out the files it is told to, and stops on a file that isn't there or a zip that isn't a release |

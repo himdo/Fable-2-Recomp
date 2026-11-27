@@ -86,6 +86,53 @@ def describe_main():
 
         assert sorted(p.name for p in destination.parent.iterdir()) == ["dir.manifest"]
 
+    def test_should_write_a_staged_only_line_once(files):
+        source, destination = files
+        destination.parent.mkdir(parents=True)
+        destination.write_bytes(b"scripts\\recomp\\F5.lua\r\nscripts\\recomp\\F5.lua\r\n")
+
+        run(source, destination)
+
+        assert destination.read_bytes() == DISC + b"scripts\\recomp\\F5.lua\r\n"
+
+    def test_should_keep_the_staged_lines_when_the_disc_manifest_is_empty(files):
+        # ensure_recomp_manifest.cmake creates an empty manifest itself, so empty files do occur.
+        source, destination = files
+        source.write_bytes(b"")
+        destination.parent.mkdir(parents=True)
+        destination.write_bytes(b"scripts\\recomp\\F5.lua\n")
+
+        run(source, destination)
+
+        assert destination.read_bytes() == b"scripts\\recomp\\F5.lua\r\n"
+
+    def test_should_replace_a_temporary_file_left_by_an_earlier_run(files):
+        source, destination = files
+        destination.parent.mkdir(parents=True)
+        (destination.parent / "dir.manifest.tmp").write_bytes(b"half a manifest")
+
+        run(source, destination)
+
+        assert sorted(p.name for p in destination.parent.iterdir()) == ["dir.manifest"]
+        assert destination.read_bytes() == DISC
+
+    def test_should_keep_repeated_disc_lines_in_disc_order(files):
+        # The docstring promises every source line in source order, repeats included.
+        source, destination = files
+        source.write_bytes(b"levels.bnk\r\nart\\gui\\gui.gdb\r\nlevels.bnk\r\n")
+
+        run(source, destination)
+
+        assert destination.read_bytes() == b"levels.bnk\r\nart\\gui\\gui.gdb\r\nlevels.bnk\r\n"
+
+    def test_should_read_a_last_line_without_a_line_ending(files):
+        source, destination = files
+        source.write_bytes(b"levels.bnk\r\nart\\gui\\gui.gdb")
+
+        run(source, destination)
+
+        assert destination.read_bytes() == b"levels.bnk\r\nart\\gui\\gui.gdb\r\n"
+
     def test_should_fail_without_a_source_manifest(files, tmp_path):
         _, destination = files
 

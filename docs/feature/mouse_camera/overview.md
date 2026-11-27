@@ -1,6 +1,6 @@
 # Mouse camera (direct mouse look): overview
 
-**Status:** merged · **Commits:** 80e8361 (#177), shipped in 1.6.0; follow-up fixes in #189 and #227 · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** 80e8361 (#177), shipped in 1.6.0; follow-up fixes c5c80ff (#189) and aae1116 (#227) · **Last checked against:** 7863041
 
 ## What players saw before
 

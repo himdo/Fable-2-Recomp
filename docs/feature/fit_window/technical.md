@@ -1,6 +1,6 @@
 # Fit game to window (widescreen)
 
-**Status:** merged · **Commits:** 4f0afe5 (#127), docs be92838 · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** 4f0afe5 (#127), docs be92838 · **Last checked against:** 7863041
 
 `src/core/fable2_fit_window.h` renders the game at the window's aspect ratio
 (4:3 up to 4:1) and stretches the frame to fill the window.

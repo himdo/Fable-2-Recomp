@@ -55,9 +55,10 @@ name = "GameFrame_HfTickUpdate_82278C90"
 ## 6. Check
 
 1. `python -c "import tomllib; tomllib.load(open('fable_2_manifest.toml','rb'))"`: the manifest still parses (no duplicate keys).
-2. `python tools/check_manifest_collisions.py fable_2_manifest.toml out/tooling/runtime-sdk/win-amd64/bin/rexruntime.dll`: no clash with the runtime's exports. Pass the DLL path; the default search folders are out of date. It needs a built SDK; if there isn't one, say the check wasn't run.
-3. `git grep` shows no old names left outside historical logs.
-4. Build (`build.cmd -release fable_2`) so codegen regenerates with the new names. It needs the game files; if they aren't available, say so.
+2. `python tools/check_manifest_names.py --base origin/master`: every entry the branch adds or renames has a real name in the right format, a comment above it, its own address as the suffix and a unique name. CI runs the same check.
+3. `python tools/check_manifest_collisions.py fable_2_manifest.toml out/tooling/runtime-sdk/win-amd64/bin/rexruntime.dll`: no clash with the runtime's exports. Pass the DLL path; the default search folders are out of date. It needs a built SDK; if there isn't one, say the check wasn't run.
+4. `git grep` shows no old names left outside historical logs.
+5. Build (`build.cmd -release fable_2`) so codegen regenerates with the new names. It needs the game files; if they aren't available, say so.
 
 ## 7. Report
 

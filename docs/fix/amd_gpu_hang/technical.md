@@ -1,6 +1,6 @@
 # AMD GPU hang in Wraithmarsh: technical notes
 
-**Status:** merged · **Commits:** SDK 0fe6654 (himdo/rexglue-sdk#29), first picked up by the master pin in 2df8825 (#158), shipped in 1.6.0 · **Last checked against:** 5f5f55f (SDK pin 22ef700)
+**Status:** merged · **Commits:** SDK 0fe6654 (himdo/rexglue-sdk#29), first picked up by the master pin in 2df8825 (#158), shipped in 1.6.0 · **Last checked against:** 7863041 (SDK pin 22ef700)
 
 Issue: [#126](https://github.com/himdo/Fable-2-Recomp/issues/126). SDK paths are relative to `thirdparty/rexglue-sdk/`; line numbers refer to SDK `85d96f2` (the pin at the time) unless noted. Labels: **Verified** means read in code, a log or git. **Reported** means said by a player and not checked. **Inference** means reasoned, not tested.
 

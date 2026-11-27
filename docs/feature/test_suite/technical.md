@@ -1,6 +1,6 @@
 # Test suite: technical notes
 
-**Status:** merged · **Commits:** 8957735 (#166), be11165 (#174), ffa15b3 (#196), c764cba (#197), 5cc6513 (#229) · **Last checked against:** 5f5f55f
+**Status:** merged · **Commits:** 8957735 (#166), be11165 (#174), ffa15b3 (#196), c764cba (#197), 5cc6513 (#229) · **Last checked against:** 7863041
 
 These notes record what the test suite knows that the test code doesn't say out loud: known bugs, coverage gaps, quirks and open questions. For how to run the tests and the per-file summaries, see `tests/README.md`.
 
@@ -15,7 +15,7 @@ These notes record what the test suite knows that the test code doesn't say out 
 
 None of them need game files. CI (`.github/workflows/tests.yml`) runs all four on `windows-latest` for every PR and every push to master.
 
-Baseline at 5f5f55f: **429 passed, 1 skipped, 15 xfailed.**
+Baseline at 7863041: **429 passed, 1 skipped, 15 xfailed** on Windows (CI). On macOS it's 430 passed, 15 xfailed: the symlink test in `tests/tools/test_prepare_renderer_mspack.py` is skipped only on Windows.
 
 ## Conventions
 
@@ -49,11 +49,9 @@ Baseline at 5f5f55f: **429 passed, 1 skipped, 15 xfailed.**
 - **clean_pe:** the "pefile is required" exit; trimming giving up on unresolvable export tables; the version step with DLLs not named `rex*`; a normalize step that raises.
 - **normalize_pe:** the PE32 (32-bit) header branch; non-CodeView debug entries; CodeView data too small or without `RSDS`; the non-quiet output.
 - **make_hotfunc_overrides:** CRLF handling in `extract_body`; `transform_hoist`, which only works on the real `ProcessGameFrame_82276C30` and would need a large copy of generated code to test.
-- **manifest_collisions:** a DLL with no export directory at all (the test uses one with zero names); a corrupt export table; DLLs in default locations (unreachable because of the known bug).
+- **manifest_collisions:** DLLs in default locations (unreachable because of the known bug).
 - **prepare_runtime_sdk:** the "has no commits" failure (unreachable because of known bug 1); running `prepare_renderer_mspack.py` after a real submodule update (needs network).
 - **fable2_control:** the real socket in `conn()`; every test replaces it.
-- **package_release:** `main()` argument parsing and the `git describe --tags` default version.
-- **game_versions:** the write branch of `main()` without `--check`.
 - **config_template:** value ranges (e.g. a negative scale), and whether the launcher reads every staged key.
 - **Launcher:** no WPF code (windows, code-behind) is tested, only the linked logic classes.
 
@@ -75,6 +73,10 @@ Baseline at 5f5f55f: **429 passed, 1 skipped, 15 xfailed.**
 - `fable2_control`: `script --file` with a missing file and invalid JSON passed to `raw` end in tracebacks; should they print a JSON error? Whether `RT` works as a trigger name is decided in C++ (`HandleState`), which a Python test can't reach.
 - `add_version_resource`: `read_sections` reads `SectionAlignment` (offset 32) where it means `FileAlignment` (offset 36); no `VS_FIXEDFILEINFO` block is written; two `open(...)` calls are never closed (`ResourceWarning`).
 - `apply_recomp_patches`: a failed patch keeps the earlier ones (no rollback). The test documents this; it doesn't say it's desired.
+- `package_release`: in a checkout without tags (a fork or a shallow clone), `git describe --tags` fails and packaging ends in a `CalledProcessError` traceback. Should it say to pass `--version` instead?
+- `merge_dir_manifest`: lines that differ only in letter case (`Scripts\Foo.lua`, `scripts\foo.lua`) are kept as two, although Windows paths ignore case. Does the game's index care?
+- `merge_dir_manifest`: a destination that is a folder ends in a traceback and leaves `dir.manifest.tmp` behind.
+- `merge_dir_manifest`: lines of only spaces are dropped, while `ensure_recomp_manifest.cmake` keeps them, although the docstring says the two treat blank lines alike.
 
 ## Not covered by these notes
 
