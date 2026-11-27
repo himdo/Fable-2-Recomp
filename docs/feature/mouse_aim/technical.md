@@ -1,6 +1,6 @@
 # Mouse aim (ranged aim reticle): technical notes
 
-**Status:** merged · **Commits:** 49c70ab (#183) · **Last checked against:** 7863041
+**Status:** merged · **Commits:** 49c70ab (#183) · **Last checked against:** c2a9d12
 
 Labels: **Verified** means read in the repo, the generated code or a log. **Inference** means reasoned, not tested. Game scripts are paraphrased, never pasted.
 
@@ -14,7 +14,7 @@ While aiming a ranged weapon, the mouse moves the aim reticle instead of the cam
 
 - **Scripts (paraphrased):** holding the ranged button enters player mode `PLAYER_MODE_AIM_RANGED = 23`. `cameramanager.lua` then prefers `RangedCombatCamera` over `SACCamera`. `RangedCombatCamera` has an empty `ProcessGameAction`: the camera only *follows* the native aim point (`Targeting.GetCameraSafeTargetedPosition`, rotated 11° to the side, mirrored for pistols, pitch limited to ±30°). No script moves the aim. `combatbalance.lua` sets the cursor speeds with `Debug.SetRangedCursorXSpeed(1.8)` / `YSpeed(1.5)`.
 - **Native aim chain:**
-  1. Action 71 (`RANGED_CURSOR_MOVEMENT`) handler `sub_82747090` acts only in mode 23 and stores (x, y) on the mode object.
+  1. Action 71 (`RANGED_CURSOR_MOVEMENT`) handler `AimRanged_HandleCursorMovementAction_82747090` acts only in mode 23 and stores (x, y) at +68 of the mode object.
   2. `AimTargetingUpdate_827B6228` runs each tick: `AimStickFlickDetect_827B5888` (flick/held flags at `self+232/+233` from the **raw** left stick), then `AimStickShape_827B60C8` (cubic response, flick thresholds 0.2/0.1, exponential smoothing with alpha 0.235 at `0x83320DE0`), then **`AimCursorUpdate_827B80B0`**, then the sub-target pick.
   3. `AimCursorUpdate_827B80B0` only runs while aiming. Cursor at `self+32` (x) / `+36` (y). Free move: `cursor += input × k × speed / LF tick rate`, then a box clamp (±0.8; ±1.5 in one branch). It is the only reader of the two speed globals (`0x8331941C`, `0x83319420`).
 - **End to end:** WASD → left stick → merged XInput → action 71 in mode 23 → curve + smoothing → per-tick integration and clamp → targeting position → `RangedCombatCamera` turns toward it.

@@ -69,10 +69,10 @@ void fable2_hook_website_g1b(PPCRegister& r8) {
   }
 }
 
-// Unlock Website Items. Grant method sub_8256D940 (the website-chest
-// vtable[1] "is this item new?" check): its final instruction is `xori r3,
-// r9, 1` at 0x8256D9E4. It returns 0 when the item hash is already in the
-// grant list; force r3 = 1 so the getter reports the item as granted.
+// Unlock Website Items. GuildChestWebsite_HasItem_8256D940 (the website
+// chest's "is this item in the record's list?" check): its final instruction
+// is `xori r3, r9, 1` at 0x8256D9E4. It returns 0 when the item's hash isn't
+// in the list; force r3 = 1 so the getter reports the item as granted.
 void fable2_hook_website_grantnew(PPCRegister& r3) {
   if (fable2::config::Get().unlock_website) {
     r3.u32 = 1;
@@ -97,8 +97,9 @@ void fable2_hook_ce_g1b(PPCRegister& r9) {
   }
 }
 
-// Unlock Collectors Edition Content. Grant method sub_824ACAE0 (the CE-chest
-// grant vtable slot called from GetCEContent): its entire body is `lbz r3,
+// Unlock Collectors Edition Content. GuildChestCE_GetAvailableFlag_824ACAE0
+// (the CE chest's check, called from GuildChest_GetCEContent_824B3528
+// through a function pointer): its entire body is `lbz r3,
 // 993(r3)` (returns the byte at item+0x3E1, the "CE content available" flag).
 // Force r3 = 1 so the getter reports the CE content as available.
 void fable2_hook_ce_grantavail(PPCRegister& r3) {
