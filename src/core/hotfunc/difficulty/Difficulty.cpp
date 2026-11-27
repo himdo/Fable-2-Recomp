@@ -638,6 +638,11 @@ const LevelInfo& Level(int index) {
 // object: 0 the main menu, 1 a card flipping, 2 the boy and girl cards arriving (New Game),
 // 3 / 4 boy / girl highlighted (BOY_ACTIVE / GIRL_ACTIVE), 5 the load cards, 6 a dialog
 // (Verified in the generated code). In 2-4 left / right, A and B act on the gender cards.
+bool NewGameIsGirl() {
+  const uint32_t held = g_held_event.load();
+  return held != 0 && held == EventHash(kGirlSelected);
+}
+
 bool GenderCardsWaitingForInput() {
   const uint32_t fe = g_front_end.load();
   if (!Ptr(fe) || DialogOpen() || g_held_event.load() != 0) return false;

@@ -69,6 +69,10 @@ void BackToGenderCards();
 // which the game's screen doesn't have. Reads guest memory; safe from the UI thread.
 bool GenderCardsWaitingForInput();
 
+// True while the New Game cards are held for a girl (GIRL_SELECTED), for the Easy card's
+// picture.
+bool NewGameIsGirl();
+
 // Called by the pad read (fable2_photo_mode.h on_pad_read) for user 0 on the
 // game's thread, after the game's read: feeds the dialog, runs the New Game replay
 // when a card was chosen, and returns true when the game must see an empty pad.

@@ -797,7 +797,11 @@ class Fable2App : public rex::ReXApp {
       for (const auto& pose : fable2::photomode::kPoses) pose_icons.push_back(pose.icon);
       pose_icons.push_back(fable2::difficulty::kCardBackTexture);  // the difficulty cards
       icons = gi::Load(root, icon_log, pose_icons);
-      if (icons > 0) break;
+      if (icons > 0) {
+        // The difficulty cards' pictures, from the loading screens and quest pictures.
+        gi::LoadPictures(root, fable2::difficulty::CardPictures(), icon_log);
+        break;
+      }
     }
     const int icons_added = gi::AddAllToAtlas(atlas);
     REXSYS_INFO("[photo-mode] button icons: {} of {} from gui_textures.bnk ({} in atlas){}", icons,

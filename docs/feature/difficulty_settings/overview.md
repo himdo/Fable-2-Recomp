@@ -256,7 +256,7 @@ Details are in technical.md sections 15 (code reading) and 16 (in-game results).
    - check the cards' keyboard prompts ("E Choose" after keyboard input; built 2026-11-24, not tested);
    - ~~F8 Easy → Hard → Easy in game~~ (done 2026-11-27, technical.md 20);
    - ~~round 4a: an unowned shop's buy and sell~~ (done 2026-11-27, technical.md 20); buying property too (the gift store: 6,141 / 7,062 / 7,983 on Easy / Medium / Hard);
-   - backgrounds on the cards;
+   - ~~backgrounds on the cards~~ (2026-11-27, branch `feature/difficulty-card-art`: pictures from the game's loading screens and a quest picture, technical.md 22);
    - ~~B to go back to boy or girl, and Theresa's destiny line after the cards~~ (built 2026-11-26, technical.md 19.2);
    - a controller shortcut for F8.
 1. ~~**Decide the starting multipliers**~~: done 2026-11-22 (decision 6). Easy is the original game.

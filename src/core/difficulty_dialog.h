@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include <cctype>
 
@@ -37,6 +38,29 @@
 namespace fable2::difficulty {
 
 inline constexpr const char* kCardBackTexture = "art\\gui\\frontend\\textures\\cardback.tex";
+
+// The cards' pictures (delta4o's choice, 2026-11-27), read from the user's game data at
+// startup (gameicons::LoadPictures): scenes from the game's loading screens (the scene is
+// the top 1024 x 720 of each texture) and a quest picture (512 x 512), each cropped to the
+// card's shape (210 x 320) around the subject. Easy shows the boy or the girl, whichever
+// was picked on New Game (the boy in game). Without the pictures the cards keep the card
+// back.
+inline constexpr int kPictureW = 315, kPictureH = 480, kPictureCorner = 15;  // corner = the card's rounding
+inline const std::vector<gameicons::PictureSpec>& CardPictures() {
+  static const std::vector<gameicons::PictureSpec> v = {
+      {"difficulty:easy_boy", "mip0", "art\\gui\\loadingscreens\\loading_boy.tex", 552, 0, 1024, 720, kPictureW,
+       kPictureH, kPictureCorner},
+      {"difficulty:easy_girl", "mip0", "art\\gui\\loadingscreens\\loading_girl.tex", 552, 0, 1024, 720, kPictureW,
+       kPictureH, kPictureCorner},
+      {"difficulty:medium", "mip0", "art\\gui\\loadingscreens\\loading_fairfax_castle.tex", 64, 0, 536, 720,
+       kPictureW, kPictureH, kPictureCorner},
+      {"difficulty:hard", "mip0", "art\\gui\\loadingscreens\\loading_guild_cave.tex", 184, 0, 656, 720, kPictureW,
+       kPictureH, kPictureCorner},
+      {"difficulty:hardcore", "world", "art\\gui\\questscreenshots\\qc130_epilogue_screen_image.tex", 88, 0, 424,
+       512, kPictureW, kPictureH, kPictureCorner},
+  };
+  return v;
+}
 
 class DifficultyDialog final : public rex::ui::ImGuiDialog {
  public:
@@ -200,10 +224,39 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
     dl_->AddRectFilled(ImVec2(p0.x + X(6), p0.y + X(8)), ImVec2(p1.x + X(6), p1.y + X(8)),
                        IM_COL32(0, 0, 0, 120), round);  // drop shadow
     dl_->AddRectFilled(p0, p1, Alpha(IM_COL32(28, 22, 14, 235), a), round);
-    CardBack(p0, p1, 0.55f * a);
-    // Darken the middle so the text reads over the art.
-    dl_->AddRectFilled(ImVec2(p0.x + X(12), p0.y + X(60)), ImVec2(p1.x - X(12), p1.y - X(40)),
-                       Alpha(IM_COL32(12, 9, 5, 170), a), X(6.0f));
+
+    // Foot of the card.
+    const char* foot = nullptr;
+    if (!new_game && i == current_) foot = "Current";
+    else if (!new_game && i == 3) foot = "New Game only";
+
+    // The text: the name and subtitle at the top, the multipliers at the bottom.
+    const float fs = 0.8f;
+    const float line = X(kSmall) * fs * 1.15f;
+    const int lines = i == 0 ? 3 : 5;
+    const float block = X(14.0f) + lines * line + (i == 3 ? X(6.0f) + line : 0.0f);
+    const float block_y = p1.y - (foot ? X(40.0f) : X(20.0f)) - block;
+
+    const int pic = gameicons::FindExtra(PictureKey(i, new_game));
+    const bool has_pic = gameicons::ExtraReady(pic);
+    if (has_pic) {
+      // The picture over the whole card, a dark fade under the name and a darker one
+      // under the multipliers.
+      Picture(pic, p0, p1, a);
+      const ImU32 d0 = Alpha(IM_COL32(10, 8, 5, 255), 0.0f);
+      const ImU32 dt = Alpha(IM_COL32(10, 8, 5, 255), 0.8f * a);
+      const ImU32 db = Alpha(IM_COL32(10, 8, 5, 255), 0.9f * a);
+      const float top = p0.y + X(96.0f);
+      dl_->AddRectFilledMultiColor(ImVec2(p0.x + X(2), p0.y + X(2)), ImVec2(p1.x - X(2), top), dt, dt, d0, d0);
+      const float fade = block_y - X(36.0f);
+      dl_->AddRectFilledMultiColor(ImVec2(p0.x + X(2), fade), ImVec2(p1.x - X(2), block_y), d0, d0, db, db);
+      dl_->AddRectFilled(ImVec2(p0.x + X(2), block_y), ImVec2(p1.x - X(2), p1.y - X(2)), db, round);
+    } else {
+      CardBack(p0, p1, 0.55f * a);
+      // Darken the middle so the text reads over the art.
+      dl_->AddRectFilled(ImVec2(p0.x + X(12), p0.y + X(60)), ImVec2(p1.x - X(12), p1.y - X(40)),
+                         Alpha(IM_COL32(12, 9, 5, 170), a), X(6.0f));
+    }
     dl_->AddRect(p0, p1, Alpha(selected ? kGold : kCreamDim, selected ? 1.0f : 0.55f * a), round, 0,
                  std::max(1.0f, X(selected ? 3.0f : 1.4f)));
 
@@ -212,12 +265,10 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
     TextCentred(cx, y, kLarge, Alpha(selected ? kGold : kCream, a), L.name);
     y += X(36.0f);
     TextCentred(cx, y, kSmall, Alpha(kCreamDim, a), L.subtitle, 0.9f);
-    y += X(34.0f);
+    y = has_pic ? block_y : y + X(34.0f);
     Rule(p0.x + X(20), p1.x - X(20), y, a);
     y += X(14.0f);
 
-    const float fs = 0.8f;
-    const float line = X(kSmall) * fs * 1.15f;
     if (i == 0) {
       TextCentred(cx, y, kSmall, Alpha(kCream, a), "The original game", fs);
       y += line;
@@ -237,11 +288,29 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
       }
     }
 
-    // Foot of the card.
-    const char* foot = nullptr;
-    if (!new_game && i == current_) foot = "Current";
-    else if (!new_game && i == 3) foot = "New Game only";
     if (foot) TextCentred(cx, p1.y - X(34.0f), kSmall, Alpha(kGold, a), foot, 0.85f);
+  }
+
+  // The picture key for card i (Easy: the boy or the girl picked on New Game).
+  static const char* PictureKey(int i, bool new_game) {
+    switch (i) {
+      case 0:
+        return new_game && NewGameIsGirl() ? "difficulty:easy_girl" : "difficulty:easy_boy";
+      case 1:
+        return "difficulty:medium";
+      case 2:
+        return "difficulty:hard";
+      default:
+        return "difficulty:hardcore";
+    }
+  }
+
+  // A card picture over the whole card (cropped to the card's shape, corners cut out).
+  void Picture(int extra, ImVec2 p0, ImVec2 p1, float alpha) {
+    const gameicons::Image& img = gameicons::extras()[extra].img;
+    ImFontAtlasRect r;
+    if (!img.atlas || !img.atlas->GetCustomRect(img.rect_id, &r)) return;
+    dl_->AddImage(dl_->_CmdHeader.TexRef, p0, p1, r.uv0, r.uv1, Alpha(IM_COL32_WHITE, alpha));
   }
 
   // The last input came from the keyboard or mouse (the SDK's synthetic device), as the

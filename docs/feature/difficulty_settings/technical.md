@@ -472,6 +472,34 @@ Sizes come from `gui_texture_headers.bnk`; the textures themselves are in `art/g
 
 The remaining open questions (slot label format, Masochist, unused Theresa lines) are listed in `overview.md`.
 
+### 22. Pictures on the difficulty cards (2026-11-27, branch `feature/difficulty-card-art`)
+
+delta4o wanted backgrounds on the cards (2026-11-24) but none of the GUI bank's textures (`art/gui/gui_textures.bnk`, the ones the overlay already reads; 82 exported and looked at). So the search went to the game's other texture banks.
+
+#### 22.1 Where the game's pictures are (read from the game data)
+
+- `data/Globals/1024mip0_textures.bnk` (1,256 entries): the top mip of the large textures, among them **69 loading screens** (`art\gui\loadingscreens\*`, 1024 × 1024), six coloured GUI backgrounds with the Guild seal (`art\gui\backgrounds\background_*`, 1024 × 512) and front-end screens. Their size headers are in the **GUI** header bank (`art/gui/gui_texture_headers.bnk`), not in the world one.
+- `data/Globals/globals_textures.bnk` (6,042 entries) with `globals_texture_headers.bnk`: the world's textures, among them **64 quest pictures** (`art\gui\questscreenshots\*_epilogue_screen_image`, 512 × 512) and Theresa's in-world tarot deck (`art\inventory\cards\ob_tarotcards`, faces of about 125 px).
+- **The index is chunked:** the same bank layout as the GUI bank, but the zlib index continues in chunks of `{u32 compressed size, u32 size = 0x10000}` up to the data offset (one stream, sync-flushed). The GUI bank is the one-chunk case.
+- **Loading screens** pack a 1280 × 720 screen into 1024 × 1024: the scene is the top 1024 × 720 (the right part shows the world map), and the last 256 columns are stored rotated in the bottom strip.
+- Both formats the pictures use (35 and 39) decode with the overlay's existing decoder (`photo_mode_icons.h`, Lionhead's codec for 35); only a few chunk types 6 / 11 didn't.
+
+#### 22.2 What was built
+
+- `photo_mode_icons.h`: `Bank::Open` reads chunked indexes, and `LoadPictures()` loads a picture from the "mip0" or "world" bank, crops it, scales it down with a box filter and cuts rounded corners into it (the runtime doesn't export `ImDrawList::AddImageRounded`). The pictures go into the same atlas as the button icons. Nothing is shipped: they come from the user's game data at startup.
+- `difficulty_dialog.h`: delta4o's choice, each cropped to the card's 210 × 320 shape and loaded at 315 × 480:
+
+  | Card | Picture | Crop (source pixels) |
+  | --- | --- | --- |
+  | Easy, "Little Sparrow" | `loading_boy` or `loading_girl`, matching the New Game pick (the boy in game) | 552–1024 × 0–720 |
+  | Medium, "Hero of Albion" | `loading_fairfax_castle` | 64–536 × 0–720 |
+  | Hard, "GuildMaster" | `loading_guild_cave` | 184–656 × 0–720 |
+  | Hardcore, "Archon's Heir" | `qc130_epilogue_screen_image` (the Spire under the storm) | 88–424 × 0–512 |
+
+- The card layout with a picture: the picture over the whole card, the name and subtitle at the top on a dark fade, the multipliers at the bottom on a darker panel. Without the pictures (missing banks) the cards keep the old look.
+- **Seen in game 2026-11-27 (`fable_2_084.log`, screenshots):** `pictures: 5 of 5` at startup; the New Game cards show the four pictures, and Easy switches between the boy and the girl. delta4o: "This looks REALLY good". The F8 cards use the same drawing (the boy on Easy) but weren't looked at.
+- The exporter used to look through the banks was a scratch tool and isn't in the repo.
+
 ### 21. Enemy health: research (2026-11-27, static)
 
 Enemy health is the last multiplier without code (decision 6: ×1.25 / 1.5 / 2.0 on Medium / Hard / Hardcore). Read in the generated code unless marked.
