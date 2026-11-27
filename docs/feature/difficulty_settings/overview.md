@@ -254,8 +254,8 @@ Details are in technical.md sections 15 (code reading) and 16 (in-game results).
 0. **2026-11-24 leftovers:**
    - ~~the slot label cuts off the end of the chapter text~~ (a new string since 2026-11-27, technical.md 19.4);
    - check the cards' keyboard prompts ("E Choose" after keyboard input; built 2026-11-24, not tested);
-   - F8 Easy → Hard → Easy in game;
-   - round 4a: an unowned shop's buy and sell, buying a house;
+   - ~~F8 Easy → Hard → Easy in game~~ (done 2026-11-27, technical.md 20);
+   - ~~round 4a: an unowned shop's buy and sell~~ (done 2026-11-27, technical.md 20); buying property too (the gift store: 6,141 / 7,062 / 7,983 on Easy / Medium / Hard);
    - backgrounds on the cards;
    - ~~B to go back to boy or girl, and Theresa's destiny line after the cards~~ (built 2026-11-26, technical.md 19.2);
    - a controller shortcut for F8.

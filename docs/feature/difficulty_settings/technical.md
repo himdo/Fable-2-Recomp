@@ -472,6 +472,30 @@ Sizes come from `gui_texture_headers.bnk`; the textures themselves are in `art/g
 
 The remaining open questions (slot label format, Masochist, unused Theresa lines) are listed in `overview.md`.
 
+### 20. Round 4 in game (2026-11-27, `fable_2_082.log`)
+
+The topic 3 leftovers, on the slot 1 hero (Bowerstone Market), which loaded on Medium. delta4o read out the prices; the level changes and gold lines are from the log.
+
+| Check | Level | Seen | Expected | Result |
+| --- | --- | --- | --- | --- |
+| Diamond, buy, gift store not owned | Easy → Medium | 5,207 → 5,988 | 5,207 × 1.15 = 5,988 | ✓ |
+| Ruby, sell, gift store not owned | Easy → Medium | 2,083 → 1,811 | 2,083 ÷ 1.15 = 1,811 | ✓ |
+| Diamond, sell, gift store not owned | Easy → Medium | 5,207 → 4,528 | 5,207 ÷ 1.15 = 4,528 | ✓ |
+| Pie stall, sale price (owned) | Easy | 2,125 | the game's own price, as on 2026-11-22 (16.4) | ✓ |
+| Gift store, buy price (not owned) | Easy → Medium → Hard | 6,141 → 7,062 → 7,983 | × 1.15 = 7,062, × 1.3 = 7,983 | ✓ |
+| Rent paid out on load | Medium | +220,446 → +187,379 | × 0.85 = 187,379 | ✓ |
+
+- **Selling to a shop the hero doesn't own** is confirmed: ÷ prices, like an owned shop. In the unowned gift store the diamond's sell price on Easy equals its buy price (5,207), so the sell price's cap against the buy price (18) applies there; the multiplier still lands once, on the final price.
+- **Buying property** is confirmed on Medium and Hard (the gift store above). Hardcore can't be reached from a save (decision 2), so it needs a new Hardcore game.
+- **F8:** Medium → Hard → Easy → Medium → Easy → Medium, each one a `SetDifficultyLevel` on player 1 (`[difficulty] in game: … -> …`). `stats` showed difficulty level 1 / 2 / 3 on Easy / Medium / Hard. The level read by the next price or gold matched every time.
+- **Save and Quit on Medium:** the save box's sub-code 24, then `slot Hero000: saved on Medium`; the Continue screen's label shows "Hero 1 (Medium)" (delta4o).
+- **Not checked this round:**
+  - property prices on Hardcore (new game only);
+  - the key caps on the F8 cards, and F8 with the pause menu open;
+  - the Guild's scripted 350 Will XP (needs a new game);
+  - co-op.
+- The slot 1 hero was left on Medium (delta4o: a debug save, no reset needed).
+
 ### 19. The prologue, and feature code step 2: the difficulty cards (2026-11-24)
 
 #### 19.1 The childhood gold and the music box (Verified in the script bytecode)
@@ -1214,6 +1238,7 @@ Run on Windows 11 (the dev machine) on 2026-11-21, before and after the round 2 
   - the label size and test label;
   - New Game → gender.
 - Co-op (player 2 also has a type-33 component).
+- Round 4 (20) left these out: property prices on Hardcore, the key caps on the F8 cards, F8 with the pause menu open, the Guild's scripted XP (delta4o will do it later).
 
 ## Follow-ups
 
