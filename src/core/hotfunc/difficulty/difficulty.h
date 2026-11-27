@@ -64,6 +64,11 @@ void CloseDialog();
 // on the card thread, puts the game's boy and girl cards back (FE_20 plays again).
 void BackToGenderCards();
 
+// True while the game's own boy and girl cards take input (front-end state +24 is 2, 3 or
+// 4, no hero yet and our cards are closed): the dialog then draws A / B prompts for them,
+// which the game's screen doesn't have. Reads guest memory; safe from the UI thread.
+bool GenderCardsWaitingForInput();
+
 // Called by the pad read (fable2_photo_mode.h on_pad_read) for user 0 on the
 // game's thread, after the game's read: feeds the dialog, runs the New Game replay
 // when a card was chosen, and returns true when the game must see an empty pad.

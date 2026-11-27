@@ -49,6 +49,15 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
     const int mode = d.mode.load();
     if (mode == int(DialogMode::kClosed)) {
       was_open_ = false;
+      // The game's boy and girl cards have no button prompts: draw ours under them.
+      if (GenderCardsWaitingForInput()) {
+        k_ = std::max(0.5f, io.DisplaySize.y / 720.0f);
+        dl_ = ImGui::GetForegroundDrawList();
+        float px = io.DisplaySize.x * 0.5f - X(160.0f);
+        const float py = io.DisplaySize.y - X(70.0f);
+        Prompt(px, py, "A", "Choose");
+        Prompt(px, py, "B", "Back");
+      }
       return;
     }
     if (!was_open_) {

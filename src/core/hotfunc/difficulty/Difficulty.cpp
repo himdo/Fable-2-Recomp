@@ -387,6 +387,9 @@ size_t ThreadKey() { return std::hash<std::thread::id>{}(std::this_thread::get_i
 
 std::atomic<uint32_t> g_held_event{0};  // the held-back SELECTED hash, 0 = none
 std::atomic<uint32_t> g_held_self{0};   // r3 of the held call
+// The front-end object, as last seen by the card events (for the gender cards' prompts);
+// 0 once a game is started or a hero exists, because the object may not outlive the menu.
+std::atomic<uint32_t> g_front_end{0};
 std::atomic<size_t> g_card_thread{0};   // the thread that sent it
 std::atomic<int64_t> g_choice_ms{0};    // when the card was chosen
 thread_local bool t_replaying = false;
@@ -516,6 +519,7 @@ void BackToGenderCardsNow(PPCContext& ctx, uint8_t* base, uint32_t self) {
 }  // namespace
 
 extern "C" void FrontMenu_HandleCardEvent_826C9188(PPCContext& __restrict ctx, uint8_t* base) {
+  if (!t_replaying) g_front_end.store(ctx.r3.u32);
   const uint32_t ev = ctx.r4.u32;
   const uint32_t hash = Ptr(ev) ? U32(ev + 4) : 0;
   const bool boy = hash != 0 && hash == EventHash(kBoySelected);
@@ -569,6 +573,17 @@ namespace fable2::difficulty {
 
 const LevelInfo& Level(int index) {
   return kLevels[static_cast<size_t>(std::clamp(index, 0, kLevelCount - 1))];
+}
+
+// The card input (FrontMenu_HandleCardInput_826C72A8) switches on +24 of the front-end
+// object: 0 the main menu, 1 a card flipping, 2 the boy and girl cards arriving (New Game),
+// 3 / 4 boy / girl highlighted (BOY_ACTIVE / GIRL_ACTIVE), 5 the load cards, 6 a dialog
+// (Verified in the generated code). In 2-4 left / right, A and B act on the gender cards.
+bool GenderCardsWaitingForInput() {
+  const uint32_t fe = g_front_end.load();
+  if (!Ptr(fe) || DialogOpen() || g_held_event.load() != 0) return false;
+  const int32_t state = static_cast<int32_t>(U32(fe + 24));
+  return state >= 2 && state <= 4 && CurrentIndex() < 0;
 }
 
 int CurrentIndex() {
@@ -664,6 +679,7 @@ bool OnPadRead(PPCContext& ctx, uint8_t* base, uint16_t buttons, int16_t lx) {
             g_newgame_ms.store(now);
             REXSYS_INFO("[difficulty] New Game on {}: starting the game ({} thread {:X}, card thread {:X})",
                         Level(level).name, same_thread ? "same" : "OTHER", ThreadKey(), g_card_thread.load());
+            g_front_end.store(0);
             ReplayCardEvent(ctx, base, g_held_self.load(), held);
           }
         }
@@ -699,6 +715,7 @@ bool OnPadRead(PPCContext& ctx, uint8_t* base, uint16_t buttons, int16_t lx) {
 std::atomic<int> g_last_level{-1};
 
 void OnWorldUpdate(PPCContext& ctx, uint8_t* base) {
+  if (CurrentIndex() >= 0) g_front_end.store(0);  // in game: the menu's object may be gone
   if (const int now = CurrentIndex(); now >= 0) g_last_level.store(now, std::memory_order_relaxed);
 
   // New Game: write the chosen level to the new hero once the game is on screen.
