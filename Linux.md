@@ -336,7 +336,13 @@ start-up can then stall on a white window.
   visible stutters. With it on, the same summaries with CPU time per thread,
   CPU/GPU clocks and per-frame work counts also go to `perf_log.txt` next to
   the executable (`log_perf_file`), and `log_perf_profile = true` adds the
-  busiest functions every 30 s. All three are off by default.
+  busiest functions every 30 s. These switches are off by default.
+- Set `log_perf_gpu_timestamps = true` to include Vulkan GPU timings with
+  `log_guest_fps`. Add `log_perf_gpu_passes = true` for a breakdown by render
+  target. GPU timestamps are off by default, including when FPS logging is on.
+- Deck builds compute terrain tessellation factors four vertices at a time on
+  the CPU. The factors matched the scalar path bit for bit in validation.
+  `terrain_tess_simd = 0` in `fable_2.toml` selects the scalar path for comparison.
 
 ## Known limitations
 
