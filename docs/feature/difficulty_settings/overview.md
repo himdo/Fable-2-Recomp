@@ -240,8 +240,8 @@ Details are in technical.md sections 15 (code reading) and 16 (in-game results).
   - Easy, Medium and Hard can be switched.
   - Hardcore can't be picked there ("New Game only"), and a Hardcore hero can't change level (decision 2).
   - Not tested in game yet. There's no controller shortcut yet.
-- **Theresa's destiny line** now plays once a difficulty card is chosen, not on the boy or girl choice. The game then starts as long after the line as it did before. Built 2026-11-26.
-- **B on the New Game cards** goes back to boy or girl, and Theresa asks again who the hero is. Built 2026-11-26.
+- **Theresa's destiny line** now plays once a difficulty card is chosen, not on the boy or girl choice. The game then starts as long after the line as it did before. Built 2026-11-26; confirmed in game 2026-11-27 (girl on Hard: the line plays in full, then the game starts on Hard).
+- **B on the New Game cards** goes back to boy or girl, and Theresa asks again who the hero is. Built 2026-11-26, fixed and confirmed in game 2026-11-27.
 
 ### The level on the Continue screen
 - **Confirmed in game:** each save now writes the hero's level into a small file in its slot folder.

@@ -59,7 +59,9 @@
 #include "fable2_ui_events.h" // FINISHED_TRANSITIONING_TO_GAME
 
 extern "C" void __imp__FrontMenu_HandleCardEvent_826C9188(PPCContext& ctx, uint8_t* base);
-extern "C" void __imp__FrontMenu_HandleUnfreeze_826C9460(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__CopyAssign_RefCounted_821F0108(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__Gui_FindElement_823F8C30(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__Gui_GoToSlide_823F9140(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__Speech_PlayByKey_82306098(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__Handle_Release_822ADE08(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__sub_823F8268(PPCContext& ctx, uint8_t* base);
@@ -343,14 +345,15 @@ extern "C" void MoneyComp_Modify_8239E698(PPCContext& __restrict ctx, uint8_t* b
 // chosen, not on the boy or girl choice: Speech_PlayByKey_82306098 skips the game's own
 // calls for it, and the pad read plays it just before the replay, then waits as long as
 // the game waited between the line and the SELECTED event. B on the cards puts the boy and
-// girl cards back the way the game does after a dialog (technical.md 19.2).
+// girl cards back the way New Game shows them (technical.md 19.2).
 
 namespace {
 
 // Event hash and speech key globals at 0x834A0000 + offset (technical.md section 7).
 constexpr int32_t kBoySelected = -20448;
 constexpr int32_t kGirlSelected = -20444;
-constexpr int32_t kUnfreeze = -20432;
+constexpr int32_t kChooseCard = -20424;       // the choosecard element name
+constexpr int32_t kWhoIsTheHero = -20340;    // TEXT_QUEST_QC010_FRONT_END_20
 constexpr int32_t kDestinyLineBoy = -20336;   // TEXT_QUEST_QC010_FRONT_END_30_HM
 constexpr int32_t kDestinyLineGirl = -20332;  // TEXT_QUEST_QC010_FRONT_END_30_HF
 uint32_t EventHash(int32_t offset) {
@@ -427,11 +430,11 @@ void ReplayCardEvent(PPCContext& ctx, uint8_t* base, uint32_t self, uint32_t has
   t_replaying = false;
 }
 
-// Plays the destiny line the way the card input does (fable_2_recomp.0.cpp at 0x826C7A50):
-// Speech_PlayByKey_82306098(r3 = an 8-byte handle on the stack, r4 =
+// Plays one of Theresa's front-end lines the way the card input does (fable_2_recomp.0.cpp
+// at 0x826C7A50): Speech_PlayByKey_82306098(r3 = an 8-byte handle on the stack, r4 =
 // *(*(*(0x83496928)+8)+80), r5 = &key, r6 = 0), then Handle_Release_822ADE08(handle).
 // The line goes on playing after the release.
-bool PlayDestinyLine(PPCContext& ctx, uint8_t* base, int32_t key_offset) {
+bool PlayFrontEndLine(PPCContext& ctx, uint8_t* base, int32_t key_offset) {
   uint32_t speaker = U32(0x83496928u);
   for (const uint32_t off : {8u, 80u}) {
     if (!Ptr(speaker)) return false;
@@ -464,23 +467,47 @@ std::string CardFields(uint32_t self) {
                      static_cast<int32_t>(U32(self + 112)), U8(self + 192), U8(self + 212));
 }
 
-// B: put the boy and girl cards back. The game does the same after its "overwrite a save"
-// dialog on New Game: +104 = 0, +108 = 2, +112 = 0 (fable_2_recomp.167.cpp, just before
-// 0x826C863C), then UNFREEZE. FrontMenu_HandleUnfreeze_826C9460 then, for +104 = 0 and
-// +108 = 2, goes to slide 1 of choosecard, plays FE_20 ("who is the hero") and sets +24 =
-// +108 = 2, as New Game does. It only gets that far while +101 is set and +192 / +212 are
-// clear (Verified in the generated code), so those are logged.
+// B: put the boy and girl cards back, the way New Game shows them (FrontMenu_HandleEvent at
+// 0x826C863C, fable_2_recomp.167.cpp; Verified in the generated code):
+//   name = CopyAssign_RefCounted_821F0108(&tmp, &global choosecard name)
+//   el = Gui_FindElement_823F8C30(name, gui = *(self+20))   (it destroys the name handle)
+//   Gui_GoToSlide_823F9140(el, gui, 1)
+//   self+24 = 2, then FE_20 ("who is the hero") through Speech_PlayByKey_82306098.
+// The game's other way back, UNFREEZE through FrontMenu_HandleUnfreeze_826C9460, only works
+// after a dialog: on the card screen +101 is 0, and UNFREEZE then left +24 = 0 without the
+// slide or the line (seen in game 2026-11-26, fable_2_077.log).
 void BackToGenderCardsNow(PPCContext& ctx, uint8_t* base, uint32_t self) {
   REXSYS_INFO("[difficulty] New Game: back to boy or girl ({})", CardFields(self));
   if (!Ptr(self)) return;
-  if (U8(self + 101) == 0) {
-    REXSYS_INFO("[difficulty] New Game: +101 is 0, so UNFREEZE won't put the cards back");
+  const uint32_t gui = U32(self + 20);
+  if (!Ptr(gui)) return;
+  const PPCContext saved = ctx;
+  const uint32_t sp = (ctx.r1.u32 - 0x200u) & ~0xFu;
+  W32(sp, ctx.r1.u32);
+  const uint32_t name = sp + 0x100u;
+  W32(name, 0);  // CopyAssign releases what the slot held first
+  ctx.r1.u64 = sp;
+  ctx.r3.u64 = name;
+  ctx.r4.u64 = 0x834A0000u + static_cast<uint32_t>(kChooseCard);
+  __imp__CopyAssign_RefCounted_821F0108(ctx, base);
+  ctx.r4.u64 = gui;  // r3 = the name handle, as CopyAssign returns it
+  __imp__Gui_FindElement_823F8C30(ctx, base);
+  const uint32_t element = ctx.r3.u32;
+  if (Ptr(element)) {
+    ctx.r3.u64 = element;
+    ctx.r4.u64 = gui;
+    ctx.r5.u64 = 1;
+    __imp__Gui_GoToSlide_823F9140(ctx, base);
   }
-  W32(self + 104, 0);
-  W32(self + 108, 2);
-  W32(self + 112, 0);
-  CallWithEvent(ctx, base, __imp__FrontMenu_HandleUnfreeze_826C9460, self, EventHash(kUnfreeze));
-  REXSYS_INFO("[difficulty] New Game: after UNFREEZE ({})", CardFields(self));
+  ctx = saved;
+  if (!Ptr(element)) {
+    REXSYS_INFO("[difficulty] New Game: choosecard element not found");
+    return;
+  }
+  W32(self + 24, 2);
+  const bool line = PlayFrontEndLine(ctx, base, kWhoIsTheHero);
+  REXSYS_INFO("[difficulty] New Game: gender cards again ({}), FE_20 {}", CardFields(self),
+              line ? "played" : "NOT played");
 }
 
 }  // namespace
@@ -619,7 +646,7 @@ bool OnPadRead(PPCContext& ctx, uint8_t* base, uint16_t buttons, int16_t lx) {
         const int64_t played = g_line_played_ms.load();
         if (played == 0) {
           const bool boy = held == EventHash(kBoySelected);
-          const bool ok = PlayDestinyLine(ctx, base, boy ? kDestinyLineBoy : kDestinyLineGirl);
+          const bool ok = PlayFrontEndLine(ctx, base, boy ? kDestinyLineBoy : kDestinyLineGirl);
           g_line_played_ms.store(now);
           REXSYS_INFO("[difficulty] New Game: destiny line ({}) {}, the game starts in {} ms",
                       boy ? "boy" : "girl", ok ? "played" : "NOT played (no speaker)", gap);

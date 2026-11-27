@@ -354,7 +354,7 @@ The `choosecard` layer of `art\gui\gameface\frontendmainmenu.bgf` (`guiscripts.b
 
 **Helpers (Inference):**
 - `Speech_PlayByKey_82306098` plays a speech line by key (r5), into a handle (r3) that the caller releases straight away with `Handle_Release_822ADE08` (19.2).
-- `sub_823F8C30` + `sub_823F9140(r5 = slide)` look up an element and go to a slide.
+- `Gui_FindElement_823F8C30` + `Gui_GoToSlide_823F9140(r5 = slide)` look up an element and go to a slide.
 
 #### Event and element globals
 
@@ -510,11 +510,14 @@ delta4o asked whether collecting the 5 gold and paying for the music box still w
   - The feature overrides `Speech_PlayByKey_82306098`. At those four return addresses it zeroes the handle and returns, so nothing plays and the release does nothing. Every other line goes to the original.
   - Once a difficulty card is chosen, the pad read (on the card thread) plays the line itself, with the same arguments, and releases its handle. The key is picked from the held event (boy or girl).
   - The game itself plays the line on the A press and starts the game some time later, after the card has flipped. To keep that lead, the time from the skipped call to the `_SELECTED` event is measured and logged, and the start waits that long after our line (at most 4 s).
-- **B on the New Game cards (built 2026-11-26).** Read in the generated code:
-  - `FrontMenu_HandleCardEvent_826C9188` and `FrontMenu_HandleUnfreeze_826C9460` are both registered with the front-end object as `this` (code at 0x826C6D0C… and 0x826C6EB0 / 0x826C6ED0), so the `r3` held back with the `_SELECTED` event is the object both work on.
+  - **Seen in game 2026-11-27 (`fable_2_079.log`):** girl, then Hard. The skipped call came 643 ms before `GIRL_SELECTED`; after the card our line played, and the game started 643 ms later on the card thread. The hero went from game level 1 to 3 and `stats` showed 3. delta4o: the line plays in full and "the wait was perfect".
+- **B on the New Game cards (built 2026-11-26, fixed 2026-11-27).** Read in the generated code:
+  - `FrontMenu_HandleCardEvent_826C9188` and `FrontMenu_HandleUnfreeze_826C9460` are both registered with the front-end object as `this` (code at 0x826C6D0C… and 0x826C6EB0 / 0x826C6ED0), so the `r3` held back with the `_SELECTED` event is the object both work on. `+20` of it is the GUI root.
   - `+24` is the card screen's input state: New Game sets it to 2; `BOY_ACTIVE` / `GIRL_ACTIVE` (`FrontMenu_HandleCardEvent_826C9188`) set 3 / 4; the A press sets 1; UNFREEZE in the card handler sets 0.
-  - The game's own way back to the gender cards is after its "overwrite a save?" dialog on New Game: it sets `+104` = 0, `+108` = 2, `+112` = 0 (just before `0x826C863C`), and the dialog's UNFREEZE then reaches `FrontMenu_HandleUnfreeze_826C9460`, which for `+104` = 0 and `+108` = 2 goes to slide 1 of `choosecard`, plays `FE_20` and sets `+24` = `+108` = 2, as New Game does. That only happens while `+101` is set and `+192` / `+212` are clear; with `+101` clear it goes to slide 8 instead (not decoded).
-  - So B closes the cards, blanks the pad until B is released (B on the gender cards goes back to the main menu), and on the next pad read on the card thread writes those three fields and calls `FrontMenu_HandleUnfreeze_826C9460` with an UNFREEZE event on a fresh guest stack frame. The fields are logged before and after (`[difficulty] New Game: back to boy or girl (...)`).
+  - New Game shows the gender cards at `0x826C863C` (`FrontMenu_HandleEvent`): `CopyAssign_RefCounted_821F0108(&tmp, &choosecard name at 0x834A0000 - 20424)`, `Gui_FindElement_823F8C30(tmp, gui)` (it destroys `tmp`), `Gui_GoToSlide_823F9140(element, gui, 1)`, `+24` = 2, then `FE_20` through `Speech_PlayByKey_82306098`.
+  - B does the same: it closes the cards, blanks the pad until B is released (B on the gender cards goes back to the main menu), and on the next pad read on the card thread makes those calls on a fresh guest stack frame.
+  - **First try (2026-11-26), dropped:** the game's way back after its "overwrite a save?" dialog: `+104` = 0, `+108` = 2, `+112` = 0, then UNFREEZE through `FrontMenu_HandleUnfreeze_826C9460`. That only rebuilds the cards while `+101` is set, and on the card screen it's 0 (`+101` seems to mean "a dialog was up"). In game (`fable_2_077.log`) it left `+24` = 0 with no slide and no line.
+  - **Seen in game 2026-11-27 (`fable_2_078.log`):** after B, `+24` = 2, the gender cards came back and Theresa asked who the hero is again (delta4o). B on the gender cards then went back to the main menu as usual.
   - The New Game cards now show "B Back" too.
 - **Seen in game (2026-11-24, `fable_2_071.log` and `fable_2_072.log`):** four new games, on Medium (twice), Hard and Hardcore.
   - Each started on the thread that sent the card event, so the 2 s fallback never ran.
@@ -1166,6 +1169,8 @@ Functions named on 2026-11-26 for B and the destiny line (19.2). Read in the gen
 | 0x826C9460 | `FrontMenu_HandleUnfreeze_826C9460` | `sub_826C9460` | Verified (19.2) |
 | 0x82306098 | `Speech_PlayByKey_82306098` | `ProcessAndProcessAndProcess2485_82306098` | Verified at its front-end calls; the body wasn't read (19.2) |
 | 0x822ADE08 | `Handle_Release_822ADE08` | `ProcessAndVcallAndClear3_822ADE08` | Verified (19.2) |
+| 0x823F8C30 | `Gui_FindElement_823F8C30` | `sub_823F8C30` | Verified (19.2, named 2026-11-27) |
+| 0x823F9140 | `Gui_GoToSlide_823F9140` | `sub_823F9140` | Verified for the calls; the slide meaning is Inference (19.2, named 2026-11-27) |
 
 These stay unnamed until their role is confirmed:
 - the co-op partner getter `sub_828BEEC0` (Inference);

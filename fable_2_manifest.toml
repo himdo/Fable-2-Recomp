@@ -4033,7 +4033,7 @@ name = "CopyRefcountedArray_827F2010"
 # the value (HashLookup_823F74D0, sub_823F74D0 -- the hash-table get-or-create), then compares the
 # string (CompareString_8229AD78, sub_8229AD78). Depending on the comparison result, it handles the
 # refcounted object: it may copy-assign (CopyAssign_RefCounted_821F0108, sub_821F0108) or destructure
-# (DestructRefCounted_82214F08, sub_82214F08) the value, and recurses (sub_823F9620, plus sub_823F8C30 and
+# (DestructRefCounted_82214F08, sub_82214F08) the value, and recurses (sub_823F9620, plus Gui_FindElement_823F8C30 and
 # sub_823F8C90, siblings in the 0x823F9 cluster). So it's a "look up a value in the hash table and
 # compare it" routine. 116 lines. 2 callers: sub_82817D28 and sub_828152D0. The table's key/value class
 # (strings) and the exact match semantics aren't resolvable, so the name states the mechanism: hash-
@@ -43777,7 +43777,7 @@ name = "ProcessAndProcessAndProcess1612_822D0488"
 [entrypoint.functions."0x822D06E8"]
 name = "ProcessAndProcessAndProcess1613_822D06E8"
 
-# Process a very large data structure by wrapping sub-operations (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and fourteenth form). It takes a structure, constructs a 12-byte object (Construct12Byte), constructs a refcounted object (ConstructRefCounted), destructs a refcounted object (DestructRefCounted), dispatches and processes (ProcessAndDispatchAndProcess25), and drives sub-operations (ProcessAndProcessAndProcess1095, ProcessAndProcessAndProcess1100, ProcessAndProcessAndProcess1105, ProcessAndProcessAndProcess1609, sub_8219CEF8, sub_8219D000, sub_822BE890, sub_823F9140, ProcessAndProcessAndProcess1607, sub_8259D7C0, sub_8322B050, sub_8322E3C0) based on the result. This is a dispatcher in the 0x82379 process cluster. 466 lines. 16 callees. 0 callers.
+# Process a very large data structure by wrapping sub-operations (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and fourteenth form). It takes a structure, constructs a 12-byte object (Construct12Byte), constructs a refcounted object (ConstructRefCounted), destructs a refcounted object (DestructRefCounted), dispatches and processes (ProcessAndDispatchAndProcess25), and drives sub-operations (ProcessAndProcessAndProcess1095, ProcessAndProcessAndProcess1100, ProcessAndProcessAndProcess1105, ProcessAndProcessAndProcess1609, sub_8219CEF8, sub_8219D000, sub_822BE890, Gui_GoToSlide_823F9140, ProcessAndProcessAndProcess1607, sub_8259D7C0, sub_8322B050, sub_8322E3C0) based on the result. This is a dispatcher in the 0x82379 process cluster. 466 lines. 16 callees. 0 callers.
 [entrypoint.functions."0x82379C10"]
 name = "ProcessAndProcessAndProcess1614_82379C10"
 
@@ -43813,7 +43813,7 @@ name = "ProcessAndProcessAndProcess1621_822149C8"
 [entrypoint.functions."0x822BE890"]
 name = "ProcessAndProcessAndProcess1622_822BE890"
 
-# Process a very large data structure by constructing a refcounted object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and twenty-third form). It takes a structure, constructs a refcounted object (ConstructRefCounted), copy-assigns a refcounted object (CopyAssign_RefCounted), copies a structure (CopyStructure), destructs a refcounted object (DestructRefCounted), constructs a string (ProcessConstructString), lowercases (ProcessToLower), releases a global reference (ReleaseGlobalRef), and drives sub-operations (ProcessAndProcessAndProcess1217, ProcessAndProcessAndProcess1244, ProcessAndProcessAndProcess565, ProcessAndProcessAndProcess765, sub_82301D40, sub_823F8C30, sub_826CAD28, ProcessAndProcessAndProcess1624) based on the result. Part of the 0x826CB process cluster. 727 lines. 15 callees. 2 callers (sub_826C63D8 and sub_826C6F28).
+# Process a very large data structure by constructing a refcounted object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and twenty-third form). It takes a structure, constructs a refcounted object (ConstructRefCounted), copy-assigns a refcounted object (CopyAssign_RefCounted), copies a structure (CopyStructure), destructs a refcounted object (DestructRefCounted), constructs a string (ProcessConstructString), lowercases (ProcessToLower), releases a global reference (ReleaseGlobalRef), and drives sub-operations (ProcessAndProcessAndProcess1217, ProcessAndProcessAndProcess1244, ProcessAndProcessAndProcess565, ProcessAndProcessAndProcess765, sub_82301D40, Gui_FindElement_823F8C30, sub_826CAD28, ProcessAndProcessAndProcess1624) based on the result. Part of the 0x826CB process cluster. 727 lines. 15 callees. 2 callers (sub_826C63D8 and sub_826C6F28).
 [entrypoint.functions."0x826CB338"]
 name = "ProcessAndProcessAndProcess1623_826CB338"
 
@@ -49955,6 +49955,24 @@ name = "FrontMenu_HandleCardEvent_826C9188"
 # goes to slide 8 instead. Read in the generated code (technical.md 19.2).
 [entrypoint.functions."0x826C9460"]
 name = "FrontMenu_HandleUnfreeze_826C9460"
+
+# Finds a GUI element by name. r3 = a name handle (it copies it, looks the element up with
+# ProcessAndProcessAndProcess1848_823F8A38(copy, 0, r4) and then destroys the handle with
+# DestructRefCounted_82214F08), r4 = the GUI root (on the front end *(front-end object + 20)).
+# Returns the element. Read in the generated code; the callers on the front end pass element
+# names such as choosecard (0x834A0000 - 20424) and go to a slide with Gui_GoToSlide_823F9140
+# (FrontMenu_HandleEvent at 0x826C863C, FrontMenu_HandleCardInput_826C72A8).
+[entrypoint.functions."0x823F8C30"]
+name = "Gui_FindElement_823F8C30"
+
+# Goes to a slide of a GUI element. r3 = the element (from Gui_FindElement_823F8C30), r4 = the
+# GUI root, r5 = the slide number. Calls ProcessAndProcessAndProcess2539_823F9040(r3, r4, r5),
+# then, when r4 is set, two vcalls on it (slot +36, then slot +60 of what that returns, with
+# r4 = the element, r5 = 0). The slide numbers its front-end callers pass match the choosecard
+# layer's slides (1 Intro ... 6 ChooseBoy, 7 ChooseGirl; technical.md 7). Read in the generated
+# code; the slide meaning is Inference from those callers.
+[entrypoint.functions."0x823F9140"]
+name = "Gui_GoToSlide_823F9140"
 
 # Selects a save card on the Continue screen. r3 = the front-end object, r4 = the
 # card index (clamped to 6). Moves the old and new cards' slides, plays a sound and
