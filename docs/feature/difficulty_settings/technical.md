@@ -204,7 +204,7 @@ The other 17 callers were identified on 2026-11-22; see 15.1. In short:
 
 - Scale only when `delta < 0`.
 - When the target is player 1, scale by the enemy-damage factor. When the target is not a player, scale by 1 / enemy-health.
-- Check the source (r5) and the faction, because allies, the dog and henchmen share this path. The faction component hasn't been identified yet.
+- Check the source (r5) and the faction, because allies, the dog and henchmen share this path. The faction component is type 133 (21.2).
 - Leave out scripted kills (`Health.Modify(-1000000)`-style calls) and quest damage, for example by ignoring hits with a null source or very large amounts.
 
 #### Console
@@ -472,6 +472,40 @@ Sizes come from `gui_texture_headers.bnk`; the textures themselves are in `art/g
 
 The remaining open questions (slot label format, Masochist, unused Theresa lines) are listed in `overview.md`.
 
+### 21. Enemy health: research (2026-11-27, static)
+
+Enemy health is the last multiplier without code (decision 6: ×1.25 / 1.5 / 2.0 on Medium / Hard / Hardcore). Read in the generated code unless marked.
+
+#### 21.1 Where a hit takes health
+
+- `Combat_ApplyHit_8268AB30(r3 = the target's health component + 12, r4 = the hit, f1 = the damage)` calls `HealthComp_Modify_8268BD90(r3 = the health component, f1 = -damage, r5 = the attacker from CheckValidPointer_825575C8(hit))`. That call returns to **0x8268AF98**, so a hit is recognisable at `HealthComp_Modify_8268BD90` by its return address.
+- The target entity is `*(health component + 4)` (what the round 2 probe logged as the target, 16.2).
+- Scripted damage (`Health.Modify`, kills like `-1000000`), regeneration and damage over time reach `HealthComp_Modify_8268BD90` from other callers (section 4), so they would be left alone.
+- The life-steal at 0x8268B968 heals the attacker by a share of the hit's damage (16.2). It is worked out from the damage before the health change, so dividing the health change doesn't reduce it.
+
+#### 21.2 Friend or foe
+
+- **`Faction_GetRelationship_822040D0(r3 = an entity's type-133 faction component, r4 = another entity)`** returns 1 neutral, 2 ally or 4 enemy. It checks the component's own lists first (`+24` allies, `+36` enemies, `+48` neutral), then asks `FactionManager_GetRelationship_821F8C60` with both faction ids (`+20`). A flag at `+12` swaps ally and enemy for non-players (Inference: a charmed or turned creature).
+- The Lua `Faction.IsMyEnemy` / `Faction.IsNeutral` are thin wrappers (`LuaFaction_IsMyEnemy_82540338`: `== 4`; `LuaFaction_IsNeutral_82540368`: `== 1`). `Faction.IsMyAlly` (→ 0x821C32F0), `GetCurrentFaction` (→ 0x82B568C0) and `sub_82232748` weren't read.
+- So "an enemy of the hero" is: the target has a type-133 component, and `Faction_GetRelationship_822040D0(target's 133, player 1's entity) == 4`. That leaves out villagers, guards who aren't hostile, the dog, henchmen, allies and player 2, and follows a guard turning hostile.
+
+#### 21.3 Designs
+
+| | How | Covers | Against |
+| --- | --- | --- | --- |
+| **A (recommended)** | Override `HealthComp_Modify_8268BD90`: for the hit call (return 0x8268AF98), `delta < 0`, a target that isn't player 1 or 2 and is an enemy of player 1 (21.2), divide `delta` by the level's enemy health | every attacker (the hero, the dog, henchmen, allies, traps that hit), only real enemies; scripted kills and quest damage untouched; follows a level change at once | `DifficultyProbe.cpp` already overrides `HealthComp_Modify_8268BD90` (its check F), so **the probe has to go first** (it's due to go before a PR anyway); damage over time and spells that don't go through `Combat_ApplyHit_8268AB30` aren't covered (Inference: untested) |
+| B | The game's own DamageCaused gate: return 1 / enemy health for idx 0 in `Difficulty_GetMultiplier_823C92F0` | one line in the existing override | only the hero's hits (and co-op player 2's), and on every target: villagers, guards and chickens too; not the dog's or henchmen's hits |
+| C | Raise the maximum health at spawn (`Health.SetMax`) | true health bars | written into the save, so a level change or a reload stacks or needs undoing; every spawn path would need a hook (rejected) |
+
+- With A, an enemy on Hard takes 1 / 1.5 of each hit, so it lasts 1.5 × as many hits, the same as 1.5 × its health. Its health bar empties more slowly, and the bar's maximum stays as it is.
+- A rounding note: health is a float (`+20` / `+28`), so no rounding is needed.
+
+#### 21.4 Before the code
+
+- **Decision 7 (open, for delta4o):** design A or B (overview).
+- Delete the probe and its seven temporary hooks (14.4), which frees `HealthComp_Modify_8268BD90`.
+- Check in game: a guard made hostile, a bandit, a beetle or hollow man, the dog's bites, a spell, a crossbow bolt, and a scripted kill (it must still kill).
+
 ### 20. Round 4 in game (2026-11-27, `fable_2_082.log`)
 
 The topic 3 leftovers, on the slot 1 hero (Bowerstone Market), which loaded on Medium. delta4o read out the prices; the level changes and gold lines are from the log.
@@ -491,7 +525,7 @@ The topic 3 leftovers, on the slot 1 hero (Bowerstone Market), which loaded on M
 - **Save and Quit on Medium:** the save box's sub-code 24, then `slot Hero000: saved on Medium`; the Continue screen's label shows "Hero 1 (Medium)" (delta4o).
 - **Not checked this round:**
   - property prices on Hardcore (new game only);
-  - the key caps on the F8 cards, and F8 with the pause menu open;
+  - not needed (delta4o): the key caps on the F8 cards and F8 with the pause menu open. F8 is a debug stand-in for the pause-menu entry;
   - the Guild's scripted 350 Will XP (needs a new game);
   - co-op.
 - The slot 1 hero was left on Medium (delta4o: a debug save, no reset needed).
@@ -1206,10 +1240,20 @@ Functions named on 2026-11-27 for the slot label (19.4). Read in the generated c
 | 0x822B85C8 | `RefCounted_Assign_822B85C8` | `ProcessAndReplaceRefCounted_822B85C8` | Verified (19.4) |
 | 0x822D6998 | `WideString_NotEqual_822D6998` | `ProcessAndProcessAndProcess1666_822D6998` | Verified (19.4) |
 
+Functions named on 2026-11-27 for enemy health (21). Read in the generated code:
+
+| Address | Name | Was | Evidence |
+| --- | --- | --- | --- |
+| 0x822040D0 | `Faction_GetRelationship_822040D0` | `sub_822040D0` | Verified (21.2) |
+| 0x821F8C60 | `FactionManager_GetRelationship_821F8C60` | `sub_821F8C60` | Verified for the ally and enemy lookups; `r6` = 7 is Inference (21.2) |
+| 0x82540338 | `LuaFaction_IsMyEnemy_82540338` | `sub_82540338` | Verified (21.2) |
+| 0x82540368 | `LuaFaction_IsNeutral_82540368` | `sub_82540368` | Verified (21.2) |
+
 These stay unnamed until their role is confirmed:
 - the co-op partner getter `sub_828BEEC0` (Inference);
 - the spending callers marked Inference in 15.1 (`sub_8281E6A8`, `sub_82597DC0`, `sub_8238BEB0`, `sub_825A11F0`);
 - the binder `sub_823D62F8`.
+- `sub_82232748` (an entity-in-two-lists check inside `Faction_GetRelationship_822040D0`, 21.2).
 
 ## Verification
 
@@ -1238,7 +1282,7 @@ Run on Windows 11 (the dev machine) on 2026-11-21, before and after the round 2 
   - the label size and test label;
   - New Game → gender.
 - Co-op (player 2 also has a type-33 component).
-- Round 4 (20) left these out: property prices on Hardcore, the key caps on the F8 cards, F8 with the pause menu open, the Guild's scripted XP (delta4o will do it later).
+- Round 4 (20) left these out: property prices on Hardcore and the Guild's scripted XP (delta4o will do it later). The F8 cards' key caps and F8 with the pause menu open aren't needed: F8 is a debug stand-in for the pause-menu entry.
 
 ## Follow-ups
 

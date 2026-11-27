@@ -263,7 +263,7 @@ Details are in technical.md sections 15 (code reading) and 16 (in-game results).
 2. ~~**Name the functions**~~: done 2026-11-22. 44 functions now have real names, among them the gold callers, the shop and property price steps, rent, and the combat checks (technical.md "What changed").
 3. **Round 3 in game:** test the feature code (checklist below), and the leftovers from round 2: Golden touch on a monster, a region change and a house purchase, Save and Continue, the slot label, then New Game → boy or girl.
 4. **Feature code, next steps:** ~~the New Game difficulty cards~~ (done 2026-11-24), the pause-menu entry (F8 for now), Hardcore saving, the slot label (started), then enemy health.
-5. Next research: enemy health and telling friend from foe, then where the pause menu gets its items.
+5. ~~Next research: enemy health and telling friend from foe~~ (done 2026-11-27, technical.md 21; decision 7 below is open), then where the pause menu gets its items.
 6. Tidy up before anything goes to master:
    - delete the probe and its temporary hooks;
    - delete the marker files in the slot folders;
@@ -394,6 +394,10 @@ The hero can buy about 0.74× as much on Medium, 0.54× on Hard and 0.46× on Ha
 7. **Theresa's unused lines:** use any of them on the difficulty screen?
 8. ~~**Property prices**~~: decided 2026-11-22, yes, buying and selling (decision 6). The gold-gain rule skips property sales.
 9. ~~**Which gold gains scale**~~: decided 2026-11-22, earned gold but not sales (decision 6). Script-paid gold is all earned gold, so no script changes are needed.
+10. **Decision 7, enemy health (technical.md 21.3):** how should enemies get tougher?
+    - **A (recommended):** every hit on an enemy of the hero takes less health (÷ 1.25 / 1.5 / 2.0), whoever lands it: the hero, the dog, henchmen or allies. Villagers, friendly guards and scripted kills aren't affected. The research probe has to be removed first, because it uses the same function.
+    - **B:** only the hero's own hits do less damage, on every target, villagers and chickens included. Much simpler, but the dog and allies hit as hard as on Easy.
+    - Raising enemies' maximum health at spawn was ruled out: it would be written into the save.
 
 ## Proposed approach (cheapest first, not started)
 
