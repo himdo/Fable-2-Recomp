@@ -245,13 +245,13 @@ Details are in technical.md sections 15 (code reading) and 16 (in-game results).
 
 ### The level on the Continue screen
 - **Confirmed in game:** each save now writes the hero's level into a small file in its slot folder.
-- **Confirmed in game:** the Continue screen shows "Hero 1 (Easy) / Bowerstone Market", "Hero 2 (Medium) / …" and so on. The level is written into the card's description text itself, because the GUI's text attribute doesn't change what's drawn.
-  - The catch: the text can't grow, so the end of the chapter text is cut off by the same number of characters. See technical.md 19.4.
+- **Confirmed in game:** the Continue screen shows "Hero 1 (Easy) / Bowerstone Market", "Hero 2 (Medium) / …" and so on. Since 2026-11-27 the card's description is a new, longer string built the game's own way, so the chapter text under it is shown in full (confirmed in game with screenshots). See technical.md 19.4.
+- **Fixed and confirmed in game 2026-11-27:** the game saves straight after a New Game starts, and that first save was labelled Easy whatever level was chosen. It now gets the chosen level (a girl started on Hard: her first save is labelled Hard).
 
 ## Where to pick up next time
 
 0. **2026-11-24 leftovers:**
-   - the slot label cuts off the end of the chapter text (it needs a longer string, not an in-place edit);
+   - ~~the slot label cuts off the end of the chapter text~~ (a new string since 2026-11-27, technical.md 19.4);
    - check the cards' keyboard prompts ("E Choose" after keyboard input; built 2026-11-24, not tested);
    - F8 Easy → Hard → Easy in game;
    - round 4a: an unowned shop's buy and sell, buying a house;

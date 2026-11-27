@@ -64,7 +64,10 @@ extern "C" void __imp__Gui_FindElement_823F8C30(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__Gui_GoToSlide_823F9140(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__Speech_PlayByKey_82306098(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__Handle_Release_822ADE08(PPCContext& ctx, uint8_t* base);
-extern "C" void __imp__sub_823F8268(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__GuiElement_SetText_823F8268(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__Allocate_OrDbgBreak_8221F388(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__WideString_Assign_82B39DD8(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__Release_RefCounted_821C67D8(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__Difficulty_GetMultiplier_823C92F0(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__LuaExperience_Modify_8251C8E0(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__LuaPlayer_SetDifficultyLevel_823C9458(PPCContext& ctx, uint8_t* base);
@@ -709,6 +712,9 @@ void OnWorldUpdate(PPCContext& ctx, uint8_t* base) {
     const uint32_t comp = FindComponent(hero, 33);
     if ((in_game || fresh) && Ptr(comp)) {
       g_newgame_level.store(-1);
+      // The game saves straight after the start, before the next world update would see
+      // the new level (seen 2026-11-27, fable_2_079.log: a Hard hero's first save got Easy).
+      g_last_level.store(level, std::memory_order_relaxed);
       const int32_t before = static_cast<int32_t>(U32(comp + 80));
       const uint8_t changed = U8(comp + 38);
       if (level > 0) {
@@ -738,6 +744,7 @@ void OnWorldUpdate(PPCContext& ctx, uint8_t* base) {
       ctx.r4.s64 = level + 1;
       LuaPlayer_SetDifficultyLevel_823C9458(ctx, base);  // the override: also clears the cache
       ctx = saved;
+      g_last_level.store(level, std::memory_order_relaxed);
       REXSYS_INFO("[difficulty] in game: {} -> {}", Level(now).name, Level(level).name);
     } else if (level >= 0) {
       REXSYS_INFO("[difficulty] in game: {} kept", now >= 0 ? Level(now).name : "?");
@@ -812,7 +819,9 @@ void PollSaveSlots() {
   std::error_code ec;
   std::vector<std::pair<std::string, int>> table;
   const auto fnow = fs::file_time_type::clock::now();
-  const int level = g_last_level.load(std::memory_order_relaxed);
+  // A New Game level not written yet belongs to the hero being started.
+  const int pending = g_newgame_level.load();
+  const int level = pending >= 0 ? pending : g_last_level.load(std::memory_order_relaxed);
   for (const auto& profile : fs::directory_iterator(root, ec)) {
     const fs::path title = profile.path() / "4D5307F1";
     const fs::path data = title / "00000001";
@@ -854,45 +863,45 @@ void PollSaveSlots() {
 // --- The slot label: "Hero 2 (Medium) / Bowerstone Old Town" ----------------------------
 //
 // The Continue screen's shared loadgame.SaveGameDescription text is set through
-// sub_823F8268(element r3, r4, &handle r5), which copies the string handle into the text
-// object's slot (*(*(element+4)))+140 and marks it changed. FrontMenu_SelectLoadCard_826C9008
-// passes &names[card] with names = *(fe+120); opening the screen sets card 0 through another
-// path that also ends here (seen in game 2026-11-24: the first card had no level until it was
-// selected again). A handle points to a ref-counted record {+0 UTF-16BE chars, +4 length,
-// +12 refcount} (Verified in the generated code: .156:10993-11011, .216:4627,
-// ProcessAndProcessAndProcess1666_822D6998, ProcessAndReplaceRefCounted_822B85C8). The text
-// is the whole card description: "Hero 2 / Bowerstone Old Town\nLiving as an orphan ...".
+// GuiElement_SetText_823F8268(element r3, r4, &handle r5): the text object is
+// *(*(element+4)), and when WideString_NotEqual_822D6998(&text+140, handle) says the text
+// differs, RefCounted_Assign_822B85C8 makes the text object hold the handle's string (with
+// its own reference) and marks it changed. FrontMenu_SelectLoadCard_826C9008 passes
+// &names[card] with names = *(fe+120); opening the screen sets card 0 through another path
+// that also ends here (seen in game 2026-11-24). A handle points to a ref-counted wide string
+// {+0 UTF-16BE chars, +4 length, +8 (buffer size << 1) | flag, +12 refcount}, freed by
+// Release_RefCounted_821C67D8 when the count reaches 0 (Verified in the generated code). The
+// text is the whole card description: "Hero 2 / Bowerstone Old Town\nLiving as an orphan ...".
 //
-// Setting the GUI's textstring attribute has no visible effect, and making a new string
-// would need the game's wide-string constructor (not found yet). So, before the text is
-// set, a description of a known slot ("<slot name> / ...", the name from the headers) gets
-// the level written into it: " (Medium)" after the name, the rest moved right, and the same
-// number of characters dropped off the end of the flavour text. The length doesn't change,
-// so nothing is allocated. Every address is checked first (a stale header's card pointed
-// into text: "QC01" read as a pointer crashed an earlier try).
+// Setting the GUI's textstring attribute has no visible effect. So, for a description of a
+// known slot ("<slot name> / ...", the name from the headers), a NEW string with the level
+// after the name is built the way the game's wide sprintf (WideString_Format_82B39260) builds
+// one: a 16-byte record from Allocate_OrDbgBreak_8221F388, WideString_Assign_82B39DD8(record,
+// chars, length), refcount 1. It is set through a handle of our own, which is released
+// again, so the text object holds the only reference and the game frees the string when the
+// text changes. The game's names[] list is never touched, so nothing is cut or shifted.
+// Every read is checked first (a stale header's card pointed into text: "QC01" read as a
+// pointer crashed an earlier try).
 
 namespace {
 
 #ifdef _WIN32
-// The end of the committed, readable (and writable, if asked) region holding a, or 0.
-const uint8_t* HostRegionEnd(uint32_t a, bool write) {
+// The end of the committed, readable region holding a, or 0.
+const uint8_t* HostRegionEnd(uint32_t a) {
   if (fable2::patches::GuestBase() == nullptr || a < 0x10000u) return nullptr;
   const uint8_t* p = Mem(a);
   MEMORY_BASIC_INFORMATION mbi{};
   if (VirtualQuery(p, &mbi, sizeof(mbi)) == 0 || mbi.State != MEM_COMMIT) return nullptr;
   const DWORD prot = mbi.Protect & 0xFF;
   if ((mbi.Protect & PAGE_GUARD) != 0 || prot == PAGE_NOACCESS) return nullptr;
-  if (write && !(prot == PAGE_READWRITE || prot == PAGE_EXECUTE_READWRITE || prot == PAGE_WRITECOPY ||
-                 prot == PAGE_EXECUTE_WRITECOPY))
-    return nullptr;
   return static_cast<const uint8_t*>(mbi.BaseAddress) + mbi.RegionSize;
 }
 #else
-const uint8_t* HostRegionEnd(uint32_t, bool) { return nullptr; }
+const uint8_t* HostRegionEnd(uint32_t) { return nullptr; }
 #endif
 
-bool HostRange(uint32_t a, size_t n, bool write) {
-  const uint8_t* end = HostRegionEnd(a, write);
+bool HostRange(uint32_t a, size_t n) {
+  const uint8_t* end = HostRegionEnd(a);
   return end != nullptr && Mem(a) + n <= end;
 }
 
@@ -904,18 +913,20 @@ void W16(uint32_t a, uint16_t v) {
 
 constexpr uint32_t kMaxChars = 1024;
 
-// `handle` = the address of a string handle about to be set as some element's text.
-void LabelSlotText(uint32_t handle) {
+// `handle` = the address of a string handle about to be set as some element's text. Returns
+// the labelled text when it is a known slot's card description, else an empty vector.
+std::vector<uint16_t> LabelledSlotText(uint32_t handle) {
   namespace d = fable2::difficulty;
-  if ((handle & 3u) != 0 || !HostRange(handle, 4, false)) return;
+  if ((handle & 3u) != 0 || !HostRange(handle, 4)) return {};
   const uint32_t rec = U32(handle);
-  if ((rec & 3u) != 0 || !HostRange(rec, 16, false)) return;
+  if ((rec & 3u) != 0 || !HostRange(rec, 16)) return {};
   const uint32_t chars = U32(rec);
-  if ((chars & 1u) != 0) return;
-  const uint8_t* region_end = HostRegionEnd(chars, true);
-  if (region_end == nullptr) return;
-  const uint32_t room = static_cast<uint32_t>(std::min<std::ptrdiff_t>(region_end - Mem(chars), std::ptrdiff_t{2} * kMaxChars) / 2);
-  if (room < 2) return;
+  if ((chars & 1u) != 0) return {};
+  const uint8_t* region_end = HostRegionEnd(chars);
+  if (region_end == nullptr) return {};
+  const uint32_t room = static_cast<uint32_t>(
+      std::min<std::ptrdiff_t>(region_end - Mem(chars), std::ptrdiff_t{2} * kMaxChars) / 2);
+  if (room < 2) return {};
 
   // Cheap filter first: the first character must start one of the slot names.
   std::vector<std::pair<std::string, int>> slots;
@@ -926,46 +937,77 @@ void LabelSlotText(uint32_t handle) {
   const uint16_t first = U16(chars);
   bool maybe = false;
   for (const auto& [slot, lv] : slots) maybe = maybe || (!slot.empty() && static_cast<uint8_t>(slot[0]) == first);
-  if (!maybe) return;
+  if (!maybe) return {};
 
-  uint32_t len = 0;
-  while (len < room && U16(chars + 2 * len) != 0) ++len;
-  if (len == 0 || len >= room) return;
-  std::string text;
-  for (uint32_t i = 0; i < len; ++i) {
+  std::vector<uint16_t> wide;
+  std::string text;  // ASCII view, for matching only
+  for (uint32_t i = 0; i < room; ++i) {
     const uint16_t c = U16(chars + 2 * i);
+    if (c == 0) break;
+    wide.push_back(c);
     text += c < 0x80 ? static_cast<char>(c) : '?';
   }
+  if (wide.empty() || wide.size() >= room) return {};
   // A card description: "<name> / <place>\n<text>".
   const size_t line_end = text.find('\n');
   const size_t name_end = text.find(" / ");
-  if (line_end == std::string::npos || name_end == std::string::npos || name_end > line_end) return;
+  if (line_end == std::string::npos || name_end == std::string::npos || name_end > line_end) return {};
   const std::string name = text.substr(0, name_end);
   int level = -1;
   for (const auto& [slot, lv] : slots) {
     if (slot == name) level = lv;
   }
-  if (level < 0) return;
-  for (int i = 0; i < d::kLevelCount; ++i) {
-    if (text.compare(name_end, 2 + std::strlen(d::Level(i).name), std::string(" (") + d::Level(i).name) == 0)
-      return;  // already labelled
-  }
+  if (level < 0) return {};
   const std::string suffix = std::string(" (") + d::Level(level).name + ")";
-  const uint32_t k = static_cast<uint32_t>(suffix.size());
-  // Keep the name's line: only drop characters that come after the line break.
-  if (len - line_end <= k + 1) {
-    REXSYS_INFO("[difficulty] slot label: no room for the level in '{}'", name);
-    return;
-  }
-  for (uint32_t i = len - 1; i >= name_end + k; --i) W16(chars + 2 * i, U16(chars + 2 * (i - k)));
-  for (uint32_t i = 0; i < k; ++i)
-    W16(chars + 2 * (static_cast<uint32_t>(name_end) + i), static_cast<uint8_t>(suffix[i]));
-  REXSYS_INFO("[difficulty] slot label: '{}{}'", name, suffix);
+  wide.insert(wide.begin() + static_cast<std::ptrdiff_t>(name_end), suffix.begin(), suffix.end());
+  REXSYS_INFO("[difficulty] slot label: '{}{}' ({} characters)", name, suffix, wide.size());
+  return wide;
 }
 
 }  // namespace
 
-extern "C" void sub_823F8268(PPCContext& __restrict ctx, uint8_t* base) {
-  LabelSlotText(ctx.r5.u32);
-  __imp__sub_823F8268(ctx, base);
+extern "C" void GuiElement_SetText_823F8268(PPCContext& __restrict ctx, uint8_t* base) {
+  const std::vector<uint16_t> text = LabelledSlotText(ctx.r5.u32);
+  if (text.empty()) {
+    __imp__GuiElement_SetText_823F8268(ctx, base);
+    return;
+  }
+  const PPCContext saved = ctx;
+  const uint32_t len = static_cast<uint32_t>(text.size());
+  // A fresh frame below the caller's: back chain at sp, our handle at sp + 0x100, the
+  // characters from sp + 0x110. The callees' frames go below sp.
+  const uint32_t frame = (0x110u + 2u * (len + 1u) + 0xFu) & ~0xFu;
+  const uint32_t sp = (ctx.r1.u32 - frame - 0x100u) & ~0xFu;
+  W32(sp, ctx.r1.u32);
+  const uint32_t handle = sp + 0x100u;
+  const uint32_t chars = sp + 0x110u;
+  for (uint32_t i = 0; i < len; ++i) W16(chars + 2 * i, text[i]);
+  W16(chars + 2 * len, 0);
+  ctx.r1.u64 = sp;
+
+  ctx.r3.u64 = 16;
+  __imp__Allocate_OrDbgBreak_8221F388(ctx, base);
+  const uint32_t rec = ctx.r3.u32;
+  if (!Ptr(rec)) {
+    ctx = saved;
+    __imp__GuiElement_SetText_823F8268(ctx, base);
+    return;
+  }
+  W32(rec, 0);
+  W32(rec + 4, 0);
+  W32(rec + 8, 0);
+  ctx.r3.u64 = rec;
+  ctx.r4.u64 = chars;
+  ctx.r5.u64 = len;
+  __imp__WideString_Assign_82B39DD8(ctx, base);  // buffer, +4 = len, +8, the terminator
+  W32(rec + 12, 1);                              // our reference
+  W32(handle, rec);
+
+  ctx.r3.u64 = saved.r3.u64;
+  ctx.r4.u64 = saved.r4.u64;
+  ctx.r5.u64 = handle;
+  __imp__GuiElement_SetText_823F8268(ctx, base);  // the text object takes its own reference
+  ctx.r3.u64 = handle;
+  __imp__Release_RefCounted_821C67D8(ctx, base);  // ours goes; the string lives on in the text
+  ctx = saved;
 }

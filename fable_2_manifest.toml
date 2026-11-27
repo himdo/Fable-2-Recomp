@@ -7238,7 +7238,7 @@ name = "ReturnConstant_0x10000_82A14660"
 # one-based / a zero-based offset). So it's a "get a string length (scan a UTF-16 string (a 2-byte character loop,
 # looking for a null terminator) and return the length (in characters, minus 1))" routine (a string length getter, the
 # UTF-16 variant of StrLen_822F1DE0, part of the 0x8217A cluster, a sibling of StrLen_822F1DE0). ~20 lines, no direct
-# callees (pure data manipulation). 10+ callers: sub_82C72640, sub_82BFD228, sub_82BF1CA0, sub_82B39260, sub_82C75340,
+# callees (pure data manipulation). 10+ callers: sub_82C72640, sub_82BFD228, sub_82BF1CA0, WideString_Format_82B39260, sub_82C75340,
 # sub_82B4DA88, sub_822F8620, sub_82CBD5A0, sub_82C7F458, sub_82CFA1B0 (a widely-called string length getter, part of
 # the game's string subsystem). The string's meaning (a string, a particular UTF-16 string, a particular text) isn't
 # resolvable, so the name states the mechanism: a string length getter (scan a UTF-16 string (a 2-byte character loop,
@@ -30255,17 +30255,14 @@ name = "ProcessAndAllocateAligned_82B39BE8"
 [entrypoint.functions."0x82C15C10"]
 name = "ProcessAndIterateElements_82C15C10"
 
-# A processor that frees the old buffer, reallocates it larger, and updates the size fields. It takes a buffer (a: a
-# pointer at a->0, a size at a->4, a capacity at a->8), a value (b), and a count (c). When the buffer is present
-# (a->0 non-null) it frees the old buffer (Free_SizeBucketed_Thunk_8221BE68(a->0)) and clears the pointer (a->0 = 0).
-# It then reallocates the buffer to the new (larger) aligned size (ProcessAndAllocateAligned_82B39BE8 = sub_82B39BE8),
-# copies the existing data over (MemCpy_Vectorized_822085D0), zeroes the new region (MemSet_SdkRuntime_82CA3190), and
-# updates the size fields (a->4 = c, a->8 = the new capacity). This is the "free this buffer, reallocate it larger,
-# and update the size" routine for the 0x82B39 reallocate cluster, used by 7 callers (ProcessAndIncrementCounter
-# _822D6B40 and the 0x82B38/0x82B39 range). Part of the 0x82B39 reallocate cluster (sibling of GrowAndZeroBuffer
-# _82BC55B8 / ProcessAndAllocateAligned_82B39BE8). 92 lines, 4 callees. 7 callers.
+# Sets a wide string record's characters. r3 = the record {+0 UTF-16 chars, +4 length, +8 (buffer
+# size << 1) | flag bit 0, +12 refcount}, r4 = the source characters, r5 = the length in
+# characters. Frees the old buffer (Free_SizeBucketed_Thunk_8221BE68), allocates a new one
+# (ProcessAndAllocateAligned_82B39BE8), sets +4 = r5 and the size bits of +8 (keeping bit 0), writes
+# the terminator, zeroes the padding and copies 2 * r5 bytes (MemCpy_Vectorized_822085D0). Used by
+# WideString_Format_82B39260 and the difficulty slot label. Read in the generated code.
 [entrypoint.functions."0x82B39DD8"]
-name = "ProcessAndReallocateBuffer_82B39DD8"
+name = "WideString_Assign_82B39DD8"
 
 # A processor that leaves the critical section when the lock is held. It takes a lock (a: a critical section at a->0,
 # a held flag at a->4). When the held flag (a->4) is zero (lock not held) it does nothing. When it is set it leaves the
@@ -30748,18 +30745,13 @@ name = "ProcessAndFindTreeLeafLocked_821F5B90"
 [entrypoint.functions."0x82287710"]
 name = "ProcessAndIncrementCounter_82287710"
 
-# A processor that replaces a reference-counted pointer, releasing the old reference and incrementing the new one. It
-# takes a target (a: a reference-counted pointer at a->0) and a source (b: a reference-counted pointer at b->0, with a
-# reference count at b->0->12). When the target and source are the same (a == b, or a->0 == b->0), it does nothing.
-# Otherwise it releases the old reference (Release_RefCounted_821C67D8(a->0), when a->0 is non-null), stores the new
-# pointer (a->0 = b->0), and atomically increments the new reference count (b->0->12 += 1, via a load-word-reserved /
-# store-word-conditional (lwarx / stwcx) pair under the global lock). This is the "replace this reference-counted
-# pointer (release the old reference, store the new pointer, and atomically increment the new reference count)" routine
-# for the 0x822B8 refcounted cluster, used by 10 callers (the 0x8219C/0x8245E/0x8247D/0x827A6/0x827CC/0x827D3/0x82817/
-# 0x82836/0x828ED/0x828F8 range). Part of the 0x822B8 refcounted cluster (sibling of Release_RefCounted_821C67D8). 92
-# lines, 1 callee. 10 callers.
+# Assigns a reference-counted pointer. r3 = the target slot, r4 = the source slot. When the
+# slots or their pointers are the same it does nothing; otherwise it releases the target's old
+# pointer (Release_RefCounted_821C67D8), stores the source's pointer, and atomically increments
+# its count at +12 (lwarx / stwcx. under the global lock). GuiElement_SetText_823F8268 uses it to
+# make a text object hold a wide string. Read in the generated code. 10 callers.
 [entrypoint.functions."0x822B85C8"]
-name = "ProcessAndReplaceRefCounted_822B85C8"
+name = "RefCounted_Assign_822B85C8"
 
 # A processor that resolves the handler (from the .data entries, handling the different layouts), then finds the tree
 # leaf. It takes a value (a) and a value (b). It resolves the handler from the .data entries: when the primary handler
@@ -32626,7 +32618,7 @@ name = "ProcessAndConstructObject2_82BED1B0"
 name = "ProcessAndFreeAndShrink_823B8178"
 
 # A processor that replaces a value and updates related counters. It takes a structure (a: a field at a->16) and a value (b). It replaces a
-# refcounted value (ProcessAndReplaceRefCounted_822B85C8), increments several counters (ProcessAndIncrementCounter_82287710 and
+# refcounted value (RefCounted_Assign_822B85C8), increments several counters (ProcessAndIncrementCounter_82287710 and
 # ProcessAndIncrementCounter_822D6B40, with .data descriptors), and manages the associated memory (Allocate_OrDbgBreak, Release_RefCounted,
 # ReleaseGlobalRef, SetValue4, and sub_823B8178 / sub_827DEEE0 / sub_827DFA18 / sub_82B38B78). This is the "replace this value and update
 # the related counters" routine, part of the 0x827DE value-replace cluster. 163 lines. 11 callees. 4 callers.
@@ -32635,7 +32627,7 @@ name = "ProcessAndReplaceValue_827DEAE0"
 
 # A processor that looks up a value and manages the associated memory. It takes three values. It increments a counter (ProcessAndIncrementCounter_822D6B40
 # with a .data descriptor), performs a lookup (sub_82B391D8), and based on the result (checking for a -1 sentinel) it either takes a default path
-# or continues processing. It then manages the associated memory and counters (Allocate_OrDbgBreak, ProcessAndIncrementCounter, ProcessAndReplaceRefCounted,
+# or continues processing. It then manages the associated memory and counters (Allocate_OrDbgBreak, ProcessAndIncrementCounter, RefCounted_Assign,
 # ReleaseGlobalRef, Release_RefCounted, SetValue4, and several sub_827Dx / sub_82B38x / sub_82B39x helpers). This is the "look up this value and
 # manage the associated memory" routine, part of the 0x827DE value-lookup cluster. 577 lines. 14 callees. 1 caller (ProcessAndReplaceValue_827DEAE0).
 [entrypoint.functions."0x827DEEE0"]
@@ -32680,7 +32672,7 @@ name = "ProcessAndComputeFloat_82818638"
 
 # A processor that atomically increments a counter and processes strings. It takes a structure (a: a field at a->0) and a value. It atomically
 # increments a global counter (a lwarx/stwcx. loop with the MSR saved and restored to guard the critical section), then reads a->0 and performs
-# a series of string and refcount operations (FindUTF16Substring_82CA3BF0, StrLenUTF16_8217AB30, ProcessAndReplaceRefCounted_822B85C8,
+# a series of string and refcount operations (FindUTF16Substring_82CA3BF0, StrLenUTF16_8217AB30, RefCounted_Assign_822B85C8,
 # ProcessAndIncrementCounter_822D6B40, ReleaseGlobalRef_821C6868, Release_RefCounted_821C67D8). This is the "increment the counter and process
 # these strings" routine, part of the 0x82B38 string cluster. 259 lines. 8 callees. 12 callers.
 [entrypoint.functions."0x82B38B78"]
@@ -42247,7 +42239,7 @@ name = "ProcessAndProcessAndProcess1237_822D6660"
 [entrypoint.functions."0x823955A8"]
 name = "ProcessAndProcessAndProcess1238_823955A8"
 
-# Process a structure by decrementing and replacing a reference count (seven hundred and one hundred and one hundred and one hundred and one hundred and two hundred and thirty-ninth form). It takes a structure, decrements a reference count (ProcessAndDecrementRefCount), and replaces a refcounted object (ProcessAndReplaceRefCounted) based on the result. Part of the 0x8219C process cluster. 172 lines. 2 callees. 1 caller (sub_82A7C780).
+# Process a structure by decrementing and replacing a reference count (seven hundred and one hundred and one hundred and one hundred and one hundred and two hundred and thirty-ninth form). It takes a structure, decrements a reference count (ProcessAndDecrementRefCount), and replaces a refcounted object (RefCounted_Assign) based on the result. Part of the 0x8219C process cluster. 172 lines. 2 callees. 1 caller (sub_82A7C780).
 [entrypoint.functions."0x8219C2D0"]
 name = "ProcessAndProcessAndProcess1239_8219C2D0"
 
@@ -44013,15 +44005,18 @@ name = "ProcessAndProcessAndProcess1664_826CBB58"
 [entrypoint.functions."0x828CE180"]
 name = "ProcessAndProcessAndProcess1665_828CE180"
 
-# Process a structure (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and sixty-sixth form). It takes a structure and checks its state, with no external sub-operations. This is a frequently-called helper in the 0x822D6 process cluster. 127 lines. 0 callees. 4 callers.
+# Compares two wide string handles. r3 / r4 = the handles. Returns 0 when both hold the same
+# record, or the same length and characters (UTF-16, compared one by one); 1 otherwise (also when
+# either is empty). GuiElement_SetText_823F8268 only replaces an element's text when this says it
+# differs. Read in the generated code.
 [entrypoint.functions."0x822D6998"]
-name = "ProcessAndProcessAndProcess1666_822D6998"
+name = "WideString_NotEqual_822D6998"
 
 # Process a structure by copy-assigning a refcounted object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and sixty-seventh form). It takes a structure, copy-assigns a refcounted object (CopyAssign_RefCounted), destructs a refcounted object (DestructRefCounted), and drives sub-operations (ProcessAndProcessAndProcess1228, ProcessAndProcessAndProcess1315, ProcessAndProcessAndProcess1633) based on the result. This is a frequently-called helper in the 0x82301 process cluster. 95 lines. 5 callees. 11 callers.
 [entrypoint.functions."0x82301F58"]
 name = "ProcessAndProcessAndProcess1667_82301F58"
 
-# Process a structure by replacing a refcounted object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and sixty-eighth form). It takes a structure, replaces a refcounted object (ProcessAndReplaceRefCounted), and drives a sub-operation (ProcessAndProcessAndProcess1666) based on the result. Part of the 0x82817 process cluster. 52 lines. 2 callees. 1 caller (ProcessAndProcessAndProcess1669).
+# Process a structure by replacing a refcounted object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and sixty-eighth form). It takes a structure, replaces a refcounted object (RefCounted_Assign), and drives a sub-operation (WideString_NotEqual) based on the result. Part of the 0x82817 process cluster. 52 lines. 2 callees. 1 caller (ProcessAndProcessAndProcess1669).
 [entrypoint.functions."0x82817318"]
 name = "ProcessAndProcessAndProcess1668_82817318"
 
@@ -44260,7 +44255,7 @@ name = "ProcessAndProcessAndProcess1724_82C0BD40"
 [entrypoint.functions."0x82C0CB78"]
 name = "ProcessAndProcessAndProcess1725_82C0CB78"
 
-# Process a large data structure by constructing a refcounted object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and twenty-sixth form). It takes a structure, constructs a refcounted object (ConstructRefCounted), copy-assigns a refcounted object (CopyAssign_RefCounted), destructs a refcounted object (DestructRefCounted), replaces a refcounted object (ProcessAndReplaceRefCounted), releases a global reference (ReleaseGlobalRef), and drives sub-operations (ProcessAndProcessAndProcess1228, ProcessAndProcessAndProcess1633, ProcessAndProcessAndProcess320, sub_821E6408, sub_8236D798, sub_82B3A7A0, sub_82B3AA88) based on the result. This is a very frequently-called helper in the 0x82301 process cluster. 229 lines. 12 callees. 245 callers.
+# Process a large data structure by constructing a refcounted object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and twenty-sixth form). It takes a structure, constructs a refcounted object (ConstructRefCounted), copy-assigns a refcounted object (CopyAssign_RefCounted), destructs a refcounted object (DestructRefCounted), replaces a refcounted object (RefCounted_Assign), releases a global reference (ReleaseGlobalRef), and drives sub-operations (ProcessAndProcessAndProcess1228, ProcessAndProcessAndProcess1633, ProcessAndProcessAndProcess320, sub_821E6408, sub_8236D798, sub_82B3A7A0, sub_82B3AA88) based on the result. This is a very frequently-called helper in the 0x82301 process cluster. 229 lines. 12 callees. 245 callers.
 [entrypoint.functions."0x82301D40"]
 name = "ProcessAndProcessAndProcess1726_82301D40"
 
@@ -44839,7 +44834,7 @@ name = "ProcessAndProcessAndProcess1867_82CDBAF8"
 [entrypoint.functions."0x82B7B870"]
 name = "ProcessAndProcessAndProcess1868_82B7B870"
 
-# Process a large structure by allocating fresh memory (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and one hundred and sixty-ninth form). It takes a structure, allocates fresh memory (Allocate_OrDbgBreak), and reallocates a buffer (ProcessAndReallocateBuffer). This is a frequently-called helper in the 0x82B39 process cluster. 112 lines. 2 callees. 4 callers.
+# Process a large structure by allocating fresh memory (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and one hundred and sixty-ninth form). It takes a structure, allocates fresh memory (Allocate_OrDbgBreak), and reallocates a buffer (WideString_Assign). This is a frequently-called helper in the 0x82B39 process cluster. 112 lines. 2 callees. 4 callers.
 [entrypoint.functions."0x82B396A8"]
 name = "ProcessAndProcessAndProcess1869_82B396A8"
 
@@ -46129,7 +46124,7 @@ name = "ProcessAndProcessAndProcess2189_82A6D650"
 [entrypoint.functions."0x82A6EA50"]
 name = "ProcessAndProcessAndProcess2190_82A6EA50"
 
-# Process a large structure by allocating fresh memory (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and four hundred and ninety-first form). It takes a structure, allocates fresh memory (Allocate_OrDbgBreak), reallocates a buffer (ProcessAndReallocateBuffer), and releases a refcounted object (Release_RefCounted). This is a frequently-called helper in the 0x82B39 process cluster. 199 lines. 3 callees. 4 callers.
+# Process a large structure by allocating fresh memory (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and four hundred and ninety-first form). It takes a structure, allocates fresh memory (Allocate_OrDbgBreak), reallocates a buffer (WideString_Assign), and releases a refcounted object (Release_RefCounted). This is a frequently-called helper in the 0x82B39 process cluster. 199 lines. 3 callees. 4 callers.
 [entrypoint.functions."0x82B394B8"]
 name = "ProcessAndProcessAndProcess2191_82B394B8"
 
@@ -47286,7 +47281,7 @@ name = "ProcessAndProcessAndProcess2463_821D5BE0"
 [entrypoint.functions."0x822651E0"]
 name = "ProcessAndProcessAndProcess2464_822651E0"
 
-# Process a structure by checking its state and driving many sub-operations (two thousand four hundred and sixty-sixth form). It takes a structure (a: field at a->0) and a structure (b: field at b->0); it checks the structure's state, and drives many sub-operations (Allocate_OrDbgBreak, Release_RefCounted, ProcessAndReallocateBuffer, ProcessAndProcessAndProcess2191, ProcessAndProcessAndProcess2192, and more) based on the result. This is the "process this data" routine (two thousand four hundred and sixty-sixth form), part of the 0x82B38 process cluster. 133 lines. 5 callees. 12 callers (sub_82901C60, sub_828FD288, sub_82408B88, and more).
+# Process a structure by checking its state and driving many sub-operations (two thousand four hundred and sixty-sixth form). It takes a structure (a: field at a->0) and a structure (b: field at b->0); it checks the structure's state, and drives many sub-operations (Allocate_OrDbgBreak, Release_RefCounted, WideString_Assign, ProcessAndProcessAndProcess2191, ProcessAndProcessAndProcess2192, and more) based on the result. This is the "process this data" routine (two thousand four hundred and sixty-sixth form), part of the 0x82B38 process cluster. 133 lines. 5 callees. 12 callers (sub_82901C60, sub_828FD288, sub_82408B88, and more).
 [entrypoint.functions."0x82B38F30"]
 name = "ProcessAndProcessAndProcess2465_82B38F30"
 
@@ -49973,6 +49968,25 @@ name = "Gui_FindElement_823F8C30"
 # code; the slide meaning is Inference from those callers.
 [entrypoint.functions."0x823F9140"]
 name = "Gui_GoToSlide_823F9140"
+
+# Sets a GUI element's text. r3 = the element, r4 = must be non-zero (the GUI), r5 = &a wide
+# string handle. The text object is *(*(element+4)); it sets +144, and when
+# WideString_NotEqual_822D6998(text+140, handle) says the text differs, RefCounted_Assign_822B85C8
+# makes text+140 hold the handle's string (taking a reference) and sets +138 and +136 (changed).
+# 155 callers; FrontMenu_SelectLoadCard_826C9008 sets the Continue screen's
+# loadgame.SaveGameDescription with it. Read in the generated code. The difficulty feature
+# overrides it for the slot label (docs/feature/difficulty_settings/technical.md 19.4).
+[entrypoint.functions."0x823F8268"]
+name = "GuiElement_SetText_823F8268"
+
+# Formats a wide string into a string handle. r3 = &handle, r4 = a UTF-16 format, r5... = the
+# arguments (saved to the stack for sub_82CAA2B8, a wide vsprintf into a 4096-character buffer, or a
+# bigger one from sub_82B39B48 when the format is longer). The result is a new 16-byte record from
+# Allocate_OrDbgBreak_8221F388, filled by WideString_Assign_82B39DD8 with refcount +12 = 1; the old
+# handle value is released (Release_RefCounted_821C67D8) and replaced. Read in the generated code;
+# that sub_82CAA2B8 is a vsprintf is Inference from the use.
+[entrypoint.functions."0x82B39260"]
+name = "WideString_Format_82B39260"
 
 # Selects a save card on the Continue screen. r3 = the front-end object, r4 = the
 # card index (clamped to 6). Moves the old and new cards' slides, plays a sound and

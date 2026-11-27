@@ -401,13 +401,13 @@ The `loadgame` layer of `frontendmainmenu.bgf` (Verified):
 
 #### Label code (Verified)
 
-- `FrontMenu_SelectLoadCard_826C9008` (`.156:10839`) selects a card. It clamps to 6, sets slide 2 on the old card and slide 1 on the new one, plays a sound, then sets the `loadgame.SaveGameDescription` text from a string list on the frontend object (~+120) through `sub_823F8268`.
+- `FrontMenu_SelectLoadCard_826C9008` (`.156:10839`) selects a card. It clamps to 6, sets slide 2 on the old card and slide 1 on the new one, plays a sound, then sets the `loadgame.SaveGameDescription` text from a string list on the frontend object (~+120) through `GuiElement_SetText_823F8268`.
 - The default name is `GUI_DEFAULT_SAVE_GAME_NAME` = "Hero %1". Its hash is computed in `sub_8324E640` (FNV-1 via `0x821F3C28`) and stored at `0x83498364`. It is used in `sub_824E4CD8` (`.181` around 6931 and 6968), which builds the save name.
 - The main-menu item is internally Load Game but shows "Continue" (`GUI_SCREEN_FRONT_END_LOAD_GAME`).
 
 #### Adding "(Easy)" (Inference)
 
-- Strong-override `FrontMenu_SelectLoadCard_826C9008`, or `sub_823F8268` when the target is `SaveGameDescription`, and append the suffix to a **new** string. Don't patch the string in place: in-place relabels longer than the original crashed in the mod-menu work (`plans/main-menu-mod-item.md`).
+- Strong-override `FrontMenu_SelectLoadCard_826C9008`, or `GuiElement_SetText_823F8268` when the target is `SaveGameDescription`, and append the suffix to a **new** string. Don't patch the string in place: in-place relabels longer than the original crashed in the mod-menu work (`plans/main-menu-mod-item.md`).
 - Or set `textstring` through the GUI Lua bridge (`src/core/fable2_gui_lua.h`, `docs/reference/gui_lua_bridge.md`).
 - The level per slot must be readable without loading the save, which favours the sidecar file (section 5).
 - A second line would need a new text element in the `.bgf` or a host overlay. The box width and wrap settings haven't been read.
@@ -552,19 +552,18 @@ delta4o asked whether collecting the 5 gold and paying for the music box still w
 
 - **The level per slot.** After each save made in this run (its `mainsave.bin` written in the last 30 s), `<slot folder>/recomp_difficulty.txt` gets the level name. This is done on the UI thread, every 2 s, from the level last seen in game. A slot with no file counts as Easy. **Seen in game 2026-11-24:** Hero001 Medium, Hero002 Hard, Hero003 Hardcore.
 - **Slot names.** `Headers/00000001/HeroNNN.header` holds the slot name in UTF-16 big-endian at `+8` ("Hero 1") and the folder name in ASCII at `+0x108` ("Hero000"). Read on disk.
-- **How the game sets the label.** `FrontMenu_SelectLoadCard_826C9008` calls `sub_823F8268(element, *(r3+20), &names[card])` with `names = *(r3+120)`. That sets the element's text object (`*(*(element+4))`, string slot `+140`). A string handle points to a ref-counted record `{+0 UTF-16BE chars, +4 length, +12 refcount}`, and the text object keeps a reference to it (`ProcessAndReplaceRefCounted_822B85C8`). Verified in the generated code. The text is the whole card description: "Hero 2 / Bowerstone Old Town", a line break, then the chapter text (seen in game).
+- **How the game sets the label.** `FrontMenu_SelectLoadCard_826C9008` calls `GuiElement_SetText_823F8268(element, *(r3+20), &names[card])` with `names = *(r3+120)`. That sets the element's text object (`*(*(element+4))`, string slot `+140`). A string handle points to a ref-counted record `{+0 UTF-16BE chars, +4 length, +12 refcount}`, and the text object keeps a reference to it (`RefCounted_Assign_822B85C8`). Verified in the generated code. The text is the whole card description: "Hero 2 / Bowerstone Old Town", a line break, then the chapter text (seen in game).
 - **What didn't work (2026-11-24):**
   - Reading `textstring` with `getAttribute` returns the layout's placeholder ("fdggdf dfg …"), not the live text.
   - Setting `textstring` has no visible effect.
   - A first native try crashed: a stale header (`Hero004`, its save deleted) gave a card whose record pointed into text, and "QC01" was read as a pointer.
-- **In place (seen in game 2026-11-24, second try):** the level is written into the description record itself. " (Medium)" goes after the name, the rest moves right, and as many characters drop off the end of the chapter text, so the length and the allocation don't change. Every address is checked first (`VirtualQuery`: committed, writable, aligned).
-  - Done in `FrontMenu_SelectLoadCard_826C9008`, Hero 2, 3 and 4 showed Medium, Hard and Hardcore, and Hero 1 showed Easy after being selected again.
-  - But the first card shown on opening had no level: opening the screen sets card 0's text through another path. `SelectLoadCard` is then called with -1, which only plays a sound.
-- **Current version:** the same in-place write, moved into `sub_823F8268` (the element-text setter that both paths use). It acts on any text that reads "<known slot name> / …" followed by a line break.
-  - **Seen in game (screenshots, 2026-11-24):** "Hero 1 (Easy) / Bowerstone Market", "Hero 2 (Medium) / Bowerstone Old Town", "Hero 3 (Hard) / …".
-  - The first card shows its level straight away on opening, also after B and Continue again (confirmed by delta4o on the 21:38 build).
-- **Known problem:** the chapter text under the name loses as many characters from its end as the level adds, so its last word or two are cut off mid-word (seen on two slots), because the string can't grow in place. The fix is a new, longer string: find the game's wide-string constructor (or what the `+8` field of the record is, in case it's a capacity).
-- **A cleaner way, later:** build a new string with the game's wide-string constructor (not found yet), or add the level where the description is built.
+- **First version (2026-11-24), replaced:** the level was written into the description record itself, in place: " (Medium)" after the name, the rest moved right, and as many characters dropped off the end of the chapter text, so the length and the allocation didn't change. It ran in `GuiElement_SetText_823F8268` (both paths that set the label end there), so the first card showed its level on opening too. But the end of the chapter text was cut mid-word (seen on two slots), and the game's own `names[]` list stayed edited.
+- **Current version (2026-11-27): a new string.** Read in the generated code:
+  - The game's wide strings are records `{+0 UTF-16BE chars, +4 length, +8 (buffer size << 1) | flag bit 0, +12 refcount}`. The game's wide sprintf `WideString_Format_82B39260` builds one like this: a 16-byte record from `Allocate_OrDbgBreak_8221F388`, zeroed, then `WideString_Assign_82B39DD8(record, chars, length)` (frees the old buffer, allocates, sets `+4` and the size bits, writes the terminator, copies the characters), then refcount 1. `Release_RefCounted_821C67D8` frees both parts through `Dispose_82B39A30` and `Free_SizeBucketed_Thunk_8221BE68`, the same heap as the allocator.
+  - `GuiElement_SetText_823F8268(element, gui, &handle)` only takes a new string when `WideString_NotEqual_822D6998` says the text differs; `RefCounted_Assign_822B85C8` then gives the text object its own reference.
+  - So the override builds the labelled text ("Hero 2 (Medium) / Bowerstone Old Town", a line break, then the whole chapter text) the same way, on a fresh guest stack frame with a handle of its own. It calls the original setter with that handle, then releases its own reference. The text object holds the only one, and the game frees the string when the text changes again. The `names[]` list isn't touched, and every read is still checked with `VirtualQuery` first.
+  - **Seen in game 2026-11-27 (`fable_2_080.log`, screenshots):** all five slots labelled ("Hero 1 (Easy) / Bowerstone Market", "Hero 4 (Hardcore) / Bowerstone Old Town", …) with the chapter text in full ("Living as an orphan in the Bowerstone slums."). Moving between the cards, B and Continue again gave the same lengths every time (70–84 characters), so nothing grows.
+- **The first save after a New Game (fixed 2026-11-27):** the level file is written from the level last seen on the world update, but the game saves straight after the start, before the next world update sees the new level. A Hard hero's first save was stamped Easy (`fable_2_079.log`: `slot Hero004: saved on Easy`). Now the level is recorded as soon as it is written (New Game and F8), and a New Game level that isn't written yet counts for the save. **Seen in game 2026-11-27 (`fable_2_080.log`):** girl on Hard, level written 4.1 s after the start, the game's save 1.9 s later: `slot Hero005: saved on Hard`.
 
 ### 18. Feature code, step 1 (2026-11-22)
 
@@ -1171,6 +1170,16 @@ Functions named on 2026-11-26 for B and the destiny line (19.2). Read in the gen
 | 0x822ADE08 | `Handle_Release_822ADE08` | `ProcessAndVcallAndClear3_822ADE08` | Verified (19.2) |
 | 0x823F8C30 | `Gui_FindElement_823F8C30` | `sub_823F8C30` | Verified (19.2, named 2026-11-27) |
 | 0x823F9140 | `Gui_GoToSlide_823F9140` | `sub_823F9140` | Verified for the calls; the slide meaning is Inference (19.2, named 2026-11-27) |
+
+Functions named on 2026-11-27 for the slot label (19.4). Read in the generated code:
+
+| Address | Name | Was | Evidence |
+| --- | --- | --- | --- |
+| 0x823F8268 | `GuiElement_SetText_823F8268` | `sub_823F8268` | Verified (19.4) |
+| 0x82B39260 | `WideString_Format_82B39260` | `sub_82B39260` | Verified for the record it builds; the vsprintf callee is Inference (19.4) |
+| 0x82B39DD8 | `WideString_Assign_82B39DD8` | `ProcessAndReallocateBuffer_82B39DD8` | Verified (19.4) |
+| 0x822B85C8 | `RefCounted_Assign_822B85C8` | `ProcessAndReplaceRefCounted_822B85C8` | Verified (19.4) |
+| 0x822D6998 | `WideString_NotEqual_822D6998` | `ProcessAndProcessAndProcess1666_822D6998` | Verified (19.4) |
 
 These stay unnamed until their role is confirmed:
 - the co-op partner getter `sub_828BEEC0` (Inference);
