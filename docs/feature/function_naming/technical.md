@@ -1,6 +1,6 @@
 # Function naming for recent PRs: technical notes
 
-**Status:** merged · **Commits:** f451b72 (#238) · **Last checked against:** 7863041
+**Status:** merged · **Commits:** f451b72 (#238) · **Last checked against:** c2a9d12
 
 On approving #183, the maintainer asked that every game function a PR relies on get a real name in `fable_2_manifest.toml`. This pass named the 22 functions that master's last 40 commits (#158..#230) used without one. No behaviour changes: only names, comments and docs. #183's own functions were named in its squash commit, 49c70ab, not here.
 

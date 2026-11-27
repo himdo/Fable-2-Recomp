@@ -1,10 +1,10 @@
 # Open player reports: technical notes
 
-**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** 7863041
+**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** c2a9d12
 
 Claims are labelled **Verified** (checked in this repo or a primary source), **Reported** (a source says so, not checked here) or **Inference** (reasoned, not tested). This came out of the [November 2026 research](../../reference/research/README.md).
 
-Code was read at master 7863041. SDK code was read at the commit master pins (`thirdparty/rexglue-sdk` at 22ef700) with `git show 22ef700:<path>`, because the local submodule checkout was at a different commit (c26d8b6). The GitHub issues couldn't be opened from this machine (`gh` wasn't signed in), so their wording comes from the research, not from the issues themselves.
+Code was read at master 7863041. SDK code was read at the commit master pins (`thirdparty/rexglue-sdk` at 22ef700) with `git show 22ef700:<path>`, because the local submodule checkout on the Mac this was first written on was at a different commit (c26d8b6). On the Windows machine used to check it on 26 Nov 2026, the submodule is at the pinned 22ef700. The GitHub issues couldn't be opened from this machine (`gh` wasn't signed in), so their wording comes from the research, not from the issues themselves.
 
 ## Symptom
 
@@ -26,7 +26,7 @@ Problems players reported against the recomp at the time of the research. None i
 |---|---|---|
 | `logs/` | the SDK logger, started before `OnPostInitLogging` in `src/core/fable_2_app.h` | The game log. Near the start it has `[native-build] configuration=… linked_sdk=…`, `[build-profile] detected …` and the `[xex-verify]` hash lines, then the GPU adapter line (see the AMD section). |
 | `fable2_crash.log` | `src/diagnostics/fable2_crash_log.h` | Host crashes: unhandled exception (code and address), `abort()`, `std::terminate`, invalid CRT parameter, pure virtual call. The call stack is written as module+offset; `llvm-symbolizer --obj=fable_2.exe 0x<offset>` turns it into names. |
-| `fable2_av_probe.log` | `src/diagnostics/fable2_av_probe.h` (included from `src/main.cpp`) | Guest-code access violations with the guest state, first 10 events. |
+| `fable2_av_probe.log` | `src/diagnostics/fable2_av_probe.h` (included from `src/main.cpp`) | Guest-code access violations with the guest state. Rate-limited: the first 10 events per (fault, rip) pair, then every 2048th, at most 20,000 lines. |
 | `fable2_stall_dump.log` | `src/diagnostics/fable2_stall_dump.h` (included from `src/main.cpp`) | When the render thread goes silent for more than 4 s: the RIP and first stack words of every thread, at most once per 5 s, up to 40 dumps. |
 
 Opt-in tools, all off by default:
@@ -41,13 +41,14 @@ Opt-in tools, all off by default:
 
 - **Reported (Intel ARK):** the i7-3770 (Ivy Bridge) supports "Intel® SSE4.1, Intel® SSE4.2, Intel® AVX", with no AVX2 (introduced with 4th-gen Core).
 - **Reported:** another recomp confirmed exactly this CPU fails on AVX2 builds (illegal instruction 0xC000001D), and shipped a `*_SSE4.exe` that the normal executable launches on non-AVX2 CPUs. The LCS recomp moved to an AVX1 baseline.\[2\] LASRecomp kept AVX2 for speed.\[3\]
-- **Verified: master's build doesn't ask the compiler for AVX or AVX2.**
+- **Verified: master's build doesn't ask the compiler for AVX or AVX2, apart from zlib-ng.**
   - The project's `windows-base` preset in `CMakePresets.json` sets no `-march`. The only `-march` values there are `armv8-a`, for the ARM64 presets.
   - The recompiled game code (`fable_2_recomp`) gets `-msse4.1` and nothing wider, from `rexglue_apply_target_settings` in the SDK's `cmake/rexglue_helpers.cmake`, applied by `rexglue_setup_target` in `generated/rexglue.cmake`.
   - The runtime and the D3D12 plugin are built by `tools/build_runtime_sdk.cmd` with `-march=x86-64-v2` (SSE4.2 and POPCNT, no AVX). So are the Vulkan plugin (`tools/build_sdk_vulkan.cmd`) and the Linux SDK build in `build.sh`.
   - The SDK's own presets use `x86-64-v2` on Windows and Linux. Only its `mac-base` preset uses `x86-64-v3` (AVX2), and this project doesn't build that one.
   - `include/rex/ppc/intrinsics.h` in the SDK includes SIMDe's `avx.h` and `avx2.h`. **Inference:** SIMDe falls back to SSE code when the compiler isn't allowed AVX2, so this doesn't add AVX2 instructions on its own.
   - No CPUID or CPU-feature check exists in `src/` or in the SDK's `src/` and `include/` (no `cpuid`, `__builtin_cpu_supports` or `IsProcessorFeaturePresent`).
+  - **The exception is zlib-ng**, the host inflate library that `src/core/hotfunc/zlib/native_inflate.cmake` fetches. It builds a few files per instruction set: `-mavx2` for `adler32_avx2.c`, `chunkset_avx2.c`, `compare256_avx2.c` and `slide_hash_avx2.c`, and `-mavx512*` for four more (**Verified** in the Debug build's `compile_commands.json` on Windows). zlib-ng picks one of these at runtime with its own CPUID check, and `native_inflate.cmake` doesn't turn that off. **Inference:** so an i7-3770 runs the SSE versions and this isn't the crash. It is the one place where AVX2 code is in the binary.
 - **Not on master:** the `202_2` branch's Steam Deck build (`72b2b56`) adds `build.sh --cpu deck` with `-march=znver2`, which does allow AVX2. A Windows build made with similar flags would crash on an i7-3770, but nothing on master does that.
 - **Inference:** a source build of master shouldn't hit an AVX2 illegal instruction, so the AVX2 explanation is now doubtful for current builds. Still open: the build the player used (an older release, a prebuilt plugin, or a fork may have been compiled differently), a third-party DLL, or a cause unrelated to the CPU.
 

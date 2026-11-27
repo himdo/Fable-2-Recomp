@@ -13,9 +13,11 @@
 //   * limit+kCounterPtrOffset holds the guest address of the GPU progress
 //     counter. The SDK's command processor writes that counter from the GPU
 //     thread (EVENT_WRITE_SHD; see docs/fix/fps_cap/technical.md), and
-//     BeginFrame_82B9BA58 resets it on the game thread.
-//   * limit+kDeadlineOffset is the deadline in counter units, written by
-//     BeginFrame_82B9BA58 and EndFrame_822981F0.
+//     D3DDevice_SetRingBufferParameters_82B9BA58 resets it on the game
+//     thread when it sets up the ring buffer.
+//   * limit+kDeadlineOffset is the deadline in counter units, set to its
+//     start value by D3DDevice_SetRingBufferParameters_82B9BA58 and moved on
+//     every frame by EndFrame_822981F0.
 // The wait loop below spins until the counter reaches the deadline, so the
 // counter load must be re-issued on every iteration. A plain (non-volatile)
 // load of memory another thread writes is a data race, and the optimiser

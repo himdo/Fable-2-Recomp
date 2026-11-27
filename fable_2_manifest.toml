@@ -87,14 +87,16 @@ after_instruction = true
 
 # --- Unlock grant methods (make the getter report each item as granted) -----
 # Forcing the two registration gates alone is not enough: after the gates the
-# getter finds the item and calls a per-object GRANT vtable method, and the
-# getter returns THAT method's result. For an unregistered player the grant
-# method returns 0 (item not granted), so the getter reports "not available"
-# and the chest stays locked. We force each grant method's return to 1.
+# getter finds the item and calls a per-record check through a function
+# pointer it was given, and the getter returns THAT check's result. For an
+# unregistered player the check returns 0 (item not granted), so the getter
+# reports "not available" and the chest stays locked. We force each check's
+# return to 1.
 #
-# Website: sub_8256D940 is the website-chest vtable[1] "is this item new?"
-# check. Its final instruction is `xori r3, r9, 1` at 0x8256D9E4; hook right
-# after it and set r3 = 1 so the getter reports the item as granted.
+# Website: GuildChestWebsite_HasItem_8256D940 returns 1 when the item's hash is
+# in the record's list and 0 when it isn't. Its final instruction is
+# `xori r3, r9, 1` at 0x8256D9E4; hook right after it and set r3 = 1 so the
+# getter reports the item as granted.
 [[entrypoint.midasm_hook]]
 address = 0x8256D9E4
 name = "fable2_hook_website_grantnew"
@@ -133,10 +135,11 @@ name = "fable2_hook_direct_mouse_look"
 registers = ["r31"]
 after_instruction = true
 #
-# CE: sub_824ACAE0 is the CE-chest grant vtable slot called from
-# GetCEContent. Its entire body is `lbz r3, 993(r3)` (returns the byte at
-# item+0x3E1, the "CE content available" flag). Hook right after it and set
-# r3 = 1 so the getter reports the CE content as available.
+# CE: GuildChestCE_GetAvailableFlag_824ACAE0 is the CE-chest check that
+# GuildChest_GetCEContent_824B3528 calls through a function pointer. Its
+# entire body is `lbz r3, 993(r3)` (returns the byte at item+0x3E1, the "CE
+# content available" flag). Hook right after it and set r3 = 1 so the getter
+# reports the CE content as available.
 [[entrypoint.midasm_hook]]
 address = 0x824ACAE0
 name = "fable2_hook_ce_grantavail"
@@ -393,6 +396,26 @@ name = "GuildChest_GetWebsiteItem_8256E368"
 # 0x824B366C (a load) inside this fn.
 [entrypoint.functions."0x824B3528"]
 name = "GuildChest_GetCEContent_824B3528"
+
+# Website chest: does this record's list hold the named item? (r3 = the
+# record the getter found, r4 = a pointer to the item name, or to null for an
+# empty name). It FNV-1 hashes the name (FNV1Hash_821F3C28), maps the hash
+# through sub_822CDC48 with the table at *0x83496BD0 (r5 = 4), and searches
+# the array from +16 to +20 for the result. It returns 1 when found and 0
+# when not; the final `xori r3, r9, 1` at 0x8256D9E4 is where
+# fable2_hook_website_grantnew forces 1. GuildChest_GetWebsiteItem_8256E368
+# calls it through the function pointer at +8 of its own r3 argument, not a
+# vtable. Read in the generated code.
+[entrypoint.functions."0x8256D940"]
+name = "GuildChestWebsite_HasItem_8256D940"
+
+# CE chest: return the "CE content available" byte (r3 = the record). The
+# whole body is `lbz r3, 993(r3)` (+0x3E1); fable2_hook_ce_grantavail forces
+# it to 1. GuildChest_GetCEContent_824B3528 calls it through the function
+# pointer at +16 of its r3 argument, with `this` adjusted by the value at
+# +20. Read in the generated code.
+[entrypoint.functions."0x824ACAE0"]
+name = "GuildChestCE_GetAvailableFlag_824ACAE0"
 
 # Per-item worker: called once per chest item on the click; calls the item op
 # method (0x8256E4F8) through the website-object vtable.
@@ -34896,10 +34919,23 @@ name = "SerializeAndProcessIndexedRegion_82BC44F0"
 name = "ProcessAndCheckAndClear_82BF2CB8"
 
 # A getter that gets the timebase. It takes a structure (a: a field at a->0). It reads the timebase (mftb). When the timebase is zero it reads the timebase again (a retry). It then stores the timebase
-# into a->0 and returns 1. This is the "get the timebase" routine, part of the 0x8221E process cluster. 20 lines. 0 callees (leaf function). 12 callers (sub_82BBB2A8, sub_82D02A88, sub_82B9C530,
+# into a->0 and returns 1. This is the "get the timebase" routine, part of the 0x8221E process cluster. 20 lines. 0 callees (leaf function). 95 callers in the generated code (counted 26 Nov 2026), among them these 12 (sub_82BBB2A8, sub_82D02A88, sub_82B9C530,
 # sub_82A3E7C0, sub_82CFECA8, sub_822B6D70, sub_82A57418, sub_82AA2E80, sub_82B69488, sub_82AB2968, sub_82BE3E00, and sub_8238A2D8).
 [entrypoint.functions."0x8221EB58"]
 name = "GetTimebase_8221EB58"
+
+# Game init: set the tick rates, then build the game's subsystems (no
+# arguments used). It reads the clock (GetTimebase_8221EB58), stores the HF
+# tick rate (the double at 0x833194F0, 30.0) into 0x83319518 at 0x8233AE98
+# and the LF rate (15.0) into 0x83319510 at 0x8233AEB4, plus a third double,
+# then allocates and constructs about 30 subsystems (Allocate_OrDbgBreak_8221F388
+# calls followed by their constructors). These are the only writers of the
+# two rate doubles; the high_tick_rate hooks skip both stores
+# (docs/feature/guest_patches/technical.md). Its only caller, sub_8233D6E8, is
+# a single branch to it. Read in the generated code; "game init" for the
+# subsystem part is Inference from the allocations.
+[entrypoint.functions."0x8233AE50"]
+name = "Game_InitTickRatesAndSystems_8233AE50"
 
 # A processor that queries and dispatches the data. It takes a structure (a: a field at a->16), a value (b), a value (c), and a value (d). It computes c times d and queries and processes
 # (ProcessAndQueryAndProcess2_82A36390, with a, b, and the product). It then reads a->16 (a value). When a->16 is non-zero and d minus 1 is at most 7 it performs a table lookup (a .data pointer
@@ -35527,7 +35563,7 @@ name = "CompareAndProcess_82B3ACC0"
 # A processor that constructs and processes the data (twelfth form). It takes a value (a). It constructs and processes (ProcessAndConstructAndProcess7_82B3ADA0, with a). It then constructs a lower
 # string (ProcessAndConstructLowerString_82B40708, with a local buffer and a) and compares (CompareAndProcess_82B3ACC0, with another local buffer). It then destructs and copy-assigns
 # (DestructRefCounted_82214F08 and CopyAssign_RefCounted2_82265160). This is the "construct and process this data" routine (twelfth form), part of the 0x82B3A process cluster. 81 lines. 6 callees
-# (including ProcessAndConstructAndProcess7, ProcessAndConstructLowerString, and CompareAndProcess). 12 callers (sub_82B3C898, sub_8233AE50, sub_82B3B110, sub_825B4CC8, sub_82460F70, sub_823A5498,
+# (including ProcessAndConstructAndProcess7, ProcessAndConstructLowerString, and CompareAndProcess). 12 callers (sub_82B3C898, Game_InitTickRatesAndSystems_8233AE50, sub_82B3B110, sub_825B4CC8, sub_82460F70, sub_823A5498,
 # sub_824155C8, sub_825F3D58, sub_82B3C4F8, sub_825F45A8, sub_823ADB60, and sub_823FE828).
 [entrypoint.functions."0x82B3AEA0"]
 name = "ProcessAndConstructAndProcess12_82B3AEA0"
@@ -36136,7 +36172,7 @@ name = "SortAndPartition_82C2AF58"
 [entrypoint.functions."0x82C2B850"]
 name = "SortAndRecurse2_82C2B850"
 
-# A constructor that constructs and processes the data. It takes a structure (a: fields at a->0, a->8, and a->12), a value (b), a value (c), and a value (d). It stores a .data pointer (-8672) into a->0. It then atomically increments (AtomicIncrement3_821F7798, with a+4 and the .data pointer). It then stores 0 into a->8 and a->12. It then constructs and processes (ProcessAndConstructAndProcess23_82C635D8, with a, b, c, and d). This is the "construct and process this data" routine, part of the 0x82C63 process cluster. 57 lines. 2 callees (AtomicIncrement3 and ProcessAndConstructAndProcess23). 12 callers (sub_8233EC30, sub_82466098, sub_826928F8, sub_82357DF8, sub_825F45A8, sub_824E9E70, sub_82691A70, sub_8281A568, sub_822F27C0, sub_82359BE8, sub_8233AE50, and sub_8290BE28).
+# A constructor that constructs and processes the data. It takes a structure (a: fields at a->0, a->8, and a->12), a value (b), a value (c), and a value (d). It stores a .data pointer (-8672) into a->0. It then atomically increments (AtomicIncrement3_821F7798, with a+4 and the .data pointer). It then stores 0 into a->8 and a->12. It then constructs and processes (ProcessAndConstructAndProcess23_82C635D8, with a, b, c, and d). This is the "construct and process this data" routine, part of the 0x82C63 process cluster. 57 lines. 2 callees (AtomicIncrement3 and ProcessAndConstructAndProcess23). 12 callers (sub_8233EC30, sub_82466098, sub_826928F8, sub_82357DF8, sub_825F45A8, sub_824E9E70, sub_82691A70, sub_8281A568, sub_822F27C0, sub_82359BE8, Game_InitTickRatesAndSystems_8233AE50, and sub_8290BE28).
 [entrypoint.functions."0x82C63FB8"]
 name = "ConstructAndProcess25Byte_82C63FB8"
 
@@ -36928,7 +36964,7 @@ name = "ProcessAndProcessAndProcess11_822D0F10"
 [entrypoint.functions."0x822D3EA0"]
 name = "ProcessAndProcessAndProcess12_822D3EA0"
 
-# A processor that allocates and processes the data (sixteenth form). It takes a structure (a: field at a->0) and a structure (b: field at b->0). It allocates and processes the data (Allocate_OrDbgBreak_8221F388, with a). It then constructs a reference-counted object (ConstructRefCounted_8222CF18, with a). This is the "allocate and process this data" routine (sixteenth form), part of the 0x822F2 process cluster. 101 lines. 5 callees (Allocate_OrDbgBreak, ConstructRefCounted, CopyAssign_RefCounted2, DestructRefCounted, and Free_SizeBucketed_Thunk). 12 callers (sub_82355C08, sub_8233AE50, sub_826928F8, sub_8233EC30, sub_826935F0, sub_825F45A8, sub_8281A568, sub_826939A0, sub_82691A70, sub_822F27C0, sub_82359BE8, and sub_82466098).
+# A processor that allocates and processes the data (sixteenth form). It takes a structure (a: field at a->0) and a structure (b: field at b->0). It allocates and processes the data (Allocate_OrDbgBreak_8221F388, with a). It then constructs a reference-counted object (ConstructRefCounted_8222CF18, with a). This is the "allocate and process this data" routine (sixteenth form), part of the 0x822F2 process cluster. 101 lines. 5 callees (Allocate_OrDbgBreak, ConstructRefCounted, CopyAssign_RefCounted2, DestructRefCounted, and Free_SizeBucketed_Thunk). 12 callers (sub_82355C08, Game_InitTickRatesAndSystems_8233AE50, sub_826928F8, sub_8233EC30, sub_826935F0, sub_825F45A8, sub_8281A568, sub_826939A0, sub_82691A70, sub_822F27C0, sub_82359BE8, and sub_82466098).
 [entrypoint.functions."0x822F2400"]
 name = "ProcessAndAllocateAndProcess16_822F2400"
 
@@ -37408,7 +37444,7 @@ name = "ProcessAndProcessAndProcess120_82CAC650"
 [entrypoint.functions."0x82CAC700"]
 name = "ProcessAndProcessAndProcess121_82CAC700"
 
-# A processor that processes the data (one hundred and twenty-second form). It takes a value (a). It processes the data (a). This is the "process this data" routine (one hundred and twenty-second form), part of the 0x82CBC process cluster. 9 lines. 0 callees (no function calls). 7 callers (sub_826C6A80, sub_829F9D38, sub_82378CD0, sub_8233AE50, sub_82373E08, sub_82A153F0, and sub_822EB0C8).
+# A processor that processes the data (one hundred and twenty-second form). It takes a value (a). It processes the data (a). This is the "process this data" routine (one hundred and twenty-second form), part of the 0x82CBC process cluster. 9 lines. 0 callees (no function calls). 7 callers (sub_826C6A80, sub_829F9D38, sub_82378CD0, Game_InitTickRatesAndSystems_8233AE50, sub_82373E08, sub_82A153F0, and sub_822EB0C8).
 [entrypoint.functions."0x82CBC5F0"]
 name = "ProcessAndProcessAndProcess122_82CBC5F0"
 
@@ -37496,7 +37532,7 @@ name = "ProcessAndFreeAndProcess10_829EA980"
 [entrypoint.functions."0x829FAC30"]
 name = "ProcessAndProcessAndProcess137_829FAC30"
 
-# A processor that processes the data (one hundred and thirty-eighth form). It takes a structure (a: field at a->0), a value (b), and a value (c). It processes the data (a, b, and c). This is the "process this data" routine (one hundred and thirty-eighth form), part of the 0x829FB process cluster. 144 lines. 8 callees (ConstructRefCounted, DestructRefCounted, ProcessAndVcallAndDestruct3, SetString, ProcessAndFreeAndProcess9, ProcessAndProcessAndProcess124, sub_829FB280, and sub_82C63FB8). 6 callers (sub_825B4CC8, sub_8241DC68, sub_825F3050, sub_822F33B8, sub_8233AE50, and sub_82354BB8).
+# A processor that processes the data (one hundred and thirty-eighth form). It takes a structure (a: field at a->0), a value (b), and a value (c). It processes the data (a, b, and c). This is the "process this data" routine (one hundred and thirty-eighth form), part of the 0x829FB process cluster. 144 lines. 8 callees (ConstructRefCounted, DestructRefCounted, ProcessAndVcallAndDestruct3, SetString, ProcessAndFreeAndProcess9, ProcessAndProcessAndProcess124, sub_829FB280, and sub_82C63FB8). 6 callers (sub_825B4CC8, sub_8241DC68, sub_825F3050, sub_822F33B8, Game_InitTickRatesAndSystems_8233AE50, and sub_82354BB8).
 [entrypoint.functions."0x829FB018"]
 name = "ProcessAndProcessAndProcess138_829FB018"
 
@@ -37860,7 +37896,7 @@ name = "ProcessAndProcessAndProcess224_822F7B70"
 [entrypoint.functions."0x822F84D8"]
 name = "ProcessAndProcessAndProcess225_822F84D8"
 
-# A processor that processes the data (two hundred and twenty-sixth form). It takes a structure (a: fields at a->8, a->12, a->16, a->20, a->24, a->28, a->32, a->36, a->40, a->44, a->48, a->52, a->56, a->60, and a->64). It processes the data (a). This is the "process this data" routine (two hundred and twenty-sixth form), part of the 0x82305 process cluster. 417 lines. 7 callees (Allocate_OrDbgBreak, Construct16Byte, sub_8235E278, sub_8240D938, sub_8241AAB0, sub_8241AC20, and sub_829F8250). 2 callers (sub_82378CD0 and sub_8233AE50).
+# A processor that processes the data (two hundred and twenty-sixth form). It takes a structure (a: fields at a->8, a->12, a->16, a->20, a->24, a->28, a->32, a->36, a->40, a->44, a->48, a->52, a->56, a->60, and a->64). It processes the data (a). This is the "process this data" routine (two hundred and twenty-sixth form), part of the 0x82305 process cluster. 417 lines. 7 callees (Allocate_OrDbgBreak, Construct16Byte, sub_8235E278, sub_8240D938, sub_8241AAB0, sub_8241AC20, and sub_829F8250). 2 callers (sub_82378CD0 and Game_InitTickRatesAndSystems_8233AE50).
 [entrypoint.functions."0x823052C0"]
 name = "ProcessAndProcessAndProcess226_823052C0"
 
@@ -38028,7 +38064,7 @@ name = "ProcessAndProcessAndProcess264_823BE9C0"
 [entrypoint.functions."0x823FB510"]
 name = "ProcessAndProcessAndProcess265_823FB510"
 
-# A processor that processes the data (two hundred and sixty-sixth form). It takes nothing. It processes the data. This is the "process this data" routine (two hundred and sixty-sixth form), part of the 0x82415 process cluster. 307 lines. 4 callees (Allocate_OrDbgBreak, ProcessAndSetjmpAndProcess2, sub_8240D938, and sub_82A20528). 3 callers (sub_8233AE50, ProcessAndProcessAndProcess213, and sub_82357DF8).
+# A processor that processes the data (two hundred and sixty-sixth form). It takes nothing. It processes the data. This is the "process this data" routine (two hundred and sixty-sixth form), part of the 0x82415 process cluster. 307 lines. 4 callees (Allocate_OrDbgBreak, ProcessAndSetjmpAndProcess2, sub_8240D938, and sub_82A20528). 3 callers (Game_InitTickRatesAndSystems_8233AE50, ProcessAndProcessAndProcess213, and sub_82357DF8).
 [entrypoint.functions."0x824151E8"]
 name = "ProcessAndProcessAndProcess266_824151E8"
 
@@ -38088,7 +38124,7 @@ name = "ProcessAndProcessAndProcess279_829F8250"
 [entrypoint.functions."0x829FAB50"]
 name = "ProcessAndProcessAndProcess280_829FAB50"
 
-# A processor that processes the data (two hundred and eighty-first form). It takes nothing. It processes the data. This is the "process this data" routine (two hundred and eighty-first form), part of the 0x829FA process cluster. 131 lines. 3 callees (Allocate_OrDbgBreak, MemSet_SdkRuntime, and sub_829FC9A8). 3 callers (ProcessAndProcessAndProcess211, sub_8233AE50, and sub_82354BB8).
+# A processor that processes the data (two hundred and eighty-first form). It takes nothing. It processes the data. This is the "process this data" routine (two hundred and eighty-first form), part of the 0x829FA process cluster. 131 lines. 3 callees (Allocate_OrDbgBreak, MemSet_SdkRuntime, and sub_829FC9A8). 3 callers (ProcessAndProcessAndProcess211, Game_InitTickRatesAndSystems_8233AE50, and sub_82354BB8).
 [entrypoint.functions."0x829FAF40"]
 name = "ProcessAndProcessAndProcess281_829FAF40"
 
@@ -40844,7 +40880,7 @@ name = "ProcessAndProcessAndProcess900_82236FD0"
 [entrypoint.functions."0x821CD298"]
 name = "ProcessAndProcessAndProcess901_821CD298"
 
-# Process a structure by wrapping a sub-operation (seven hundred and one hundred and ninety-second form). It takes a structure and drives a sub-operation (ProcessAndProcessAndProcess771). Part of the 0x82B9B process cluster. 142 lines. 1 callee. 2 callers (BeginFrame_82B9BA58 and sub_82B9E848).
+# Process a structure by wrapping a sub-operation (seven hundred and one hundred and ninety-second form). It takes a structure and drives a sub-operation (ProcessAndProcessAndProcess771). Part of the 0x82B9B process cluster. 142 lines. 1 callee. 2 callers (D3DDevice_SetRingBufferParameters_82B9BA58 and sub_82B9E848).
 [entrypoint.functions."0x82B9B7E8"]
 name = "ProcessAndProcessAndProcess902_82B9B7E8"
 
@@ -42308,7 +42344,7 @@ name = "ProcessAndProcessAndProcess1258_82B9C7F8"
 [entrypoint.functions."0x82B9C9D8"]
 name = "ProcessAndProcessAndProcess1259_82B9C9D8"
 
-# Process a structure by driving sub-operations (seven hundred and one hundred and one hundred and one hundred and one hundred and two hundred and sixtieth form). It takes a structure and drives sub-operations (sub_82BA21F8, FrameWaitPoller_82BA2568, sub_82BA29B8) based on the result. Part of the render-loop process path in the 0x82BA3 cluster. 138 lines. 3 callees. 1 caller (MainRenderLoop).
+# Process a structure by driving sub-operations (seven hundred and one hundred and one hundred and one hundred and one hundred and two hundred and sixtieth form). It takes a structure and drives sub-operations (sub_82BA21F8, D3DDevice_WaitGpuAndReadDisplayInfo_82BA2568, sub_82BA29B8) based on the result. Part of the render-loop process path in the 0x82BA3 cluster. 138 lines. 3 callees. 1 caller (MainRenderLoop).
 [entrypoint.functions."0x82BA32C8"]
 name = "ProcessAndProcessAndProcess1260_82BA32C8"
 
@@ -48147,30 +48183,59 @@ name = "DispatchOsNotifications_82185080"
 # 60 FPS dispatch function (0x82B9C7F8). fps_meter.h hooks this symbol.
 [entrypoint.functions."0x82B9CD68"]
 name = "MainRenderLoop_82B9CD68"
-# Begin frame: the only writer of the frame limiter's deadline field
-# (+10908 on the video struct). It sets the vblank counter to that deadline
-# minus 2 and calls FrameLimiterWait_82242628 (r5 = 4); EndFrame_822981F0
-# adds 2 to the deadline each frame, so the limiter waits 2 vblanks (30 fps).
-# Read in the generated code and traced with src/diagnostics/fps_probe.h
-# during the fps cap investigation (docs/fix/fps_cap/technical.md); not
-# re-read for this entry.
+# Set up the GPU ring buffer (r3 = the device, r4 = a parameters struct or
+# null). It waits for the old ring buffer to drain (through sub_82B9B970,
+# which calls FrameLimiterWait_82242628 with r5 = 4, and only when a ring
+# buffer exists), flushes and frees the old buffers, then reads r4: +4 primary
+# size (default 32 KB), +8 primary buffer, +12 secondary size (default 2 MB),
+# +16 secondary buffer (both allocated when null), +20 segment count
+# (default 32). It calls MmGetPhysicalAddress, VdInitializeRingBuffer,
+# VdEnableRingBufferRPtrWriteBack and
+# VdSetSystemCommandBufferGpuIdentifierAddress. It sets the frame limiter's
+# deadline field (+10908) to 3 only when it is still 0, and stores
+# deadline - 2 into the vblank counter at *(+10896). EndFrame_822981F0 is the
+# per-frame writer of +10908, not this. Callers: device create sub_82BA0220,
+# device shutdown sub_82BA04A8 (r4 = 0), game init
+# ProcessAndProcessAndProcess1385_821C38C8 (twice), sub_82B68E78 and
+# sub_82B69778. Read in the generated code. The match with the XDK's
+# D3DDevice_SetRingBufferParameters and its parameters struct is Inference.
+# Renamed from BeginFrame_82B9BA58 (#248), which wasn't a per-frame function.
 [entrypoint.functions."0x82B9BA58"]
-name = "BeginFrame_82B9BA58"
-# Frame-wait poller: polls KeQuerySystemTime; called by the per-frame helper
-# ProcessAndProcessAndProcess1260_82BA32C8. Probe-traced during the fps cap
-# investigation: never called on the title screen (its enable flag at +23968
-# is off), so it is not the 30 fps limiter.
+name = "D3DDevice_SetRingBufferParameters_82B9BA58"
+# Wait for the GPU, then read the display mode (r3 = the device). It does
+# nothing unless bit 0x10 of the byte at +23968 is set. Then it calls
+# FrameLimiterWait_82242628 (r5 = 6) and spins on DelayZero_82CBC6B0 until a
+# fence word reads 6144, calls VdGetCurrentDisplayInformation and
+# KeQueryPerformanceFrequency and fills a 2 KB block with them, and finally
+# closes up to 41 handles (ProcessAndCheckSuccess_82CBBF60) and calls
+# ObDeleteSymbolicLink. It never calls KeQuerySystemTime. What it is for is
+# unknown (the handles and the symbolic link suggest it tears down something
+# optional). Callers: ProcessAndProcessAndProcess1260_82BA32C8 (render path),
+# device shutdown sub_82BA04A8, sub_82BA21F8 and sub_82BA0058. Probe-traced
+# in the fps cap investigation: never called on the title screen. Read in the
+# generated code. Renamed from FrameWaitPoller_82BA2568 (#248).
 [entrypoint.functions."0x82BA2568"]
-name = "FrameWaitPoller_82BA2568"
-# GPU CPU-interrupt callback: signals an event with KeSetEvent, probably to
-# wake the render thread (RenderThreadMain_82B9F598). Probe-traced during the
-# fps cap investigation: never fires on the title screen. Role inferred from
-# its kernel calls; not re-read for this entry.
+name = "D3DDevice_WaitGpuAndReadDisplayInfo_82BA2568"
+# Stop a worker thread and wait for it to exit (no arguments). Its state is
+# the global at 0x83336ECC: it sets the stop flag at +32 to 1, signals the
+# event at +16 (KeSetEvent), waits for the thread object at +0
+# (KeWaitForSingleObject, no timeout) and dereferences it
+# (ObDereferenceObject); returns 0. No code calls it directly, so it is
+# reached through a pointer. Which worker it stops is unknown; it is not the
+# render thread, which waits on its own event. Read in the generated code.
+# Renamed from GpuInterruptCallback_82CC2948 (#248), which nothing supports.
 [entrypoint.functions."0x82CC2948"]
-name = "GpuInterruptCallback_82CC2948"
-# Render thread main loop: waits with KeWaitForSingleObject, then renders.
-# Probe-traced during the fps cap investigation: never runs on the title
-# screen. Role inferred from its kernel calls; not re-read for this entry.
+name = "WorkerThread_StopAndJoin_82CC2948"
+# Render thread main loop (r3 = the thread's context). It sets its affinity
+# (ProcessAndProcessAndProcess478_82CBBE20), then waits on the event at +32
+# (KeWaitForSingleObject), with a 30 ms timeout (-300000) when two fields of
+# the device match, otherwise without one. On a timeout (status 258) it
+# takes the device lock (+14944) and, if bit 0x2 of the byte at +10942 is set,
+# runs ProcessAndProcessAndProcess1258_82B9C7F8 and MainRenderLoop_82B9CD68,
+# then waits again. When the event is signalled, it resets it and calls
+# ProcessAndProcessAndProcess1081_82B9F280. So it presents frames while no
+# one else does. Probe-traced in the fps cap investigation: never runs on the
+# title screen. Read in the generated code.
 [entrypoint.functions."0x82B9F598"]
 name = "RenderThreadMain_82B9F598"
 # Render settings setup: fills the main render settings object (r3, kept in
@@ -49458,6 +49523,20 @@ name = "AimTargetingUpdate_827B6228"
 # (mouse aim). Sole caller: AimTargetingUpdate_827B6228.
 [entrypoint.functions."0x827B80B0"]
 name = "AimCursorUpdate_827B80B0"
+
+# Handle the RANGED_CURSOR_MOVEMENT game action (r3 = the handler object,
+# r4 = the action). It acts only on action 71: it finds the player's current
+# mode object (a binary search of the {tag, obj} array at +72..+76 for tag 33,
+# or the cached slot at +140) and checks that its mode is 23
+# (PLAYER_MODE_AIM_RANGED, through the vtable slot at +32). It then stores the
+# action's 8-byte (x, y) at +68 of the mode object, scales y (+72) by the
+# float at 0x8209DE04 when the byte at +90 is 0, and passes +76 on to
+# ProcessAndAllocateAndProcess20_826A03A8. AimCursorUpdate_827B80B0 reads
+# that input later in the tick. Reached through a pointer (no direct callers).
+# Read in the generated code; the action and mode numbers are from the game's
+# scripts (docs/feature/mouse_aim/technical.md).
+[entrypoint.functions."0x82747090"]
+name = "AimRanged_HandleCursorMovementAction_82747090"
 
 # Picks the best target near the reticle. r3 = targeting object, r4 = cursor,
 # r5 = direction, r9 = a target to skip, f1 = angle limit, f2 = max distance,

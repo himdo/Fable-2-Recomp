@@ -1,6 +1,6 @@
 # AI-assisted function naming: overview
 
-**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** 7863041
+**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** c2a9d12
 
 ## What this is
 
@@ -19,7 +19,7 @@ The original game is made of tens of thousands of small pieces of code, and most
   - One piece of code was named as if it did one job when it does a different one. That stayed wrong for about two months, until a contributor read it properly. Older notes elsewhere still use the wrong name.
   - One more name is known to be too narrow and hasn't been fixed yet.
 - **None of these names said how they were worked out,** so nobody could tell which ones to trust. That's the same problem the study describes.
-- **Today, only one rule is checked automatically:** that a name doesn't clash with the toolkit. The other naming rules are written down for people and AI helpers to follow, but nothing checks them.
+- **Most naming rules are now checked automatically.** Since late November an automatic check runs on every change: each new or renamed function needs a real name in the agreed shape, a note above it, and no clash with another name. The check that a name doesn't clash with the toolkit is run by hand. Nothing checks yet how confident a name is, because the project hasn't agreed on confidence levels.
 
 ## What could change
 

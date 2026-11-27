@@ -1,6 +1,6 @@
 # Fable 2 (ReXGlue) 30 fps cap — investigation log
 
-**Status:** merged · **Commits:** 73d89b0, 62b4db2, d28da25 (#143), e0c69c0 (#135) · **Last checked against:** 7863041
+**Status:** merged · **Commits:** 73d89b0, 62b4db2, d28da25 (#143), e0c69c0 (#135) · **Last checked against:** c2a9d12
 
 Goal: run the recompiled Fable 2 uncapped / at 60 fps instead of the native 30 fps lock.
 
@@ -42,8 +42,11 @@ CMake). It sets `REX_VSYNC=0` and calls `fable2.cmd`. To run capped (native
 - Build: `cmd //c "build.cmd -release fable_2"` (project root)
 - Run: `Set-Location out/build/win-amd64-release; cmd //c "fable2.cmd d3d12"` (~110 s timeout to reach title loop)
 - Probe: `src/diagnostics/fps_probe.h` (its include in `src/core/fable_2_app.h:43` is commented out; uncomment it to use the probe). Strong `extern "C"`
-  overrides of weak recompiled symbols forward to `__imp__sub_XXXX` after logging.
+  overrides of weak recompiled symbols forward to `__imp__<name>` after logging.
   Logs to `fps_probe.log` in CWD.
+  - Five of the functions it probed now have permanent strong overrides: `MainRenderLoop_82B9CD68` (`src/diagnostics/fps_meter.h`), `Yield_82CBD098`, `FrameLimiterWait_82242628`, `GpuProgressCheck_82B9BF90` and `MemSet_SdkRuntime_82CA3190` (`src/core/hotfunc/`).
+  - Their probes, including the limiter inspection below, only compile with `FPS_PROBE_OVERRIDDEN_FUNCS=1`, and that also needs those overrides taken out of the build.
+  - The rest of the probe compiles as is (checked with a Release build on 26 Nov 2026).
 - Guest arena host base = `0x100000000` (identity map for guest addrs < 0xE0000000;
   +0x1000 host offset for ≥ 0xE0000000, per `REX_PHYS_HOST_OFFSET` in `fable_2_pch.h`).
   Guest values are **big-endian** on the host (use `__builtin_bswap32`).
@@ -52,25 +55,33 @@ CMake). It sets `REX_VSYNC=0` and calls `fable2.cmd`. To run capped (native
 
 | Candidate | Result |
 |---|---|
-| `FrameWaitPoller_82BA2568` frame_wait (KeQuerySystemTime poller) | Never called (flag at +23968 off) |
+| `D3DDevice_WaitGpuAndReadDisplayInfo_82BA2568` frame_wait (waits for the GPU, then reads the display mode; not a poller) | Never called (flag at +23968 off) |
 | `Yield_82CBD098` yield | ~150 M calls, negligible duration — not the limiter |
 | `KeDelayExecutionThreadWrapper_82CC2028` KeDelayExecutionThread wrapper | Not the primary limiter |
 | Host vblank worker at 30 Hz | No — guest vblank cb `VblankInterruptCallback_82B9B8D8` max interval ≈ 19 ms → ~60 Hz |
-| `GpuInterruptCallback_82CC2948` GPU cb, `RenderThreadMain_82B9F598` render thread | Never fire on title screen |
+| `WorkerThread_StopAndJoin_82CC2948` (stops a worker thread; first guessed to be a GPU callback), `RenderThreadMain_82B9F598` render thread | Never fire on title screen |
 
 ## Key guest functions (recompiled, `generated/default/`)
 
-All names below are in `fable_2_manifest.toml`. `BeginFrame_82B9BA58`, `FrameWaitPoller_82BA2568`,
-`GpuInterruptCallback_82CC2948` and `RenderThreadMain_82B9F598` started as names in this doc and
-were added to the manifest later, with this doc's evidence. The `recomp.N:line` locations are from
-the generated code at the time and move with every codegen.
+All names below are in `fable_2_manifest.toml`. The `recomp.N:line` locations are from the
+generated code at the time and move with every codegen.
+
+**Corrected on 26 Nov 2026** (read in the generated code on Windows). This doc first named four functions from their kernel calls, and #248 put those names in the manifest. Three of them were wrong:
+
+| First name | What the code does | Manifest name now |
+|---|---|---|
+| `BeginFrame_82B9BA58` | Ring-buffer setup, run at device create, device shutdown and game init (not per frame). It reaches the limiter only through `sub_82B9B970`, and only when a ring buffer already exists | `D3DDevice_SetRingBufferParameters_82B9BA58` |
+| `FrameWaitPoller_82BA2568` | No `KeQuerySystemTime` call. It waits for the GPU (`FrameLimiterWait_82242628` with r5 = 6, then a spin on a fence), reads the display mode and closes handles | `D3DDevice_WaitGpuAndReadDisplayInfo_82BA2568` |
+| `GpuInterruptCallback_82CC2948` | Sets a stop flag, signals an event, waits for a thread to exit and dereferences it | `WorkerThread_StopAndJoin_82CC2948` |
+
+`RenderThreadMain_82B9F598` was close and keeps its name. It renders only when its wait times out (30 ms) and does other work when its event is signalled.
 
 | Addr | Role |
 |---|---|
 | `MainRenderLoop_82B9CD68` (was `sub_82B9CD68`; recomp.246:20628) | Main render loop; ~33 ms period at 30 fps |
 | `FrameLimiterWait_82242628` | **Frame limiter / GPU-progress wait** (h4; 30–53 ms per call) |
 | `GpuProgressCheck_82B9BF90` (h5) | GPU "has it progressed ≥ 5000 ticks?" check, called in the limiter's spin loop |
-| `BeginFrame_82B9BA58` (recomp.289:19146) | "Begin frame"; only writer of the limiter struct field +10908 |
+| `D3DDevice_SetRingBufferParameters_82B9BA58` (recomp.166:20738) | Ring-buffer setup; sets the deadline field +10908 to its start value (3) and the counter to deadline − 2. `EndFrame_822981F0` is the per-frame writer of +10908 |
 | `VblankInterruptCallback_82B9B8D8` (recomp.93:20842) | vblank interrupt cb (~60 Hz); clears flag bits under spinlock, calls user cb |
 | `GpuInterruptHandler_82B9C530` | GPU-interrupt handler (timestamp + counter under spinlock) |
 | `FastHelper_821E8D20` (h13) | Fast helper (maxdur 0.036 ms) — not a sleep |
@@ -100,7 +111,9 @@ now4=0000018F ... gfc=0000018F f10908=00000193
   counter ≈ 60 units/s (either +1 per 60 Hz vblank, or +2 per 30 Hz frame —
   both consistent so far; high-frequency sampling added to disambiguate)
 
-### Begin-frame deadline math (`BeginFrame_82B9BA58`, recomp.289:19537+)
+### Deadline start value (`D3DDevice_SetRingBufferParameters_82B9BA58`, recomp.166:20738)
+
+This first looked like per-frame "begin frame" code. It is part of the ring-buffer setup, which runs when the device is created or shut down and at game init. So it sets the counter and the deadline once, and `EndFrame_822981F0` moves the deadline on each frame:
 
 ```
 lwz  r11, 10908(r31)      ; frame field
@@ -137,8 +150,10 @@ when the GPU finishes a frame's commands, which is paced at 33 ms.
 - The game's CPU limiter (`FrameLimiterWait_82242628`) and its GPU `WAIT_REG_MEM` both wait
   on this counter advancing **+2 units = 2 vblanks = 33 ms** per frame → 30 fps.
 - End-of-frame `EndFrame_822981F0` (recomp.33:1934) does `field10908 += 2` (the
-  per-frame deadline advance) and rewrites the counter globals; begin-frame
-  `BeginFrame_82B9BA58` sets `*counter = field10908 - 2` and calls the limiter (r5=4).
+  per-frame deadline advance) and rewrites the counter globals. The ring-buffer
+  setup `D3DDevice_SetRingBufferParameters_82B9BA58` sets the start values once
+  (`*counter = field10908 - 2`). The limiter call with r5=4 is in its callee
+  `sub_82B9B970`, which drains the old ring buffer first.
 
 ## Uncap plan (GPU-side, in SDK source)
 
@@ -155,7 +170,9 @@ Instrumentation added (temporary): logs every memory `WAIT_REG_MEM` with
 ## If revisiting
 
 - To re-measure frame pacing: uncomment the `#include "fps_probe.h"` in
-  `src/core/fable_2_app.h` and rebuild.
+  `src/core/fable_2_app.h` and rebuild. The limiter, main-loop, yield, GPU
+  progress and memset probes also need `FPS_PROBE_OVERRIDDEN_FUNCS=1` and
+  their permanent overrides taken out (see "Setup").
 - If a *capped-but-smoother* 60 fps is ever wanted instead of fully uncapped,
   the surgical option is a source patch making the vblank worker run at exactly
   2× (120 Hz) so the guest's "+2 units" = 16.6 ms; that needs a plugin/runtime
@@ -214,7 +231,7 @@ plugin is dual D3D12+Vulkan, so a plain launch stays D3D12).
 ## Files
 
 - `src/diagnostics/fps_probe.h` — all probes + limiter experiment (temporary)
-- `src/core/fable_2_app.h` — includes probe (no-limiter define reverted)
+- `src/core/fable_2_app.h` — the probe include, commented out (no-limiter define reverted)
 - `thirdparty/rexglue-sdk-src/src/graphics/command_processor.cpp` (fetched by `tools/setup_sdk_src.cmd`)
   — `[wrm]` instrumentation in `ExecutePacketType3_WAIT_REG_MEM` (temporary)
 - `thirdparty/rexglue-sdk-src/out/build/d3d12-fps/` — fresh

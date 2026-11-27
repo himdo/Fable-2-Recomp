@@ -390,6 +390,8 @@ try
     Require(UpdateChecker.ReadInstalledVersion(versionFolder) is null, "malformed build file gave a version");
     Console.WriteLine("Update check tests passed.");
 
+    await ReleaseUpgradeTests.RunAsync(testDirectory);
+
     // Fable2ConfigFile (the Advanced Options page config, fable2_config.toml).
     string advPath = Path.Combine(testDirectory, "fable2_config.toml");
     var advanced = new Fable2ConfigValues

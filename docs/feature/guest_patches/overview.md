@@ -1,6 +1,6 @@
 # Game patches: overview
 
-**Status:** merged · **Commits:** cab738b, f146b02 (#208), bfe422d (#210), 8446622 (#228), 5f5f55f (#226) · **Last checked against:** 7863041
+**Status:** merged · **Commits:** cab738b, f146b02 (#208), bfe422d (#210), 8446622 (#228), 5f5f55f (#226) · **Last checked against:** c2a9d12
 
 ## What it is
 
