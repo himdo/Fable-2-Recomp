@@ -1,6 +1,6 @@
 # Mouse camera (direct mouse look): overview
 
-**Status:** merged · **Commits:** 80e8361 (#177), shipped in 1.6.0; follow-up fixes c5c80ff (#189) and aae1116 (#227) · **Last checked against:** 7863041
+**Status:** merged · **Commits:** 80e8361 (#177), shipped in 1.6.0; follow-up fixes c5c80ff (#189) and aae1116 (#227) · **Last checked against:** c2a9d12
 
 ## What players saw before
 
@@ -29,4 +29,4 @@ The in-game camera sensitivity setting also scales the mouse.
 
 ## Known issues
 
-The first release with this (1.6.0) could crash after alt-tab. That was fixed in 1.6.1; see `docs/fix/alt_tab_script_crash/`.
+The first release with this (1.6.0) could crash after alt-tab. That was fixed in 1.6.1; see [the alt-tab crash fix](../../fix/alt_tab_script_crash/overview.md).

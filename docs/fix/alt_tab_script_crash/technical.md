@@ -1,6 +1,6 @@
 # Alt-tab script crash: technical notes
 
-**Status:** merged · **Commits:** c5c80ff (#189, the fix), 266f181 (#195, the guard) · **Last checked against:** 7863041
+**Status:** merged · **Commits:** c5c80ff (#189, the fix), 266f181 (#195, the guard) · **Last checked against:** c2a9d12
 
 Labels: **Verified** means read in a log, the repo or the generated code. **Plan claim** means taken from a PR description or notes without re-checking. **Inference** means reasoned, not tested.
 
@@ -44,4 +44,4 @@ On master `3635c93` (1.6.0) the game crashed on the world thread, inside the gam
 - Earlier placements that also crashed (comments in `fable2_console.h` and `console_pump.lua`): RunScript from `MainRenderLoop` per command, installing the pump while the world was mid-update, and installing it the moment the world first comes back on top.
 - **Symbolising a crash:** `llvm-pdbutil dump --publics out/build/win-amd64-release/fable_2.pdb > publics.txt`, then map each `fable_2.exe+0xRVA` to the nearest public symbol below it (`.text` is at RVA 0x1000, so RVA = section offset + 0x1000). Use the PDB from the same build as the crash; `llvm-symbolizer` can't read the trimmed exe.
 - **Useful switches:** `FABLE2_RUNSCRIPT_STRESS=world|render` runs a tiny script repeatedly for a fast repro. `FABLE2_PUMP_SETTLE_MS` overrides photo mode's 20 s pump warm-up.
-- **Process lesson:** #177 merged right after #184 without re-running its checks against it. Requiring PR branches to be up to date with master, with the Tests check required, would have caught it.
+- **Process lesson:** #184 merged right after #177 without re-running its checks against it, so neither PR was tested with the other. Requiring PR branches to be up to date with master, with the Tests check required, would have caught it.

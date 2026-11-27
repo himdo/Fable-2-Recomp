@@ -1,6 +1,6 @@
 # AI-assisted function naming: technical notes
 
-**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** 7863041
+**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** c2a9d12
 
 Claims are labelled **Verified** (checked in this repo or a primary source), **Reported** (a source says so, not checked here) or **Inference** (reasoned, not tested). This came out of the [November 2026 research](../../reference/research/README.md).
 
@@ -32,9 +32,10 @@ Learn what the reverse-engineering scene found in 2026 about LLM agents naming f
 | `CLAUDE.md` ("Naming functions") | `Subsystem_WhatItDoes_ADDRESS`, a comment block with evidence, rename in place, update every old use, no clash with runtime exports | No (instructions) |
 | `.claude/skills/name-functions/SKILL.md` (added 2026-11-23, #240) | The same, plus **Verified**/**Inference** labels, reusing existing subsystem prefixes, and a TOML parse and collision check before the PR | No (instructions an agent follows) |
 | `tools/check_manifest_collisions.py` | Only that no name equals a runtime DLL export (`__imp__<name>` or the bare name). It needs a built SDK's DLL. | Yes, run by hand |
+| `tools/check_manifest_names.py` (#249, 2f46d83, merged 25 Nov) | Every entry: the address suffix matches and the name is unique. New or renamed entries: no placeholder name, the `Subsystem_WhatItDoes_ADDRESS` shape and a comment above the entry. Needs nothing but the manifest. See [manifest_naming_check](../manifest_naming_check/technical.md) | Yes, in CI on every PR (`--base HEAD~1`) |
 | `tests/tools/test_manifest_collisions.py` | The tool's behaviour with fake DLLs, plus the two kernel-wait names on the real manifest | Yes, in CI (pytest) |
 
-Nothing checks the name format, the address suffix, or whether a comment or evidence label exists. **Inference:** that is the gap ghidra-mcp's tool-layer convention enforcement closes, and the convention check proposed in [function_mapping](../function_mapping/technical.md#a-convention-check-in-toolscheck_manifest_collisionspy-proposed) would close it here.
+When this was written (at 7863041), nothing checked the name format, the address suffix, or whether a comment or evidence label exists. `tools/check_manifest_names.py` (#249) now checks all of these except evidence labels, which haven't been adopted yet. **Inference:** that is most of the gap ghidra-mcp's tool-layer convention enforcement closes.
 
 ### Tooling elsewhere (Reported)
 
@@ -48,7 +49,7 @@ Nothing checks the name format, the address suffix, or whether a comment or evid
 ### The project's AI use
 
 - **Verified:** the README's opening paragraph says the project "was made to test the capabilities of local and open source AI", using Qwen3.8 27b, which "got the game running" in about an hour, and that "a large amount of human trial and error" then mapped enough functions to finish the game.\[7\]
-- **Verified:** 119 of master's 364 commits carry at least one `Co-Authored-By: Claude …` trailer (218 trailer lines in all, across several Claude model versions), counted with `git log master` at 7863041.
+- **Verified:** 119 of master's 364 commits carry at least one `Co-Authored-By: Claude …` trailer (188 trailer lines in all, across several Claude model versions), counted case-sensitively with `git log` at 7863041. Ignoring letter case, it is 134 commits and 218 lines.
 - **Verified:** the debug-only remote-control server is described in the README as an input channel so an AI harness can drive the game with "no human at the keyboard" (design: `plans/ai-remote-input-control.md`). The tooling for agent-run checks already exists in part ([function_mapping](../function_mapping/technical.md#tie-in-with-the-automated-checking-loop)).
 - **Reported:** Emulation King labels the project "Mostly AI-built", and recomp.gg says "people wrote the code with an AI's help".\[8\]\[9\] Contributor PRs carry Claude co-author trailers.\[10\]\[11\]
 
@@ -56,8 +57,8 @@ Nothing checks the name format, the address suffix, or whether a comment or evid
 
 - Treat the manifest and its per-entry evidence comments as the external memory these agents lack. An agent starting a session reads the comments, not its own earlier context.
 - Agents propose names and draft evidence. A name merges only with an [evidence level](../function_mapping/technical.md#evidence-levels).
-- Copy ghidra-mcp's tool-layer convention enforcement by adding a no-DLL mode to `tools/check_manifest_collisions.py` (format, address suffix, comment and evidence label present on new or renamed entries), tested in `tests/tools/test_manifest_collisions.py` so CI runs it.
-- When a name is proved wrong, also fix the old name in other entries' comments (the 9 stale `ComputeVectorHash` mentions), so a later agent doesn't re-learn the wrong name from them. The `/name-functions` skill already asks for this in step 5 for code and docs. Manifest comments are where agents read it back.
+- Copy ghidra-mcp's tool-layer convention enforcement. **Done in #249**, as a separate tool rather than a mode of the collision check: `tools/check_manifest_names.py` checks format, address suffix and comment on new or renamed entries, and CI runs it. Still open: an evidence-label rule, once labels are adopted.
+- When a name is proved wrong, also fix the old name in other entries' comments (the 9 stale `ComputeVectorHash` mentions), so a later agent doesn't re-learn the wrong name from them. The `/name-functions` skill (step 5) and `CLAUDE.md` already ask for this, the manifest's own comments included. The 9 stale mentions predate that rule: #238 merged on 21 Nov, the rule arrived with #240 on 23 Nov. Manifest comments are where agents read it back.
 - **Inference:** disclosure is already public, so the defensible position is verifiability. Every AI-proposed name carries evidence and a test, which answers "AI slop" criticism with checkable artefacts.
 
 ## What changed
