@@ -349,6 +349,26 @@ hero_dog_texture_readback = false
 # Default: true
 dog_fur_depth_bias = true
 
+# Shadow Fine Grain: the sun shadow is softened by a 12-sample pattern that a
+# small noise texture rotates from pixel to pixel. The game picks the rotation
+# per console pixel, so at a resolution_scale above 1 one rotation covers
+# several screen pixels (3x3 at scale 3) and shadow edges look blotchy. This
+# picks it per screen pixel instead (shadow pass 0F99810F072BF0FC, constants
+# c47.zw times the resolution scale), which turns the grain into a smooth soft
+# edge; at scale 1 nothing changes. Seeds the SDK cvar
+# pixel_shader_constant_overrides. false = grain at console-pixel size.
+# Default: true
+shadow_fine_grain = true
+
+# Shadow Filter Radius: how far that softening reaches for nearby shadows
+# (characters, the ground near the camera), as a factor of the game's own
+# radius (c77.x of the same pass). Lower is sharper: 0.75 is sharper but still
+# soft; below about 0.5 edges can turn jagged and flat surfaces can show dark
+# stripes. Distant shadows use a separate fixed filter and don't change.
+# Range: above 0 up to 4. 1.0 = the game's radius.
+# Default: 1.0
+shadow_filter_radius = 1.0
+
 # Terrain Tessellation on CPU (SDK cvar terrain_tess_cpu): compute the terrain's
 # tessellation factors on the CPU so the game does not wait every frame for the
 # GPU to read them back. The draw still runs on the GPU. D3D12 only.
@@ -689,6 +709,17 @@ bool Load(const std::filesystem::path& path) {
     values.dog_fur_depth_bias =
         Read<bool>(patches_table, "patches", "dog_fur_depth_bias", "boolean",
                    values.dog_fur_depth_bias);
+    values.shadow_fine_grain =
+        Read<bool>(patches_table, "patches", "shadow_fine_grain", "boolean",
+                   values.shadow_fine_grain);
+    values.shadow_filter_radius = static_cast<float>(
+        Read<double>(patches_table, "patches", "shadow_filter_radius", "number",
+                     values.shadow_filter_radius));
+    if (!(values.shadow_filter_radius > 0.0f && values.shadow_filter_radius <= 4.0f)) {
+      REXSYS_WARN("[fable2-config] patches.shadow_filter_radius {} is outside (0, 4]; using 1.0",
+                  values.shadow_filter_radius);
+      values.shadow_filter_radius = 1.0f;
+    }
     values.terrain_tess_cpu =
         Read<bool>(patches_table, "patches", "terrain_tess_cpu", "boolean",
                    values.terrain_tess_cpu);

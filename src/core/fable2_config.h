@@ -235,6 +235,12 @@ struct Values {
   // at random, which shows as flickering patches on the dog. Seeds the SDK
   // cvars depth_bias_shader(_units) in Fable2App. false = no bias.
   bool dog_fur_depth_bias = true;
+  // [patches] shadow_fine_grain / shadow_filter_radius: the sun shadow pass
+  // (pixel shader 0F99810F072BF0FC) picks its noise rotation per screen pixel
+  // (c47.zw times the resolution scale) and scales its filter radius (c77.x).
+  // Seed the SDK cvar pixel_shader_constant_overrides in Fable2App.
+  bool shadow_fine_grain = true;
+  float shadow_filter_radius = 1.0f;
   // [patches] terrain_tess_cpu: Terrain tessellation on the CPU (SDK cvar terrain_tess_cpu).
   bool terrain_tess_cpu = true;
   // [patches] skinning_cpu: Memexport skinning on the CPU (SDK cvar skinning_cpu).

@@ -44,6 +44,7 @@ When you finish a fix or a feature, add or update its folder and its row below. 
 | [player_complaints](feature/player_complaints/overview.md) | no commit yet (research only) | — | What players complained about in 2008–2009, and what the recomp already covers |
 | [qol_candidates](feature/qol_candidates/overview.md) | no commit yet (research only) | — | Reasonable (R1–R19) and out-of-scope (U1–U10) fixes and features, with what each builds on; achievements and website items already work |
 | [recomp_landscape](feature/recomp_landscape/overview.md) | no commit yet (research only) | — | Other Xbox 360 recomps and what Fable 2 Recomp can borrow from them |
+| [shadow_quality](feature/shadow_quality/overview.md) | no commit yet | — | Sun shadow edges: fine grain at higher internal resolutions, and an adjustable filter radius |
 | [test_suite](feature/test_suite/overview.md) | merged | 8957735 (#166), be11165 (#174), ffa15b3 (#196), c764cba (#197), 5cc6513 (#229), #249–#251 | Known bugs (strict xfails), coverage gaps and quirks of the test suite |
 
 ## Reference
