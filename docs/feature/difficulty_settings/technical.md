@@ -472,6 +472,20 @@ Sizes come from `gui_texture_headers.bnk`; the textures themselves are in `art/g
 
 The remaining open questions (slot label format, Masochist, unused Theresa lines) are listed in `overview.md`.
 
+### 25. F8 is a debug tool: every level, Hardcore and Hardcore+ too (2026-11-28)
+
+delta4o: now that players change the level in Options > Game (24), F8 is only for developers, so it should let them check any level on an existing save. The F8 cards no longer lock Hardcore:
+- every card can be picked, on any hero;
+- Y on the Hardcore card switches Hardcore+ (saving locked, game level 5), starting as the hero has it;
+- the apply on the world update writes game level 1-4, or 5 for Hardcore+, through the `LuaPlayer_SetDifficultyLevel_823C9458` override (which sets the game's changed flag, so that hero can't earn Masochist);
+- the line under the title says it's a debug tool. The current card is marked "Current" ("Current: Hardcore+" for a hero with saving locked).
+
+The Options > Game row keeps decision 2: a Hardcore hero can't change level there, and Hardcore can't be picked there.
+
+**In game (2026-11-28, delta4o):** F8 → Hardcore+ took the Save box down to Save and Quit, and F8 → Medium brought all three buttons back (Verified). With F8 on Hardcore, buying the gift store cost **8,597** (6,141 × 1.4 = 8,597.4), against 7,983 on Hard. That closes round 4's open "property prices on Hardcore" (Verified). Leaving F8 in for now was delta4o's call; whether it stays in a release build is still open.
+
+Also on 2026-11-28 (clean-up, local files only, nothing in git): the probe's `difficulty-probe-marker.txt` files were deleted (slot 1 and five inside `saves.before-239`), and so was the `saves.backup-difficulty-2026-11-20` backup. Slot 1's hero was kept as it is (Medium, changed flag set).
+
 ### 24. A Difficulty row in Pause > Options > Game (2026-11-28)
 
 delta4o wanted the in-game difficulty change inside the game's own menus: on the Options > Game page, a sixth row "Difficulty" with an Easy / Medium / Hard picker like Glowing Trail Brightness. A real new row, not a reused one (reusing the Auto Joinable row was offered and declined). F8 stays as a shortcut.
@@ -1414,7 +1428,7 @@ Run on Windows 11 (the dev machine) on 2026-11-21, before and after the round 2 
   - the label size and test label;
   - New Game → gender.
 - Co-op (player 2 also has a type-33 component).
-- Round 4 (20) left these out: property prices on Hardcore and the Guild's scripted XP (delta4o will do it later). The F8 cards' key caps and F8 with the pause menu open aren't needed: F8 is a debug stand-in for the pause-menu entry.
+- Round 4 (20) left these out: ~~property prices on Hardcore~~ (8,597, done 2026-11-28, section 25) and the Guild's scripted XP (delta4o will do it later). The F8 cards' key caps and F8 with the pause menu open aren't needed: F8 is a debug stand-in for the pause-menu entry.
 
 ## Follow-ups
 

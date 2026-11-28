@@ -56,8 +56,8 @@ DialogState& Dialog();
 
 inline bool DialogOpen() { return Dialog().mode.load() != int(DialogMode::kClosed); }
 
-// The in-game key (F8; F7 is the SDK achievements overlay): opens the cards over a running game. On a Hardcore hero
-// they only show the level, which can't be changed (decision 2).
+// The in-game key (F8; F7 is the SDK achievements overlay): opens the cards over a running game. A debug tool:
+// every level can be set there, Hardcore and Hardcore+ too (the Options > Game row keeps decision 2).
 void RequestInGameDialog();
 
 // Called by the dialog on the UI thread when a card is confirmed.

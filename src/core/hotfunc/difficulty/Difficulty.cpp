@@ -696,6 +696,8 @@ void RequestInGameDialog() {
   d.nav_x.store(0);
   d.activate.store(0);
   d.back.store(0);
+  d.toggle.store(0);
+  d.lock_saving.store(SavingLocked());  // the Hardcore card's switch starts as the hero has it
   d.mode.store(int(DialogMode::kInGame));
   REXSYS_INFO("[difficulty] in-game cards opened (level {})", Level(CurrentIndex()).name);
 }
@@ -857,22 +859,26 @@ void OnWorldUpdate(PPCContext& ctx, uint8_t* base) {
     }
   }
 
-  // In game: a card chosen with F8.
+  // In game: a card chosen with F8. F8 is a debug tool, so every level can be set, Hardcore
+  // and Hardcore+ (game level 5) too (2026-11-28); the Options > Game row keeps decision 2.
   DialogState& d = Dialog();
   if (d.chosen_mode.load() == int(DialogMode::kInGame) && d.chosen.load() >= 0) {
     const int level = d.chosen.exchange(-1);
     const uint32_t comp = FindComponent(Player1Entity(), 33);
-    const int now = CurrentIndex();
-    if (level >= 0 && Ptr(comp) && now != 3 && level != 3 && level != now) {
+    const int32_t before = Ptr(comp) ? static_cast<int32_t>(U32(comp + 80)) : -1;
+    const bool lock = level == 3 && d.lock_saving.load();
+    const int32_t game_level = lock ? kSavingLockedLevel : level + 1;
+    const std::string was = Ptr(comp) ? std::string(CurrentLevelName()) : std::string("?");
+    if (level >= 0 && Ptr(comp) && game_level != before) {
       const PPCContext saved = ctx;
       ctx.r3.u64 = comp;
-      ctx.r4.s64 = level + 1;
+      ctx.r4.s64 = game_level;
       LuaPlayer_SetDifficultyLevel_823C9458(ctx, base);  // the override: also clears the cache
       ctx = saved;
-      g_last_level.store(level, std::memory_order_relaxed);
-      REXSYS_INFO("[difficulty] in game: {} -> {}", Level(now).name, Level(level).name);
+      g_last_level.store(SlotCode(level, lock), std::memory_order_relaxed);
+      REXSYS_INFO("[difficulty] in game (F8): {} -> {}", was, SlotLevelName(SlotCode(level, lock)));
     } else if (level >= 0) {
-      REXSYS_INFO("[difficulty] in game: {} kept", now >= 0 ? Level(now).name : "?");
+      REXSYS_INFO("[difficulty] in game (F8): {} kept", was);
     }
   }
 }

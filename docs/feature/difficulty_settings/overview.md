@@ -266,10 +266,10 @@ Details are in technical.md sections 15 (code reading) and 16 (in-game results).
 5. ~~Next research: enemy health and telling friend from foe~~ (done 2026-11-27, technical.md 21; decision 7 below is open), then where the pause menu gets its items.
 6. Tidy up before anything goes to master:
    - ~~delete the probe and its temporary hooks~~ (done 2026-11-27);
-   - delete the marker files in the slot folders;
-   - remove the `saves.backup-difficulty-2026-11-20` backup.
+   - ~~delete the marker files in the slot folders~~ (done 2026-11-28);
+   - ~~remove the `saves.backup-difficulty-2026-11-20` backup~~ (done 2026-11-28).
 
-   The slot 1 hero has "changed" set and was saved again on 2026-11-22 (5,358,567 gold); restore it from the backup if that matters.
+   The slot 1 hero has "changed" set and was saved again on 2026-11-22 (5,358,567 gold); delta4o kept it as it is (2026-11-28), and the backup is gone.
 
 ## In-game checklist (round 3, feature code step 1)
 

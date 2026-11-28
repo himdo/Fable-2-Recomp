@@ -6,12 +6,14 @@
 // Two uses (fable2::difficulty::DialogMode):
 //   - New Game: after boy or girl, before the game starts. A card must be chosen; Easy
 //     is selected first (decision 6).
-//   - In game (F8): the current level is marked. Hardcore can't be entered or left in
-//     game (decision 2), so its card is locked, and on a Hardcore hero nothing changes.
+//   - In game (F8): a debug tool for developers (2026-11-28). The current level is marked
+//     and every level can be picked, Hardcore and Hardcore+ too, so existing saves can be
+//     checked on each level. The game's own menu (Options > Game, OptionsDifficultyRow.cpp)
+//     keeps decision 2: Hardcore can't be entered or left there.
 //
-// On New Game, Y switches Hardcore saving on the Hardcore card (save on quit only,
-// technical.md 23); it starts as [patches] hardcore_saving says. While a window close waits
-// for the game to save and quit, a notice says so.
+// Y on the Hardcore card switches Hardcore saving (Hardcore+, save on quit only, technical.md
+// 23). On New Game it starts as [patches] hardcore_saving says; in game as the hero has it.
+// While a window close waits for the game to save and quit, a notice says so.
 //
 // Input arrives as counters from the pad read (Difficulty.cpp OnPadRead), so the
 // controller and the keyboard map both work; the game sees an empty pad meanwhile.
@@ -98,8 +100,7 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
       was_open_ = true;
       current_ = mode == int(DialogMode::kInGame) ? CurrentIndex() : -1;
       sel_ = current_ >= 0 ? current_ : 0;
-      locked_ = current_ == 3;  // a Hardcore hero stays Hardcore
-      saving_locked_ = locked_ && SavingLocked();
+      current_lock_ = current_ == 3 && SavingLocked();
       REXSYS_INFO("[difficulty] cards shown ({}), selected {}",
                   mode == int(DialogMode::kNewGame) ? "New Game" : "in game", Level(sel_).name);
     }
@@ -108,26 +109,24 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
     const bool new_game = mode == int(DialogMode::kNewGame);
 
     // Input.
-    if (const int dx = d.nav_x.exchange(0); dx != 0 && !locked_) {
+    if (const int dx = d.nav_x.exchange(0); dx != 0) {
       sel_ = std::clamp(sel_ + dx, 0, kLevelCount - 1);
     }
-    if (d.toggle.exchange(0) > 0 && new_game && sel_ == 3) {
+    if (d.toggle.exchange(0) > 0 && sel_ == 3) {
       const bool lock = !d.lock_saving.load();
       d.lock_saving.store(lock);
       REXSYS_INFO("[difficulty] Hardcore saving switched {}", lock ? "on (save on quit only)" : "off");
     }
     if (d.activate.exchange(0) > 0) {
-      if (locked_ || (!new_game && sel_ == current_)) {
+      const bool unchanged = sel_ == current_ && (sel_ != 3 || d.lock_saving.load() == current_lock_);
+      if (!new_game && unchanged) {
         CloseDialog();
         return;
       }
-      if (!new_game && sel_ == 3) {
-        locked_hint_s_ = NowS();  // Hardcore is New Game only
-      } else {
-        REXSYS_INFO("[difficulty] card chosen: {}", Level(sel_).name);
-        Choose(sel_);
-        return;
-      }
+      REXSYS_INFO("[difficulty] card chosen: {}{}", Level(sel_).name,
+                  sel_ == 3 && d.lock_saving.load() ? " (saving locked)" : "");
+      Choose(sel_);
+      return;
     }
     if (d.back.exchange(0) > 0) {
       if (new_game) {
@@ -145,9 +144,7 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
   bool was_open_ = false;
   int sel_ = 0;
   int current_ = -1;
-  bool locked_ = false;
-  bool saving_locked_ = false;  // in game: this Hardcore hero saves on quit only
-  double locked_hint_s_ = -100.0;
+  bool current_lock_ = false;  // in game: the hero is Hardcore+ (saving locked)
   float k_ = 1.0f;
   ImDrawList* dl_ = nullptr;
 
@@ -244,8 +241,7 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
 
     // Foot of the card.
     const char* foot = nullptr;
-    if (!new_game && i == current_) foot = "Current";
-    else if (!new_game && i == 3) foot = "New Game only";
+    if (!new_game && i == current_) foot = i == 3 && current_lock_ ? "Current: Hardcore+" : "Current";
 
     // The text: the name and subtitle at the top, the multipliers at the bottom.
     const float fs = 0.8f;
@@ -394,8 +390,7 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
     TextCentred(cx, y, kLarge, kCream, new_game ? "How hard shall the tale be?" : "Difficulty");
     y += X(42.0f);
     const char* sub = new_game ? "You can change Easy, Medium and Hard later. Hardcore is for good."
-                      : locked_ ? "This hero is on Hardcore, which can't be changed."
-                                : "Hardcore can only be chosen on a New Game.";
+                               : "Debug (F8): every level can be picked here, Hardcore and Hardcore+ too.";
     TextCentred(cx, y, kSmall, kCreamDim, sub, 0.9f);
     Rule(cx - X(360), cx + X(360), y + X(36.0f), 1.0f);
 
@@ -403,18 +398,14 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
     const float x0 = cx - X(total * 0.5f);
     const float cy = ds.y * 0.5f - X(kCardH * 0.5f) + X(20.0f);
     for (int i = 0; i < kLevelCount; ++i) {
-      const bool dim = locked_ ? i != current_ : (!new_game && i == 3);
-      Card(i, ImVec2(x0 + X((kCardW + kGap) * i), cy), i == sel_, dim, new_game);
+      Card(i, ImVec2(x0 + X((kCardW + kGap) * i), cy), i == sel_, false, new_game);
     }
 
-    // Hint after trying to pick Hardcore in game.
-    const bool saving_card = new_game && sel_ == 3;
+    // Hardcore saving (technical.md 23): the switch on the Hardcore card.
+    const bool saving_card = sel_ == 3;
     const bool lock = Dialog().lock_saving.load();
-    if (NowS() - locked_hint_s_ < 2.5) {
-      TextCentred(cx, cy + X(kCardH + 28.0f), kNormal, kGold, "Hardcore can only be chosen on a New Game");
-    } else if (saving_card || saving_locked_) {
-      // Hardcore saving (technical.md 23): the New Game switch, or this hero's setting.
-      const bool on = saving_card ? lock : true;
+    if (saving_card) {
+      const bool on = lock;
       TextCentred(cx, cy + X(kCardH + 22.0f), kNormal, on ? kGold : kCream,
                   on ? "Saving: only on quit" : "Saving: as in the original");
       TextCentred(cx, cy + X(kCardH + 54.0f), kSmall, kCreamDim,
@@ -425,13 +416,9 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
 
     float px = cx - X(saving_card ? 250.0f : 160.0f);
     const float py = ds.y - X(70.0f);
-    if (locked_) {
-      Prompt(px, py, "A", "Close");
-    } else {
-      Prompt(px, py, "A", "Choose");
-      Prompt(px, py, "B", "Back");
-      if (saving_card) Prompt(px, py, "Y", lock ? "Saving: on quit only" : "Saving: normal");
-    }
+    Prompt(px, py, "A", "Choose");
+    Prompt(px, py, "B", "Back");
+    if (saving_card) Prompt(px, py, "Y", lock ? "Saving: on quit only" : "Saving: normal");
   }
 
   // While a window close waits for the game to save and quit (Hardcore saving).
