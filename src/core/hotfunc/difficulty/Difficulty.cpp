@@ -806,13 +806,24 @@ bool OnPadRead(PPCContext& ctx, uint8_t* base, uint16_t buttons, int16_t lx) {
 }
 
 // The hero's level as last seen in game, for the slot label's level file (written on
-// the UI thread after a save).
+// the UI thread after a save), as a slot code: the card index, or kSlotHardcorePlus.
 std::atomic<int> g_last_level{-1};
+
+// The slot label's fifth level: Hardcore with saving locked (game level 5, technical.md 23).
+constexpr int kSlotHardcorePlus = kLevelCount;
+int SlotCode(int index, bool saving_locked) {
+  return index == kLevelCount - 1 && saving_locked ? kSlotHardcorePlus : index;
+}
+const char* SlotLevelName(int code) {
+  return code == kSlotHardcorePlus ? "Hardcore+" : Level(code).name;
+}
 
 void OnWorldUpdate(PPCContext& ctx, uint8_t* base) {
   ServiceCloseRequest(ctx, base, true);  // a window close on a locked Hardcore hero
   if (CurrentIndex() >= 0) g_front_end.store(0);  // in game: the menu's object may be gone
-  if (const int now = CurrentIndex(); now >= 0) g_last_level.store(now, std::memory_order_relaxed);
+  if (const int now = CurrentIndex(); now >= 0) {
+    g_last_level.store(SlotCode(now, SavingLocked()), std::memory_order_relaxed);
+  }
 
   // New Game: write the chosen level to the new hero once the game is on screen.
   if (const int level = g_newgame_level.load(); level >= 0) {
@@ -827,7 +838,7 @@ void OnWorldUpdate(PPCContext& ctx, uint8_t* base) {
       g_newgame_level.store(-1);
       // The game saves straight after the start, before the next world update would see
       // the new level (seen 2026-11-27, fable_2_079.log: a Hard hero's first save got Easy).
-      g_last_level.store(level, std::memory_order_relaxed);
+      g_last_level.store(SlotCode(level, g_newgame_lock.load()), std::memory_order_relaxed);
       const int32_t before = static_cast<int32_t>(U32(comp + 80));
       const uint8_t changed = U8(comp + 38);
       const int32_t game_level = level == 3 && g_newgame_lock.load() ? kSavingLockedLevel : level + 1;
@@ -873,11 +884,12 @@ namespace {
 constexpr const char* kLevelFile = "recomp_difficulty.txt";
 std::mutex g_slots_mu;
 std::filesystem::path g_save_root;
-std::vector<std::pair<std::string, int>> g_slot_levels;  // slot name ("Hero 1") -> card index
+std::vector<std::pair<std::string, int>> g_slot_levels;  // slot name ("Hero 1") -> slot code
 const auto g_process_start = std::filesystem::file_time_type::clock::now();
 
 int ParseLevel(std::string s) {
   while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' ')) s.pop_back();
+  if (s == SlotLevelName(kSlotHardcorePlus)) return kSlotHardcorePlus;
   for (int i = 0; i < kLevelCount; ++i) {
     if (s == Level(i).name) return i;
   }
@@ -935,7 +947,8 @@ void PollSaveSlots() {
   const auto fnow = fs::file_time_type::clock::now();
   // A New Game level not written yet belongs to the hero being started.
   const int pending = g_newgame_level.load();
-  const int level = pending >= 0 ? pending : g_last_level.load(std::memory_order_relaxed);
+  const int level =
+      pending >= 0 ? SlotCode(pending, g_newgame_lock.load()) : g_last_level.load(std::memory_order_relaxed);
   for (const auto& profile : fs::directory_iterator(root, ec)) {
     const fs::path title = profile.path() / "4D5307F1";
     const fs::path data = title / "00000001";
@@ -952,8 +965,8 @@ void PollSaveSlots() {
         const fs::path file = slot.path() / kLevelFile;
         const auto stamped = fs::last_write_time(file, e3);
         if (!e3 && stamped >= saved) continue;
-        std::ofstream(file, std::ios::trunc) << Level(level).name << "\n";
-        REXSYS_INFO("[difficulty] slot {}: saved on {}", slot.path().filename().string(), Level(level).name);
+        std::ofstream(file, std::ios::trunc) << SlotLevelName(level) << "\n";
+        REXSYS_INFO("[difficulty] slot {}: saved on {}", slot.path().filename().string(), SlotLevelName(level));
       }
     }
 
@@ -1072,7 +1085,7 @@ std::vector<uint16_t> LabelledSlotText(uint32_t handle) {
     if (slot == name) level = lv;
   }
   if (level < 0) return {};
-  const std::string suffix = std::string(" (") + d::Level(level).name + ")";
+  const std::string suffix = std::string(" (") + d::SlotLevelName(level) + ")";
   wide.insert(wide.begin() + static_cast<std::ptrdiff_t>(name_end), suffix.begin(), suffix.end());
   REXSYS_INFO("[difficulty] slot label: '{}{}' ({} characters)", name, suffix, wide.size());
   return wide;

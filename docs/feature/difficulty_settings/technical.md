@@ -478,7 +478,17 @@ The remaining open questions (slot label format, Masochist, unused Theresa lines
 - **Verified:** the switch (Y, shown as RMB with the default keyboard map) turned saving on, and the hero started at game level 5. Its first save was labelled Hardcore (Hero005).
 - **Verified:** the pause Save box showed only Save and Quit, with the selection already on it (screenshot).
 - **Verified:** the reload check was answered false from the start.
-- **Not tested yet:** the window close (in game, paused, in a cutscene), Save and Quit itself on this hero, a locked region exit during a quest, and a Hardcore hero with the switch off.
+- **Verified:** Save and Quit works on this hero. An older Hardcore hero (game level 4) still has all three Save box buttons.
+- **Verified, window close with the pause menu open:**
+  - 13:15:30.2: the close was held, and the notice showed;
+  - 13:15:31.9: Hero005's `mainsave.bin` was written;
+  - 13:15:33.4: the save and quit finished, run by the **pad-read thread** (the world doesn't update while paused, so the fallback took over);
+  - 13:15:34.8: the front end was up, 1.4 s after the quit, and the window closed.
+
+  The save is written synchronously inside `SaveManager_Save_824E8990`, which is why the file appears before our "saved" line.
+- **Not tested yet:** the window close while playing (should be the world thread) and in a cutscene, a locked region exit during a quest.
+
+**Slot label (2026-11-28, after the first test):** delta4o asked for the Continue screen to show "Hardcore+" for a hero with saving locked. The slot file and the label now use a fifth code: the card index, or Hardcore+ when the hero is at game level 5. That applies to the New Game's first save, each world update and the pending New Game level. Hero005's file still says "Hardcore" until its next save. Not checked in game yet.
 
 delta4o chose this topic and then asked for it to be **optional**: nobody knows yet how it feels, and it shouldn't push players into odd habits (such as triggering an autosave on purpose before stopping). Decision 1 (section 11) stays the design; it now applies only to a hero who had it switched on.
 
