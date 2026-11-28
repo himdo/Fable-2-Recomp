@@ -172,6 +172,13 @@ class Fable2App : public rex::ReXApp {
         if (window()) window()->RequestClose();
       });
     });
+    // Hardcore saving (docs/feature/difficulty_settings/ technical.md 23): a held window
+    // close is finished from the UI thread once the save and quit are done.
+    fable2::difficulty::SetCloseWindow([this] {
+      app_context().CallInUIThread([this] {
+        if (window()) window()->RequestClose();
+      });
+    });
     // Render at the window's aspect ratio (src/core/fable2_fit_window.h).
     fable2::fitwindow::Install(runtime()->memory(), window());
     // Direct mouse aim's up/down sensitivity follows that aspect
@@ -548,6 +555,11 @@ class Fable2App : public rex::ReXApp {
     remote_server_.Stop();
 #endif  // FABLE2_REMOTE_CONTROL
   }
+
+  // Hardcore saving: on a hero with saving locked, the close waits for a Save and Quit
+  // (src/core/hotfunc/difficulty/Difficulty.cpp, technical.md 23).
+  bool OnWindowCloseRequested() override { return fable2::difficulty::OnWindowCloseRequested(); }
+
   // Apply the game patches (see src/core/fable2_patches.h) once the SDK has
   // decrypted default.xex into the guest arena, before the module launches.
   // Each patch is switched on by a [patches] key in fable2_config.toml

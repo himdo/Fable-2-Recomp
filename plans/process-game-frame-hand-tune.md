@@ -28,7 +28,7 @@ Forward/backward jumps (25 gotos / 21 labels):
 - L315 `loc_82276DD8:`
 - L379 `ble→loc_82277208` — yield/threshold tail
 - L399/L432 `beq/ble→loc_82276EAC` — OS-notification gate
-- L449 `loc_82276EAC:` — `InitializeGameEntity` + frame-advance region
+- L449 `loc_82276EAC:` — `Game_QuitToFrontEnd` + frame-advance region
 - L480 `ble→loc_82276EE8` / L491 `loc_82276EE8:`
 - L501 `bgt→loc_82276F00` / L504 `loc_82276F00:`
 - L512 `beq→loc_82276F14` / L515 `loc_82276F14:`
@@ -122,7 +122,7 @@ epilogue (722C L1038-1051): lwz r3,84(r31); restore; return
 if (gbyte_26940 != 0) {                       // L399
   <timebase, f12..f8 math, fcmpu cr6,f8,f22>
   if (ctx.cr6.gt) {                            // L432
-    <ConstructRefCounted, InitializeGameEntity> // -> 6EAC
+    <ConstructRefCounted, Game_QuitToFrontEnd> // -> 6EAC
   }
 }
 <6EAC L449-479: timebase, f30 math>

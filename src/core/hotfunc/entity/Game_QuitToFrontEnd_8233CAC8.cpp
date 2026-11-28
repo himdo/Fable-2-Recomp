@@ -1,4 +1,4 @@
-// Hand-tuned override of recompiled InitializeGameEntity_8233CAC8
+// Hand-tuned override of recompiled Game_QuitToFrontEnd_8233CAC8
 // (recompiler output: fable_2_recomp.131.cpp; generated transforms nv=1 mfmsr=1 glock=0 gt=0).
 // The "// Hand-tuned override" first line makes tools/make_hotfunc_overrides.py
 // skip this file; re-run that script to regenerate the literal reference copy.
@@ -10,13 +10,13 @@
 // Volatile r7-r11 live in C++ locals (caller-saved per the PPC32 ABI).
 //
 // The recompiler emits recompiled guest functions as WEAK extern "C" aliases
-// of __imp__InitializeGameEntity_8233CAC8; fable_2_register.cpp registers the ALIAS in the
+// of __imp__Game_QuitToFrontEnd_8233CAC8; fable_2_register.cpp registers the ALIAS in the
 // indirect-dispatch table. This strong definition intercepts both direct bl
-// calls and bctrl dispatch. __imp__InitializeGameEntity_8233CAC8 remains the original.
+// calls and bctrl dispatch. __imp__Game_QuitToFrontEnd_8233CAC8 remains the original.
 //
 // Guest logic (see per-instruction disassembly references):
 //
-//   void InitializeGameEntity(StructA* a /* r3 */, RefCounted* ref /* r4 */)
+//   void QuitToFrontEnd(StructA* a /* r3 */, RefCounted* ref /* r4 */)
 //   {
 //     x = f_82172EE8(0x820A6194, *(u32*)0x834A5B6C);
 //     y = f_8217E3F8(x.r3, x.r4);
@@ -86,7 +86,7 @@ HOTFUNC_ALWAYS_INLINE void gstore32(u32 addr, u8* base, u32 v) {
 
 }  // namespace
 
-extern "C" void InitializeGameEntity_8233CAC8(PPCContext& __restrict ctx, uint8_t* base) {
+extern "C" void Game_QuitToFrontEnd_8233CAC8(PPCContext& __restrict ctx, uint8_t* base) {
   REX_FUNC_PROLOGUE();
 
   // --- Guest prologue: mflr r12; bl 0x82ca2bec (save r29-r31 + lr); stwu r1,-128(r1) ---

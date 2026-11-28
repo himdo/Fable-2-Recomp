@@ -256,13 +256,13 @@ Details are in technical.md sections 15 (code reading) and 16 (in-game results).
    - check the cards' keyboard prompts ("E Choose" after keyboard input; built 2026-11-24, not tested);
    - ~~F8 Easy → Hard → Easy in game~~ (done 2026-11-27, technical.md 20);
    - ~~round 4a: an unowned shop's buy and sell~~ (done 2026-11-27, technical.md 20); buying property too (the gift store: 6,141 / 7,062 / 7,983 on Easy / Medium / Hard);
-   - ~~backgrounds on the cards~~ (2026-11-27, branch `feature/difficulty-card-art`: pictures from the game's loading screens and a quest picture, technical.md 22);
+   - ~~backgrounds on the cards~~ (2026-11-27, 0c3e30b: pictures from the game's loading screens and a quest picture, technical.md 22);
    - ~~B to go back to boy or girl, and Theresa's destiny line after the cards~~ (built 2026-11-26, technical.md 19.2);
    - a controller shortcut for F8.
 1. ~~**Decide the starting multipliers**~~: done 2026-11-22 (decision 6). Easy is the original game.
 2. ~~**Name the functions**~~: done 2026-11-22. 44 functions now have real names, among them the gold callers, the shop and property price steps, rent, and the combat checks (technical.md "What changed").
 3. **Round 3 in game:** test the feature code (checklist below), and the leftovers from round 2: Golden touch on a monster, a region change and a house purchase, Save and Continue, the slot label, then New Game → boy or girl.
-4. **Feature code, next steps:** ~~the New Game difficulty cards~~ (done 2026-11-24), the pause-menu entry (F8 for now), Hardcore saving, ~~the slot label~~ (done 2026-11-27), ~~enemy health~~ (done 2026-11-27).
+4. **Feature code, next steps:** ~~the New Game difficulty cards~~ (done 2026-11-24), the pause-menu entry (F8 for now), Hardcore saving (built 2026-11-28 as a switch, decision 8; test it in game: technical.md 23.5), ~~the slot label~~ (done 2026-11-27), ~~enemy health~~ (done 2026-11-27).
 5. ~~Next research: enemy health and telling friend from foe~~ (done 2026-11-27, technical.md 21; decision 7 below is open), then where the pause menu gets its items.
 6. Tidy up before anything goes to master:
    - ~~delete the probe and its temporary hooks~~ (done 2026-11-27);
@@ -376,6 +376,13 @@ The hero can buy about 0.74× as much on Medium, 0.54× on Hard and 0.46× on Ha
 - **Property** follows the price multiplier, buying and selling, like shop items.
 - **XP** is scaled (the table's last column), through the game's own XP check, but only XP the hero collects. **XP a script hands out isn't scaled.** delta4o asked to check the Guild tutorial: it gives exactly 350 Will XP and won't continue until the hero buys a spell. The cheapest, Force Push, costs 300, so with the multiplier Medium, Hard and Hardcore would get stuck (297, 245 and 227 XP). Only that tutorial hands out XP from a script, so it now plays exactly as in the original on every level (technical.md 17.1).
 - **Default:** the Easy card is selected when the New Game screen opens, and an existing save without a difficulty counts as Easy, so old saves play exactly as before.
+
+**8. Hardcore saving as a switch** (asked 2026-11-28). delta4o wasn't sure how "save on quit only" would feel, and didn't want it to push players into odd habits, so it became optional. Where the switch lives: in the launcher and config / on the Hardcore card / both. **Choice: both.** `[patches] hardcore_saving` (off by default) sets where the Hardcore card's switch starts, and Y on the card changes it for that hero. A hero who has it on:
+  - has only Save and Quit in the pause Save box;
+  - gets no leave-area reload box;
+  - saves and quits first when the window is closed.
+
+  It's chosen once and kept in the save (technical.md 23).
 
 **5. How much to log in the next play session** (asked 2026-11-21). Options:
   - **the five difficulty checks plus extras** (gold, health, saves, New Game, slot cards);

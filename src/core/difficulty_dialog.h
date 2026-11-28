@@ -9,6 +9,10 @@
 //   - In game (F8): the current level is marked. Hardcore can't be entered or left in
 //     game (decision 2), so its card is locked, and on a Hardcore hero nothing changes.
 //
+// On New Game, Y switches Hardcore saving on the Hardcore card (save on quit only,
+// technical.md 23); it starts as [patches] hardcore_saving says. While a window close waits
+// for the game to save and quit, a notice says so.
+//
 // Input arrives as counters from the pad read (Difficulty.cpp OnPadRead), so the
 // controller and the keyboard map both work; the game sees an empty pad meanwhile.
 // The dialog only raises the choice; the game's threads apply it.
@@ -19,9 +23,8 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <unordered_map>
 #include <vector>
-
-#include <cctype>
 
 #include <imgui.h>
 #include <rex/input/input_system.h>
@@ -34,6 +37,7 @@
 #include "hotfunc/difficulty/difficulty.h"
 #include "photo_mode_font.h"
 #include "photo_mode_icons.h"
+#include "prompt_labels.h"  // the game's own key prompts' labels (src/gui/)
 
 namespace fable2::difficulty {
 
@@ -69,8 +73,14 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
  protected:
   void OnDraw(ImGuiIO& io) override {
     PollSaveSlots();  // the slot labels' level files (throttled, host files only)
+    PollClose();      // Hardcore saving: close the window once the save and quit are done
     DialogState& d = Dialog();
     const int mode = d.mode.load();
+    if (ClosePending()) {
+      k_ = std::max(0.5f, io.DisplaySize.y / 720.0f);
+      dl_ = ImGui::GetForegroundDrawList();
+      ClosingNotice(io);
+    }
     if (mode == int(DialogMode::kClosed)) {
       was_open_ = false;
       // The game's boy and girl cards have no button prompts: draw ours under them.
@@ -89,6 +99,7 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
       current_ = mode == int(DialogMode::kInGame) ? CurrentIndex() : -1;
       sel_ = current_ >= 0 ? current_ : 0;
       locked_ = current_ == 3;  // a Hardcore hero stays Hardcore
+      saving_locked_ = locked_ && SavingLocked();
       REXSYS_INFO("[difficulty] cards shown ({}), selected {}",
                   mode == int(DialogMode::kNewGame) ? "New Game" : "in game", Level(sel_).name);
     }
@@ -99,6 +110,11 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
     // Input.
     if (const int dx = d.nav_x.exchange(0); dx != 0 && !locked_) {
       sel_ = std::clamp(sel_ + dx, 0, kLevelCount - 1);
+    }
+    if (d.toggle.exchange(0) > 0 && new_game && sel_ == 3) {
+      const bool lock = !d.lock_saving.load();
+      d.lock_saving.store(lock);
+      REXSYS_INFO("[difficulty] Hardcore saving switched {}", lock ? "on (save on quit only)" : "off");
     }
     if (d.activate.exchange(0) > 0) {
       if (locked_ || (!new_game && sel_ == current_)) {
@@ -130,6 +146,7 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
   int sel_ = 0;
   int current_ = -1;
   bool locked_ = false;
+  bool saving_locked_ = false;  // in game: this Hardcore hero saves on quit only
   double locked_hint_s_ = -100.0;
   float k_ = 1.0f;
   ImDrawList* dl_ = nullptr;
@@ -322,36 +339,20 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
   }
 
   // The key the keyboard map ([input] keyboard_gamepad_map, "Key:Button,...") binds to
-  // `button` ("A", "B"): the first one-character key ("E", "B"), else the first key
-  // that isn't a mouse button, else "".
+  // `button` ("A", "B", "Y"), labelled the way the game's own keyboard prompts label it
+  // (fable2::gui::ResolveLabels): a regular key beats a modifier or a mouse button, and a
+  // mouse button shows as "LMB" / "RMB" / "MMB" (the default map binds Y only to RMB).
+  // "" when nothing is bound.
   static std::string KeyFor(const char* button) {
+    static std::string map_seen;
+    static std::unordered_map<std::string, std::string> labels;
     const std::string& map = config::Get().keyboard_gamepad_map;
-    std::string first;
-    size_t i = 0;
-    while (i <= map.size()) {
-      size_t j = map.find(',', i);
-      if (j == std::string::npos) j = map.size();
-      const std::string entry = map.substr(i, j - i);
-      i = j + 1;
-      const size_t colon = entry.find(':');
-      if (colon == std::string::npos) continue;
-      auto trim = [](std::string s) {
-        while (!s.empty() && (s.front() == ' ' || s.front() == '\t')) s.erase(s.begin());
-        while (!s.empty() && (s.back() == ' ' || s.back() == '\t')) s.pop_back();
-        return s;
-      };
-      const std::string key = trim(entry.substr(0, colon));
-      std::string target = trim(entry.substr(colon + 1));
-      for (char& c : target) c = char(std::toupper(static_cast<unsigned char>(c)));
-      if (target != button || key.empty()) continue;
-      std::string upper = key;
-      for (char& c : upper) c = char(std::toupper(static_cast<unsigned char>(c)));
-      if (upper.size() >= 3 && upper.compare(upper.size() - 2, 2, "MB") == 0) continue;  // LMB, XMB1...
-      if (upper.rfind("XMB", 0) == 0) continue;
-      if (key.size() == 1) return upper;
-      if (first.empty()) first = key;
+    if (map != map_seen || labels.empty()) {
+      labels = gui::ResolveLabels(map, "");
+      map_seen = map;
     }
-    return first;
+    const auto it = labels.find(gui::Ci(button));
+    return it != labels.end() ? it->second : std::string();
   }
 
   // A key cap with the key's name, like photo mode's keyboard prompts.
@@ -407,18 +408,42 @@ class DifficultyDialog final : public rex::ui::ImGuiDialog {
     }
 
     // Hint after trying to pick Hardcore in game.
+    const bool saving_card = new_game && sel_ == 3;
+    const bool lock = Dialog().lock_saving.load();
     if (NowS() - locked_hint_s_ < 2.5) {
       TextCentred(cx, cy + X(kCardH + 28.0f), kNormal, kGold, "Hardcore can only be chosen on a New Game");
+    } else if (saving_card || saving_locked_) {
+      // Hardcore saving (technical.md 23): the New Game switch, or this hero's setting.
+      const bool on = saving_card ? lock : true;
+      TextCentred(cx, cy + X(kCardH + 22.0f), kNormal, on ? kGold : kCream,
+                  on ? "Saving: only on quit" : "Saving: as in the original");
+      TextCentred(cx, cy + X(kCardH + 54.0f), kSmall, kCreamDim,
+                  on ? "No Save and Continue, no Quit without saving, no reloading. Closing the game saves first."
+                     : "Save and Continue, Quit without saving and the reload box all stay.",
+                  0.85f);
     }
 
-    float px = cx - X(160.0f);
+    float px = cx - X(saving_card ? 250.0f : 160.0f);
     const float py = ds.y - X(70.0f);
     if (locked_) {
       Prompt(px, py, "A", "Close");
     } else {
       Prompt(px, py, "A", "Choose");
       Prompt(px, py, "B", "Back");
+      if (saving_card) Prompt(px, py, "Y", lock ? "Saving: on quit only" : "Saving: normal");
     }
+  }
+
+  // While a window close waits for the game to save and quit (Hardcore saving).
+  void ClosingNotice(ImGuiIO& io) {
+    const ImVec2 ds = io.DisplaySize;
+    const float w = X(560.0f), h = X(74.0f);
+    const ImVec2 p0(ds.x * 0.5f - w * 0.5f, X(40.0f));
+    dl_->AddRectFilled(p0, ImVec2(p0.x + w, p0.y + h), IM_COL32(18, 14, 9, 225), X(8.0f));
+    dl_->AddRect(p0, ImVec2(p0.x + w, p0.y + h), Alpha(kGold, 0.8f), X(8.0f), 0, std::max(1.0f, X(1.4f)));
+    TextCentred(ds.x * 0.5f, p0.y + X(10.0f), kNormal, kGold, "Hardcore: saving before the game closes");
+    TextCentred(ds.x * 0.5f, p0.y + X(42.0f), kSmall, kCreamDim,
+                "It waits until the game can save. Close again after 15 s to quit without saving.", 0.8f);
   }
 };
 

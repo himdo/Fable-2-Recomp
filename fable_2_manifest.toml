@@ -48163,9 +48163,18 @@ name = "QueryActivePlayerMethod_821EC8A0"
 [entrypoint.functions."0x821F8760"]
 name = "ResolveSubsystemReference_821F8760"
 
-# Complex game entity initialization. Takes the game state and a constructed reference. Calls ProcessAndProcessAndProcess2254, ProcessAndProcessAndProcess938, ProcessAndProcessAndProcess1309, and sub_822F9EC0. 199 lines. 5+ callees. Called from the main game loop.
+# Quit to the front end (was misnamed InitializeGameEntity). r3 = the game object
+# *(*(0x83496920)+12), r4 = a ref string (the reason; the pause Save box passes "" from
+# 0x82000C98, built by ConstructRefCounted_8222CF18). It logs "QuitToFrontEnd(%s)"
+# (0x820A6194), sets the game object's +256 byte (which makes SaveManager_Save_824E8990
+# refuse to save from then on), drains the network queue through Network_DropClient_8230FEB0
+# and starts the front-end transition. Callers: PauseSaveBox_HandleEvent_82413988 (Save and
+# Quit, after the save; Quit without saving), ProcessGameFrame_82276C30 (a timer), and the
+# difficulty feature's Hardcore window close (docs/feature/difficulty_settings/ technical.md
+# 23). Read in the generated code (Verified); a hand-tuned override lives in
+# src/core/hotfunc/entity/.
 [entrypoint.functions."0x8233CAC8"]
-name = "InitializeGameEntity_8233CAC8"
+name = "Game_QuitToFrontEnd_8233CAC8"
 
 # The main per-frame game loop. 512-byte stack frame. Processes timing, calls all major per-frame subsystems (notifications, player update, state update, callbacks, yield). 1052 lines. 20+ callees. Called once per frame.
 [entrypoint.functions."0x82276C30"]
@@ -49896,6 +49905,34 @@ name = "LuaSaveManager_SaveFailQuestSave_824E8D18"
 [entrypoint.functions."0x824ECCB8"]
 name = "LuaSaveManager_LoadFailQuestSave_824ECCB8"
 
+# The native body of the Lua function IsHeroPlayerPlayingWithSaveGame. r3 = the save
+# manager; returns r3 = 1 when player 1's entry in the manager's map at +2028 has a
+# non-null +16 (the player who owns the save), else 0. Bound in sub_824EC750 at
+# 0x824ECAA8 (the closure {manager, 0x824EC0A0} next to the name string 0x820B919C);
+# nothing calls it directly. Its only script use is gameflow's RegionExitChecking, which
+# shows the leave-area "reload" box (then LoadFailQuestSave) only while it is true.
+# Verified in the generated code and the scripts; the difficulty feature returns 0 while
+# Hardcore saving is locked (technical.md 23).
+[entrypoint.functions."0x824EC0A0"]
+name = "LuaSaveManager_IsHeroPlayerPlayingWithSaveGame_824EC0A0"
+
+# Whether a save may be written now. r3 = the save manager; returns false when byte
+# +2093 (SetSavingAsAllowed) is 0 or no player entry in the map at +2028 has a non-null
+# +16. SaveManager_Save_824E8990 calls it first (after checking the game object's +256
+# quit byte) and saves nothing when it is false. Verified in the generated code.
+[entrypoint.functions."0x824EBF30"]
+name = "SaveManager_CanSave_824EBF30"
+
+# Adds a button to a GUI menu: r3 = the menu, r4 = the label key (a ref string, turned
+# into the wide text), r5/r6 passed on, r7 = the button's index, r8-r10 passed on (r8 = 2
+# for the Save box). It wraps sub_824083C0; the result isn't used. The pause Save box
+# builder sub_82842860 calls it three times: 0x828429C0 Save and Continue (r7 = 0),
+# 0x82842A00 Save and Quit (1), 0x82842A40 Quit without saving (2) (the return
+# addresses). Verified in the generated code and the decrypted image; the difficulty
+# feature skips 0 and 2 while Hardcore saving is locked.
+[entrypoint.functions."0x82408338"]
+name = "GuiMenu_AddButton_82408338"
+
 # Handles the pause menu Save box. r4 = event (46 = a button was chosen, 47 =
 # another path), r5 = sub-code: 23 Save and Continue (save, r7 = 1), 24 Save and
 # Quit (save, r7 = 0, then the quit routine 0x8233CAC8), 25 Quit without saving
@@ -50161,7 +50198,7 @@ name = "Coop_MoveGoldToPlayer1_82413620"
 
 # Drops network client(s) ("GUI_NET_DROPPED_CLIENT"): gives player 1 the co-op
 # partner's gold (sub_828BEEC0(playerObj), r6 = 0), then saves through
-# SaveManager_Save_824E8990. Called from the quit routine InitializeGameEntity_8233CAC8
+# SaveManager_Save_824E8990. Called from the quit routine Game_QuitToFrontEnd_8233CAC8
 # with r4 = a 24-byte-entry list, and from sub_823211F0 / sub_82321268. Verified for
 # the gold and save calls; the list and the exact role are Inference.
 [entrypoint.functions."0x8230FEB0"]

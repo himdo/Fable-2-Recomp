@@ -236,7 +236,7 @@ In `src/lua/console_cmds.lua`:
 | 24 | save (r7 = 0), then `0x8233CAC8` | Save and Quit |
 | 25 | `0x8233CAC8` only | Quit without saving |
 
-`0x8233CAC8` is the quit-to-front-end routine (it uses `"QuitToFrontEnd(%s)"` at 0x820A6194). The manifest misnames it `InitializeGameEntity_8233CAC8`, and it has a hand-tuned override at `src/core/hotfunc/entity/InitializeGameEntity_8233CAC8.cpp`.
+`0x8233CAC8` is the quit-to-front-end routine (it uses `"QuitToFrontEnd(%s)"` at 0x820A6194). It was named `InitializeGameEntity_8233CAC8` until 2026-11-28 (now `Game_QuitToFrontEnd_8233CAC8`), and it has a hand-tuned override at `src/core/hotfunc/entity/Game_QuitToFrontEnd_8233CAC8.cpp`.
 
 #### The save path
 
@@ -472,7 +472,51 @@ Sizes come from `gui_texture_headers.bnk`; the textures themselves are in `art/g
 
 The remaining open questions (slot label format, Masochist, unused Theresa lines) are listed in `overview.md`.
 
-### 22. Pictures on the difficulty cards (2026-11-27, branch `feature/difficulty-card-art`)
+### 23. Hardcore saving: save on quit only, as a switch (2026-11-28, not tested in game yet)
+
+delta4o chose this topic and then asked for it to be **optional**: nobody knows yet how it feels, and it shouldn't push players into odd habits (such as triggering an autosave on purpose before stopping). Decision 1 (section 11) stays the design; it now applies only to a hero who had it switched on.
+
+#### 23.1 The switch (decision 8, 2026-11-28)
+
+- **Where:** both. `[patches] hardcore_saving` (config file and the launcher's patch list, **default false**) sets where the switch starts; on the New Game cards, **Y** on the Hardcore card changes it for that hero. The cards show "Saving: only on quit" / "Saving: as in the original" under the cards and a Y prompt. (Claude's reading of delta4o's "all of the above".)
+- **Stored as game level 5.** A Hardcore hero with saving locked gets game level 5 at type-33 `+80` instead of 4. The game only ever compares the level with 1: the five native gates (`cmpwi r11,1; ble`, 13.1) and the one script use (`GetDifficultyLevel(Hero) > 1` for Masochist, `gameflow`). So 5 plays exactly as Hardcore, the save keeps it with no file of our own, and old Hardcore heroes (4) keep normal saving. `LevelIndex` already maps 4 and up to Hardcore, so the multipliers, F8 and the slot label ("Hardcore") are unchanged. Like Hardcore itself, it can't be changed later.
+- The F8 cards on such a hero show "Saving: only on quit".
+
+#### 23.2 What it changes (Verified in the generated code and the scripts)
+
+| Way back to an older save | How it is closed | Function |
+| --- | --- | --- |
+| Save and Continue, Quit without saving (pause Save box) | The builder `sub_82842860` adds the three buttons through `GuiMenu_AddButton_82408338` (r7 = index; return addresses 0x828429C0, 0x82842A00, 0x82842A40). The override skips the calls for 0 and 2, so only Save and Quit is added. | `GuiMenu_AddButton_82408338` |
+| The leave-area reload box (`LoadFailQuestSave`) | `gameflow` `RegionExitChecking:Update` shows the box near a locked region exit only while `IsHeroPlayerPlayingWithSaveGame()` is true. That's the function's **only** script use (`FABLE2_LUA_API.md`: 1 call, 1 file). Its native, bound in `sub_824EC750` at 0x824ECAA8 as the closure {save manager, 0x824EC0A0}, returns 0 for the hero. So the box never appears; the player has to finish the quest. | `LuaSaveManager_IsHeroPlayerPlayingWithSaveGame_824EC0A0` |
+| Closing the window | The app's `OnWindowCloseRequested` (SDK `rex_app.h`: false = veto) holds the close and asks for a Save and Quit. See 23.3. | `fable2::difficulty::OnWindowCloseRequested` |
+| The recomp's Quit | Main menu only: no game is running, so there's nothing to roll back. Not changed. | |
+| `f2 quitmenu confirm` | A console command: left as is. | |
+
+Autosaves and the `+2093` gate are untouched: Hardcore doesn't block saving, it blocks going back.
+
+#### 23.3 The window close
+
+1. **UI thread.** `OnWindowCloseRequested`: when `SavingLocked()` (player 1's level ≥ 5), it notes the newest `mainsave.bin`, sets the request and returns false. A notice at the top of the screen says it is saving first.
+2. **Guest thread.** The world update (`OnWorldUpdate`) runs the request. The pad read only takes over when no world update has seen it for 500 ms (the pause menu may stop the world; not checked yet). The steps:
+   - `SaveManager_CanSave_824EBF30(mgr)`: the same check `SaveManager_Save_824E8990` makes first (byte `+2093` and the player map at `+2028`). While it's false (a cutscene, a quest moment) it waits and tries again on each update.
+   - Then the same as Save box sub-code 24 (`PauseSaveBox_HandleEvent_82413988`): `SaveManager_Save_824E8990(mgr, 0, 0, 0, 0)`, then `Game_QuitToFrontEnd_8233CAC8(game, "")`, with the reason built by `ConstructRefCounted_8222CF18` from the empty string at 0x82000C98. `mgr` = `game+148`, `game` = `*(*(0x83496920)+12)`. The Save box's sound and its closing of the pause screen are left out.
+   - If the game object's `+256` is already set (the quit routine sets it, and the save then refuses), the game is quitting already, so it only waits.
+3. **UI thread.** `PollClose`, every 500 ms: once there is no hero (the front end) **and** a `mainsave.bin` newer than at the request exists, it waits one more second and closes the window (`RequestClose`, which asks `OnWindowCloseRequested` again and now gets true). If no new save shows up, it closes 30 s after the quit anyway, and logs it.
+4. **The way out.** A close 15 s or more after the first one closes at once, saved or not. Without it, a hero stuck where the game never allows saving couldn't close the game except by killing it. Like a crash or a killed process, that goes back to the last save (section 5, open).
+
+#### 23.4 Names (2026-11-28)
+
+`GuiMenu_AddButton_82408338`, `LuaSaveManager_IsHeroPlayerPlayingWithSaveGame_824EC0A0`, `SaveManager_CanSave_824EBF30`, and `Game_QuitToFrontEnd_8233CAC8` (renamed from `InitializeGameEntity_8233CAC8`, with its hand-tuned override file).
+
+#### 23.5 To test in game
+
+- New Game → Hardcore: Y switches saving; start with it on. The log should show `New Game on Hardcore (saving locked)` and game level 5.
+- The pause Save box shows only Save and Quit. Does the selection start on it, and does it work?
+- Walk to a locked region exit during a quest: no reload box.
+- Close the window in game, then again with the pause menu open, then during a cutscene: the notice, the save (`slot HeroNNN: saved on Hardcore`), the front end, then the window closes. Reload the slot: nothing lost.
+- A Hardcore hero with the switch off, and an Easy hero: the box has all three buttons, the reload box is there, and the window closes at once.
+
+### 22. Pictures on the difficulty cards (2026-11-27, 0c3e30b)
 
 delta4o wanted backgrounds on the cards (2026-11-24) but none of the GUI bank's textures (`art/gui/gui_textures.bnk`, the ones the overlay already reads; 82 exported and looked at). So the search went to the game's other texture banks.
 

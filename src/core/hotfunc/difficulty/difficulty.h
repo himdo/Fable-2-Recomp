@@ -44,6 +44,10 @@ struct DialogState {
   std::atomic<int> nav_x{0};       // left / right presses
   std::atomic<int> activate{0};    // A / Enter
   std::atomic<int> back{0};        // B / Esc
+  std::atomic<int> toggle{0};      // Y: the Hardcore card's saving switch
+  // The Hardcore card's saving switch (New Game): on = save on quit only (game level 5).
+  // Starts as [patches] hardcore_saving says each time the New Game cards open.
+  std::atomic<bool> lock_saving{false};
   std::atomic<bool> suppress_pad{false};  // keep blanking the pad until it is released
   std::atomic<int> chosen{-1};     // set by the dialog on confirm (card index)
   std::atomic<int> chosen_mode{0}; // the DialogMode the choice was made in
@@ -81,6 +85,25 @@ bool OnPadRead(PPCContext& ctx, uint8_t* base, uint16_t buttons, int16_t lx);
 // Called on every world update (the world-thread hook in fable_2_app.h): applies a
 // level that was chosen on New Game or in game, once the hero exists.
 void OnWorldUpdate(PPCContext& ctx, uint8_t* base);
+
+// --- Hardcore saving: save on quit only (technical.md 23) ---------------------------------
+//
+// A Hardcore hero started with the card's saving switch on is stored at game level 5. For
+// it the pause Save box has only Save and Quit, the leave-area reload box never shows, and
+// closing the window does a Save and Quit first.
+
+// True when player 1 is such a hero. Reads guest memory; safe from any thread.
+bool SavingLocked();
+
+// The app's way to close the window (UI thread), set once at startup.
+void SetCloseWindow(std::function<void()> close);
+// UI thread, from the app's OnWindowCloseRequested: false holds the close while the game
+// saves and quits (a second close after 15 s closes anyway).
+bool OnWindowCloseRequested();
+// True while a held close is saving and quitting (for the dialog's notice).
+bool ClosePending();
+// UI thread, every frame: closes the window once the save is written and the front end is up.
+void PollClose();
 
 // --- The level of each save slot, for a slot label ("Hero 1 (Medium)", not done yet) ----
 //

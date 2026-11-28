@@ -26,6 +26,12 @@
 //     target that is an enemy of player 1 takes health / enemy health (decision 7,
 //     technical.md 21).
 //
+// Hardcore saving (decision 1, made optional 2026-11-28; technical.md 23): a Hardcore hero
+// whose New Game card had saving locked is stored as game level 5 (the game only ever asks
+// "above 1", so 5 plays as Hardcore). For it the pause Save box has only Save and Quit, the
+// leave-area reload box never shows, and closing the window does a Save and Quit first
+// (the section at the end of this file).
+//
 // Every line it logs starts with "[difficulty]".
 #include "fable_2_pch.h"
 
@@ -58,6 +64,7 @@
 #include <rex/ppc/context.h>
 
 #include "difficulty.h"
+#include "fable2_config.h"    // [patches] hardcore_saving: the Hardcore card's switch
 #include "fable2_patches.h"   // fable2::patches::GuestBase
 #include "fable2_ui_events.h" // FINISHED_TRANSITIONING_TO_GAME
 
@@ -81,6 +88,14 @@ extern "C" void __imp__Property_GetSellPrice_8274DFD0(PPCContext& ctx, uint8_t* 
 extern "C" void __imp__MoneyComp_Modify_8239E698(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__HealthComp_Modify_8268BD90(PPCContext& ctx, uint8_t* base);
 extern "C" void __imp__Faction_GetRelationship_822040D0(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__GuiMenu_AddButton_82408338(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__LuaSaveManager_IsHeroPlayerPlayingWithSaveGame_824EC0A0(PPCContext& ctx,
+                                                                              uint8_t* base);
+extern "C" void __imp__SaveManager_CanSave_824EBF30(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__SaveManager_Save_824E8990(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__ConstructRefCounted_8222CF18(PPCContext& ctx, uint8_t* base);
+// The hand-tuned override (src/core/hotfunc/entity/), as every game caller reaches it.
+extern "C" void Game_QuitToFrontEnd_8233CAC8(PPCContext& ctx, uint8_t* base);
 
 namespace {
 
@@ -162,6 +177,9 @@ uint32_t Player1Entity() {
 // --- The current level --------------------------------------------------------------
 
 std::atomic<int32_t> g_logged_level{-1};
+
+// Hardcore with saving locked (technical.md 23). Anything from 5 up counts.
+constexpr int32_t kSavingLockedLevel = 5;
 
 size_t LevelIndex(int32_t game_level) {
   if (game_level <= 1) return 0;
@@ -454,6 +472,10 @@ std::atomic<int64_t> g_choice_ms{0};    // when the card was chosen
 thread_local bool t_replaying = false;
 
 std::atomic<int> g_newgame_level{-1};   // card index to write to the new hero
+std::atomic<bool> g_newgame_lock{false}; // Hardcore with saving locked: game level 5
+
+// Hardcore saving's window close, on a guest thread (the section at the end of this file).
+void ServiceCloseRequest(PPCContext& ctx, uint8_t* base, bool world_thread);
 std::atomic<int64_t> g_newgame_ms{0};   // when the new game was started
 std::atomic<uint32_t> g_hero_at_start{0};
 
@@ -597,6 +619,8 @@ extern "C" void FrontMenu_HandleCardEvent_826C9188(PPCContext& __restrict ctx, u
       d::Dialog().nav_x.store(0);
       d::Dialog().activate.store(0);
       d::Dialog().back.store(0);
+      d::Dialog().toggle.store(0);
+      d::Dialog().lock_saving.store(fable2::config::Get().hardcore_saving);
       g_held_event.store(hash);
       d::Dialog().mode.store(int(d::DialogMode::kNewGame));
       REXSYS_INFO(
@@ -739,10 +763,12 @@ bool OnPadRead(PPCContext& ctx, uint8_t* base, uint16_t buttons, int16_t lx) {
             g_held_event.store(0);
             g_line_played_ms.store(0);
             g_hero_at_start.store(Player1Entity());
+            g_newgame_lock.store(level == 3 && d.lock_saving.load());
             g_newgame_level.store(level);
             g_newgame_ms.store(now);
-            REXSYS_INFO("[difficulty] New Game on {}: starting the game ({} thread {:X}, card thread {:X})",
-                        Level(level).name, same_thread ? "same" : "OTHER", ThreadKey(), g_card_thread.load());
+            REXSYS_INFO("[difficulty] New Game on {}{}: starting the game ({} thread {:X}, card thread {:X})",
+                        Level(level).name, g_newgame_lock.load() ? " (saving locked)" : "",
+                        same_thread ? "same" : "OTHER", ThreadKey(), g_card_thread.load());
             g_front_end.store(0);
             ReplayCardEvent(ctx, base, g_held_self.load(), held);
           }
@@ -760,8 +786,13 @@ bool OnPadRead(PPCContext& ctx, uint8_t* base, uint16_t buttons, int16_t lx) {
   g_prev_left = left;
   g_prev_right = right;
 
+  // A window close on a Hardcore hero with saving locked: the world update saves and
+  // quits; this thread only steps in when the world isn't updating (the pause menu).
+  ServiceCloseRequest(ctx, base, false);
+
   if (DialogOpen()) {
     if (pressed & 0x1000) d.activate.fetch_add(1);                  // A
+    if (pressed & 0x8000) d.toggle.fetch_add(1);                    // Y
     if (pressed & (0x2000 | 0x0020)) d.back.fetch_add(1);           // B, Back
     if (left_edge) d.nav_x.fetch_sub(1);
     if (right_edge) d.nav_x.fetch_add(1);
@@ -779,6 +810,7 @@ bool OnPadRead(PPCContext& ctx, uint8_t* base, uint16_t buttons, int16_t lx) {
 std::atomic<int> g_last_level{-1};
 
 void OnWorldUpdate(PPCContext& ctx, uint8_t* base) {
+  ServiceCloseRequest(ctx, base, true);  // a window close on a locked Hardcore hero
   if (CurrentIndex() >= 0) g_front_end.store(0);  // in game: the menu's object may be gone
   if (const int now = CurrentIndex(); now >= 0) g_last_level.store(now, std::memory_order_relaxed);
 
@@ -798,17 +830,18 @@ void OnWorldUpdate(PPCContext& ctx, uint8_t* base) {
       g_last_level.store(level, std::memory_order_relaxed);
       const int32_t before = static_cast<int32_t>(U32(comp + 80));
       const uint8_t changed = U8(comp + 38);
+      const int32_t game_level = level == 3 && g_newgame_lock.load() ? kSavingLockedLevel : level + 1;
       if (level > 0) {
         // Directly, without the "changed" flag at +38 that Player.SetDifficultyLevel sets:
         // the Masochist question (open question 5) stays open.
-        W32(comp + 80, static_cast<uint32_t>(level + 1));
+        W32(comp + 80, static_cast<uint32_t>(game_level));
         const uint32_t combat = FindComponent(hero, 57);
         if (Ptr(combat)) W32(combat + 2164, 0);  // recompute the damage-taken factor
       }
       REXSYS_INFO(
           "[difficulty] New Game: hero {:08X} had game level {} (changed flag {}), now {} ({}), "
           "{} ms after the start{}",
-          hero, before, changed, level > 0 ? level + 1 : before, Level(level).name,
+          hero, before, changed, level > 0 ? game_level : before, Level(level).name,
           fable2::uievents::NowMs() - started, in_game ? "" : " (no transition event seen)");
     }
   }
@@ -1092,3 +1125,231 @@ extern "C" void GuiElement_SetText_823F8268(PPCContext& __restrict ctx, uint8_t*
   __imp__Release_RefCounted_821C67D8(ctx, base);  // ours goes; the string lives on in the text
   ctx = saved;
 }
+
+// --- Hardcore saving: save on quit only (decision 1; technical.md 23) ---------------------
+//
+// Only for a hero stored at game level 5 (New Game, Hardcore card, saving switched on with Y;
+// the switch starts as [patches] hardcore_saving says). The game still saves on its own
+// (autosaves stay); what goes is every way back to an older save:
+//   - the pause Save box loses Save and Continue and Quit without saving: the builder's
+//     GuiMenu_AddButton_82408338 calls for buttons 0 and 2 are skipped, Save and Quit stays;
+//   - the leave-area reload box (gameflow RegionExitChecking, then LoadFailQuestSave) only
+//     shows while IsHeroPlayerPlayingWithSaveGame is true, its only script use: it says false;
+//   - closing the window first does what Save and Quit does (PauseSaveBox_HandleEvent_82413988,
+//     sub-code 24): SaveManager_Save_824E8990(mgr, 0, 0, 0, 0), then
+//     Game_QuitToFrontEnd_8233CAC8(game, ""). The window closes once the front end is up and
+//     a slot's mainsave.bin has been written. While the game can't save (a cutscene, a quest
+//     moment: SaveManager_CanSave_824EBF30 is false) it waits; a second close after 15 s
+//     closes without saving, the way out if saving never becomes possible.
+// A crash or a killed process still goes back to the last save (open, technical.md 5).
+
+namespace {
+
+// Return addresses of the Save box builder's (sub_82842860) button calls.
+constexpr uint32_t kSaveAndContinueButton = 0x828429C0u;   // r7 = 0
+constexpr uint32_t kQuitWithoutSavingButton = 0x82842A40u; // r7 = 2
+
+// The game object *(*(0x83496920)+12); its save manager is at +148, and +256 is the byte the
+// quit routine sets (SaveManager_Save_824E8990 refuses to save once it is set).
+uint32_t GameObject() {
+  if (fable2::patches::GuestBase() == nullptr) return 0;
+  const uint32_t root = U32(0x83496920u);
+  return Ptr(root) ? U32(root + 12) : 0;
+}
+
+// An empty C string in the image: the reason the Save box passes to the quit routine.
+constexpr uint32_t kEmptyQuitReason = 0x82000C98u;
+
+enum CloseState : int { kCloseIdle = 0, kCloseWanted = 1, kCloseQuitting = 2, kCloseNow = 3 };
+std::atomic<int> g_close{kCloseIdle};
+std::atomic<int64_t> g_close_ms{0};        // when the close was asked for
+std::atomic<int64_t> g_close_quit_ms{0};   // when the save and quit ran
+std::atomic<int64_t> g_close_world_ms{0};  // the last world update that saw the request
+std::atomic<int64_t> g_close_wait_logged{0};
+std::function<void()> g_close_window;      // set once at startup (the app)
+constexpr int64_t kForceCloseAfterMs = 15000;
+
+std::atomic<bool> g_logged_box{false};
+std::atomic<int> g_logged_reload{-1};
+
+void ServiceCloseRequest(PPCContext& ctx, uint8_t* base, bool world_thread) {
+  if (g_close.load() != kCloseWanted) return;
+  const int64_t now = fable2::uievents::NowMs();
+  if (world_thread) {
+    g_close_world_ms.store(now);
+  } else if (now - g_close_world_ms.load() < 500) {
+    return;  // the world update is running: leave it to that thread
+  }
+  const uint32_t game = GameObject();
+  if (!Ptr(game)) return;
+  if (U8(game + 256) != 0) {  // the game is already quitting (its own Save and Quit)
+    int expected = kCloseWanted;
+    if (g_close.compare_exchange_strong(expected, kCloseQuitting)) {
+      g_close_quit_ms.store(now);
+      REXSYS_INFO("[difficulty] Hardcore saving: the game is already quitting, closing after it");
+    }
+    return;
+  }
+  const uint32_t mgr = U32(game + 148);
+  if (!Ptr(mgr)) return;
+
+  const PPCContext saved = ctx;
+  const uint32_t sp = (ctx.r1.u32 - 0x200u) & ~0xFu;
+  W32(sp, ctx.r1.u32);
+  ctx.r1.u64 = sp;
+  ctx.r3.u64 = mgr;
+  __imp__SaveManager_CanSave_824EBF30(ctx, base);
+  const bool can_save = (ctx.r3.u32 & 0xFFu) != 0;
+  if (!can_save) {
+    ctx = saved;
+    if (g_close_wait_logged.exchange(g_close_ms.load()) != g_close_ms.load()) {
+      REXSYS_INFO("[difficulty] Hardcore saving: the game can't save right now, waiting to save and quit");
+    }
+    return;
+  }
+  int expected = kCloseWanted;
+  if (!g_close.compare_exchange_strong(expected, kCloseQuitting)) {
+    ctx = saved;
+    return;
+  }
+  // Save and Quit (PauseSaveBox_HandleEvent_82413988, sub-code 24), without its sound and
+  // without closing the pause screen, which the front end replaces anyway.
+  ctx.r1.u64 = sp;
+  ctx.r3.u64 = mgr;
+  ctx.r4.u64 = 0;
+  ctx.r5.u64 = 0;
+  ctx.r6.u64 = 0;
+  ctx.r7.u64 = 0;
+  __imp__SaveManager_Save_824E8990(ctx, base);
+  const uint32_t reason = sp + 0x100u;
+  W32(reason, 0);
+  ctx.r1.u64 = sp;
+  ctx.r3.u64 = reason;
+  ctx.r4.u64 = kEmptyQuitReason;
+  ctx.r5.s64 = -1;
+  __imp__ConstructRefCounted_8222CF18(ctx, base);
+  ctx.r4.u64 = ctx.r3.u64;  // the ref string, as the Save box passes it
+  ctx.r3.u64 = game;
+  ctx.r1.u64 = sp;
+  Game_QuitToFrontEnd_8233CAC8(ctx, base);
+  ctx = saved;
+  g_close_quit_ms.store(fable2::uievents::NowMs());
+  REXSYS_INFO("[difficulty] Hardcore saving: window close -> saved, quitting to the front end ({} thread)",
+              world_thread ? "world" : "pad");
+}
+
+// The newest mainsave.bin under the save root (the epoch when there is none).
+std::filesystem::file_time_type NewestMainSave() {
+  namespace fs = std::filesystem;
+  fs::path root;
+  {
+    std::lock_guard<std::mutex> lock(fable2::difficulty::g_slots_mu);
+    root = fable2::difficulty::g_save_root;
+  }
+  fs::file_time_type newest{};
+  std::error_code ec;
+  if (root.empty()) return newest;
+  for (const auto& profile : fs::directory_iterator(root, ec)) {
+    const fs::path data = profile.path() / "4D5307F1" / "00000001";
+    std::error_code e2;
+    for (const auto& slot : fs::directory_iterator(data, e2)) {
+      std::error_code e3;
+      const auto t = fs::last_write_time(slot.path() / "mainsave.bin", e3);
+      if (!e3 && t > newest) newest = t;
+    }
+  }
+  return newest;
+}
+
+std::filesystem::file_time_type g_close_since{};  // UI thread: the newest save before the close
+
+}  // namespace
+
+// r3 = the menu, r7 = the button index; the return address says which button it is.
+extern "C" void GuiMenu_AddButton_82408338(PPCContext& __restrict ctx, uint8_t* base) {
+  const uint32_t lr = static_cast<uint32_t>(ctx.lr);
+  if ((lr == kSaveAndContinueButton || lr == kQuitWithoutSavingButton) &&
+      fable2::difficulty::SavingLocked()) {
+    if (lr == kSaveAndContinueButton) {
+      REXSYS_INFO("[difficulty] Hardcore saving: Save box with Save and Quit only");
+    }
+    return;
+  }
+  __imp__GuiMenu_AddButton_82408338(ctx, base);
+}
+
+// r3 = the save manager; the bool in r3. RegionExitChecking asks every frame.
+extern "C" void LuaSaveManager_IsHeroPlayerPlayingWithSaveGame_824EC0A0(PPCContext& __restrict ctx,
+                                                                       uint8_t* base) {
+  const bool locked = fable2::difficulty::SavingLocked();
+  if (g_logged_reload.exchange(locked ? 1 : 0) != (locked ? 1 : 0) && locked) {
+    REXSYS_INFO("[difficulty] Hardcore saving: no leave-area reload box for this hero");
+  }
+  if (locked) {
+    ctx.r3.u64 = 0;
+    return;
+  }
+  __imp__LuaSaveManager_IsHeroPlayerPlayingWithSaveGame_824EC0A0(ctx, base);
+}
+
+namespace fable2::difficulty {
+
+bool SavingLocked() {
+  const uint32_t comp = FindComponent(Player1Entity(), 33);
+  return Ptr(comp) && static_cast<int32_t>(U32(comp + 80)) >= kSavingLockedLevel;
+}
+
+void SetCloseWindow(std::function<void()> close) { g_close_window = std::move(close); }
+
+bool OnWindowCloseRequested() {
+  const int64_t now = fable2::uievents::NowMs();
+  const int state = g_close.load();
+  if (state == kCloseNow) return true;
+  if (state == kCloseWanted || state == kCloseQuitting) {
+    if (now - g_close_ms.load() >= kForceCloseAfterMs) {
+      REXSYS_INFO("[difficulty] Hardcore saving: second close after {} ms, closing {}",
+                  now - g_close_ms.load(), state == kCloseWanted ? "WITHOUT saving" : "while quitting");
+      g_close.store(kCloseNow);
+      return true;
+    }
+    return false;  // still saving and quitting
+  }
+  if (!SavingLocked() || !g_close_window) return true;
+  g_close_since = NewestMainSave();
+  g_close_ms.store(now);
+  g_close.store(kCloseWanted);
+  REXSYS_INFO("[difficulty] Hardcore saving: window close held, saving and quitting first");
+  return false;
+}
+
+bool ClosePending() {
+  const int state = g_close.load();
+  return state == kCloseWanted || state == kCloseQuitting;
+}
+
+void PollClose() {
+  if (g_close.load() != kCloseQuitting) return;
+  static int64_t last = 0;
+  static int64_t ready_ms = 0;
+  const int64_t now = fable2::uievents::NowMs();
+  if (now - last < 500) return;
+  last = now;
+  const int64_t quit = g_close_quit_ms.load();
+  const bool front_end = CurrentIndex() < 0;
+  const bool written = NewestMainSave() > g_close_since;
+  // A second after both, or 30 s after the quit if no new save shows up on disk.
+  if (front_end && written) {
+    if (ready_ms == 0) ready_ms = now;
+  } else {
+    ready_ms = 0;
+  }
+  const bool timed_out = front_end && now - quit > 30000;
+  if ((ready_ms != 0 && now - ready_ms >= 1000) || timed_out) {
+    REXSYS_INFO("[difficulty] Hardcore saving: {} {} ms after the quit, closing the window",
+                written ? "saved and at the front end" : "at the front end but NO new save seen,", now - quit);
+    g_close.store(kCloseNow);
+    if (g_close_window) g_close_window();
+  }
+}
+
+}  // namespace fable2::difficulty
