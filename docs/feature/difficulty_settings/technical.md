@@ -221,7 +221,7 @@ In `src/lua/console_cmds.lua`:
 
 #### The pause Save box
 
-`sub_82842860` (`.51:13531`) builds it, and `sub_8240F040` (`.209:4472`) calls it. The title is `GUI_SCREEN_PAUSE_SAVING`. The buttons are:
+`PauseMenu_Populate_82842860` (`.51:13531`) builds it, and `sub_8240F040` (`.209:4472`) calls it. The title is `GUI_SCREEN_PAUSE_SAVING`. The buttons are:
 - 0: `GUI_SCREEN_PAUSE_SAVE_AND_CONTINUE` (0x820DCF38)
 - 1: `GUI_SCREEN_PAUSE_SAVE_AND_QUIT` (0x820DCF5C)
 - 2: `GUI_SCREEN_PAUSE_QUIT_DONT_SAVE` (0x820DCF94)
@@ -304,7 +304,7 @@ In `thirdparty/rexglue-sdk/src/system/xam/content_manager.cpp`:
 
 #### Hardcore design: decision 1, save on quit only (Inference, not built)
 
-- Remove buttons 0 and 2 in `sub_82842860`, or reject sub-codes 23 and 25 in `PauseSaveBox_HandleEvent_82413988`. That leaves Save and Quit.
+- Remove buttons 0 and 2 in `PauseMenu_Populate_82842860`, or reject sub-codes 23 and 25 in `PauseSaveBox_HandleEvent_82413988`. That leaves Save and Quit.
 - Force a save before closing the window or using the recomp Quit: `SetQuitHandler` / `RequestClose` in `fable_2_app.h:171`. The save has to finish before the process exits, so check the save is complete, not just queued.
 - Block `LoadFailQuestSave` (`LuaSaveManager_LoadFailQuestSave_824ECCB8`), and possibly stop `SaveFailQuestSave` so no fail-quest file exists.
 - Leave autosaves and the +2093 gate alone. Hardcore doesn't block saving; it blocks going back.
@@ -472,6 +472,41 @@ Sizes come from `gui_texture_headers.bnk`; the textures themselves are in `art/g
 
 The remaining open questions (slot label format, Masochist, unused Theresa lines) are listed in `overview.md`.
 
+### 24. A Difficulty row in Pause > Options > Game (2026-11-28)
+
+delta4o wanted the in-game difficulty change inside the game's own menus: on the Options > Game page, a sixth row "Difficulty" with an Easy / Medium / Hard picker like Glowing Trail Brightness. A real new row, not a reused one (reusing the Auto Joinable row was offered and declined). F8 stays as a shortcut.
+
+#### 24.1 How the page works (Verified in the generated code unless marked)
+
+- **Pause menu.** `PauseMenu_Populate_82842860` rebuilds it on every opening, through `GuiMenu_SpawnButton_824083C0` (the same arguments as `ExpandableMenu_SpawnButton`). `PauseMenu_HandleEvent_82412378` dispatches by item name: Options opens screen 17. No new pause item was needed.
+- **The page.** GameFace presentation `art/gui/gameface/optionsscreen.bgf`, page 1. Each row is a text element plus a `<name>_pickbox` element under `Foreground.Book.Pages.Page1.Contents.Options`: Subtitles, BreadcrumbSize (shown as Glowing Trail Brightness), TutorialBoxes, MultiplayerOrbs, Auto_joinable. Labels sit at y = 95, 10, -75, -160, -245, each picker 40 below its label (read live).
+- **The native page object.** It keeps one picker per row in a map at `+28` (index → shared handle), with the focused row at `+40`:
+  - `OptionsGame_Populate_828D7588` clears the map and calls `OptionsGame_CreatePickers_828D7290` (five pickers; rows 1-4 only in game) and `OptionsGame_LoadSettings_828D84E0`;
+  - then each row's filler binds its picker to the element path (`Picker_Bind_828860E8`), pushes the choices (`StringList_PushBack_82356488` on picker `+44`) and selects one (`Picker_Select_828862E8`, index at `+36`).
+- **Input.** `OptionsGame_HandleInput_828D8E80` takes the code from `MenuInput_Translate_82841730`: 28 up (`focus > 0`), 29 down (`focus < 4`, **a constant**), 36 Accept (`OptionsGame_Accept_828D8AF0`, which reads pickers 0-4), 37 Cancel. Anything else goes to the focused picker (left / right).
+- **GameFace.** The Lua global `clone(element[, name[, parent]])` is `GameFace_LuaClone_82BB80F0`. A copy keeps the original's name. A text element's `textstring` attribute doesn't show: the game localizes each text element from the text ID stored in the `.bgf` (for example `GUI_SCREEN_OPTIONS_MULTIPLAYER_JOINABLE`).
+
+#### 24.2 Live check (2026-11-28, console `f2 gui`, no code)
+
+Cloning the Auto_joinable pair drew a new row in the game's style. Six rows 70 apart (85 before) fit above Cancel / Accept. Renaming an element made its text go blank, and a clone still named `Auto_joinable` took over the "Auto Joinable" text and the "Off" value: the native side looks the elements up by name.
+
+#### 24.3 The code (`src/core/hotfunc/difficulty/OptionsDifficultyRow.cpp`)
+
+- **Create** (`OptionsGame_CreatePickers_828D7290`): after the game's pickers, a sixth one is made the same way and put at index 5, in game only.
+- **Elements** (`OptionsGame_Populate_828D7588`): if picker 5 can't bind yet, a GUI Lua chunk is posted (`src/core/gui_auto_chunk.h`). The bridge runs it from its GameFace native hooks (`fable2_gui_lua.h` `run_auto`) on the calling state, the only safe place. It clones and renames the label and pickbox, and respaces the six rows.
+- **Bind and fill:** picker 5 is bound to a ref-string handle of our own holding the `...Options.Difficulty_pickbox` path. The choices are Easy / Medium / Hard as wide strings, or a single "Hardcore" / "Hardcore+" on a Hardcore hero, and the current level is selected. The label gets "Difficulty" through `Gui_FindElement_823F8C30` and `GuiElement_SetText_823F8268`.
+- **Down** (`OptionsGame_HandleInput_828D8E80`): when the code was 29 (recorded by a `MenuInput_Translate_82841730` override, never called twice) and the game left the focus on row 4, it moves to row 5 with the game's down sound. Up and left / right are the game's own.
+- **Accept** (`OptionsGame_Accept_828D8AF0`): after the game's rows, picker 5's index is applied at once (`ApplyLevelNow` through the `LuaPlayer_SetDifficultyLevel_823C9458` override). The world doesn't update while paused, so the F8 path's apply would wait.
+
+#### 24.4 In game (2026-11-28, `fable_2_090.log`, delta4o)
+
+- **Verified:** the row rendered correctly. The clone chunk ran 6 ms after the fill, **on the same thread** as the page code, so the row was bound at once.
+- **Verified:** Medium → Hard with Accept (`SetDifficultyLevel 2 -> 3`); the F8 cards then showed Hard.
+- **Verified:** reopening the page shows "Difficulty: Hard", with the label text set natively (screenshot); all six rows fit above Cancel / Accept.
+- **Verified:** Cancel after picking Medium: the page refills from the saved values while it closes (it shows Hard again) and the level stays Hard.
+- **Verified:** a Hardcore+ hero's row can't be changed; Subtitles still saves and shows on reopen.
+- **Not needed:** the title screen has no Options page, so the page is only ever seen in game.
+
 ### 23. Hardcore saving: save on quit only, as a switch (2026-11-28, fdeaa4a)
 
 **In game (2026-11-28, `fable_2_087.log`, delta4o):**
@@ -488,7 +523,7 @@ The remaining open questions (slot label format, Masochist, unused Theresa lines
   The save is written synchronously inside `SaveManager_Save_824E8990`, which is why the file appears before our "saved" line.
 - **Not tested yet:** the window close while playing (should be the world thread) and in a cutscene, a locked region exit during a quest.
 
-**Slot label (2026-11-28, after the first test):** delta4o asked for the Continue screen to show "Hardcore+" for a hero with saving locked. The slot file and the label now use a fifth code: the card index, or Hardcore+ when the hero is at game level 5. That applies to the New Game's first save, each world update and the pending New Game level. Hero005's file still says "Hardcore" until its next save. Not checked in game yet.
+**Slot label (2026-11-28, after the first test):** delta4o asked for the Continue screen to show "Hardcore+" for a hero with saving locked. The slot file and the label now use a fifth code: the card index, or Hardcore+ when the hero is at game level 5. That applies to the New Game's first save, each world update and the pending New Game level. Hero005's file said "Hardcore" until its next save. **Verified in game (delta4o, 2026-11-28):** after saving again, the slot showed Hardcore+.
 
 delta4o chose this topic and then asked for it to be **optional**: nobody knows yet how it feels, and it shouldn't push players into odd habits (such as triggering an autosave on purpose before stopping). Decision 1 (section 11) stays the design; it now applies only to a hero who had it switched on.
 
@@ -502,7 +537,7 @@ delta4o chose this topic and then asked for it to be **optional**: nobody knows 
 
 | Way back to an older save | How it is closed | Function |
 | --- | --- | --- |
-| Save and Continue, Quit without saving (pause Save box) | The builder `sub_82842860` adds the three buttons through `GuiMenu_AddButton_82408338` (r7 = index; return addresses 0x828429C0, 0x82842A00, 0x82842A40). The override skips the calls for 0 and 2, so only Save and Quit is added. | `GuiMenu_AddButton_82408338` |
+| Save and Continue, Quit without saving (pause Save box) | The builder `PauseMenu_Populate_82842860` adds the three buttons through `GuiMenu_AddButton_82408338` (r7 = index; return addresses 0x828429C0, 0x82842A00, 0x82842A40). The override skips the calls for 0 and 2, so only Save and Quit is added. | `GuiMenu_AddButton_82408338` |
 | The leave-area reload box (`LoadFailQuestSave`) | `gameflow` `RegionExitChecking:Update` shows the box near a locked region exit only while `IsHeroPlayerPlayingWithSaveGame()` is true. That's the function's **only** script use (`FABLE2_LUA_API.md`: 1 call, 1 file). Its native, bound in `sub_824EC750` at 0x824ECAA8 as the closure {save manager, 0x824EC0A0}, returns 0 for the hero. So the box never appears; the player has to finish the quest. | `LuaSaveManager_IsHeroPlayerPlayingWithSaveGame_824EC0A0` |
 | Closing the window | The app's `OnWindowCloseRequested` (SDK `rex_app.h`: false = veto) holds the close and asks for a Save and Quit. See 23.3. | `fable2::difficulty::OnWindowCloseRequested` |
 | The recomp's Quit | Main menu only: no game is running, so there's nothing to roll back. Not changed. | |
@@ -860,14 +895,14 @@ All of it was read by hand in the generated code on `feature/game-difficulty` at
 
 #### 13.2 Pause Save box (Verified)
 
-- **The builder.** `sub_82842860` adds the buttons with `sub_82408338`, passing `r7` = button index and `r4` = the label: 0 = `..._SAVE_AND_CONTINUE` (0x820DCF38), 1 = `..._SAVE_AND_QUIT` (0x820DCF5C), 2 = `..._QUIT_DONT_SAVE` (0x820DCF94); r8 = 2 for all three.
+- **The builder.** `PauseMenu_Populate_82842860` adds the buttons with `GuiMenu_AddButton_82408338`, passing `r7` = button index and `r4` = the label: 0 = `..._SAVE_AND_CONTINUE` (0x820DCF38), 1 = `..._SAVE_AND_QUIT` (0x820DCF5C), 2 = `..._QUIT_DONT_SAVE` (0x820DCF94); r8 = 2 for all three.
 - **The handler.** `PauseSaveBox_HandleEvent_82413988` (`.236:4435`): `r4` = event (46 = chosen; 47 is another path), `r5` = sub-code.
   - 23 → `SaveManager_Save_824E8990(mgr, 0, 0, 0, r7 = 1)`, stays in game.
   - 24 → plays a sound (`0x82306098`), then `SaveManager_Save_824E8990(…, r7 = 0)`, then the quit routine `0x8233CAC8`.
   - 25 → the same sound, then `0x8233CAC8` only.
   - `mgr` = `*(*(0x83496920)+12)+148` (lis -31927 + 26912).
 - What each code does fixes which button it belongs to (23 Continue, 24 Quit, 25 Don't save), so the 2026-11-15 mapping holds.
-- **Hardcore options.** Reject r5 = 23 and 25 in a wrapper of `PauseSaveBox_HandleEvent_82413988`, or skip the index 0 and 2 `sub_82408338` calls (`sub_82842860` is long, so the wrapper route is cheaper).
+- **Hardcore options.** Reject r5 = 23 and 25 in a wrapper of `PauseSaveBox_HandleEvent_82413988`, or skip the index 0 and 2 `GuiMenu_AddButton_82408338` calls (`PauseMenu_Populate_82842860` is long, so the wrapper route is cheaper).
 
 #### 13.3 Callers of the save function `SaveManager_Save_824E8990` (Verified list, roles pending)
 
@@ -1097,7 +1132,7 @@ r5 / r6 / r7 are the `MoneyComp_Modify_8239E698` arguments (r5 = 1 on the co-op 
 | --- | --- | --- |
 | `TattooShop_RemoveTattoo_82593950` | **Tattoo removal:** `-"PriceOfTattooRemoval"`. Listed as a gain before; the `neg` sits well before the call. | Verified |
 | `Travel_ChargeFare_82609B90` | **Coach/ferry fare.** It is charged only when the balance covers it. It is reached from the Lua travel bindings near "FastTravelToStop" (`sub_823AD510`) and "TravelToStopInRegion" (`sub_82609DE0`), and from `sub_82837610`. | Verified for the domain; which name pairs with which pointer is Inference (names and pointers interleave in those tables) |
-| `sub_8281E6A8` | **Family upkeep.** The cost is `r10 × r25` (Inference: days × the daily allowance; "DailyUpkeepCost" sits next to the wedding strings), and the amount is recorded at `+172`. The callers are `sub_828214A8` (divorce and "children taken" text), `sub_8282BBE8` and the pause-menu builder `sub_82842860`. | Inference |
+| `sub_8281E6A8` | **Family upkeep.** The cost is `r10 × r25` (Inference: days × the daily allowance; "DailyUpkeepCost" sits next to the wedding strings), and the amount is recorded at `+172`. The callers are `sub_828214A8` (divorce and "children taken" text), `sub_8282BBE8` and the pause-menu builder `PauseMenu_Populate_82842860`. | Inference |
 | `sub_82597DC0` | **Household allowance, real-estate menu** (GUI table 0x820C1670). It sets a household's amount through `sub_8282BBE8`, then charges `new - old (+172)` right away, capped at the balance. | Inference |
 | `sub_8238BEB0` | **Orb gift: send.** It takes r5 gold from the sender, removes the item (`sub_8261AF88`) and autosaves. It is called from the gift menu (`sub_825A0F50`, `sub_825A1510`). | Inference |
 | `sub_825A11F0` | **Gift menu** (GUI table 0x820C1E14). It takes r4 gold, then calls `sub_825A0D98`. | Inference |

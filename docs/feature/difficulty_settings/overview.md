@@ -262,7 +262,7 @@ Details are in technical.md sections 15 (code reading) and 16 (in-game results).
 1. ~~**Decide the starting multipliers**~~: done 2026-11-22 (decision 6). Easy is the original game.
 2. ~~**Name the functions**~~: done 2026-11-22. 44 functions now have real names, among them the gold callers, the shop and property price steps, rent, and the combat checks (technical.md "What changed").
 3. **Round 3 in game:** test the feature code (checklist below), and the leftovers from round 2: Golden touch on a monster, a region change and a house purchase, Save and Continue, the slot label, then New Game → boy or girl.
-4. **Feature code, next steps:** ~~the New Game difficulty cards~~ (done 2026-11-24), the pause-menu entry (F8 for now), Hardcore saving (built 2026-11-28 as a switch, decision 8; test it in game: technical.md 23.5), ~~the slot label~~ (done 2026-11-27), ~~enemy health~~ (done 2026-11-27).
+4. **Feature code, next steps:** ~~the New Game difficulty cards~~ (done 2026-11-24), ~~the pause-menu entry~~ (2026-11-28: a Difficulty row in Pause > Options > Game, technical.md 24; F8 stays as a shortcut), Hardcore saving (built 2026-11-28 as a switch, decision 8; test it in game: technical.md 23.5), ~~the slot label~~ (done 2026-11-27), ~~enemy health~~ (done 2026-11-27).
 5. ~~Next research: enemy health and telling friend from foe~~ (done 2026-11-27, technical.md 21; decision 7 below is open), then where the pause menu gets its items.
 6. Tidy up before anything goes to master:
    - ~~delete the probe and its temporary hooks~~ (done 2026-11-27);

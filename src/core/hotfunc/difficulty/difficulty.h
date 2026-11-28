@@ -105,6 +105,16 @@ bool ClosePending();
 // UI thread, every frame: closes the window once the save is written and the front end is up.
 void PollClose();
 
+// --- Options > Game: the Difficulty row (src/core/hotfunc/difficulty/OptionsDifficultyRow.cpp) ---
+
+// Player 1's level as shown on a slot label: "Easy" .. "Hardcore", "Hardcore+" with saving
+// locked; "" when there is no hero.
+const char* CurrentLevelName();
+// Sets player 1's level to card index 0..2 right away, on this guest thread (the pause
+// menu stops the world update, so the F8 path's apply would wait until the game resumes).
+// Refused on a Hardcore hero (decision 2). True when the level changed.
+bool ApplyLevelNow(PPCContext& ctx, uint8_t* base, int index);
+
 // --- The level of each save slot, for a slot label ("Hero 1 (Medium)", not done yet) ----
 //
 // The level of each save slot is kept in <slot folder>/recomp_difficulty.txt (a file

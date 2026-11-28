@@ -877,6 +877,25 @@ void OnWorldUpdate(PPCContext& ctx, uint8_t* base) {
   }
 }
 
+const char* CurrentLevelName() {
+  const int now = CurrentIndex();
+  return now < 0 ? "" : SlotLevelName(SlotCode(now, SavingLocked()));
+}
+
+bool ApplyLevelNow(PPCContext& ctx, uint8_t* base, int index) {
+  const uint32_t comp = FindComponent(Player1Entity(), 33);
+  const int now = CurrentIndex();
+  if (!Ptr(comp) || now < 0 || now == 3 || index < 0 || index > 2 || index == now) return false;
+  const PPCContext saved = ctx;
+  ctx.r3.u64 = comp;
+  ctx.r4.s64 = index + 1;
+  LuaPlayer_SetDifficultyLevel_823C9458(ctx, base);  // the override: also clears the cache
+  ctx = saved;
+  g_last_level.store(index, std::memory_order_relaxed);
+  REXSYS_INFO("[difficulty] Options > Game: {} -> {}", Level(now).name, Level(index).name);
+  return true;
+}
+
 // --- The slot label ----------------------------------------------------------------------
 
 namespace {
@@ -1158,7 +1177,7 @@ extern "C" void GuiElement_SetText_823F8268(PPCContext& __restrict ctx, uint8_t*
 
 namespace {
 
-// Return addresses of the Save box builder's (sub_82842860) button calls.
+// Return addresses of the Save box builder's (PauseMenu_Populate_82842860) button calls.
 constexpr uint32_t kSaveAndContinueButton = 0x828429C0u;   // r7 = 0
 constexpr uint32_t kQuitWithoutSavingButton = 0x82842A40u; // r7 = 2
 

@@ -38264,7 +38264,7 @@ name = "ProcessAndProcessAndProcess318_82B38798"
 [entrypoint.functions."0x82B395D8"]
 name = "ProcessAndProcessAndProcess319_82B395D8"
 
-# A processor that processes the data (three hundred and twentieth form). It takes a value (a) and a structure (b: fields at b->0 and b->4). It processes the data (a and b). This is the "process this data" routine (three hundred and twentieth form), part of the 0x82B39 process cluster. 117 lines. 1 callee (ProcessAndProcessAndProcess319). 12 callers (sub_82436940, sub_824EFB50, sub_82809250, sub_82355C08, sub_8245E3F8, sub_8218FC98, sub_82339090, sub_8239AA00, sub_82842860, sub_827EA850, sub_8252AF38, and sub_82697790).
+# A processor that processes the data (three hundred and twentieth form). It takes a value (a) and a structure (b: fields at b->0 and b->4). It processes the data (a and b). This is the "process this data" routine (three hundred and twentieth form), part of the 0x82B39 process cluster. 117 lines. 1 callee (ProcessAndProcessAndProcess319). 12 callers (sub_82436940, sub_824EFB50, sub_82809250, sub_82355C08, sub_8245E3F8, sub_8218FC98, sub_82339090, sub_8239AA00, PauseMenu_Populate_82842860, sub_827EA850, sub_8252AF38, and sub_82697790).
 [entrypoint.functions."0x82B39978"]
 name = "ProcessAndProcessAndProcess320_82B39978"
 
@@ -49925,13 +49925,164 @@ name = "SaveManager_CanSave_824EBF30"
 
 # Adds a button to a GUI menu: r3 = the menu, r4 = the label key (a ref string, turned
 # into the wide text), r5/r6 passed on, r7 = the button's index, r8-r10 passed on (r8 = 2
-# for the Save box). It wraps sub_824083C0; the result isn't used. The pause Save box
-# builder sub_82842860 calls it three times: 0x828429C0 Save and Continue (r7 = 0),
+# for the Save box). It wraps GuiMenu_SpawnButton_824083C0; the result isn't used. The pause Save box
+# builder PauseMenu_Populate_82842860 calls it three times: 0x828429C0 Save and Continue (r7 = 0),
 # 0x82842A00 Save and Quit (1), 0x82842A40 Quit without saving (2) (the return
 # addresses). Verified in the generated code and the decrypted image; the difficulty
 # feature skips 0 and 2 while Hardcore saving is locked.
 [entrypoint.functions."0x82408338"]
 name = "GuiMenu_AddButton_82408338"
+
+# --- Pause menu and Options > Game (difficulty feature, technical.md 24; read 2026-11-28) ---
+
+# Builds the pause menu each time it opens: Save (Root, type 301) with the Save box buttons
+# (GuiMenu_AddButton_82408338), then Quests/Maps, Abilities, Items, Weapons, Clothing, Logbook,
+# Options (type 300) and Kick (co-op), each through GuiMenu_SpawnButton_824083C0 with parent
+# "Root" (0x820A5998). r3 = the menu. Verified in the generated code and the decrypted image.
+[entrypoint.functions."0x82842860"]
+name = "PauseMenu_Populate_82842860"
+
+# The pause menu's event handler. r4 = the event: +0 = the chosen item's name handle, +4 =
+# type, +8 = id. Compares the name (Logbook opens screen 16, Options screen 17, Kick, ...);
+# type-2 events with ids 0/1/2 are the Save box buttons, which open a confirm dialog with
+# sub-code 23/24/25 (then PauseSaveBox_HandleEvent_82413988). Verified in the generated code.
+[entrypoint.functions."0x82412378"]
+name = "PauseMenu_HandleEvent_82412378"
+
+# Adds one item to a GUI menu, the same shape as ExpandableMenu_SpawnButton: r4 = &name,
+# r5 = &localized text handle (its record's +0 = the characters), r6 = &icon, r7 = &parent,
+# r8 = ids, r9 = event type, r10 and [sp+84] passed on; it sets the String / Float attributes
+# on the menu element (*(*(0x834968A4)+40)). Callers: the pause menu and the clothing,
+# abilities and real estate menus. Verified in the generated code.
+[entrypoint.functions."0x824083C0"]
+name = "GuiMenu_SpawnButton_824083C0"
+
+# Options > Game: makes the page's pickers. Five 64-byte picker objects
+# (Allocate_OrDbgBreak_8221F388, Picker_Construct_82886070, SharedHandle_Make_8247D448) go into
+# the map at page+28 at index 0-4 (OptionsPage_SetPicker_8247BDD0); rows 1-4 only when
+# GuiScreens_Find_823381B8(*(*(0x834968A4)+28), 0) is absent or its +4 is 0 (in game).
+# Called by OptionsGame_Populate_828D7588. Verified in the generated code; the difficulty
+# feature adds a sixth picker (index 5).
+[entrypoint.functions."0x828D7290"]
+name = "OptionsGame_CreatePickers_828D7290"
+
+# Options > Game: fills the page. r3 = the page. Clears the map, then
+# OptionsGame_CreatePickers_828D7290 and OptionsGame_LoadSettings_828D84E0, then each row's
+# filler with OptionsPage_GetPicker_828D9FE8(i): 0 Subtitles, 2 Tutorials and 4 Auto-joinable
+# (OptionsGame_FillOnOff_828D7718, page +64 / +65 / +68), 1 Glowing Trail Brightness
+# (OptionsGame_FillTrailBrightness_828D7920, +60), 3 Online Orbs (OptionsGame_FillOrbs_828D7808,
+# +56); rows 1-4 in game only. Then OptionsGame_SetOnlineRowsVisible_828D7470 and
+# OptionsGame_SetFocus_828D8DE8(page, 0). Verified in the generated code.
+[entrypoint.functions."0x828D7588"]
+name = "OptionsGame_Populate_828D7588"
+
+# Options > Game: one input. r3 = the page. The code from MenuInput_Translate_82841730(page+72):
+# 28 up (if focus > 0), 29 down (if focus < 4, a constant), 36 Accept
+# (OptionsGame_Accept_828D8AF0), 37 Cancel (focus 0, then vtable[1]), anything else goes to the
+# focused picker's vtable[2] (left / right). Focus = page+40; up and down play a sound
+# (Speech_PlayByKey_82306098, keys 0x834A0000 - 30856 / - 30852). Verified in the generated code.
+[entrypoint.functions."0x828D8E80"]
+name = "OptionsGame_HandleInput_828D8E80"
+
+# Options > Game: Accept. r3 = the page. Reads pickers 0-4 (constants) and stores the settings.
+# Verified as the reader of the five pickers; what it stores per row wasn't traced.
+[entrypoint.functions."0x828D8AF0"]
+name = "OptionsGame_Accept_828D8AF0"
+
+# Options > Game: focuses a row. r3 = the page, r4 = the row (stored at page+40); moves the
+# highlight to the picker's +16 / +20. Verified in the generated code.
+[entrypoint.functions."0x828D8DE8"]
+name = "OptionsGame_SetFocus_828D8DE8"
+
+# Options > Game: reads the saved settings into page +56 (orbs), +60 (trail brightness, a float)
+# and +64 / +65 / +68 (subtitles, tutorials, auto-join). Verified as the writer of those fields.
+[entrypoint.functions."0x828D84E0"]
+name = "OptionsGame_LoadSettings_828D84E0"
+
+# Options > Game: shows or hides the row elements by their path globals (0x8349CB58-CB74, through
+# sub_823F87C0), the last two inverted. Verified in the generated code; the condition is a
+# GuiScreens_Find_823381B8 lookup (Inference: the online rows).
+[entrypoint.functions."0x828D7470"]
+name = "OptionsGame_SetOnlineRowsVisible_828D7470"
+
+# Options > Game: fills an On / Off picker. r3 = the page, r4 = &picker handle, r5 = the GUI,
+# r6 = &path global, r7 = the value; binds (Picker_Bind_828860E8), pushes two choices and
+# selects one (Picker_Select_828862E8). Inference from its callers and its calls.
+[entrypoint.functions."0x828D7718"]
+name = "OptionsGame_FillOnOff_828D7718"
+
+# Options > Game: fills the Online Orbs picker (Off / Friends / All, the keys
+# GUI_SCREEN_OPTIONS_ORBS_*), value page+56. Same arguments as OptionsGame_FillOnOff_828D7718.
+# Verified in the generated code.
+[entrypoint.functions."0x828D7808"]
+name = "OptionsGame_FillOrbs_828D7808"
+
+# Options > Game: fills the Glowing Trail Brightness picker: five label keys from 0x8349CB7C
+# (GUI_OPTIONS_BCRUMB_*), then selects the step that page+60 (a float) reaches. Verified in the
+# generated code.
+[entrypoint.functions."0x828D7920"]
+name = "OptionsGame_FillTrailBrightness_828D7920"
+
+# An options page's picker: r3 = &out shared handle {object, control}, r4 = the map at page+28,
+# r5 = the index. Release the handle with Release_RefCounted_829FF648. Inference from its
+# callers (every page function reads its pickers through it).
+[entrypoint.functions."0x828D9FE8"]
+name = "OptionsPage_GetPicker_828D9FE8"
+
+# Puts a picker into an options page's map: r3 = the map, r4 = &shared handle, r5 = the index.
+# A map keyed by int: an index that's already there is refused (the handle is released, returns
+# 0); otherwise it's added (returns 1). Verified in the generated code.
+[entrypoint.functions."0x8247BDD0"]
+name = "OptionsPage_SetPicker_8247BDD0"
+
+# Turns {object, ?} at r3 into a shared handle {object, control block} in place and returns r3.
+# Inference from OptionsGame_CreatePickers_828D7290 (its null branch writes {0, 0} itself).
+[entrypoint.functions."0x8247D448"]
+name = "SharedHandle_Make_8247D448"
+
+# A picker (left / right chooser) object, 64 bytes: vtable 0x820DF870, +4 the GUI, +12 bound,
+# +16 / +20 the highlight position, +36 the selected index, +40 the value's text element, +44 a
+# vector of wide string handles (the choices: +48 begin, +52 end). r3 = the object; returns it.
+# Verified in the generated code.
+[entrypoint.functions."0x82886070"]
+name = "Picker_Construct_82886070"
+
+# Picker vtable[0]: binds a picker to its element. r3 = the picker, r4 = the GUI, r5 = &path
+# handle (a full path such as Foreground.Book.Pages.Page1.Contents.Options.MultiplayerOrbs_pickbox).
+# Clears the choices, finds the value's text child (Gui_FindElement_823F8C30, kept at +40) and
+# sets +12. Returns true when bound. Verified in the generated code.
+[entrypoint.functions."0x828860E8"]
+name = "Picker_Bind_828860E8"
+
+# Selects a picker's choice: r3 = the picker, r4 = the index (wraps around at both ends), stored
+# at +36; the value's text becomes that choice (GuiElement_SetText_823F8268). Does nothing until
+# bound. Verified in the generated code.
+[entrypoint.functions."0x828862E8"]
+name = "Picker_Select_828862E8"
+
+# Appends to a vector of ref-counted string handles: r3 = the vector, r4 = &handle (it takes its
+# own reference). Used for a picker's choices (picker+44). Inference from the fillers, which
+# release their handle right after.
+[entrypoint.functions."0x82356488"]
+name = "StringList_PushBack_82356488"
+
+# Finds a GUI screen by id: r3 = the screen manager (*(*(0x834968A4)+28)), r4 = the id; looks it
+# up in the map at +68 and returns the screen, or 0. Verified in the generated code.
+[entrypoint.functions."0x823381B8"]
+name = "GuiScreens_Find_823381B8"
+
+# A menu's input translator with auto-repeat: r3 = its state (the options page passes page+72),
+# r4 = the raw input; returns the code (28 up, 29 down, 36 accept, 37 cancel, ...). It keeps
+# repeat timers, so it must be called once per input. Read in the generated code (the codes
+# from OptionsGame_HandleInput_828D8E80's jump table).
+[entrypoint.functions."0x82841730"]
+name = "MenuInput_Translate_82841730"
+
+# GameFace's Lua global clone(element[, name[, parent]]) (registered in sub_82BB2528 next to the
+# string at 0x820FD488). The copy keeps the original's name; rename it with
+# setAttribute(el, "name", ...). Verified in the registration and in game (2026-11-28).
+[entrypoint.functions."0x82BB80F0"]
+name = "GameFace_LuaClone_82BB80F0"
 
 # Handles the pause menu Save box. r4 = event (46 = a button was chosen, 47 =
 # another path), r5 = sub-code: 23 Save and Continue (save, r7 = 1), 24 Save and
