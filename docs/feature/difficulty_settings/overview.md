@@ -1,6 +1,6 @@
 # Difficulty settings: overview
 
-**Status:** feature complete, PR to master being opened (2026-11-28) · **Commits:** branch `feature/game-difficulty`, latest 9215604, not on master yet · **Last checked against:** master at the branch's merge base (0 behind on 2026-11-28)
+**Status:** feature complete, [PR #257](https://github.com/himdo/Fable-2-Recomp/pull/257) open (2026-11-28) · **Commits:** branch `feature/game-difficulty`, latest 9215604, not on master yet · **Last checked against:** master at the branch's merge base (0 behind on 2026-11-28)
 
 Choosing a difficulty for each hero: Easy (the original game), Medium, Hard or Hardcore. All of it is on `feature/game-difficulty`:
 - **the multipliers** for gold earned, prices (shops and property), enemy damage, enemy health and XP (decision 6, technical.md 17-18 and 21);
