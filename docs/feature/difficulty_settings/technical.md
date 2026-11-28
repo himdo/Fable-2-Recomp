@@ -472,7 +472,13 @@ Sizes come from `gui_texture_headers.bnk`; the textures themselves are in `art/g
 
 The remaining open questions (slot label format, Masochist, unused Theresa lines) are listed in `overview.md`.
 
-### 23. Hardcore saving: save on quit only, as a switch (2026-11-28, not tested in game yet)
+### 23. Hardcore saving: save on quit only, as a switch (2026-11-28, fdeaa4a)
+
+**In game (2026-11-28, `fable_2_087.log`, delta4o):**
+- **Verified:** the switch (Y, shown as RMB with the default keyboard map) turned saving on, and the hero started at game level 5. Its first save was labelled Hardcore (Hero005).
+- **Verified:** the pause Save box showed only Save and Quit, with the selection already on it (screenshot).
+- **Verified:** the reload check was answered false from the start.
+- **Not tested yet:** the window close (in game, paused, in a cutscene), Save and Quit itself on this hero, a locked region exit during a quest, and a Hardcore hero with the switch off.
 
 delta4o chose this topic and then asked for it to be **optional**: nobody knows yet how it feels, and it shouldn't push players into odd habits (such as triggering an autosave on purpose before stopping). Decision 1 (section 11) stays the design; it now applies only to a hero who had it switched on.
 
