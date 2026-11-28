@@ -1,17 +1,18 @@
 # Test suite: overview
 
-**Status:** merged · **Commits:** 8957735 (#166), be11165 (#174), ffa15b3 (#196), c764cba (#197), 5cc6513 (#229) · **Last checked against:** 7863041
+**Status:** merged · **Commits:** 8957735 (#166), be11165 (#174), ffa15b3 (#196), c764cba (#197), 5cc6513 (#229), 2f46d83 (#249), 1a5bc57 (#250), c2a9d12 (#251) · **Last checked against:** c2a9d12
 
 ## What it is
 
 The project has automatic tests that check its tools, its settings files and its launcher, and that some past bugs stay fixed. None of them need the game. They run on GitHub for every pull request, and anyone can run them on their own computer before and after a change to make sure nothing broke.
 
-There are four groups:
+There are five groups:
 
 - **Tool tests (Python).** The build and packaging tools are checked with small pretend files in a temporary folder, so the project's real files are never touched.
 - **Settings checks.** The same setting is written down in four places (the settings file, the game's built-in copy, the launcher and the game's defaults). The tests make sure all four agree, so a new setting can't be forgotten in one of them.
 - **Launcher tests.** The logic behind the launcher: saving your settings, recognising your game version, copying from a disc image, choosing what to start, and the update check. The windows and buttons themselves aren't tested.
 - **Native tests (C++).** Checks on the game's own code that can run without the game. These only run on Windows.
+- **Repository checks.** Every pull request checks that new function names follow the project's naming rules, and that no file from the game was ever added to the project.
 
 ## Known problems
 

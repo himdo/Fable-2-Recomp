@@ -23,6 +23,8 @@ def inputs(tmp_path):
     for path, text in {
         folders.root / "README.md": "readme",
         folders.root / "thirdparty/XenosTiling/LICENSE.txt": "xenos tiling licence",
+        folders.root / "thirdparty/rexglue-sdk/LICENSE": "sdk licence",
+        folders.root / "thirdparty/tomlplusplus/LICENSE": "toml++ licence",
         folders.root / "config/fable2_config.toml": "repo config",
         folders.root / "assets/fonts/Google Sans/GoogleSans.ttf": "keycap font",
         folders.root / "assets/fonts/Google Sans/OFL.txt": "font licence",
@@ -81,7 +83,8 @@ def describe_package():
 
         assert names == {f"Fable 2 1.6.0/{name}" for name in (
             "fable_2.exe", "rexruntime.dll", "rexgpu-xenos.dll", "fable2_build.json", "Fable2Launcher.exe",
-            "README.md", "licenses/XenosTiling-LICENSE.txt", "fable2_config.toml", "data/scripts/recomp/F5.lua",
+            "README.md", "licenses/XenosTiling-LICENSE.txt", "licenses/rexglue-sdk-LICENSE.txt",
+            "licenses/tomlplusplus-LICENSE.txt", "fable2_config.toml", "data/scripts/recomp/F5.lua",
             "assets/fonts/Google Sans/GoogleSans.ttf", "assets/fonts/Google Sans/OFL.txt")}
         assert config == "repo config"
         assert build_info["profiles"] == ["goty"]
@@ -142,6 +145,26 @@ def describe_package():
         (inputs.build / "rexruntime.dll").unlink()
 
         with pytest.raises(SystemExit, match="rexruntime.dll"):
+            package(inputs)
+
+        assert not inputs.dist.exists()
+
+    def test_should_ship_each_licence_under_its_own_name(inputs):
+        release, _ = package(inputs)
+
+        with zipfile.ZipFile(release) as archive:
+            licences = {name: archive.read("Fable 2 1.6.0/" + name).decode() for name in packager.LICENSES}
+
+        assert licences == {"licenses/XenosTiling-LICENSE.txt": "xenos tiling licence",
+                            "licenses/rexglue-sdk-LICENSE.txt": "sdk licence",
+                            "licenses/tomlplusplus-LICENSE.txt": "toml++ licence"}
+
+    @pytest.mark.parametrize("licence", ["thirdparty/rexglue-sdk/LICENSE", "thirdparty/tomlplusplus/LICENSE"])
+    def test_should_stop_when_a_licence_is_missing(inputs, licence):
+        # The SDK's licence lives in its submodule, so an unfetched submodule stops packaging.
+        (inputs.root / licence).unlink()
+
+        with pytest.raises(SystemExit, match="LICENSE"):
             package(inputs)
 
         assert not inputs.dist.exists()

@@ -1,6 +1,6 @@
 # Legal risk and clean distribution: technical notes
 
-**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** 7863041
+**Status:** research; its proposed test merged · **Commits:** 1a5bc57 (#250, the tracked-files test) · **Last checked against:** c2a9d12
 
 Claims are labelled **Verified** (checked in this repo or a primary source), **Reported** (a source says so, not checked here) or **Inference** (reasoned, not tested). This came out of the [November 2026 research](../../reference/research/README.md). These are notices and news reports, not legal advice or court judgments.
 
@@ -35,7 +35,7 @@ All **Verified** (read in the repo at 7863041).
 
 | Entry | What it keeps out |
 |---|---|
-| `default.xex`, `/data/`, `/nxeart`, `/$SystemUpdate/`, `/Gamefiles/` | The ripped disc: the executable, the game data and the extra disc folders `tools/x360extract` writes. |
+| `default.xex`, `/data/`, `/nxeart`, `/$SystemUpdate/`, `/Gamefiles/` | The ripped disc: the executable, the game data and the extra disc folders. `tools/x360extract`'s README names `nxeart` and `$SystemUpdate`; `Gamefiles` came in with the German GOTY support (bfcc5d6), and no tool in the repo writes it. |
 | `out`, `generated` | All build output, including the recompiled C++ (`generated/default/`). Only `generated/rexglue.cmake` is tracked (force-added). |
 | `.fable2_image.bin` | The raw decrypted guest image that `tools/xex_image.py` and the Lua API analysis produce. |
 | `/console/`, `fps_probe.log`, `fable2_func_*.log` | Runtime logs and console files that can land in the root. |
@@ -45,6 +45,20 @@ All **Verified** (read in the repo at 7863041).
 
 Saves live in the build folder (`out/build/<preset>/saves/`, per the README), so they are covered by `out`.
 
+### What git tracks
+
+`tests/test_tracked_files.py` (1a5bc57, #250) runs `git ls-files` and fails if git tracks anything in the rip's folders at the repo root (`data/`, `nxeart`, `$SystemUpdate/`, `Gamefiles/`, the same list as `.gitignore`) or any file of a game-only type, in any letter case. So `git add -f` or an oddly named rip folder can't slip past `.gitignore` unnoticed. A guard test checks that the tracked-file list isn't empty. #250 started with `.xex`, `.bnk` and `.bik`, the only game types the repo's own tools mention. The ten other game-only types found on the disc (below) were added in #252, plus `.bnk.orig`, the untouched copy of a GUI bank that the keyboard-prompt swap keeps next to the bank it rewrites.
+
+**Verified against an unpacked disc** (GOTY USA/Europe, identified by its `default.xex` hash; Windows, 26 Nov 2026). The disc's `data/` folder holds these file types:
+
+| Kind | Types | Caught by the test anywhere in the repo? |
+|---|---|---|
+| Already in the test | `.bnk` (127 files, about 5.7 GB), `.bik` (40, about 860 MB) | Yes |
+| Game-only types | `.adb` (114), `.bft` (12), `.babel` (7), `.gdb` (7), `.sbk` (2), `.animation_data`, `.animation_toc`, `.loco`, `.amp`, `.vfsconfig` (1 each) | Yes, since #252. Before, only inside `data/` |
+| Common types | `.xml` (56), `.lua` (42), `.txt` (15), `.dds` (14), `.swf` (7), `.list` (6), `.csv` (2), `.manifest` (1) | No, on purpose: the repo has its own `.lua` files (13 in `src/lua/`), and blocking the others would block the repo's own files |
+
+None of the game-only types is tracked on master. Checked against every file on the disc with its path moved out of `data/`: the test catches all 318 game-only files (the 316 disc files plus the two `.bnk.orig` backups in `data/art/gui/`), and lets through only the common types. The `.lua` count includes the recomp's own scripts, which the build stages into `data/scripts/recomp/`.
+
 ### What a release contains
 
 `tools/package_release.py` (run by `build.cmd package`) builds the player zip from an **allowlist**, not by copying the build folder:
@@ -52,7 +66,7 @@ Saves live in the build folder (`out/build/<preset>/saves/`, per the README), so
 - the build's `fable_2.exe`, `rexruntime.dll`, `rexgpu-xenos.dll` and `fable2_build.json` (with the version stamped in);
 - `Fable2Launcher.exe`;
 - the repo's `README.md` and `config/fable2_config.toml` (the repo copy, not the build folder's, which may hold a developer's own settings);
-- `licenses/XenosTiling-LICENSE.txt`;
+- the third-party licences in `licenses/`: `XenosTiling-LICENSE.txt`, `rexglue-sdk-LICENSE.txt` (from the SDK submodule) and `tomlplusplus-LICENSE.txt`, listed in `LICENSES` in the tool (the last two added in #252);
 - the recomp's own Lua scripts from `data/scripts/recomp/*.lua` (written in `src/lua/`), but not `dir.manifest`, which comes from the disc;
 - the bundled keycap font under `assets/fonts/`, with its OFL licence next to it.
 
@@ -62,7 +76,7 @@ Symbols (`*.pdb`) go into a separate zip, and `SHA256SUMS` covers both. Anything
 
 ### CI
 
-`.github/workflows/tests.yml` runs on every pull request and on pushes to `master`, on `windows-latest`, with read-only repository permissions. It runs the version-constant check, pytest, the launcher tests and the native tests. **It never builds the game**, so CI needs no game files and none ever reach a runner.
+`.github/workflows/tests.yml` runs on every pull request and on pushes to `master`, on `windows-latest`, with read-only repository permissions. It runs the version-constant check, the manifest naming check, pytest (which includes the tracked-files test), the launcher tests and the native tests. **It never builds the game**, so CI needs no game files and none ever reach a runner.
 
 ### Only real discs are accepted
 
@@ -75,17 +89,27 @@ The remote-control server (localhost TCP port 8791, injects gamepad input) is co
 ### Docs and generated references
 
 - The "Never commit" list in `CLAUDE.md` forbids game files, XEX dumps, saves, shader dumps, game text, dialogue, scripts, asset data, logs with player or local paths, and personal AI files. The docs index (`docs/README.md`) repeats the rule for docs.
-- `FABLE2_LUA_API.md` and `docs/reference/lua_call_shapes.md` were generated from the script banks, but they hold names, call counts and argument shapes, not script code. A skim of the quoted values in `lua_call_shapes.md` found key codes and file names, not dialogue.
+- `FABLE2_LUA_API.md` and `docs/reference/lua_call_shapes.md` were generated from the script banks. They hold names, call counts and argument shapes, not script code.
+  - **Corrected on 26 Nov 2026:** `lua_call_shapes.md` did hold game text. Its example argument lists quoted 62 multi-word strings from the scripts, such as on-screen objectives, yes/no prompts, info-box text and developer debug messages.
+  - `tools/lua_callshapes.py` now prints a string literal only when it looks like a key, an ID or a path. Anything else is printed as `"…"`. The doc was regenerated from the disc, and only those strings changed. `tests/tools/test_lua_callshapes.py` guards the rule.
+  - The old text is still in git history (from #240).
+  - `FABLE2_LUA_API.md` holds no quoted text.
 - The README's opening note says the project doesn't condone piracy, and that mentions or links lead to removal and a ban.
 
 ### Licences
 
 - `LICENSE` (repo root): MIT, copyright 2026 Himdo. It covers the project's own code, not the game.
-- `thirdparty/XenosTiling/LICENSE.txt` and `thirdparty/tomlplusplus/LICENSE` are the bundled third-party licences. The release ships the XenosTiling one, and the keycap font ships with its OFL text.
+- The release ships three third-party licences, and the keycap font ships with its OFL text:
+  - `thirdparty/XenosTiling/LICENSE.txt`, for Xenia's tiling code in `src/gui/xenos_tiling.h`;
+  - `thirdparty/rexglue-sdk/LICENSE` (BSD-3-Clause, which asks binary releases to reproduce the notice), for `rexruntime.dll` and `rexgpu-xenos.dll` and the Xenia-derived code in them;
+  - `thirdparty/tomlplusplus/LICENSE` (MIT), for the config reader compiled into `fable_2.exe`.
+- **Fixed in #252:** until then, `tools/package_release.py` shipped only the XenosTiling licence. Packaging now stops if any of the three is missing, so an unfetched SDK submodule can't produce a zip without the SDK's notice.
+- **Inference, still open:** the SDK's own `thirdparty/` folder bundles about 25 more libraries with their own licences (for example fmt, spdlog, imgui, SDL3, FFmpeg). Some of them are probably linked into the runtime DLLs. Which ones, and which of their licences the release must carry, hasn't been worked out. `stb`, `vulkan` and `vk_video` in this repo's `thirdparty/` have no licence file of their own.
 
 ### Gaps (Inference)
 
-- No test checks that no game file is tracked in git. `.gitignore` only covers the usual names, and `git add -f` or an oddly named rip folder would get past it. A small pytest that fails if `git ls-files` lists `*.xex`, `*.bnk` or anything under `data/` would close that gap.
+- **Closed in #250:** nothing used to check that no game file is tracked in git; `tests/test_tracked_files.py` does now (see "What git tracks"). Its file-type list has been compared with an unpacked disc, and the ten other game-only types found there were added in #252.
+- Which of the SDK's bundled libraries end up in the runtime DLLs, and so need their licences in the release, hasn't been checked (see "Licences").
 - `tools/xex_image.py` contains the retail XEX AES key in plain text. It is the key the Xbox 360 emulators already publish, but it is worth knowing it's there if the repo is ever reviewed.
 - The README links an external extractor tool. That's fine, but any link to disc images would break the project's own rule.
 
@@ -94,20 +118,26 @@ The remote-control server (localhost TCP port 8791, injects gamepad input) is co
 - Keep `generated/` out of releases and forks, as now.
 - Never ship assets. Anything restored (see [cut_content](../cut_content/technical.md)) must be read from the player's own `data/` files at runtime.
 - Don't target unreleased or current IP.
-- Add the git-tracked-files test described under Gaps.
+- Add the git-tracked-files test described under Gaps. Done in #250; the disc's other game-only types were added in #252.
+- Ship `thirdparty/rexglue-sdk/LICENSE` and `thirdparty/tomlplusplus/LICENSE` in the release zip. Done in #252. Next: work out which of the SDK's bundled libraries are in the DLLs and ship their licences too.
 
 ## What changed
 
-Nothing. This is research only.
+This doc is research. The one change it proposed, the tracked-files test, merged as 1a5bc57 (#250): `tests/test_tracked_files.py` and its row in `tests/README.md`.
 
 ## Verification
 
 - **Verified in this repo:** `.gitignore`, `tools/package_release.py` and `tests/tools/test_package_release.py`, `.github/workflows/tests.yml`, `constants/game_versions.json`, the `FABLE2_REMOTE_CONTROL` gate in `CMakeLists.txt`, the licence files, the README notes and the "Never commit" list in `CLAUDE.md`.
+- **Verified on Windows with the disc** (26 Nov 2026):
+  - the disc's file types (see "What git tracks");
+  - `python -m pytest` passes, including the packager and tracked-files tests (493 passed, 1 skipped, 15 xfailed at c2a9d12);
+  - `tools/lua_callshapes.py` run on the disc's banks reproduces the committed `lua_call_shapes.md` exactly, before the redaction change.
 
 ## Not tested
 
 - No legal review. The Microsoft position rests on one secondary source.
-- The packager test was read, not run, for this doc. `git ls-files` showed no game files tracked at 7863041.
+- `git ls-files` showed no game files tracked at 7863041, and `tests/test_tracked_files.py` passes at c2a9d12.
+- Only the GOTY USA/Europe disc was checked. Other versions (such as the German GOTY) may have more file types.
 
 ## Sources
 

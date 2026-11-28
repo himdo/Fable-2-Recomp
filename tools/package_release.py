@@ -16,6 +16,17 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILD_INFO = "fable2_build.json"
 BUILD_FILES = ("fable_2.exe", "rexruntime.dll", "rexgpu-xenos.dll", BUILD_INFO)
 SYMBOL_FILES = ("fable_2.pdb", "rexruntime.pdb", "rexgpu-xenos.pdb")
+# Licences of third-party code that ships in the release, as <zip name>: <repo path>.
+# - XenosTiling: Xenia's tiling code, copied into src/gui/xenos_tiling.h (fable_2.exe).
+# - rexglue-sdk: rexruntime.dll and rexgpu-xenos.dll are built from it. It is
+#   BSD-3-Clause (with the Xenia-derived code), which asks binary releases to
+#   reproduce the notice. It lives in the SDK submodule.
+# - toml++: compiled into fable_2.exe (src/core/fable2_config.cpp). MIT.
+LICENSES = {
+    "licenses/XenosTiling-LICENSE.txt": "thirdparty/XenosTiling/LICENSE.txt",
+    "licenses/rexglue-sdk-LICENSE.txt": "thirdparty/rexglue-sdk/LICENSE",
+    "licenses/tomlplusplus-LICENSE.txt": "thirdparty/tomlplusplus/LICENSE",
+}
 # The layout the launcher's in-place upgrade understands. Launchers already installed
 # refuse a number they don't know and send the player to the release page instead, so
 # bump it whenever an older launcher could no longer install the zip correctly.
@@ -49,7 +60,8 @@ def release_files(root, build, launcher):
     files = {name: require(build / name) for name in BUILD_FILES}
     files["Fable2Launcher.exe"] = require(launcher)
     files["README.md"] = require(root / "README.md")
-    files["licenses/XenosTiling-LICENSE.txt"] = require(root / "thirdparty/XenosTiling/LICENSE.txt")
+    for name, source in LICENSES.items():
+        files[name] = require(root / source)
     # From the repo: the build folder's copy may hold a developer's own settings.
     files["fable2_config.toml"] = require(root / "config/fable2_config.toml")
     # dir.manifest stays out: the real one comes from the disc, and the game lists these scripts itself.
