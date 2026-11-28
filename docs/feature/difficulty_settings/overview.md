@@ -397,8 +397,9 @@ The hero can buy about 0.74× as much on Medium, 0.54× on Hard and 0.46× on Ha
 3. **Slot label:** "Hero 1 (Easy)" on the same line, or a new line? The same line is much cheaper (see above).
 4. ~~**Starting multiplier values**~~: decided 2026-11-22, see decision 6.
 5. **Masochist achievement:** should Hard or Hardcore count as the game's "above Normal" level, so it can unlock? (Since decision 6, Easy is the original game, so Medium and up map naturally to the game's "above Normal".) And if difficulty changes mid-game, should it stop counting, as the original does?
+   **Parked 2026-11-28 (delta4o): a separate topic for a later branch.** As built, it already follows the game's own rule (technical.md 5 and 19): `gameflow` checks once after the main story ends (QC240), and unlocks it when the level is above 1 and was never changed. A New Game on Medium or harder writes the level without the changed flag, so such a hero qualifies; any later change (Options row, F8, console) sets the flag and rules it out. Not checked: whether the achievement is in the game's achievement list at all.
 6. ~~**XP**~~: decided 2026-11-22, scaled 1.0 / 0.85 / 0.7 / 0.65 (decision 6).
-7. **Theresa's unused lines:** use any of them on the difficulty screen?
+7. ~~**Theresa's unused lines:** use any of them on the difficulty screen?~~ No (delta4o, 2026-11-28).
 8. ~~**Property prices**~~: decided 2026-11-22, yes, buying and selling (decision 6). The gold-gain rule skips property sales.
 9. ~~**Which gold gains scale**~~: decided 2026-11-22, earned gold but not sales (decision 6). Script-paid gold is all earned gold, so no script changes are needed.
 10. **Decision 7, enemy health (technical.md 21.3):** how should enemies get tougher?
