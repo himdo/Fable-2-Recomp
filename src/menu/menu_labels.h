@@ -16,13 +16,10 @@ inline constexpr std::string_view kFallbackLanguage = "en";
 
 inline constexpr Label kLabels[] = {
     {"quit", "en", u"Quit"},
+    {"quit", "pt-br", u"Sair"},
 };
 
-// Only English exists so far, so this always returns the fallback.
-inline std::string_view CurrentLanguage() { return kFallbackLanguage; }
-
-inline std::u16string_view LabelText(std::string_view key) {
-  const std::string_view language = CurrentLanguage();
+inline std::u16string_view LabelText(std::string_view key, std::string_view language) {
   std::u16string_view fallback = {};
   for (const Label& label : kLabels) {
     if (label.key != key) continue;

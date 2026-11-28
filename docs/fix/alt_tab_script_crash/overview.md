@@ -1,6 +1,6 @@
 # Alt-tab script crash: overview
 
-**Status:** merged · **Commits:** c5c80ff (#189, the fix), 266f181 (#195, the guard) · **Last checked against:** 7863041
+**Status:** merged · **Commits:** c5c80ff (#189, the fix), 266f181 (#195, the guard) · **Last checked against:** c2a9d12
 
 ## What players saw
 
@@ -10,7 +10,7 @@ In version 1.6.0 the game could crash after a few minutes of normal play. It hap
 
 The direct mouse camera (added in #177) starts a small game script to take over the camera. When the mouse moved and that script hadn't answered for a while, the camera tried to start it again. Coming back from another window is exactly that situation.
 
-The problem was *where* it started the script from: the part of the program that draws the picture, not the part that runs the game world. Starting a game script from there can land in the middle of the game's own script update and damage the script engine, which then crashes. Another change merged minutes earlier (#184) had moved every other script start to the safe place, but this new one was missed.
+The problem was *where* it started the script from: the part of the program that draws the picture, not the part that runs the game world. Starting a game script from there can land in the middle of the game's own script update and damage the script engine, which then crashes. Another change (#184), merged twelve minutes later, moved every other script start to the safe place. Its branch didn't include this new one, so this one was missed.
 
 A second problem was fixed at the same time: the console's helper script was being saved into save games, so loading such a save started a second copy of it.
 

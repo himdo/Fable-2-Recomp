@@ -3,7 +3,13 @@
 A .NET 8 WPF settings launcher for verified GOTY USA/Europe and German GOTY
 dumps. It validates the original XEX and content markers, then checks the
 native build descriptor. Unknown revisions and known mixed retail/TU1 content
-are rejected; original game files are never modified.
+are rejected.
+
+## Brazilian Portuguese language pack
+
+Close the game and open **Merge Locales → Merge Brazilian Portuguese** in the launcher menu bar. Select Dio Carvalho's translation ZIP (tested with Beta 0.9.1 on GOTY USA/Europe). The game folder needs the English voice bank for fallback. In the game, select **Language → Portuguese (Brazil)** and enable subtitles. The game stores the selected language in the player profile. [Translation and credits](https://github.com/diocarvalho/Fable2-PTBR-Project/releases)
+
+The launcher adds the text and dialogue resources, installs the four Pub Games localization files and merges the PT-BR entries into the disc's own `cultures.txt`. It keeps the previous contents in `.fable2-pt-br.json` next to `default.xex`. Keep that backup with the game folder. With the game closed, choose **Merge Locales → Remove Brazilian Portuguese** to restore those files. Remove the pack before re-extracting into the same folder. Removal also cleans manifest entries added for the pack and preserves other mods' entries. If another tool has edited a managed file, removal reports the conflict and keeps the backup.
 
 ## Extracting from an ISO
 
@@ -53,6 +59,53 @@ non-destructively: it updates keys in place (keeping indentation, spacing and
 inline comments), appends any missing keys or sections, leaves every other key
 and section untouched, and makes a one-time `.launcher-backup` before the first
 write. Keybind and patch changes take effect the next time the game launches.
+
+## Updating in place
+
+A packaged release asks GitHub for the latest release when the launcher opens.
+If there is a newer one, the top bar shows **Update to x.y.z**. Clicking it
+asks first, then downloads the release zip, checks it, and replaces the files
+in the launcher's own folder. The launcher restarts into the new version.
+
+What an update does to the folder:
+
+| Files | What happens |
+|---|---|
+| The release's own files: `fable_2.exe`, the DLLs, `Fable2Launcher.exe`, `fable2_build.json`, `README.md`, `licenses`, `assets`, `data\scripts\recomp\*.lua` | Replaced when they differ, added when new, removed when the new release no longer has them |
+| Settings: `fable2_config.toml`, `fable_2.toml`, `launcher-settings.toml` and any other `.toml` next to the exe | Kept. The zip's default `fable2_config.toml` is only installed when there is none |
+| `saves`, `cache`, `logs`, `screenshots`, `launcher-game-path.txt`, `.launcher-backup` and `.bak` files | Kept |
+| The extracted game: `default.xex`, `nxeart`, `$SystemUpdate` and everything in `data` except `data\scripts\recomp` | Kept |
+| Anything else you put in the folder, your own scripts in `data\scripts\recomp` included | Kept |
+
+If you had edited one of the release's own files (a recomp Lua script, for
+example), it is replaced like the others, and your version is copied to
+`launcher-update-backup\<old version>` first. New settings a release adds are
+not written into your `fable2_config.toml`; the game uses its defaults for
+keys the file does not have.
+
+Nothing in the folder changes until the download has passed every check: its
+size and SHA-256 against what GitHub states for the release, and every file in
+it against the list of checksums in the zip's `fable2_build.json`. The update
+is refused, with the reason, when a check fails, when the game is running,
+when the folder can't be written to or the disk is too full, and when the
+release is packaged in a way the launcher does not know. In those cases the
+overlay offers the release page for a manual update, as before.
+
+The switch itself renames files inside the folder and keeps every old file in
+`launcher-update` until it is done. If a step fails, the old files are moved
+back. If the launcher or the PC dies during the switch, the next launcher
+start moves them back. Should that ever leave the folder without a
+`Fable2Launcher.exe`, the previous one is in `launcher-update\backup`.
+`launcher-update` is removed once the new launcher has started; the old
+launcher can't delete its own exe while it runs.
+
+The checksums catch a damaged or swapped download. They do not prove who
+published the release: an update is trusted exactly as much as a zip you
+download from the release page yourself.
+
+Releases before the first one with this feature have no list of files, so
+they can't be installed this way. The update needs a launcher that has the
+feature and a newer release that was packaged with `build.cmd package`.
 
 Dropdowns use dark text on a light background, including the selected item.
 The launcher and game use a project-owned book/tree icon documented in

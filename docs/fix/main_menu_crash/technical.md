@@ -1,6 +1,6 @@
 # Fix: D3D12 / Vulkan source builds crashed at the main menu
 
-**Status:** merged · **Commits:** afebcc5 · **Last checked against:** 7863041
+**Status:** merged · **Commits:** afebcc5 · **Last checked against:** c2a9d12
 
 **Date:** 2026-09-05
 **Symptom:** `fable2.cmd d3d12` and `fable2.cmd vulkan` (the source-built
@@ -65,7 +65,7 @@ base, so the local patch was the only memory-behavior difference.
 
 `rexglue-sdk-src/src/system/xmemory.cpp`, `BaseHeap::AllocFixed`:
 restored the original v0.10.0 logic — a reserve touching an already-reserved
-page logs the error and **returns false**. (See NOTE comment in the code.)
+page logs the error and **returns false**. (The NOTE comment this pointed to isn't in the SDK fork master pins, 22ef700. The only NOTE in `xmemory.cpp` is unrelated. The logic itself is there: the error is logged at `src/system/xmemory.cpp:1335` and the reserve returns false. Checked on Windows, 26 Nov 2026.)
 
 Additionally hardened the crash diagnostic in
 `rexglue-sdk-src/src/core/exception_handler_win.cpp`
@@ -73,6 +73,9 @@ Additionally hardened the crash diagnostic in
 `VirtualQuery(MEM_COMMIT)` before dereferencing. Previously the diagnostic
 itself raised a second access violation (reading the unmapped size-table at
 `0x80180040`) while handling the crash, corrupting the crash log.
+**This hardening isn't in the SDK fork master builds with** (22ef700 has no
+`LogUnhostedException`). It exists only in this repo's
+`thirdparty/sdk_mainmenu_crash_fix.patch` and `thirdparty/rexglue-sdk-local.patch`.
 
 Rebuilt `rexruntime` (source, dual-backend) and re-staged:
 

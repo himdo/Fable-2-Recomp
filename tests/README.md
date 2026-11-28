@@ -66,7 +66,7 @@ that don't follow the rules yet. See
 | `core/test_recomp_scripts_startup.py` | The recomp Lua scripts are copied into a separate game folder (`--game_data_root`) from `OnPostInitLogging` and nowhere later. The SDK lists the game folder once, when it mounts it right after that hook, so a script copied later can't be opened by the game until the next start. Reads the C++ source |
 | `core/test_world_thread_runscript.py` | Every host RunScript (`f5lua::run_external`) is reached only from `console::service_world_thread`, which runs at the start of a world update on the world's own thread. That function is wired only to photo mode's world-update hook, inside the scope the runtime gate checks, and the MainRenderLoop hook `console::poll` starts no script. RunScript from any other thread corrupts the game's script engine (the 1.6 alt-tab crash, #189). Reads the C++ source and prints the call chain that breaks the rule |
 | `lua/test_recomp_scripts.py` | No recomp Lua script registers itself with the game's GeneralScriptManager, which writes its running scripts into save games, except the F5 menu, which ends itself when the menu closes. Only the F5 menu and the console's save cleanup touch the GeneralScriptManager |
-| `test_tracked_files.py` | Git tracks no game files: nothing in the disc rip's folders at the root (`data/`, `nxeart`, `$SystemUpdate/`, `Gamefiles/`) and no `.xex`, `.bnk` or `.bik` file anywhere, in any letter case. Other `data` folders and similar-looking names pass. A guard checks that the tracked-file list isn't empty |
+| `test_tracked_files.py` | Git tracks no game files: nothing in the disc rip's folders at the root (`data/`, `nxeart`, `$SystemUpdate/`, `Gamefiles/`) and no file of a game-only type anywhere, in any letter case: `.xex`, `.bnk`, `.bik` and the ten other types only the disc uses (`.adb`, `.bft`, `.babel`, `.gdb`, `.sbk`, `.animation_data`, `.animation_toc`, `.loco`, `.amp`, `.vfsconfig`), and the `.bnk.orig` backups the keyboard-prompt swap keeps of the GUI banks. Other `data` folders, similar-looking names and common types the disc also holds (`.lua`, `.xml`, `.txt` and others) pass. A guard checks that the tracked-file list isn't empty |
 | `tools/repro/test_add_version_resource.py` | The release step that adds version info to a DLL writes the given company, product and version, keeps the existing manifest, moves the sections after `.rsrc` without changing them, and names the version after the file. It leaves a DLL alone when it has no resources, already has version info, or has no room to grow. Two known issues are marked as expected failures |
 | `tools/repro/test_clean_pe.py` | The release build's post-build step trims `rexruntime.dll` to what the game and the GPU plugin import plus the `rex::` API, keeps each name pointing at its own function, and pins every timestamp. It reports a broken DLL and carries on, skips a runtime without exports, leaves other DLLs' exports alone, and changes nothing on a second run |
 | `tools/repro/test_gen_def.py` | The `.def` generator keeps what every consumer imports from the runtime plus the `rex::` API, in sorted order. It drops imports the runtime doesn't export, skips missing consumers, and honors `--tag` |
@@ -75,13 +75,15 @@ that don't follow the rules yet. See
 | `tools/test_apply_recomp_patches.py` | The patch step applies each patch once, fails on a missing anchor and honors its on/off switch. One known issue is marked as an expected failure |
 | `tools/test_fable2_control.py` | Each command sends the request the server expects, `state` strips spaces from button names and keeps values of 0, a token login goes first and stops on a bad token, and connection errors and timeouts are reported as JSON. One known issue is marked as an expected failure |
 | `tools/test_game_versions.py` | Generated version files match the catalogue, invalid or duplicate entries are rejected, the default profile must be compatible and in the validated code group, only those versions get a CMake profile, and `--check` reports stale or missing files. Without `--check` it writes them, with LF line endings even on Windows. One known issue is marked as an expected failure |
+| `tools/test_lua_callshapes.py` | The Lua call-shapes generator prints string literals only when they look like a key, an ID or a path (at most 64 characters of letters, digits and `_ . : \ / -`, no `..`). Anything else, such as on-screen text, prompts or debug messages, is printed as `"…"`, and the output never contains it. Numbers, booleans and nil print as before. The bytecode walk itself isn't tested (it needs the game's script banks) |
 | `tools/test_make_hotfunc_overrides.py` | The override generator extracts and transforms functions correctly and never overwrites a hand-tuned file. Four known issues are marked as expected failures |
 | `tools/test_manifest_collisions.py` | The check for manifest names that clash with DLL exports reports every clash, ignores commented-out names, rejects a missing, unreadable or empty DLL, and the real manifest avoids the kernel wait names that once broke audio. One known issue is marked as an expected failure |
 | `tools/test_manifest_names.py` | The manifest naming check reads each entry's address, name and comment, and ignores hook tables. It fails on a name that ends in another address or is used twice, and on a new or renamed entry with a placeholder name, the wrong shape or no comment. It skips entries without a name and unchanged ones, and the real manifest passes the every-entry rules. Uses small throwaway git repos |
 | `tools/test_merge_dir_manifest.py` | Content staging's `dir.manifest` merge copies the disc manifest when none is staged, and otherwise keeps every disc line in disc order (repeats included) followed by the lines only the staged manifest has, each written once. Every line is written with CRLF, whatever the input used and even without a final line ending; blank lines are dropped and names in any encoding pass through. An empty disc manifest keeps the staged lines, a second run changes nothing, and no temporary file is left behind, even one from an earlier run. A missing disc manifest or the wrong arguments fail |
 | `tools/test_mouse_log_format.py` | The lines the game writes to `fable2_mouse.log` (poll lines from `src/input/mouse_diag.h`, camera updates from `mouse_diag.lua` with the direct mouse camera's turn, and the `f2 mouse inject` and `f2 mouse mode` notes) are read the way `mouse_stats.py` expects. Reads the format strings from the source, so a renamed field fails here |
 | `tools/test_mouse_stats.py` | The `fable2_mouse.log` summariser splits the log into one run per `f2 mouse inject`, counts polls and camera updates, works out how much movement the camera saw with and without smoothing, scores the steady yaw per update while leaving out the ends of a run, adds up the total turn (stick and direct mouse camera) with the share that coasted on after the input stopped and how fast the turn got going, labels each run with its speed profile and mouse mode, ends a run early at its `f2 mouse stop` note, and prints the text and JSON reports |
-| `tools/test_package_release.py` | The release zip holds only the listed files, its build info is stamped with the version while the build folder's copy stays unstamped, symbols stay separate, checksums match, files from an earlier package are removed, and a missing file, symbol file, launcher, repo config, recomp Lua script or keycap font stops packaging before anything is written (the build folder's own config never stands in). `main()` passes the given version, or the one from `git describe --tags`, with the standard build, launcher and output folders |
+| `tools/test_make_upgrade_test_zip.py` | The tool that turns a published release zip into a test release for the in-place upgrade keeps the files, stamps the new version, adds the file list with checksums, swaps in or leaves out the files it is told to, and stops on a file that isn't there or a zip that isn't a release |
+| `tools/test_package_release.py` | The release zip holds only the listed files, its build info is stamped with the version while the build folder's copy stays unstamped, and lists every other file with its checksum, the settings file as the player's own and the package layout the launcher accepts. Symbols stay separate, checksums match, files from an earlier package are removed, the XenosTiling, SDK and toml++ licences ship under `licenses/`, and a missing file, symbol file, launcher, repo config, licence, recomp Lua script or keycap font stops packaging before anything is written (the build folder's own config never stands in). `main()` passes the given version, or the one from `git describe --tags`, with the standard build, launcher and output folders |
 | `tools/test_prepare_renderer_mspack.py` | The libmspack fallback replaces symlinks that Windows checked out as text files with their targets' contents, and reports how many it replaced. It leaves ordinary files and real symlinks alone, and also works on a second run, a deleted file or a trailing newline. It stops when the checkout isn't at the public pin, a target is missing or outside the checkout, or a file has local edits. Uses small throwaway git repos |
 | `tools/test_prepare_runtime_sdk.py` | The SDK prepare step rejects a missing or non-git folder and a checkout without libmspack, skips setup with `--skip-dependencies`, marks libmspack stored as plain files as set up (also on a second run), repins libmspack stored as a submodule, and says a failed submodule update needs network access. Uses small throwaway git repos. Two known issues are marked as expected failures |
 | `tools/test_runtime_staging.py` | Debug and Release builds stage the SDK files, and staging fails before copying if an input is missing |
@@ -129,6 +131,27 @@ graphics and FPS options, dropdown styling, game version checks, the game
 folder check, the executable and folders a launch uses, update checks and ISO
 extraction from a synthetic disc image. It prints a line for each group
 that passes. The project targets plain .NET 8, but CI only runs it on Windows.
+
+`Fable2.Launcher.ConfigTests/ReleaseUpgradeTests.cs` covers the in-place
+upgrade with small made-up releases served from memory:
+
+- The update check only offers an upgrade for a single release zip from this
+  repo with a size and SHA-256.
+- An upgrade replaces, adds and removes the release's files, and leaves
+  saves, settings, the extracted game and the player's own files as they
+  were. Edited release files are copied to `launcher-update-backup` first.
+- A download that is cut short, has another checksum, does not match its own
+  file list, has no list or an unknown layout, is another version than
+  announced, or holds unsafe paths is refused.
+- A full disk, a running game, a second upgrade at the same time, a folder in
+  the way and a cancelled or stalled download are refused.
+- A switch that fails half-way is undone, and one that is interrupted is
+  undone on the next start.
+
+After each refusal or failure the test compares the whole folder with how it
+was before. These tests can't cover what only Windows does: replacing the exe
+of the running launcher, and noticing a running game. See
+[trying the in-place upgrade by hand](#optional-trying-the-in-place-upgrade-by-hand).
 
 ### Native tests
 
@@ -219,3 +242,50 @@ out\tests\runtime-unit-tests\xex-goty-compatible.exe --xex <path to default.xex>
 ```
 
 Run `tests\run_native_tests.cmd` first to build the second one.
+
+## Optional: trying the in-place upgrade by hand
+
+The launcher's upgrade can be tried on Windows without publishing a release.
+A Debug build of the launcher offers a local zip as the update when
+`FABLE2_TEST_UPDATE_ZIP` points at one; Release builds don't have this.
+`tools/make_upgrade_test_zip.py` makes such a zip from a release zip
+downloaded from GitHub.
+
+```cmd
+rem Two launchers that differ, so the upgrade has to replace the one that is running.
+dotnet publish launcher\Fable2.Launcher\Fable2.Launcher.csproj -c Debug -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o out\tests\launcher-debug
+build.cmd launcher
+
+rem The release to start from (9.0.0, with the Debug launcher) and the one to upgrade to (9.0.1).
+python tools\make_upgrade_test_zip.py Fable_2_recomp_v1.6.1_windows.zip --version 9.0.0 --replace Fable2Launcher.exe=out\tests\launcher-debug\Fable2Launcher.exe
+python tools\make_upgrade_test_zip.py Fable_2_recomp_v1.6.1_windows.zip --version 9.0.1 --replace Fable2Launcher.exe=out\tests\launcher-build\Fable2Launcher.exe --drop data/scripts/recomp/stress_noop.lua
+```
+
+Unzip `out\upgrade-test\Fable_2_recomp_v9.0.0_windows.zip` somewhere, extract
+your disc into it or copy a `saves` folder in, and change a setting so that
+`fable2_config.toml` differs from the default. Then start its launcher with
+the variable set and click **Update to 9.0.1**:
+
+```cmd
+set FABLE2_TEST_UPDATE_ZIP=%CD%\out\upgrade-test\Fable_2_recomp_v9.0.1_windows.zip
+"C:\path\to\Fable 2 9.0.0\Fable2Launcher.exe"
+```
+
+What to check:
+
+- The launcher restarts by itself, and `fable2_build.json` says 9.0.1.
+- Saves, `fable2_config.toml`, `fable_2.toml` and the extracted game are
+  unchanged, and the game starts and loads a save.
+- `data\scripts\recomp\stress_noop.lua` is gone, and the `launcher-update`
+  folder is gone a few seconds after the new launcher opened.
+- With the game running, the update is refused and says `fable_2.exe` is in
+  use. Nothing in the folder changes.
+- With an edited `data\scripts\recomp\F5.lua`, your version ends up in
+  `launcher-update-backup\9.0.0`.
+- From a folder Windows protects (under `C:\Program Files`), the update is
+  refused with a message about the folder, not a crash.
+- Closing the window during the download cancels the update and leaves no
+  `launcher-update` folder after the next start.
+- Windows Defender or SmartScreen does not block the new files.
+
+Unzip 9.0.0 again for each run: after an upgrade the folder is 9.0.1.

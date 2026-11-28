@@ -9,6 +9,7 @@ Directory.CreateDirectory(testDirectory);
 
 try
 {
+    PortuguesePackTests.Run(Path.Combine(testDirectory, "pack"));
     string configPath = Path.Combine(testDirectory, "fable_2.toml");
     const string original = "# existing config\nresolution = \"720p\" # keep this note\ncustom_mod = true\n";
     File.WriteAllText(configPath, original);
@@ -388,6 +389,8 @@ try
     File.WriteAllText(Path.Combine(versionFolder, "fable2_build.json"), "{bad");
     Require(UpdateChecker.ReadInstalledVersion(versionFolder) is null, "malformed build file gave a version");
     Console.WriteLine("Update check tests passed.");
+
+    await ReleaseUpgradeTests.RunAsync(testDirectory);
 
     // Fable2ConfigFile (the Advanced Options page config, fable2_config.toml).
     string advPath = Path.Combine(testDirectory, "fable2_config.toml");

@@ -1,6 +1,6 @@
 # Legal risk and clean distribution: overview
 
-**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** 7863041
+**Status:** research; its proposed test merged · **Commits:** 1a5bc57 (#250, the tracked-files test) · **Last checked against:** c2a9d12
 
 ## What this is
 
@@ -14,7 +14,7 @@ A summary of the takedowns of fan PC ports in late 2026, and the rules that keep
 
 ## How this project stays safe
 
-- **No game files in the project.** The project's files are set up so that the game itself, its data, the converted game code and your saves can't be added by accident. Today nothing from the game is stored there.
+- **No game files in the project.** The project's files are set up so that the game itself, its data, the converted game code and your saves can't be added by accident. Today nothing from the game is stored there, and an automatic test fails if a game file is ever added.
 - **The download only holds the project's own work.** The release is built from a fixed list: the program, the launcher, the settings file, the project's own small scripts, a font and the licences. An automatic test fails if anything else, such as a game file or a save, ends up in it.
 - **The automatic checks never need the game.** They run on every change without game files, so the game never reaches the build servers.
 - **It only works with a real disc.** The launcher checks your disc image against a list of known retail versions before it copies anything.
@@ -24,7 +24,9 @@ A summary of the takedowns of fan PC ports in late 2026, and the rules that keep
 
 ## What could be better
 
-- Nothing automatically checks that a game file was never added to the project, only that none ends up in the download. A small extra check would cover that.
+- The automatic check that no game file was added knows the game's main file types. A full copy of the disc turned out to hold about ten more types that only the game uses, and the check now knows those too.
+- A reference page listing how the game's scripts call the engine quoted some of the game's own on-screen text and messages. That text has been taken out, and the tool that writes the page now leaves it out by itself.
+- The download now includes the licences of the toolkit the port is built on and of a small settings reader, which were missing before. That toolkit itself uses many smaller libraries, and which of their licences belong in the download hasn't been worked out yet.
 
 ## What players need to do
 

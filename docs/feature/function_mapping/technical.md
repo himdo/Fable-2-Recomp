@@ -1,6 +1,6 @@
 # A repeatable function-mapping process: technical notes
 
-**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** 7863041
+**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** c2a9d12
 
 Claims are labelled **Verified** (checked in this repo or a primary source), **Reported** (a source says so, not checked here) or **Inference** (reasoned, not tested). This came out of the [November 2026 research](../../reference/research/README.md).
 
@@ -38,8 +38,8 @@ Counted with a short Python script over `fable_2_manifest.toml` on master (not c
 | `ProcessAndProcessAndProcess<N>_…` placeholders | 2,642 (52%) |
 | Shape-only names from the instruction pattern: `Func_` 137, `SwitchDispatch_` 72, `TailCall_` 72, `IndirectCall_` 8, `VcallSlot3_` 7, `VcallChain_` 7, `ReturnConstant_` 7, `RetAddr_` 6, `VtableSlotX3_` 5 | 321 |
 | Other names that start with `Process` (for example `ProcessAndCallMethods_82BFCD38`), most from the same automatic pass | 1,013 |
-| Everything else (927 distinct prefixes; the most common are `Tree_`, `Story_`, `LoadingScreen_`, `UIText_`, `FrontMenu_`, `Cloth_`) | 1,100 |
-| Lua binding names (`Lua<Library>_<Binding>`) | 5 |
+| Everything else (927 distinct prefixes; the most common are `Tree_` (11), `Story_` (9), `LoadingScreen_`, `BinarySearch_` and `UIText_` (7 each), `FrontMenu_` and `Sync_` (6 each) | 1,100 |
+| Names shaped like Lua bindings (`Lua<Library>_<Binding>`); 3 of them are bindings, while `LuaBind_RunScript_82806168` and `LuaScriptError_FormatMessage_825ADB40` aren't | 5 |
 | Names without the `_ADDRESS` suffix (for example `Story_FirstChildCombat`, `LoadingScreen_Virtual43`, `GetNewGameLoadingGlobal`) | 56 |
 | Names whose suffix doesn't match the entry's address | 0 |
 | Duplicate names | 0 |
@@ -64,15 +64,15 @@ What this means:
 
   So 14 placeholders have been resolved in seven weeks. **Inference:** the debt only shrinks when a PR needs a specific function, which is why the priority list below matters.
 - **Most comments are old automatic descriptions,** for example "This is the 'process this value' routine, part of the 0x82BFF process cluster", with callee lists that still say `sub_…`. They describe the shape, not the purpose, and none carries an evidence label.
-- **The total number of functions isn't recorded anywhere in the repo.** The research's ~60,700 (**Reported**) couldn't be checked: `generated/` isn't committed apart from `generated/rexglue.cmake`, and no tool or doc on master writes the count down. A build log or a count of `DEFINE_REX_FUNC` in `generated/default/` on a Windows build would settle it.
+- **The total number of functions is 60,753** (**Verified** on Windows, 26 Nov 2026: `DEFINE_REX_FUNC` lines in the 295 `generated/default/fable_2_recomp.*.cpp` files of a Release build). That confirms the research's ~60,700. With master's manifest at c2a9d12, 55,436 of them still have a `sub_` name, because they have no manifest entry at all. `generated/` isn't committed, so the count has to come from a build.
 
 ### Tooling that already exists (Verified)
 
-- **`tools/check_manifest_collisions.py`** reads every `name = "…"` line with a regex and compares it with the PE exports of the runtime DLL. It fails (exit 1) when a name equals an exported `__imp__<name>` or a bare export, because that silently routes kernel import thunks into the guest body (the audio breakage it was written for). Exit 2 is a usage or IO error. It checks nothing else: not the format, not the address suffix, not comments. Its tests are in `tests/tools/test_manifest_collisions.py` (`describe_pe_exports`, `describe_main`, and `describe_the_real_manifest`, which keeps the kernel-wait names free).
+- **`tools/check_manifest_collisions.py`** reads every `name = "…"` line with a regex and compares it with the PE exports of the runtime DLL. It fails (exit 1) when a name equals an exported `__imp__<name>` or a bare export, because that silently routes kernel import thunks into the guest body (the audio breakage it was written for). Exit 2 is a usage or IO error. It checks nothing else. Format, address suffix and comments are checked by `tools/check_manifest_names.py` since #249 (see below). Its tests are in `tests/tools/test_manifest_collisions.py` (`describe_pe_exports`, `describe_main`, and `describe_the_real_manifest`, which keeps the kernel-wait names free).
 - **`.claude/skills/name-functions/SKILL.md`** already asks for two labels, **Verified** (read in the generated code or seen at runtime) and **Inference** (instruction shape or call site only). These map onto E2/E4 and E1 below.
 - **`FUNCTION_NAMES.md`** documents the first naming pass: 520 names, each with a high/medium/low **confidence** grade, an earlier version of the same idea. Its data files are still in `tools/`: `final_names.json` (398 entries: 27 high, 199 medium, 172 low confidence; categories `body` 167, `tailcall` 75, `switchdisp` 73, vtable 64, others 19), `classified.json` (the same 398 with their first and last instruction; 316 in the SDK runtime range, 82 in game code), `story_overrides.json` (19 story-beat names) and `manual_overrides.json` (4). No script in the repo reads them any more.
 - **`docs/reference/analysis/`** holds the raw output of a function-seed scan: `scan_branch_targets.txt` (339,207 branch-target addresses), `scan_new_candidates.txt` (402 candidate function starts) and `fable2_seed_candidates.json` (10 addresses).
-- **`FABLE2_LUA_API.md`** lists the game's Lua API from the decompiled script banks (1,139 files): 81 engine global functions, 2,004 engine global tables and members, 98 engine metatable/instance methods, and 65 engine functions registered but never called by the shipped scripts. It records **names only, no native addresses**, so it isn't an E3 anchor on its own: someone still has to find each binding's native body. `docs/reference/lua_call_shapes.md` (generated by `tools/lua_callshapes.py`) adds how many arguments each call passes.
+- **`FABLE2_LUA_API.md`** lists the game's Lua API from the decompiled script banks (1,139 files): 81 engine global functions, 2,004 engine global tables (their members are counted separately), 98 engine metatable/instance methods, and 65 engine functions registered but never called by the shipped scripts. It records **names only, no native addresses**, so it isn't an E3 anchor on its own: someone still has to find each binding's native body. `docs/reference/lua_call_shapes.md` (generated by `tools/lua_callshapes.py`) adds how many arguments each call passes.
 - **`tools/make_hotfunc_overrides.py`** copies recompiled functions into `src/core/hotfunc/<category>/` as strong overrides. There are 25 override files, 18 of them hand-tuned. Each override is named after its function, so overriding a function is another reason to name it first.
 
 ## Design (proposed)
@@ -107,6 +107,8 @@ Keep `Subsystem_WhatItDoes_ADDRESS` (for example `Cloth_Step_8219ADD8`),\[2\] an
 
 ### A convention check in `tools/check_manifest_collisions.py` (proposed)
 
+**Done in #249 (2f46d83), as a separate tool:** `tools/check_manifest_names.py` checks the first four rules below, the comment rule only on new or renamed entries, and CI runs it on every PR. See [manifest_naming_check](../manifest_naming_check/technical.md). Only the evidence-label rule is still open, since labels haven't been adopted. The proposal as first written:
+
 A second mode that needs no DLL, so it can run in CI (which never builds the game). On master today (**Verified** counts, measured as above) it would find:
 
 | Rule | Fails today |
@@ -121,7 +123,7 @@ A second mode that needs no DLL, so it can run in CI (which never builds the gam
 
 ### Ways to find candidates, best yield first
 
-1. **Lua binding tables:** the registration code maps names to native function pointers, which gives an E3 anchor for each binding. `FABLE2_LUA_API.md` supplies the names (81 global functions and 98 instance methods, plus the tables' members) but no addresses (**Verified**, see above). Only 5 manifest names on master are Lua bindings. **Verified:** the shared LuaPlus bound-method dispatcher that every Lua→C++ method call goes through is probed by the F5 runner in `src/core/fable2_f5_lua.h`. Its manifest name `LuaBind_RunScript_82806168` is too narrow, as that file's own comment says. Walking from that dispatcher to the registration tables would produce the binding→address map.\[2\]
+1. **Lua binding tables:** the registration code maps names to native function pointers, which gives an E3 anchor for each binding. `FABLE2_LUA_API.md` supplies the names (81 global functions and 98 instance methods, plus the tables' members) but no addresses (**Verified**, see above). Only 3 manifest names on master are Lua bindings. **Verified:** the shared LuaPlus bound-method dispatcher that every Lua→C++ method call goes through is probed by the F5 runner in `src/core/fable2_f5_lua.h`. Its manifest name `LuaBind_RunScript_82806168` is too narrow, as that file's own comment says. Walking from that dispatcher to the registration tables would produce the binding→address map.\[2\]
 2. **Cross-references outward from already-named functions** (the call-chain method of #238).
 3. **Debug, assert and format strings** referenced in the binary.
 4. **Vtables:** group functions by vtable slot, then name the class from one anchored method. 64 of the 398 entries in `tools/final_names.json` are vtable thunks already grouped this way.
@@ -149,7 +151,7 @@ The branch followed this template almost step for step before the template exist
 | Target and seed | the branch's `docs/feature/difficulty_settings/technical.md` | The question: where do gold, prices, damage and XP come from? Seeded from the script banks (`tools/bnk.lua`, `tools/lua_callshapes.py`) and the XEX string table. |
 | Probe | bd6846a, 4d14650 | A temporary log probe (`src/core/hotfunc/unsorted/DifficultyProbe.cpp`). |
 | Record | 96f6554, f25e24d | The gold callers, property prices and two rounds of in-game results, written into the doc. |
-| Name | 891eab4 | 74 new manifest entries, with 19 Lua binding names (`LuaMoney_Modify_8239EE98`, `LuaPlayer_SetDifficultyLevel_823C9458`, …). Their comment lines carry **Verified** 65 times and **Inference** 9 times, against 0 and 1 in all of master. Example: `MoneyComp_Modify_8239E698`, the gold choke point, with its registers, clamp and caller rules. |
+| Name | 891eab4 and later | 74 new manifest entries across the branch (67 functions and 7 mid-asm hooks; 891eab4 alone adds 44), with 19 Lua binding names (`LuaMoney_Modify_8239EE98`, `LuaPlayer_SetDifficultyLevel_823C9458`, …). Their comment lines carry **Verified** 65 times and **Inference** 9 times, against 0 and 1 in all of master. Example: `MoneyComp_Modify_8239E698`, the gold choke point, with its registers, clamp and caller rules. |
 | Feature | 946eddb, c2215e2, 92583be, bad29df | Decisions, then the overrides, then fixes found in game (the damage-taken cache, the price pairs calling each other), then the UI. |
 
 Two differences from the template: the names landed in the same branch as the feature rather than in a separate no-behaviour-change PR, and there are no scenario files (E5), because the remote-control server can't read game state yet (next section).
@@ -158,7 +160,7 @@ Two differences from the template: the names landed in the same branch as the fe
 
 Today's numbers (**Verified**, at 7863041) are in the table under "Where the manifest stands".
 
-- **Descriptive-name coverage:** entries that are neither placeholders nor shape-only names, over the total function count. That's 2,113 of 5,078 manifest entries (42%). The total function count isn't recorded in the repo (the research says ~60,700, **Reported**). Report E3+ separately once labels exist.
+- **Descriptive-name coverage:** entries that are neither placeholders nor shape-only names, over the total function count. That's 2,113 of 5,078 manifest entries (42%). Over all 60,753 functions (**Verified**, counted in a build) it is about 3.5%. Report E3+ separately once labels exist.
 - **Placeholder debt:** 2,642 `ProcessAndProcessAndProcess<N>_` names (52% of entries), plus every function with no entry at all (the `sub_` names in `generated/`). It has fallen by 14 since 8 Oct 2026.
 - **Evidence coverage:** entries whose comment carries a label. Today 0 on master; 74 on the difficulty branch.
 - **Hot-path coverage** (Inference: a useful metric): the share of functions executed in a standard scenario run that are E2 or higher, measured by an instrumented debug build. The existing function trace (`tools/fable2-functrace.cmd`) is the obvious starting point.
@@ -203,11 +205,11 @@ Keep scenarios small and deterministic: start from a fixed save, and disable ran
 
 ### Decompilation vs. recompilation
 
-The long-term goal is "a readable decompilation that supports modding".\[2\] Evidence-graded naming serves both paths: names, types and evidence are prerequisites for any later matching decompilation, and they make the recomp moddable now. A full matching decomp of roughly 60,700 functions (Reported; not countable from the repo) needs the original XDK compiler toolchain and years of effort; that decision belongs to the maintainer. **Recommendation:** continue the recomp and treat mapping as shared groundwork.
+The long-term goal is "a readable decompilation that supports modding".\[2\] Evidence-graded naming serves both paths: names, types and evidence are prerequisites for any later matching decompilation, and they make the recomp moddable now. A full matching decomp of 60,753 functions (counted in a Windows build) needs the original XDK compiler toolchain and years of effort; that decision belongs to the maintainer. **Recommendation:** continue the recomp and treat mapping as shared groundwork.
 
 ## What changed
 
-Nothing yet. Evidence levels and metrics aren't in `/name-functions` or `tools/check_manifest_collisions.py`.
+The convention check exists since #249 (`tools/check_manifest_names.py`). Evidence levels and metrics aren't in `/name-functions` or any tool yet.
 
 ## Verification
 
@@ -217,15 +219,14 @@ Nothing yet. Evidence levels and metrics aren't in `/name-functions` or `tools/c
 ## Not tested
 
 - The process hasn't been run end to end.
-- The total function count (~60,700) couldn't be checked without a build.
-- The convention check is a design; the "fails today" numbers come from the same count, not from a working tool.
+- The convention check's "fails today" numbers come from the same count. The tool #249 added reports the same 56 and 381 at master.
 - The remote-control server wasn't run (Debug build, Windows only).
 
 ## Follow-ups
 
-- Add evidence levels and progress metrics to `/name-functions` and the collision-check tool.
+- Add evidence levels and progress metrics to `/name-functions` and `tools/check_manifest_names.py`.
 - Rename `LuaBind_RunScript_82806168` to what it is (the shared LuaPlus bound-method dispatcher), with `/name-functions`.
-- Record the total function count from a build, so coverage has a denominator.
+- Keep the function total (60,753) next to the coverage numbers, so coverage has a denominator.
 
 ## Sources
 

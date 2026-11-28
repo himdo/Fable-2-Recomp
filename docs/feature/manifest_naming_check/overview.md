@@ -1,6 +1,6 @@
 # Manifest naming check: overview
 
-**Status:** no commit yet · **Commits:** none · **Last checked against:** 7863041
+**Status:** merged · **Commits:** 2f46d83 (#249) · **Last checked against:** c2a9d12
 
 ## What it does
 

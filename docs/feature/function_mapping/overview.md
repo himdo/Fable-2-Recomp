@@ -1,6 +1,6 @@
 # A repeatable function-mapping process: overview
 
-**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** 7863041
+**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** c2a9d12
 
 ## What this is
 
@@ -10,11 +10,11 @@ A proposed way of working for contributors who give the game's code real names. 
 
 The project keeps a list of the game's functions with a name for each. Counted on 25 November 2026:
 
-- **About 5,100 functions are on the list.** The game has many more; nobody has recorded the exact total yet.
+- **About 5,100 functions are on the list.** The game has 60,753 in all (counted in a build in November 2026), so most still have only an automatic name.
 - **Just over half of the names are placeholders.** They were made automatically in one go in September 2026 and say nothing about what the code does. Since then only 14 of them have been replaced, because a function only gets a real name when someone's change needs it.
 - **About 300 more names only describe the shape of the code** ("a jump", "a lookup"), not what it's for.
 - **About 2,100 names say what the code does.** Almost none of them say how sure we are. An earlier naming pass did grade itself (high, medium or low confidence), but that habit wasn't kept.
-- **The game's own script commands are listed by name,** over 2,000 of them. Only a handful have been matched to the code behind them. Each match is a name we can be sure of, so this is the best place to dig.
+- **The game's own script commands are listed by name:** about 180 engine functions and methods, plus more than 2,000 named tables that hold more of them. Only a handful have been matched to the code behind them. Each match is a name we can be sure of, so this is the best place to dig.
 
 ## The idea
 

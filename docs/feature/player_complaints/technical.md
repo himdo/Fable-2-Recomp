@@ -1,6 +1,6 @@
 # Fable II player complaints: technical notes
 
-**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** 7863041
+**Status:** no commit yet (research only) · **Commits:** none · **Last checked against:** c2a9d12
 
 Claims are labelled **Verified** (checked in this repo or a primary source), **Reported** (a source says so, not checked here) or **Inference** (reasoned, not tested). This came out of the [November 2026 research](../../reference/research/README.md).
 
@@ -110,7 +110,7 @@ Being knocked out only costs uncollected experience orbs and leaves a scar. Dark
 
 **In the recomp (correction to the research):**
 
-- **Verified:** `[patches] unlock_website` and `[patches] unlock_ce`, both **on by default** and in the launcher, force the website-registration and Collectors Edition gates and grant those items into the Guild chest at save load. They use mid-asm hooks in `GuildChest_GetWebsiteItem_8256E368` and `GuildChest_GetCEContent_824B3528` ([guest_patches](../guest_patches/technical.md)). The README lists "Guild chest fully unlocked".
+- **Verified:** `[patches] unlock_website` and `[patches] unlock_ce`, both **on by default** and in the launcher, force the website-registration and Collectors Edition gates and grant those items into the Guild chest at save load. They use mid-asm hooks: the gate hooks are in `GuildChest_GetWebsiteItem_8256E368` and `GuildChest_GetCEContent_824B3528`, and the two "granted" hooks are in the checks those getters call, `GuildChestWebsite_HasItem_8256D940` and `GuildChestCE_GetAvailableFlag_824ACAE0` ([guest_patches](../guest_patches/technical.md)). The README lists "Guild chest fully unlocked".
 - **Inference:** the website items are the fable2.com unlocks above. Which exact items appear wasn't checked here.
 - **Not checked in game:** that the Collectors Edition unlock actually puts its items in the chest. It is on by default like the website unlock, but needs an in-game check before this doc calls it done.
 - **Verified:** `AddDebugPubItems` is registered in the engine but no shipped script calls it (`FABLE2_LUA_API.md`, section 4). **Inference:** a debug path to the Pub Games items may exist (see R13).
