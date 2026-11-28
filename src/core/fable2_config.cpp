@@ -380,6 +380,15 @@ faster_render_targets = true
 # Default: true
 gpu_frame_sync = true
 
+# Hardcore Saving (docs/feature/difficulty_settings/): where the Hardcore card's saving
+# switch starts on the New Game difficulty cards (Y changes it there). With it on, a
+# Hardcore hero saves on quit only: the pause Save box keeps only Save and Quit, the
+# leave-area reload box is gone, and closing the window saves and quits first. It is
+# chosen once per hero and kept in the save; this key only changes new heroes.
+# false = the switch starts off (Hardcore saves as in the original).
+# Default: false
+hardcore_saving = false
+
 [perf]
 # NtYieldExecution batching for the hot-function overrides (see
 # src/core/hotfunc/hotfunc_yield.h): every Nth guest yield does the real
@@ -698,6 +707,9 @@ bool Load(const std::filesystem::path& path) {
     values.gpu_frame_sync =
         Read<bool>(patches_table, "patches", "gpu_frame_sync", "boolean",
                    values.gpu_frame_sync);
+    values.hardcore_saving =
+        Read<bool>(patches_table, "patches", "hardcore_saving", "boolean",
+                   values.hardcore_saving);
     values.faster_render_targets =
         Read<bool>(patches_table, "patches", "faster_render_targets", "boolean",
                    values.faster_render_targets);

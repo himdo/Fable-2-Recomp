@@ -78,7 +78,7 @@ FUNCTIONS = {
     "CallActivePlayerMethod_821A11E8": dict(dir="player", hand_tuned=True),
     "PollAndProcessOsNotifications_8229A9D8": dict(dir="os_notifications", hand_tuned=True),
     "DispatchOsNotifications_82185080": dict(dir="os_notifications", hand_tuned=True),
-    "InitializeGameEntity_8233CAC8": dict(dir="entity", hand_tuned=True),
+    "Game_QuitToFrontEnd_8233CAC8": dict(dir="entity", hand_tuned=True),
     "ProcessGameStateUpdate_821C9008": dict(dir="entity", hand_tuned=True),
     "UIText_FrameRender": dict(dir="ui_rendering", hand_tuned=True),
     "UIText_FrameRenderIter": dict(dir="ui_rendering", hand_tuned=True),

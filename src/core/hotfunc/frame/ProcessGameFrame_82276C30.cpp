@@ -63,7 +63,7 @@
 //         if (self->osFlag) {               // new/advanced entity
 //           t = timebase;
 //           if (entity_elapsed > threshold) {
-//             Construct(); InitializeGameEntity();
+//             Construct(); Game_QuitToFrontEnd();
 //           }
 //         }
 //         if (advanceOk) { t = timebase; /* advance-timing math */ }
@@ -103,7 +103,7 @@ extern "C" void CallActivePlayerMethod_821A11E8(PPCContext& ctx, uint8_t* base);
 extern "C" void ConstructRefCounted_8222CF18(PPCContext& ctx, uint8_t* base);
 extern "C" void DispatchFrameCallback_821A6010(PPCContext& ctx, uint8_t* base);
 extern "C" void DispatchOsNotifications_82185080(PPCContext& ctx, uint8_t* base);
-extern "C" void InitializeGameEntity_8233CAC8(PPCContext& ctx, uint8_t* base);
+extern "C" void Game_QuitToFrontEnd_8233CAC8(PPCContext& ctx, uint8_t* base);
 extern "C" void LazyInitSubsystemA_8217FD08(PPCContext& ctx, uint8_t* base);
 extern "C" void LazyInitSubsystemB_822C6C60(PPCContext& ctx, uint8_t* base);
 extern "C" void PollAndProcessOsNotifications_8229A9D8(PPCContext& ctx, uint8_t* base);
@@ -580,7 +580,7 @@ static __attribute__((noinline)) void process_frame_work(PPCContext& ctx, uint8_
 	ctx.r3.u64 = ctx.r31.u64;
 	// bl 0x8233cac8
 	ctx.lr = 0x82276EAC;
-	InitializeGameEntity_8233CAC8(ctx, base);
+	Game_QuitToFrontEnd_8233CAC8(ctx, base);
 	}
 	}
 	// addi r3,r1,128

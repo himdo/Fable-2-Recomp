@@ -58,6 +58,7 @@
 #include "mouse_look.h"     // fable2::mouselook (accumulates the mouse delta)
 #include "mouse_stick.h"    // velocity window + deadzone compensation
 #include "photo_mode_state.h"  // fable2::photomode (hotkeys, RMB-drag look)
+#include "../core/hotfunc/difficulty/difficulty.h"  // F8: the difficulty cards
 
 #ifdef _WIN32
 #include <windows.h>
@@ -326,6 +327,13 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     // the right button is held (the cursor is free for the settings panel).
     fable2::photomode::window_focused().store(focused, std::memory_order_relaxed);
     PollPhotoModeKeys(focused);
+    // The difficulty cards in game (src/core/difficulty_dialog.h). They are driven
+    // through the pad state, so the keyboard map keeps feeding it while they are open.
+    {
+      const bool down = focused && (GetAsyncKeyState(VK_F8) & 0x8000) != 0;
+      if (down && !difficulty_key_prev_ && !console_open_) fable2::difficulty::RequestInGameDialog();
+      difficulty_key_prev_ = down;
+    }
     const bool photo = fable2::photomode::active();
 
     // Controller priority (see ControllerRecentlyUsed): while a real
@@ -701,6 +709,7 @@ class KeyboardGamepadDriver final : public rex::input::InputDriver {
     if (dx) pm::nav_x().fetch_add(dx);
     if (scrub && pm::pose_grid_open().load()) pm::nav_scrub().fetch_add(scrub);
   }
+  bool difficulty_key_prev_ = false;  // F8, the in-game difficulty cards (F7 is the SDK achievements overlay)
   fable2::photomode::Repeater photo_rep_[6];  // up, down, left, right, [, ]
   std::string photo_toggle_name_;
   std::string photo_shot_name_;

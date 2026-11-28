@@ -48,6 +48,7 @@
 #include "remote_gamepad_driver.h"
 #include "fable2_crash_log.h"  // host crash report (fable2_crash.log)
 #include "photo_mode_dialog.h"  // photo mode settings panel (ImGui)
+#include "difficulty_dialog.h"  // the difficulty cards (New Game, F8)
 #ifdef FABLE2_REMOTE_CONTROL
 #include "remote_control_server.h"
 // 1-second game-state classifier (src/diagnostics/fable2_state_probe.h, single-TU inline).
@@ -110,6 +111,8 @@ class Fable2App : public rex::ReXApp {
   // Photo mode settings panel (src/core/photo_mode_dialog.h). Created in
   // OnCreateDialogs, released in OnShutdown (before the SDK drops the drawer).
   std::unique_ptr<fable2::photomode::PhotoModeDialog> photo_dialog_;
+  // The difficulty cards (src/core/difficulty_dialog.h), same lifetime.
+  std::unique_ptr<fable2::difficulty::DifficultyDialog> difficulty_dialog_;
 
   // Emulate the Xbox 360 Xenos GPU. Two plugins are staged next to the exe:
   //   rexgpu-xenos[d].dll        -> D3D12 (prebuilt SDK plugin; the default)
@@ -165,6 +168,13 @@ class Fable2App : public rex::ReXApp {
   void OnPostSetup() override {
     fable2::branding::Apply(window());
     fable2::menu::SetQuitHandler([this] {
+      app_context().CallInUIThread([this] {
+        if (window()) window()->RequestClose();
+      });
+    });
+    // Hardcore saving (docs/feature/difficulty_settings/ technical.md 23): a held window
+    // close is finished from the UI thread once the save and quit are done.
+    fable2::difficulty::SetCloseWindow([this] {
       app_context().CallInUIThread([this] {
         if (window()) window()->RequestClose();
       });
@@ -537,6 +547,7 @@ class Fable2App : public rex::ReXApp {
     // The panel unregisters itself from the ImGui drawer, which the SDK
     // destroys right after this hook.
     photo_dialog_.reset();
+    difficulty_dialog_.reset();
 #ifdef FABLE2_REMOTE_CONTROL
     // Stop the state classifier thread, then the remote control server
     // threads, before anything else tears down.
@@ -544,6 +555,11 @@ class Fable2App : public rex::ReXApp {
     remote_server_.Stop();
 #endif  // FABLE2_REMOTE_CONTROL
   }
+
+  // Hardcore saving: on a hero with saving locked, the close waits for a Save and Quit
+  // (src/core/hotfunc/difficulty/Difficulty.cpp, technical.md 23).
+  bool OnWindowCloseRequested() override { return fable2::difficulty::OnWindowCloseRequested(); }
+
   // Apply the game patches (see src/core/fable2_patches.h) once the SDK has
   // decrypted default.xex into the guest arena, before the module launches.
   // Each patch is switched on by a [patches] key in fable2_config.toml
@@ -579,6 +595,8 @@ class Fable2App : public rex::ReXApp {
     fable2::photomode::game_command_ready() = [] { return fable2::console::S().pump_ready.load(); };
     fable2::photomode::world_thread_hook() = [](PPCContext& c, uint8_t* b) {
       fable2::console::service_world_thread(c, b);
+      // The difficulty chosen on the New Game cards or with F8 (no RunScript).
+      fable2::difficulty::OnWorldUpdate(c, b);
     };
     fable2::photomode::game_command_busy() = [] {
       auto& c = fable2::console::S();
@@ -734,6 +752,7 @@ class Fable2App : public rex::ReXApp {
     std::error_code ec;
     paths.user_data_root = exe_dir / "saves";
     std::filesystem::create_directories(paths.user_data_root, ec);
+    fable2::difficulty::SetSaveRoot(paths.user_data_root);  // the slot labels
     paths.cache_root = exe_dir / "cache";
     std::filesystem::create_directories(paths.cache_root, ec);
 
@@ -788,8 +807,13 @@ class Fable2App : public rex::ReXApp {
       // The pose cards' expression icons come from the same bank.
       std::vector<std::string> pose_icons;
       for (const auto& pose : fable2::photomode::kPoses) pose_icons.push_back(pose.icon);
+      pose_icons.push_back(fable2::difficulty::kCardBackTexture);  // the difficulty cards
       icons = gi::Load(root, icon_log, pose_icons);
-      if (icons > 0) break;
+      if (icons > 0) {
+        // The difficulty cards' pictures, from the loading screens and quest pictures.
+        gi::LoadPictures(root, fable2::difficulty::CardPictures(), icon_log);
+        break;
+      }
     }
     const int icons_added = gi::AddAllToAtlas(atlas);
     REXSYS_INFO("[photo-mode] button icons: {} of {} from gui_textures.bnk ({} in atlas){}", icons,
@@ -798,6 +822,7 @@ class Fable2App : public rex::ReXApp {
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     // fable2::deadbeef_overlay::register_overlay(drawer);
     photo_dialog_ = std::make_unique<fable2::photomode::PhotoModeDialog>(drawer);
+    difficulty_dialog_ = std::make_unique<fable2::difficulty::DifficultyDialog>(drawer);
 #ifdef _WIN32
     fable2::crashlog::Install();  // again, after the SDK set up its own handlers
 #endif

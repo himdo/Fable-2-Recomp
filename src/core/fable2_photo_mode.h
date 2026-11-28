@@ -58,6 +58,7 @@
 
 #include "fable2_config.h"
 #include "fable2_frame_capture.h"
+#include "hotfunc/difficulty/difficulty.h"  // the difficulty cards read the pad here
 #include "host_pad.h"
 #include "mouse_look.h"
 #include "photo_mode_state.h"
@@ -1159,7 +1160,10 @@ inline void on_world_update_impl(PPCContext& ctx, uint8_t* base, bool force_run)
 }
 
 // --- Pad read (guest thread): r3 = user, r4 = X_INPUT_STATE, returns r3 = 0 ok. ---------
-inline void on_pad_read(uint8_t* base, uint32_t user, uint32_t state_ptr, uint32_t result) {
+// The difficulty cards (src/core/difficulty_dialog.h) read the pad here too, and the
+// New Game start they hold back runs from here (it needs this thread and ctx).
+inline void on_pad_read(PPCContext& ctx, uint8_t* base, uint32_t user, uint32_t state_ptr,
+                        uint32_t result) {
   using namespace detail;
   State& g = st();
   diag_pad_reads().fetch_add(1, std::memory_order_relaxed);
@@ -1254,13 +1258,15 @@ inline void on_pad_read(uint8_t* base, uint32_t user, uint32_t state_ptr, uint32
     g.toggle_prev[u] = all;
   }
 
+  const bool difficulty_blank = u == 0 && fable2::difficulty::OnPadRead(ctx, base, all, p.lx);
+
   if (g.suppress_pad && !active()) {
     const bool neutral = p.buttons == 0 && p.lt < 30 && p.rt < 30 && std::abs(int(p.lx)) < 7849 &&
                          std::abs(int(p.ly)) < 7849 && std::abs(int(p.rx)) < 8689 &&
                          std::abs(int(p.ry)) < 8689;
     if (neutral) g.suppress_pad = false;
   }
-  if (active() || g.suppress_pad) {
+  if (active() || g.suppress_pad || difficulty_blank) {
     REX_STORE_U16(state_ptr + 4, 0);
     REX_STORE_U8(state_ptr + 6, 0);
     REX_STORE_U8(state_ptr + 7, 0);
@@ -1290,6 +1296,6 @@ extern "C" void InputGetPadState_822B2D60(PPCContext& ctx, uint8_t* base) {
   const uint32_t user = ctx.r3.u32;
   const uint32_t state_ptr = ctx.r4.u32;
   __imp__InputGetPadState_822B2D60(ctx, base);
-  fable2::photomode::on_pad_read(base, user, state_ptr, ctx.r3.u32);
+  fable2::photomode::on_pad_read(ctx, base, user, state_ptr, ctx.r3.u32);
 }
 #endif

@@ -4033,7 +4033,7 @@ name = "CopyRefcountedArray_827F2010"
 # the value (HashLookup_823F74D0, sub_823F74D0 -- the hash-table get-or-create), then compares the
 # string (CompareString_8229AD78, sub_8229AD78). Depending on the comparison result, it handles the
 # refcounted object: it may copy-assign (CopyAssign_RefCounted_821F0108, sub_821F0108) or destructure
-# (DestructRefCounted_82214F08, sub_82214F08) the value, and recurses (sub_823F9620, plus sub_823F8C30 and
+# (DestructRefCounted_82214F08, sub_82214F08) the value, and recurses (sub_823F9620, plus Gui_FindElement_823F8C30 and
 # sub_823F8C90, siblings in the 0x823F9 cluster). So it's a "look up a value in the hash table and
 # compare it" routine. 116 lines. 2 callers: sub_82817D28 and sub_828152D0. The table's key/value class
 # (strings) and the exact match semantics aren't resolvable, so the name states the mechanism: hash-
@@ -7238,7 +7238,7 @@ name = "ReturnConstant_0x10000_82A14660"
 # one-based / a zero-based offset). So it's a "get a string length (scan a UTF-16 string (a 2-byte character loop,
 # looking for a null terminator) and return the length (in characters, minus 1))" routine (a string length getter, the
 # UTF-16 variant of StrLen_822F1DE0, part of the 0x8217A cluster, a sibling of StrLen_822F1DE0). ~20 lines, no direct
-# callees (pure data manipulation). 10+ callers: sub_82C72640, sub_82BFD228, sub_82BF1CA0, sub_82B39260, sub_82C75340,
+# callees (pure data manipulation). 10+ callers: sub_82C72640, sub_82BFD228, sub_82BF1CA0, WideString_Format_82B39260, sub_82C75340,
 # sub_82B4DA88, sub_822F8620, sub_82CBD5A0, sub_82C7F458, sub_82CFA1B0 (a widely-called string length getter, part of
 # the game's string subsystem). The string's meaning (a string, a particular UTF-16 string, a particular text) isn't
 # resolvable, so the name states the mechanism: a string length getter (scan a UTF-16 string (a 2-byte character loop,
@@ -30255,17 +30255,14 @@ name = "ProcessAndAllocateAligned_82B39BE8"
 [entrypoint.functions."0x82C15C10"]
 name = "ProcessAndIterateElements_82C15C10"
 
-# A processor that frees the old buffer, reallocates it larger, and updates the size fields. It takes a buffer (a: a
-# pointer at a->0, a size at a->4, a capacity at a->8), a value (b), and a count (c). When the buffer is present
-# (a->0 non-null) it frees the old buffer (Free_SizeBucketed_Thunk_8221BE68(a->0)) and clears the pointer (a->0 = 0).
-# It then reallocates the buffer to the new (larger) aligned size (ProcessAndAllocateAligned_82B39BE8 = sub_82B39BE8),
-# copies the existing data over (MemCpy_Vectorized_822085D0), zeroes the new region (MemSet_SdkRuntime_82CA3190), and
-# updates the size fields (a->4 = c, a->8 = the new capacity). This is the "free this buffer, reallocate it larger,
-# and update the size" routine for the 0x82B39 reallocate cluster, used by 7 callers (ProcessAndIncrementCounter
-# _822D6B40 and the 0x82B38/0x82B39 range). Part of the 0x82B39 reallocate cluster (sibling of GrowAndZeroBuffer
-# _82BC55B8 / ProcessAndAllocateAligned_82B39BE8). 92 lines, 4 callees. 7 callers.
+# Sets a wide string record's characters. r3 = the record {+0 UTF-16 chars, +4 length, +8 (buffer
+# size << 1) | flag bit 0, +12 refcount}, r4 = the source characters, r5 = the length in
+# characters. Frees the old buffer (Free_SizeBucketed_Thunk_8221BE68), allocates a new one
+# (ProcessAndAllocateAligned_82B39BE8), sets +4 = r5 and the size bits of +8 (keeping bit 0), writes
+# the terminator, zeroes the padding and copies 2 * r5 bytes (MemCpy_Vectorized_822085D0). Used by
+# WideString_Format_82B39260 and the difficulty slot label. Read in the generated code.
 [entrypoint.functions."0x82B39DD8"]
-name = "ProcessAndReallocateBuffer_82B39DD8"
+name = "WideString_Assign_82B39DD8"
 
 # A processor that leaves the critical section when the lock is held. It takes a lock (a: a critical section at a->0,
 # a held flag at a->4). When the held flag (a->4) is zero (lock not held) it does nothing. When it is set it leaves the
@@ -30748,18 +30745,13 @@ name = "ProcessAndFindTreeLeafLocked_821F5B90"
 [entrypoint.functions."0x82287710"]
 name = "ProcessAndIncrementCounter_82287710"
 
-# A processor that replaces a reference-counted pointer, releasing the old reference and incrementing the new one. It
-# takes a target (a: a reference-counted pointer at a->0) and a source (b: a reference-counted pointer at b->0, with a
-# reference count at b->0->12). When the target and source are the same (a == b, or a->0 == b->0), it does nothing.
-# Otherwise it releases the old reference (Release_RefCounted_821C67D8(a->0), when a->0 is non-null), stores the new
-# pointer (a->0 = b->0), and atomically increments the new reference count (b->0->12 += 1, via a load-word-reserved /
-# store-word-conditional (lwarx / stwcx) pair under the global lock). This is the "replace this reference-counted
-# pointer (release the old reference, store the new pointer, and atomically increment the new reference count)" routine
-# for the 0x822B8 refcounted cluster, used by 10 callers (the 0x8219C/0x8245E/0x8247D/0x827A6/0x827CC/0x827D3/0x82817/
-# 0x82836/0x828ED/0x828F8 range). Part of the 0x822B8 refcounted cluster (sibling of Release_RefCounted_821C67D8). 92
-# lines, 1 callee. 10 callers.
+# Assigns a reference-counted pointer. r3 = the target slot, r4 = the source slot. When the
+# slots or their pointers are the same it does nothing; otherwise it releases the target's old
+# pointer (Release_RefCounted_821C67D8), stores the source's pointer, and atomically increments
+# its count at +12 (lwarx / stwcx. under the global lock). GuiElement_SetText_823F8268 uses it to
+# make a text object hold a wide string. Read in the generated code. 10 callers.
 [entrypoint.functions."0x822B85C8"]
-name = "ProcessAndReplaceRefCounted_822B85C8"
+name = "RefCounted_Assign_822B85C8"
 
 # A processor that resolves the handler (from the .data entries, handling the different layouts), then finds the tree
 # leaf. It takes a value (a) and a value (b). It resolves the handler from the .data entries: when the primary handler
@@ -32626,7 +32618,7 @@ name = "ProcessAndConstructObject2_82BED1B0"
 name = "ProcessAndFreeAndShrink_823B8178"
 
 # A processor that replaces a value and updates related counters. It takes a structure (a: a field at a->16) and a value (b). It replaces a
-# refcounted value (ProcessAndReplaceRefCounted_822B85C8), increments several counters (ProcessAndIncrementCounter_82287710 and
+# refcounted value (RefCounted_Assign_822B85C8), increments several counters (ProcessAndIncrementCounter_82287710 and
 # ProcessAndIncrementCounter_822D6B40, with .data descriptors), and manages the associated memory (Allocate_OrDbgBreak, Release_RefCounted,
 # ReleaseGlobalRef, SetValue4, and sub_823B8178 / sub_827DEEE0 / sub_827DFA18 / sub_82B38B78). This is the "replace this value and update
 # the related counters" routine, part of the 0x827DE value-replace cluster. 163 lines. 11 callees. 4 callers.
@@ -32635,7 +32627,7 @@ name = "ProcessAndReplaceValue_827DEAE0"
 
 # A processor that looks up a value and manages the associated memory. It takes three values. It increments a counter (ProcessAndIncrementCounter_822D6B40
 # with a .data descriptor), performs a lookup (sub_82B391D8), and based on the result (checking for a -1 sentinel) it either takes a default path
-# or continues processing. It then manages the associated memory and counters (Allocate_OrDbgBreak, ProcessAndIncrementCounter, ProcessAndReplaceRefCounted,
+# or continues processing. It then manages the associated memory and counters (Allocate_OrDbgBreak, ProcessAndIncrementCounter, RefCounted_Assign,
 # ReleaseGlobalRef, Release_RefCounted, SetValue4, and several sub_827Dx / sub_82B38x / sub_82B39x helpers). This is the "look up this value and
 # manage the associated memory" routine, part of the 0x827DE value-lookup cluster. 577 lines. 14 callees. 1 caller (ProcessAndReplaceValue_827DEAE0).
 [entrypoint.functions."0x827DEEE0"]
@@ -32680,7 +32672,7 @@ name = "ProcessAndComputeFloat_82818638"
 
 # A processor that atomically increments a counter and processes strings. It takes a structure (a: a field at a->0) and a value. It atomically
 # increments a global counter (a lwarx/stwcx. loop with the MSR saved and restored to guard the critical section), then reads a->0 and performs
-# a series of string and refcount operations (FindUTF16Substring_82CA3BF0, StrLenUTF16_8217AB30, ProcessAndReplaceRefCounted_822B85C8,
+# a series of string and refcount operations (FindUTF16Substring_82CA3BF0, StrLenUTF16_8217AB30, RefCounted_Assign_822B85C8,
 # ProcessAndIncrementCounter_822D6B40, ReleaseGlobalRef_821C6868, Release_RefCounted_821C67D8). This is the "increment the counter and process
 # these strings" routine, part of the 0x82B38 string cluster. 259 lines. 8 callees. 12 callers.
 [entrypoint.functions."0x82B38B78"]
@@ -35751,12 +35743,12 @@ name = "ProcessAndVcallAndProcess10_82C0B768"
 [entrypoint.functions."0x82277AF8"]
 name = "ProcessAndSetjmpAndProcess_82277AF8"
 
-# A processor that performs a vcall and clears the data (third form). It takes a structure (a: fields at a->0 and a->4). It reads a->4 (a pointer); when the pointer is non-zero it reads the
-# pointer's +0 field and performs a vcall via the +0 field's +4 entry (bctrl). It then stores 0 into a->4 and a->0. This is the "perform a vcall and clear this data" routine (third form), part
-# of the 0x822AD process cluster. 49 lines. 0 callees (leaf function). 12 callers (sub_82479C28, sub_828DAAF8, sub_82173280, sub_826EF1D0, sub_825832B0, sub_82C43AB8, sub_82819740, sub_826C9460,
-# sub_826E5D10, sub_82405088, sub_827B6FA8, and sub_8240C950).
+# Releases an 8-byte handle {+0, +4}: when +4 is non-zero, a vcall through slot 1 (+4) of
+# the vtable at *(+4); then +0 = +4 = 0. A leaf, 12 callers; on the front end it releases
+# the handle Speech_PlayByKey_82306098 filled (e.g. at 0x826C7A58, 0x826C9640). Read in the
+# generated code; what the other callers' handles hold wasn't checked.
 [entrypoint.functions."0x822ADE08"]
-name = "ProcessAndVcallAndClear3_822ADE08"
+name = "Handle_Release_822ADE08"
 
 # A processor that computes and processes the data (twelfth form). It takes a value (a), a structure (b: field at b->4), a value (c), and a value (d). It lazily gets the data (LazyGetData_822F2088,
 # with d, c, and a). It then searches and computes (sub_822F5BC8, with a local buffer, b, and a local buffer). This is the "compute and process this data" routine (twelfth form), part of the 0x82375
@@ -35857,7 +35849,7 @@ name = "InitializeAndStoreFloats_82C16158"
 
 # A processor that performs a vcall and processes the data (eleventh form). It takes a value (a) and a structure (b: field at b->0). It reads b->0 (a pointer) and performs a vcall via the pointer's +20 field (bctrl). It then calls
 # VcallTriple_AllSuccess_82C011E8 (with b, a .data pointer, and a). When the result is non-zero it calls VcallTriple_AllSuccess_82C011E8 again (with b, a .data pointer, and a+4). This is the "perform a vcall and process this data"
-# routine (eleventh form), part of the 0x82C16 process cluster. 402 lines. 7 callees (DispatchVcallTriple, ProcessAndJumpTo, ProcessAndVcallAndClear3, ProcessAndVcallAndProcess10, VcallChain_AllSuccess, VcallTriple_AllSuccess, and
+# routine (eleventh form), part of the 0x82C16 process cluster. 402 lines. 7 callees (DispatchVcallTriple, ProcessAndJumpTo, Handle_Release, ProcessAndVcallAndProcess10, VcallChain_AllSuccess, VcallTriple_AllSuccess, and
 # ProcessAndComputeAndProcess17). 1 caller (sub_82C192D8).
 [entrypoint.functions."0x82C161D8"]
 name = "ProcessAndVcallAndProcess11_82C161D8"
@@ -37484,7 +37476,7 @@ name = "ProcessAndAllocateAndProcess19_82350EC8"
 [entrypoint.functions."0x82358A18"]
 name = "ProcessAndProcessAndProcess127_82358A18"
 
-# A processor that processes the data (one hundred and twenty-eighth form). It takes a structure (a: field at a->0), a value (b), and a value (c). It processes the data (a, b, and c). This is the "process this data" routine (one hundred and twenty-eighth form), part of the 0x82358 process cluster. 89 lines. 5 callees (ProcessAndAppendElement, ProcessAndCopyReferenceAndHash, ProcessAndDispatchAndResolve, ProcessAndHashString, and ProcessAndResolveTypedField). 7 callers (sub_8251D958, sub_824DE170, sub_82415830, sub_823ADF80, sub_823577C0, sub_82908E20, and sub_824FA760).
+# A processor that processes the data (one hundred and twenty-eighth form). It takes a structure (a: field at a->0), a value (b), and a value (c). It processes the data (a, b, and c). This is the "process this data" routine (one hundred and twenty-eighth form), part of the 0x82358 process cluster. 89 lines. 5 callees (ProcessAndAppendElement, ProcessAndCopyReferenceAndHash, ProcessAndDispatchAndResolve, ProcessAndHashString, and ProcessAndResolveTypedField). 7 callers (LuaExperience_Register_8251D958, sub_824DE170, sub_82415830, sub_823ADF80, sub_823577C0, sub_82908E20, and sub_824FA760).
 [entrypoint.functions."0x82358B48"]
 name = "ProcessAndProcessAndProcess128_82358B48"
 
@@ -38272,7 +38264,7 @@ name = "ProcessAndProcessAndProcess318_82B38798"
 [entrypoint.functions."0x82B395D8"]
 name = "ProcessAndProcessAndProcess319_82B395D8"
 
-# A processor that processes the data (three hundred and twentieth form). It takes a value (a) and a structure (b: fields at b->0 and b->4). It processes the data (a and b). This is the "process this data" routine (three hundred and twentieth form), part of the 0x82B39 process cluster. 117 lines. 1 callee (ProcessAndProcessAndProcess319). 12 callers (sub_82436940, sub_824EFB50, sub_82809250, sub_82355C08, sub_8245E3F8, sub_8218FC98, sub_82339090, sub_8239AA00, sub_82842860, sub_827EA850, sub_8252AF38, and sub_82697790).
+# A processor that processes the data (three hundred and twentieth form). It takes a value (a) and a structure (b: fields at b->0 and b->4). It processes the data (a and b). This is the "process this data" routine (three hundred and twentieth form), part of the 0x82B39 process cluster. 117 lines. 1 callee (ProcessAndProcessAndProcess319). 12 callers (sub_82436940, sub_824EFB50, sub_82809250, sub_82355C08, sub_8245E3F8, sub_8218FC98, sub_82339090, sub_8239AA00, PauseMenu_Populate_82842860, sub_827EA850, sub_8252AF38, and sub_82697790).
 [entrypoint.functions."0x82B39978"]
 name = "ProcessAndProcessAndProcess320_82B39978"
 
@@ -39022,7 +39014,7 @@ name = "InterpolateFloatArray_82C62548"
 [entrypoint.functions."0x832B6110"]
 name = "ProcessAndProcessAndProcess499_832B6110"
 
-# Issue a virtual call on a structure, then clear its fields (five hundredth form). It takes a structure (a: fields at a->80, a->96, and a->88); it issues a virtual call on a->80, then clears a->96 and a->88 to zero. This is the "process this data" routine (five hundredth form), part of the 0x822A2 process cluster. 66 lines. 1 callee (ProcessAndVcallAndClear3). 0 callers (unresolved — body is recovered but no callers found; likely a vtable method or indirect entry).
+# Issue a virtual call on a structure, then clear its fields (five hundredth form). It takes a structure (a: fields at a->80, a->96, and a->88); it issues a virtual call on a->80, then clears a->96 and a->88 to zero. This is the "process this data" routine (five hundredth form), part of the 0x822A2 process cluster. 66 lines. 1 callee (Handle_Release). 0 callers (unresolved — body is recovered but no callers found; likely a vtable method or indirect entry).
 [entrypoint.functions."0x822A2A40"]
 name = "ProcessAndProcessAndProcess500_822A2A40"
 
@@ -42247,7 +42239,7 @@ name = "ProcessAndProcessAndProcess1237_822D6660"
 [entrypoint.functions."0x823955A8"]
 name = "ProcessAndProcessAndProcess1238_823955A8"
 
-# Process a structure by decrementing and replacing a reference count (seven hundred and one hundred and one hundred and one hundred and one hundred and two hundred and thirty-ninth form). It takes a structure, decrements a reference count (ProcessAndDecrementRefCount), and replaces a refcounted object (ProcessAndReplaceRefCounted) based on the result. Part of the 0x8219C process cluster. 172 lines. 2 callees. 1 caller (sub_82A7C780).
+# Process a structure by decrementing and replacing a reference count (seven hundred and one hundred and one hundred and one hundred and one hundred and two hundred and thirty-ninth form). It takes a structure, decrements a reference count (ProcessAndDecrementRefCount), and replaces a refcounted object (RefCounted_Assign) based on the result. Part of the 0x8219C process cluster. 172 lines. 2 callees. 1 caller (sub_82A7C780).
 [entrypoint.functions."0x8219C2D0"]
 name = "ProcessAndProcessAndProcess1239_8219C2D0"
 
@@ -43777,7 +43769,7 @@ name = "ProcessAndProcessAndProcess1612_822D0488"
 [entrypoint.functions."0x822D06E8"]
 name = "ProcessAndProcessAndProcess1613_822D06E8"
 
-# Process a very large data structure by wrapping sub-operations (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and fourteenth form). It takes a structure, constructs a 12-byte object (Construct12Byte), constructs a refcounted object (ConstructRefCounted), destructs a refcounted object (DestructRefCounted), dispatches and processes (ProcessAndDispatchAndProcess25), and drives sub-operations (ProcessAndProcessAndProcess1095, ProcessAndProcessAndProcess1100, ProcessAndProcessAndProcess1105, ProcessAndProcessAndProcess1609, sub_8219CEF8, sub_8219D000, sub_822BE890, sub_823F9140, ProcessAndProcessAndProcess1607, sub_8259D7C0, sub_8322B050, sub_8322E3C0) based on the result. This is a dispatcher in the 0x82379 process cluster. 466 lines. 16 callees. 0 callers.
+# Process a very large data structure by wrapping sub-operations (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and fourteenth form). It takes a structure, constructs a 12-byte object (Construct12Byte), constructs a refcounted object (ConstructRefCounted), destructs a refcounted object (DestructRefCounted), dispatches and processes (ProcessAndDispatchAndProcess25), and drives sub-operations (ProcessAndProcessAndProcess1095, ProcessAndProcessAndProcess1100, ProcessAndProcessAndProcess1105, ProcessAndProcessAndProcess1609, sub_8219CEF8, sub_8219D000, sub_822BE890, Gui_GoToSlide_823F9140, ProcessAndProcessAndProcess1607, sub_8259D7C0, sub_8322B050, sub_8322E3C0) based on the result. This is a dispatcher in the 0x82379 process cluster. 466 lines. 16 callees. 0 callers.
 [entrypoint.functions."0x82379C10"]
 name = "ProcessAndProcessAndProcess1614_82379C10"
 
@@ -43813,11 +43805,11 @@ name = "ProcessAndProcessAndProcess1621_822149C8"
 [entrypoint.functions."0x822BE890"]
 name = "ProcessAndProcessAndProcess1622_822BE890"
 
-# Process a very large data structure by constructing a refcounted object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and twenty-third form). It takes a structure, constructs a refcounted object (ConstructRefCounted), copy-assigns a refcounted object (CopyAssign_RefCounted), copies a structure (CopyStructure), destructs a refcounted object (DestructRefCounted), constructs a string (ProcessConstructString), lowercases (ProcessToLower), releases a global reference (ReleaseGlobalRef), and drives sub-operations (ProcessAndProcessAndProcess1217, ProcessAndProcessAndProcess1244, ProcessAndProcessAndProcess565, ProcessAndProcessAndProcess765, sub_82301D40, sub_823F8C30, sub_826CAD28, ProcessAndProcessAndProcess1624) based on the result. Part of the 0x826CB process cluster. 727 lines. 15 callees. 2 callers (sub_826C63D8 and sub_826C6F28).
+# Process a very large data structure by constructing a refcounted object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and twenty-third form). It takes a structure, constructs a refcounted object (ConstructRefCounted), copy-assigns a refcounted object (CopyAssign_RefCounted), copies a structure (CopyStructure), destructs a refcounted object (DestructRefCounted), constructs a string (ProcessConstructString), lowercases (ProcessToLower), releases a global reference (ReleaseGlobalRef), and drives sub-operations (ProcessAndProcessAndProcess1217, ProcessAndProcessAndProcess1244, ProcessAndProcessAndProcess565, ProcessAndProcessAndProcess765, sub_82301D40, Gui_FindElement_823F8C30, sub_826CAD28, ProcessAndProcessAndProcess1624) based on the result. Part of the 0x826CB process cluster. 727 lines. 15 callees. 2 callers (sub_826C63D8 and sub_826C6F28).
 [entrypoint.functions."0x826CB338"]
 name = "ProcessAndProcessAndProcess1623_826CB338"
 
-# Process a structure by constructing a 12-byte object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and twenty-fourth form). It takes a structure and constructs a 12-byte object (Construct12Byte). Part of the 0x826CB process cluster. 95 lines. 1 callee. 2 callers (sub_826C9460 and ProcessAndProcessAndProcess1623).
+# Process a structure by constructing a 12-byte object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and twenty-fourth form). It takes a structure and constructs a 12-byte object (Construct12Byte). Part of the 0x826CB process cluster. 95 lines. 1 callee. 2 callers (FrontMenu_HandleUnfreeze_826C9460 and ProcessAndProcessAndProcess1623).
 [entrypoint.functions."0x826CBC78"]
 name = "ProcessAndProcessAndProcess1624_826CBC78"
 
@@ -44013,15 +44005,18 @@ name = "ProcessAndProcessAndProcess1664_826CBB58"
 [entrypoint.functions."0x828CE180"]
 name = "ProcessAndProcessAndProcess1665_828CE180"
 
-# Process a structure (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and sixty-sixth form). It takes a structure and checks its state, with no external sub-operations. This is a frequently-called helper in the 0x822D6 process cluster. 127 lines. 0 callees. 4 callers.
+# Compares two wide string handles. r3 / r4 = the handles. Returns 0 when both hold the same
+# record, or the same length and characters (UTF-16, compared one by one); 1 otherwise (also when
+# either is empty). GuiElement_SetText_823F8268 only replaces an element's text when this says it
+# differs. Read in the generated code.
 [entrypoint.functions."0x822D6998"]
-name = "ProcessAndProcessAndProcess1666_822D6998"
+name = "WideString_NotEqual_822D6998"
 
 # Process a structure by copy-assigning a refcounted object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and sixty-seventh form). It takes a structure, copy-assigns a refcounted object (CopyAssign_RefCounted), destructs a refcounted object (DestructRefCounted), and drives sub-operations (ProcessAndProcessAndProcess1228, ProcessAndProcessAndProcess1315, ProcessAndProcessAndProcess1633) based on the result. This is a frequently-called helper in the 0x82301 process cluster. 95 lines. 5 callees. 11 callers.
 [entrypoint.functions."0x82301F58"]
 name = "ProcessAndProcessAndProcess1667_82301F58"
 
-# Process a structure by replacing a refcounted object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and sixty-eighth form). It takes a structure, replaces a refcounted object (ProcessAndReplaceRefCounted), and drives a sub-operation (ProcessAndProcessAndProcess1666) based on the result. Part of the 0x82817 process cluster. 52 lines. 2 callees. 1 caller (ProcessAndProcessAndProcess1669).
+# Process a structure by replacing a refcounted object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and one hundred and sixty-eighth form). It takes a structure, replaces a refcounted object (RefCounted_Assign), and drives a sub-operation (WideString_NotEqual) based on the result. Part of the 0x82817 process cluster. 52 lines. 2 callees. 1 caller (ProcessAndProcessAndProcess1669).
 [entrypoint.functions."0x82817318"]
 name = "ProcessAndProcessAndProcess1668_82817318"
 
@@ -44260,7 +44255,7 @@ name = "ProcessAndProcessAndProcess1724_82C0BD40"
 [entrypoint.functions."0x82C0CB78"]
 name = "ProcessAndProcessAndProcess1725_82C0CB78"
 
-# Process a large data structure by constructing a refcounted object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and twenty-sixth form). It takes a structure, constructs a refcounted object (ConstructRefCounted), copy-assigns a refcounted object (CopyAssign_RefCounted), destructs a refcounted object (DestructRefCounted), replaces a refcounted object (ProcessAndReplaceRefCounted), releases a global reference (ReleaseGlobalRef), and drives sub-operations (ProcessAndProcessAndProcess1228, ProcessAndProcessAndProcess1633, ProcessAndProcessAndProcess320, sub_821E6408, sub_8236D798, sub_82B3A7A0, sub_82B3AA88) based on the result. This is a very frequently-called helper in the 0x82301 process cluster. 229 lines. 12 callees. 245 callers.
+# Process a large data structure by constructing a refcounted object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and twenty-sixth form). It takes a structure, constructs a refcounted object (ConstructRefCounted), copy-assigns a refcounted object (CopyAssign_RefCounted), destructs a refcounted object (DestructRefCounted), replaces a refcounted object (RefCounted_Assign), releases a global reference (ReleaseGlobalRef), and drives sub-operations (ProcessAndProcessAndProcess1228, ProcessAndProcessAndProcess1633, ProcessAndProcessAndProcess320, sub_821E6408, sub_8236D798, sub_82B3A7A0, sub_82B3AA88) based on the result. This is a very frequently-called helper in the 0x82301 process cluster. 229 lines. 12 callees. 245 callers.
 [entrypoint.functions."0x82301D40"]
 name = "ProcessAndProcessAndProcess1726_82301D40"
 
@@ -44632,9 +44627,16 @@ name = "ProcessAndProcessAndProcess1817_82C55338"
 [entrypoint.functions."0x8241C538"]
 name = "ProcessAndProcessAndProcess1818_8241C538"
 
-# Process a very large data structure by constructing a refcounted object (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and one hundred and nineteenth form). It takes a structure, constructs a refcounted object (ConstructRefCounted), copies a refcounted object (CopyAssign_RefCounted), destructs a refcounted object (DestructRefCounted), replaces a refcounted object (ProcessAndReplaceRefCounted), releases a global reference (ReleaseGlobalRef), hashes a C string (HashCstring), increments a counter (ProcessAndIncrementCounter), and drives sub-operations (ProcessAndDispatchAndProcess25, ProcessAndVcallAndClear3, ProcessAndVcallAndProcess16, ProcessAndProcessAndProcess26, and many others) based on the result. This is one of the largest functions in the binary in the 0x826C7 process cluster. 2204 lines. 29 callees. 0 callers.
+# Front-end card input on the New Game boy and girl cards. r3 = the front-end object.
+# Left / right move between the cards (slides 2-5). A flips the highlighted one: boy ->
+# choosecard slide 6 and the destiny line TEXT_QUEST_QC010_FRONT_END_30_HM through
+# Speech_PlayByKey_82306098 (the call returns to 0x826C7A50), girl -> slide 7 and _30_HF
+# (0x826C7B98), with +24 = 1 while the card flips; the card's behaviour chunk then fires
+# BOY_SELECTED / GIRL_SELECTED (FrontMenu_HandleCardEvent_826C9188). It sits in the
+# front-end vtable next to FrontMenu_HandleEvent (word at 0x820CD530). Read in the generated
+# code (docs/feature/difficulty_settings/technical.md sections 7 and 19.2).
 [entrypoint.functions."0x826C72A8"]
-name = "ProcessAndProcessAndProcess1819_826C72A8"
+name = "FrontMenu_HandleCardInput_826C72A8"
 
 # Process a very large data structure by allocating fresh memory (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and one hundred and twentieth form). It takes a structure, allocates fresh memory (Allocate_OrDbgBreak), sets a string (SetString), and drives sub-operations (ProcessAndFreeAndProcess9, sub_822F1F00, sub_826C3EF0, sub_826C3FA8, sub_829FDF90, sub_829FE010) based on the result. Part of the 0x8217F process cluster. 343 lines. 8 callees. 1 caller (ProcessAndProcessAndProcess1821).
 [entrypoint.functions."0x8217F708"]
@@ -44832,7 +44834,7 @@ name = "ProcessAndProcessAndProcess1867_82CDBAF8"
 [entrypoint.functions."0x82B7B870"]
 name = "ProcessAndProcessAndProcess1868_82B7B870"
 
-# Process a large structure by allocating fresh memory (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and one hundred and sixty-ninth form). It takes a structure, allocates fresh memory (Allocate_OrDbgBreak), and reallocates a buffer (ProcessAndReallocateBuffer). This is a frequently-called helper in the 0x82B39 process cluster. 112 lines. 2 callees. 4 callers.
+# Process a large structure by allocating fresh memory (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and one hundred and sixty-ninth form). It takes a structure, allocates fresh memory (Allocate_OrDbgBreak), and reallocates a buffer (WideString_Assign). This is a frequently-called helper in the 0x82B39 process cluster. 112 lines. 2 callees. 4 callers.
 [entrypoint.functions."0x82B396A8"]
 name = "ProcessAndProcessAndProcess1869_82B396A8"
 
@@ -45192,7 +45194,7 @@ name = "ProcessAndProcessAndProcess1957_82C22FB0"
 [entrypoint.functions."0x82B38AA8"]
 name = "ProcessAndProcessAndProcess1958_82B38AA8"
 
-# Process a large structure by performing a vcall (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and two hundred and fifty-ninth form). It takes a structure, performs a vcall (ProcessAndVcallAndClear3), and drives a sub-operation (sub_82C0CF68) based on the result. Part of the 0x82C0E process cluster. 106 lines. 2 callees. 0 callers.
+# Process a large structure by performing a vcall (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and two hundred and fifty-ninth form). It takes a structure, performs a vcall (Handle_Release), and drives a sub-operation (sub_82C0CF68) based on the result. Part of the 0x82C0E process cluster. 106 lines. 2 callees. 0 callers.
 [entrypoint.functions."0x82C0E108"]
 name = "ProcessAndProcessAndProcess1959_82C0E108"
 
@@ -45592,7 +45594,7 @@ name = "ProcessAndProcessAndProcess2057_82C56B98"
 [entrypoint.functions."0x82C3FD50"]
 name = "ProcessAndProcessAndProcess2058_82C3FD50"
 
-# Process a structure by wrapping a sub-operation (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and three hundred and fifty-ninth form). It takes a structure and drives a sub-operation (ProcessAndVcallAndClear3). Part of the 0x82C41 process cluster. 84 lines. 1 callee. 0 callers.
+# Process a structure by wrapping a sub-operation (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and three hundred and fifty-ninth form). It takes a structure and drives a sub-operation (Handle_Release). Part of the 0x82C41 process cluster. 84 lines. 1 callee. 0 callers.
 [entrypoint.functions."0x82C410B0"]
 name = "ProcessAndProcessAndProcess2059_82C410B0"
 
@@ -45798,7 +45800,7 @@ name = "ProcessAndProcessAndProcess2108_82BCC2C8"
 [entrypoint.functions."0x82286008"]
 name = "ProcessAndProcessAndProcess2109_82286008"
 
-# Process a structure by wrapping sub-operations (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and four hundred and tenth form). It takes a structure, checks its state, and drives sub-operations (ProcessAndProcessAndProcess1881, ProcessAndProcessAndProcess1991, ProcessAndVcallAndClear3, sub_82C10A10) based on the result. Part of the 0x82C10 process cluster. 96 lines. 4 callees. 0 callers.
+# Process a structure by wrapping sub-operations (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and four hundred and tenth form). It takes a structure, checks its state, and drives sub-operations (ProcessAndProcessAndProcess1881, ProcessAndProcessAndProcess1991, Handle_Release, sub_82C10A10) based on the result. Part of the 0x82C10 process cluster. 96 lines. 4 callees. 0 callers.
 [entrypoint.functions."0x82C10AE0"]
 name = "ProcessAndProcessAndProcess2110_82C10AE0"
 
@@ -46122,7 +46124,7 @@ name = "ProcessAndProcessAndProcess2189_82A6D650"
 [entrypoint.functions."0x82A6EA50"]
 name = "ProcessAndProcessAndProcess2190_82A6EA50"
 
-# Process a large structure by allocating fresh memory (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and four hundred and ninety-first form). It takes a structure, allocates fresh memory (Allocate_OrDbgBreak), reallocates a buffer (ProcessAndReallocateBuffer), and releases a refcounted object (Release_RefCounted). This is a frequently-called helper in the 0x82B39 process cluster. 199 lines. 3 callees. 4 callers.
+# Process a large structure by allocating fresh memory (seven hundred and one hundred and one hundred and one hundred and one hundred and three hundred and two hundred and four hundred and ninety-first form). It takes a structure, allocates fresh memory (Allocate_OrDbgBreak), reallocates a buffer (WideString_Assign), and releases a refcounted object (Release_RefCounted). This is a frequently-called helper in the 0x82B39 process cluster. 199 lines. 3 callees. 4 callers.
 [entrypoint.functions."0x82B394B8"]
 name = "ProcessAndProcessAndProcess2191_82B394B8"
 
@@ -46671,15 +46673,15 @@ name = "ProcessAndProcessAndProcess2316_82C4E890"
 [entrypoint.functions."0x82C4E9B8"]
 name = "ProcessAndProcessAndProcess2317_82C4E9B8"
 
-# Process a structure by checking its state and driving sub-operations (two thousand three hundred and nineteenth form). It takes a structure (a: fields at a->48, a->32, a->52, a->56, and a->72); it checks the structure's state, and drives sub-operations (ProcessAndVcallAndClear3) based on the result. This is the "process this data" routine (two thousand three hundred and nineteenth form), part of the 0x82C4E process cluster. 236 lines. 1 callee. 2 callers (sub_82C4ECB0 and ProcessAndProcessAndProcess1591).
+# Process a structure by checking its state and driving sub-operations (two thousand three hundred and nineteenth form). It takes a structure (a: fields at a->48, a->32, a->52, a->56, and a->72); it checks the structure's state, and drives sub-operations (Handle_Release) based on the result. This is the "process this data" routine (two thousand three hundred and nineteenth form), part of the 0x82C4E process cluster. 236 lines. 1 callee. 2 callers (sub_82C4ECB0 and ProcessAndProcessAndProcess1591).
 [entrypoint.functions."0x82C4EB08"]
 name = "ProcessAndProcessAndProcess2318_82C4EB08"
 
-# Process a structure by checking its state and driving many sub-operations (two thousand three hundred and twentieth form). It takes a structure (a: fields at a->32, a->248, and a->128) and a value (b); it checks the structure's state, and drives many sub-operations (ProcessAndVcallAndClear3, ProcessAndVcallAndProcess10, ProcessAndProcessAndProcess2295, ProcessAndProcessAndProcess2314, ProcessAndProcessAndProcess2318, and more) based on the result. This is the "process this data" routine (two thousand three hundred and twentieth form), part of the 0x82C4E process cluster. 427 lines. 7 callees. 2 callers (ProcessAndProcessAndProcess1591 and sub_82C4F240).
+# Process a structure by checking its state and driving many sub-operations (two thousand three hundred and twentieth form). It takes a structure (a: fields at a->32, a->248, and a->128) and a value (b); it checks the structure's state, and drives many sub-operations (Handle_Release, ProcessAndVcallAndProcess10, ProcessAndProcessAndProcess2295, ProcessAndProcessAndProcess2314, ProcessAndProcessAndProcess2318, and more) based on the result. This is the "process this data" routine (two thousand three hundred and twentieth form), part of the 0x82C4E process cluster. 427 lines. 7 callees. 2 callers (ProcessAndProcessAndProcess1591 and sub_82C4F240).
 [entrypoint.functions."0x82C4ECB0"]
 name = "ProcessAndProcessAndProcess2319_82C4ECB0"
 
-# Process a structure by checking its state and driving many sub-operations (two thousand three hundred and twenty-first form). It takes a structure (a: fields at a->156 and a->128), a value (b), a value (c), and a value (d); it checks the structure's state, and drives many sub-operations (ProcessAndProcessAndProcess1955, Allocate_OrDbgBreak, AtomicIncrement3, CopyAssign_RefCounted2, DestructRefCounted, ProcessAndVcallAndClear3, ProcessAndProcessAndProcess2319, and many more) based on the result. This is the "process this data" routine (two thousand three hundred and twenty-first form), part of the 0x82C4F process cluster. 755 lines. 15 callees. 2 callers (sub_82C1F910 and sub_82C1E878).
+# Process a structure by checking its state and driving many sub-operations (two thousand three hundred and twenty-first form). It takes a structure (a: fields at a->156 and a->128), a value (b), a value (c), and a value (d); it checks the structure's state, and drives many sub-operations (ProcessAndProcessAndProcess1955, Allocate_OrDbgBreak, AtomicIncrement3, CopyAssign_RefCounted2, DestructRefCounted, Handle_Release, ProcessAndProcessAndProcess2319, and many more) based on the result. This is the "process this data" routine (two thousand three hundred and twenty-first form), part of the 0x82C4F process cluster. 755 lines. 15 callees. 2 callers (sub_82C1F910 and sub_82C1E878).
 [entrypoint.functions."0x82C4F240"]
 name = "ProcessAndProcessAndProcess2320_82C4F240"
 
@@ -47279,7 +47281,7 @@ name = "ProcessAndProcessAndProcess2463_821D5BE0"
 [entrypoint.functions."0x822651E0"]
 name = "ProcessAndProcessAndProcess2464_822651E0"
 
-# Process a structure by checking its state and driving many sub-operations (two thousand four hundred and sixty-sixth form). It takes a structure (a: field at a->0) and a structure (b: field at b->0); it checks the structure's state, and drives many sub-operations (Allocate_OrDbgBreak, Release_RefCounted, ProcessAndReallocateBuffer, ProcessAndProcessAndProcess2191, ProcessAndProcessAndProcess2192, and more) based on the result. This is the "process this data" routine (two thousand four hundred and sixty-sixth form), part of the 0x82B38 process cluster. 133 lines. 5 callees. 12 callers (sub_82901C60, sub_828FD288, sub_82408B88, and more).
+# Process a structure by checking its state and driving many sub-operations (two thousand four hundred and sixty-sixth form). It takes a structure (a: field at a->0) and a structure (b: field at b->0); it checks the structure's state, and drives many sub-operations (Allocate_OrDbgBreak, Release_RefCounted, WideString_Assign, ProcessAndProcessAndProcess2191, ProcessAndProcessAndProcess2192, and more) based on the result. This is the "process this data" routine (two thousand four hundred and sixty-sixth form), part of the 0x82B38 process cluster. 133 lines. 5 callees. 12 callers (sub_82901C60, sub_828FD288, sub_82408B88, and more).
 [entrypoint.functions."0x82B38F30"]
 name = "ProcessAndProcessAndProcess2465_82B38F30"
 
@@ -47343,7 +47345,7 @@ name = "ProcessAndProcessAndProcess2479_82C10908"
 [entrypoint.functions."0x82C10D00"]
 name = "ProcessAndProcessAndProcess2480_82C10D00"
 
-# Process a structure by checking its state and driving many sub-operations (two thousand four hundred and eighty-second form). It takes a structure (a: fields at a->0 and a->4), a structure (b: fields at b->52 and b->80), and a value (c); it checks the structure's state, and drives many sub-operations (ProcessAndVcallAndClear3, ProcessAndProcessAndProcess1802, ProcessAndProcessAndProcess1881, ProcessAndProcessAndProcess2060, ProcessAndProcessAndProcess2470, ProcessAndProcessAndProcess2477, ProcessAndProcessAndProcess2480, and more) based on the result. This is the "process this data" routine (two thousand four hundred and eighty-second form), part of the 0x82C10 process cluster. 144 lines. 7 callees. 0 callers.
+# Process a structure by checking its state and driving many sub-operations (two thousand four hundred and eighty-second form). It takes a structure (a: fields at a->0 and a->4), a structure (b: fields at b->52 and b->80), and a value (c); it checks the structure's state, and drives many sub-operations (Handle_Release, ProcessAndProcessAndProcess1802, ProcessAndProcessAndProcess1881, ProcessAndProcessAndProcess2060, ProcessAndProcessAndProcess2470, ProcessAndProcessAndProcess2477, ProcessAndProcessAndProcess2480, and more) based on the result. This is the "process this data" routine (two thousand four hundred and eighty-second form), part of the 0x82C10 process cluster. 144 lines. 7 callees. 0 callers.
 [entrypoint.functions."0x82C10F18"]
 name = "ProcessAndProcessAndProcess2481_82C10F18"
 
@@ -47355,13 +47357,19 @@ name = "ProcessAndProcessAndProcess2482_8217AD80"
 [entrypoint.functions."0x821D5050"]
 name = "ProcessAndProcessAndProcess2483_821D5050"
 
-# Process a structure by checking its state and driving many sub-operations (two thousand four hundred and eighty-fifth form). It takes a value (a), a structure (b: fields at b->40 and b->32), a value (c), and a value (d); it checks the structure's state, and drives many sub-operations (CriticalSection_EnterOrTry, DestructRefCounted, CopyAssign_RefCounted, ProcessAndVcallAndClear3, ProcessAndVcallAndProcess10, ProcessAndProcessAndProcess2483, and more) based on the result. This is the "process this data" routine (two thousand four hundred and eighty-fifth form), part of the 0x821E0 process cluster. 278 lines. 7 callees. 4 callers (sub_82306098, sub_829F8158, sub_825AAF30, and sub_821D9258).
+# Process a structure by checking its state and driving many sub-operations (two thousand four hundred and eighty-fifth form). It takes a value (a), a structure (b: fields at b->40 and b->32), a value (c), and a value (d); it checks the structure's state, and drives many sub-operations (CriticalSection_EnterOrTry, DestructRefCounted, CopyAssign_RefCounted, Handle_Release, ProcessAndVcallAndProcess10, ProcessAndProcessAndProcess2483, and more) based on the result. This is the "process this data" routine (two thousand four hundred and eighty-fifth form), part of the 0x821E0 process cluster. 278 lines. 7 callees. 4 callers (sub_82306098, sub_829F8158, sub_825AAF30, and sub_821D9258).
 [entrypoint.functions."0x821E0B08"]
 name = "ProcessAndProcessAndProcess2484_821E0B08"
 
-# Process a structure by checking its state and driving many sub-operations (two thousand four hundred and eighty-sixth form). It takes a value (a), a structure (b: fields at b->156 and b->160), and a value (c); it checks the structure's state, and drives many sub-operations (ProcessAndProcessAndProcess1802, ProcessAndProcessAndProcess1864, ProcessAndProcessAndProcess2194, ProcessAndProcessAndProcess2464, ProcessAndProcessAndProcess2484, and more) based on the result. This is the "process this data" routine (two thousand four hundred and eighty-sixth form), part of the 0x82306 process cluster. 64 lines. 5 callees. 12 callers (sub_82833A90, sub_82583140, sub_82583938, and more).
+# Plays a speech line by key. r3 = an 8-byte handle to fill, r4 = the speaker (on the front
+# end *(*(*(0x83496928)+8)+80)), r5 = &key (a global hash, e.g. 0x834A0000 - 20340 for
+# TEXT_QUEST_QC010_FRONT_END_20), r6 = 0. The front-end callers release the handle right
+# after with Handle_Release_822ADE08 and the line goes on playing. Read at the calls in
+# FrontMenu_HandleCardInput_826C72A8, FrontMenu_HandleUnfreeze_826C9460 and
+# FrontMenu_HandleEvent (Theresa's lines play); the body itself wasn't read. The difficulty
+# feature overrides it to play the destiny line after the difficulty pick (technical.md 19.2).
 [entrypoint.functions."0x82306098"]
-name = "ProcessAndProcessAndProcess2485_82306098"
+name = "Speech_PlayByKey_82306098"
 
 # Process a value by checking its state and driving sub-operations (two thousand four hundred and eighty-seventh form). It takes a value (a) and a value (b); it checks the value's state, and drives sub-operations (Free_SizeBucketed_Thunk, ProcessAndProcessAndProcess2482, and more) based on the result. This is the "process this data" routine (two thousand four hundred and eighty-seventh form), part of the 0x82A00 process cluster. 50 lines. 2 callees. 0 callers.
 [entrypoint.functions."0x82A00530"]
@@ -48155,9 +48163,18 @@ name = "QueryActivePlayerMethod_821EC8A0"
 [entrypoint.functions."0x821F8760"]
 name = "ResolveSubsystemReference_821F8760"
 
-# Complex game entity initialization. Takes the game state and a constructed reference. Calls ProcessAndProcessAndProcess2254, ProcessAndProcessAndProcess938, ProcessAndProcessAndProcess1309, and sub_822F9EC0. 199 lines. 5+ callees. Called from the main game loop.
+# Quit to the front end (was misnamed InitializeGameEntity). r3 = the game object
+# *(*(0x83496920)+12), r4 = a ref string (the reason; the pause Save box passes "" from
+# 0x82000C98, built by ConstructRefCounted_8222CF18). It logs "QuitToFrontEnd(%s)"
+# (0x820A6194), sets the game object's +256 byte (which makes SaveManager_Save_824E8990
+# refuse to save from then on), drains the network queue through Network_DropClient_8230FEB0
+# and starts the front-end transition. Callers: PauseSaveBox_HandleEvent_82413988 (Save and
+# Quit, after the save; Quit without saving), ProcessGameFrame_82276C30 (a timer), and the
+# difficulty feature's Hardcore window close (docs/feature/difficulty_settings/ technical.md
+# 23). Read in the generated code (Verified); a hand-tuned override lives in
+# src/core/hotfunc/entity/.
 [entrypoint.functions."0x8233CAC8"]
-name = "InitializeGameEntity_8233CAC8"
+name = "Game_QuitToFrontEnd_8233CAC8"
 
 # The main per-frame game loop. 512-byte stack frame. Processes timing, calls all major per-frame subsystems (notifications, player update, state update, callbacks, yield). 1052 lines. 20+ callees. Called once per frame.
 [entrypoint.functions."0x82276C30"]
@@ -49796,3 +49813,719 @@ name = "Theme_UpdateLighting_822BD510"
 # Theme_UpdateLighting_822BD510 (world update, and photo mode).
 [entrypoint.functions."0x8218EB30"]
 name = "Theme_Update_8218EB30"
+
+# --- Difficulty settings (feature/game-difficulty, docs/feature/difficulty_settings/) ---
+
+# Reads one field of the tweak record HeroCombatBalanceParams.DifficultyLevelMultipliers
+# (strings at 0x820ACFD4 / 0x820ACFEC) through ProcessAndProcessAndProcess2670_82196E10.
+# r3 = field index: 0 DamageCaused, 1 DamageReceived, 2 ExperienceReceived,
+# 3 SpellManaCost, 4 StockItemPrice; returns the float in f1 (1.0 for any other
+# index). There is no level argument, so the table is one row. Its five callers
+# only call it when the player component's level (+80) is above 1 (Verified in the
+# generated code).
+[entrypoint.functions."0x823C92F0"]
+name = "Difficulty_GetMultiplier_823C92F0"
+
+# The native body of the Lua function Player.SetDifficultyLevel (registered in
+# sub_823C6030 through the member binder sub_823D62F8). r3 = the bound object,
+# r4 = the level. If it differs from obj+80: obj+80 = level, byte obj+38 = 1 (the
+# "changed" flag behind HasDifficultyLevelChanged). Verified in the generated code
+# and in game (the level sticks and is saved with the hero).
+[entrypoint.functions."0x823C9458"]
+name = "LuaPlayer_SetDifficultyLevel_823C9458"
+
+# The native body of the Lua function Player.GetDifficultyLevel: returns obj+80
+# (Verified in the generated code).
+[entrypoint.functions."0x82612AC0"]
+name = "LuaPlayer_GetDifficultyLevel_82612AC0"
+
+# Buy price of an item. r3 = a type-124 component (from
+# Shopkeeper_GetStockComponent_827B0358), r4 = the item, f1/f2 = the shopkeeper's
+# type-47 values (+44/+48), f3 = the shopkeeper multiplier. price = base
+# (Item_GetBaseValue_828E7C58) x the opinion factor (Item_GetBuyOpinionFactor_828E8C80)
+# x item+36 x f3 (f3 is replaced by 1.0 and the +60 discount applied when
+# Ownership_OwnsProperty_828B0B38 on player 1's type-69 component
+# is true) x StockItemPrice. The StockItemPrice gate looks up type 33 on *(r3+4),
+# not on the hero. Returns the int price in r3 (Verified in the generated code).
+[entrypoint.functions."0x828E7F78"]
+name = "Item_GetBuyPrice_828E7F78"
+
+# Sell price of an item; the mirror of Item_GetBuyPrice_828E7F78. base x
+# Item_GetSellOpinionFactor_828E8EC0 x item+40, divided by StockItemPrice behind the same type-33 gate
+# on *(r3+4), +64 discount, clamped against the buy price (Verified in the
+# generated code).
+[entrypoint.functions."0x828E8320"]
+name = "Item_GetSellPrice_828E8320"
+
+# Buy price at a shop. r3 = the shopkeeper component, r4 = the item. Gets the stock
+# component (Shopkeeper_GetStockComponent_827B0358), reads f1/f2 from type 47 on
+# the shop entity (+44/+48, default 0x820994B4), f3 = shopkeeper+12, and calls
+# Item_GetBuyPrice_828E7F78 (Verified in the generated code).
+[entrypoint.functions."0x827AF5A0"]
+name = "Shopkeeper_GetBuyPrice_827AF5A0"
+
+# Sell price at a shop; the mirror of Shopkeeper_GetBuyPrice_827AF5A0 that calls
+# Item_GetSellPrice_828E8320 (Inference: from the 2026-11-15 search pass, its
+# body not re-read; the probe logs its callers).
+[entrypoint.functions."0x827AF6F8"]
+name = "Shopkeeper_GetSellPrice_827AF6F8"
+
+# r3 = the shopkeeper component. Follows the weak handle at r3+16 to an entity and
+# returns its type-124 component (0 if none). Verified in the generated code; what
+# the entity is (the shop's stock, the shop building) is not known yet.
+[entrypoint.functions."0x827B0358"]
+name = "Shopkeeper_GetStockComponent_827B0358"
+
+# Where every save goes. r3 = the save manager (*(*(0x83496920)+12)+148), r4-r7 =
+# flags. First calls sub_824EBF30, which refuses when byte +2093 (SetSavingAsAllowed)
+# is 0. Callers: Lua SaveGame / AutoSaveGame, PauseSaveBox_HandleEvent_82413988
+# and four native callers (Verified in the generated code and in game).
+[entrypoint.functions."0x824E8990"]
+name = "SaveManager_Save_824E8990"
+
+# The native body of the Lua function SaveGame: SaveManager_Save_824E8990(mgr, 0)
+# (Verified in the generated code).
+[entrypoint.functions."0x824E8978"]
+name = "LuaSaveManager_SaveGame_824E8978"
+
+# The native body of the Lua function AutoSaveGame. r3 = the save manager, r4 =
+# defer (sets the pending byte +2088 and returns), r5 = force (byte +2089, skips the
+# throttle on FrameLastAutoSaved +2008). Otherwise saves with (mgr, 1, 0, 0, 1)
+# (Verified in the generated code).
+[entrypoint.functions."0x824E8D28"]
+name = "LuaSaveManager_AutoSaveGame_824E8D28"
+
+# The native body of the Lua function SaveFailQuestSave: sets byte +2090 on the save
+# manager (Verified in the generated code).
+[entrypoint.functions."0x824E8D18"]
+name = "LuaSaveManager_SaveFailQuestSave_824E8D18"
+
+# The native body of the Lua function LoadFailQuestSave (loads failquestsave.bin).
+# Registered in sub_824EC750 (Verified as the binding; the body was not read).
+[entrypoint.functions."0x824ECCB8"]
+name = "LuaSaveManager_LoadFailQuestSave_824ECCB8"
+
+# The native body of the Lua function IsHeroPlayerPlayingWithSaveGame. r3 = the save
+# manager; returns r3 = 1 when player 1's entry in the manager's map at +2028 has a
+# non-null +16 (the player who owns the save), else 0. Bound in sub_824EC750 at
+# 0x824ECAA8 (the closure {manager, 0x824EC0A0} next to the name string 0x820B919C);
+# nothing calls it directly. Its only script use is gameflow's RegionExitChecking, which
+# shows the leave-area "reload" box (then LoadFailQuestSave) only while it is true.
+# Verified in the generated code and the scripts; the difficulty feature returns 0 while
+# Hardcore saving is locked (technical.md 23).
+[entrypoint.functions."0x824EC0A0"]
+name = "LuaSaveManager_IsHeroPlayerPlayingWithSaveGame_824EC0A0"
+
+# Whether a save may be written now. r3 = the save manager; returns false when byte
+# +2093 (SetSavingAsAllowed) is 0 or no player entry in the map at +2028 has a non-null
+# +16. SaveManager_Save_824E8990 calls it first (after checking the game object's +256
+# quit byte) and saves nothing when it is false. Verified in the generated code.
+[entrypoint.functions."0x824EBF30"]
+name = "SaveManager_CanSave_824EBF30"
+
+# Adds a button to a GUI menu: r3 = the menu, r4 = the label key (a ref string, turned
+# into the wide text), r5/r6 passed on, r7 = the button's index, r8-r10 passed on (r8 = 2
+# for the Save box). It wraps GuiMenu_SpawnButton_824083C0; the result isn't used. The pause Save box
+# builder PauseMenu_Populate_82842860 calls it three times: 0x828429C0 Save and Continue (r7 = 0),
+# 0x82842A00 Save and Quit (1), 0x82842A40 Quit without saving (2) (the return
+# addresses). Verified in the generated code and the decrypted image; the difficulty
+# feature skips 0 and 2 while Hardcore saving is locked.
+[entrypoint.functions."0x82408338"]
+name = "GuiMenu_AddButton_82408338"
+
+# --- Pause menu and Options > Game (difficulty feature, technical.md 24; read 2026-11-28) ---
+
+# Builds the pause menu each time it opens: Save (Root, type 301) with the Save box buttons
+# (GuiMenu_AddButton_82408338), then Quests/Maps, Abilities, Items, Weapons, Clothing, Logbook,
+# Options (type 300) and Kick (co-op), each through GuiMenu_SpawnButton_824083C0 with parent
+# "Root" (0x820A5998). r3 = the menu. Verified in the generated code and the decrypted image.
+[entrypoint.functions."0x82842860"]
+name = "PauseMenu_Populate_82842860"
+
+# The pause menu's event handler. r4 = the event: +0 = the chosen item's name handle, +4 =
+# type, +8 = id. Compares the name (Logbook opens screen 16, Options screen 17, Kick, ...);
+# type-2 events with ids 0/1/2 are the Save box buttons, which open a confirm dialog with
+# sub-code 23/24/25 (then PauseSaveBox_HandleEvent_82413988). Verified in the generated code.
+[entrypoint.functions."0x82412378"]
+name = "PauseMenu_HandleEvent_82412378"
+
+# Adds one item to a GUI menu, the same shape as ExpandableMenu_SpawnButton: r4 = &name,
+# r5 = &localized text handle (its record's +0 = the characters), r6 = &icon, r7 = &parent,
+# r8 = ids, r9 = event type, r10 and [sp+84] passed on; it sets the String / Float attributes
+# on the menu element (*(*(0x834968A4)+40)). Callers: the pause menu and the clothing,
+# abilities and real estate menus. Verified in the generated code.
+[entrypoint.functions."0x824083C0"]
+name = "GuiMenu_SpawnButton_824083C0"
+
+# Options > Game: makes the page's pickers. Five 64-byte picker objects
+# (Allocate_OrDbgBreak_8221F388, Picker_Construct_82886070, SharedHandle_Make_8247D448) go into
+# the map at page+28 at index 0-4 (OptionsPage_SetPicker_8247BDD0); rows 1-4 only when
+# GuiScreens_Find_823381B8(*(*(0x834968A4)+28), 0) is absent or its +4 is 0 (in game).
+# Called by OptionsGame_Populate_828D7588. Verified in the generated code; the difficulty
+# feature adds a sixth picker (index 5).
+[entrypoint.functions."0x828D7290"]
+name = "OptionsGame_CreatePickers_828D7290"
+
+# Options > Game: fills the page. r3 = the page. Clears the map, then
+# OptionsGame_CreatePickers_828D7290 and OptionsGame_LoadSettings_828D84E0, then each row's
+# filler with OptionsPage_GetPicker_828D9FE8(i): 0 Subtitles, 2 Tutorials and 4 Auto-joinable
+# (OptionsGame_FillOnOff_828D7718, page +64 / +65 / +68), 1 Glowing Trail Brightness
+# (OptionsGame_FillTrailBrightness_828D7920, +60), 3 Online Orbs (OptionsGame_FillOrbs_828D7808,
+# +56); rows 1-4 in game only. Then OptionsGame_SetOnlineRowsVisible_828D7470 and
+# OptionsGame_SetFocus_828D8DE8(page, 0). Verified in the generated code.
+[entrypoint.functions."0x828D7588"]
+name = "OptionsGame_Populate_828D7588"
+
+# Options > Game: one input. r3 = the page. The code from MenuInput_Translate_82841730(page+72):
+# 28 up (if focus > 0), 29 down (if focus < 4, a constant), 36 Accept
+# (OptionsGame_Accept_828D8AF0), 37 Cancel (focus 0, then vtable[1]), anything else goes to the
+# focused picker's vtable[2] (left / right). Focus = page+40; up and down play a sound
+# (Speech_PlayByKey_82306098, keys 0x834A0000 - 30856 / - 30852). Verified in the generated code.
+[entrypoint.functions."0x828D8E80"]
+name = "OptionsGame_HandleInput_828D8E80"
+
+# Options > Game: Accept. r3 = the page. Reads pickers 0-4 (constants) and stores the settings.
+# Verified as the reader of the five pickers; what it stores per row wasn't traced.
+[entrypoint.functions."0x828D8AF0"]
+name = "OptionsGame_Accept_828D8AF0"
+
+# Options > Game: focuses a row. r3 = the page, r4 = the row (stored at page+40); moves the
+# highlight to the picker's +16 / +20. Verified in the generated code.
+[entrypoint.functions."0x828D8DE8"]
+name = "OptionsGame_SetFocus_828D8DE8"
+
+# Options > Game: reads the saved settings into page +56 (orbs), +60 (trail brightness, a float)
+# and +64 / +65 / +68 (subtitles, tutorials, auto-join). Verified as the writer of those fields.
+[entrypoint.functions."0x828D84E0"]
+name = "OptionsGame_LoadSettings_828D84E0"
+
+# Options > Game: shows or hides the row elements by their path globals (0x8349CB58-CB74, through
+# sub_823F87C0), the last two inverted. Verified in the generated code; the condition is a
+# GuiScreens_Find_823381B8 lookup (Inference: the online rows).
+[entrypoint.functions."0x828D7470"]
+name = "OptionsGame_SetOnlineRowsVisible_828D7470"
+
+# Options > Game: fills an On / Off picker. r3 = the page, r4 = &picker handle, r5 = the GUI,
+# r6 = &path global, r7 = the value; binds (Picker_Bind_828860E8), pushes two choices and
+# selects one (Picker_Select_828862E8). Inference from its callers and its calls.
+[entrypoint.functions."0x828D7718"]
+name = "OptionsGame_FillOnOff_828D7718"
+
+# Options > Game: fills the Online Orbs picker (Off / Friends / All, the keys
+# GUI_SCREEN_OPTIONS_ORBS_*), value page+56. Same arguments as OptionsGame_FillOnOff_828D7718.
+# Verified in the generated code.
+[entrypoint.functions."0x828D7808"]
+name = "OptionsGame_FillOrbs_828D7808"
+
+# Options > Game: fills the Glowing Trail Brightness picker: five label keys from 0x8349CB7C
+# (GUI_OPTIONS_BCRUMB_*), then selects the step that page+60 (a float) reaches. Verified in the
+# generated code.
+[entrypoint.functions."0x828D7920"]
+name = "OptionsGame_FillTrailBrightness_828D7920"
+
+# An options page's picker: r3 = &out shared handle {object, control}, r4 = the map at page+28,
+# r5 = the index. Release the handle with Release_RefCounted_829FF648. Inference from its
+# callers (every page function reads its pickers through it).
+[entrypoint.functions."0x828D9FE8"]
+name = "OptionsPage_GetPicker_828D9FE8"
+
+# Puts a picker into an options page's map: r3 = the map, r4 = &shared handle, r5 = the index.
+# A map keyed by int: an index that's already there is refused (the handle is released, returns
+# 0); otherwise it's added (returns 1). Verified in the generated code.
+[entrypoint.functions."0x8247BDD0"]
+name = "OptionsPage_SetPicker_8247BDD0"
+
+# Turns {object, ?} at r3 into a shared handle {object, control block} in place and returns r3.
+# Inference from OptionsGame_CreatePickers_828D7290 (its null branch writes {0, 0} itself).
+[entrypoint.functions."0x8247D448"]
+name = "SharedHandle_Make_8247D448"
+
+# A picker (left / right chooser) object, 64 bytes: vtable 0x820DF870, +4 the GUI, +12 bound,
+# +16 / +20 the highlight position, +36 the selected index, +40 the value's text element, +44 a
+# vector of wide string handles (the choices: +48 begin, +52 end). r3 = the object; returns it.
+# Verified in the generated code.
+[entrypoint.functions."0x82886070"]
+name = "Picker_Construct_82886070"
+
+# Picker vtable[0]: binds a picker to its element. r3 = the picker, r4 = the GUI, r5 = &path
+# handle (a full path such as Foreground.Book.Pages.Page1.Contents.Options.MultiplayerOrbs_pickbox).
+# Clears the choices, finds the value's text child (Gui_FindElement_823F8C30, kept at +40) and
+# sets +12. Returns true when bound. Verified in the generated code.
+[entrypoint.functions."0x828860E8"]
+name = "Picker_Bind_828860E8"
+
+# Selects a picker's choice: r3 = the picker, r4 = the index (wraps around at both ends), stored
+# at +36; the value's text becomes that choice (GuiElement_SetText_823F8268). Does nothing until
+# bound. Verified in the generated code.
+[entrypoint.functions."0x828862E8"]
+name = "Picker_Select_828862E8"
+
+# Appends to a vector of ref-counted string handles: r3 = the vector, r4 = &handle (it takes its
+# own reference). Used for a picker's choices (picker+44). Inference from the fillers, which
+# release their handle right after.
+[entrypoint.functions."0x82356488"]
+name = "StringList_PushBack_82356488"
+
+# Finds a GUI screen by id: r3 = the screen manager (*(*(0x834968A4)+28)), r4 = the id; looks it
+# up in the map at +68 and returns the screen, or 0. Verified in the generated code.
+[entrypoint.functions."0x823381B8"]
+name = "GuiScreens_Find_823381B8"
+
+# A menu's input translator with auto-repeat: r3 = its state (the options page passes page+72),
+# r4 = the raw input; returns the code (28 up, 29 down, 36 accept, 37 cancel, ...). It keeps
+# repeat timers, so it must be called once per input. Read in the generated code (the codes
+# from OptionsGame_HandleInput_828D8E80's jump table).
+[entrypoint.functions."0x82841730"]
+name = "MenuInput_Translate_82841730"
+
+# GameFace's Lua global clone(element[, name[, parent]]) (registered in sub_82BB2528 next to the
+# string at 0x820FD488). The copy keeps the original's name; rename it with
+# setAttribute(el, "name", ...). Verified in the registration and in game (2026-11-28).
+[entrypoint.functions."0x82BB80F0"]
+name = "GameFace_LuaClone_82BB80F0"
+
+# Handles the pause menu Save box. r4 = event (46 = a button was chosen, 47 =
+# another path), r5 = sub-code: 23 Save and Continue (save, r7 = 1), 24 Save and
+# Quit (save, r7 = 0, then the quit routine 0x8233CAC8), 25 Quit without saving
+# (quit routine only). Verified in the generated code; 24 also seen in game.
+[entrypoint.functions."0x82413988"]
+name = "PauseSaveBox_HandleEvent_82413988"
+
+# Player 1's entity: follows the weak handle at r3+104 (r3 = the player object,
+# *(*(*(*(*(0x83496920)+12)+88)+4)+0) in Item_GetBuyPrice_828E7F78). Verified in
+# the generated code; the same check (comp+4 == this) marks player 1 in
+# MoneyComp_Modify_8239E698.
+[entrypoint.functions."0x8222C210"]
+name = "Player_GetEntity_8222C210"
+
+# The gold choke point (also behind Lua Money.Modify, LuaMoney_Modify_8239EE98). r3 = the money
+# component, r4 = delta, r5 = 1 on the co-op share recursion, r6 = share with
+# co-op, r7 = 1 only for rent and income. comp+12 += delta, clamped to
+# [0, 999999999], then posts a change message (Verified in the generated code).
+[entrypoint.functions."0x8239E698"]
+name = "MoneyComp_Modify_8239E698"
+
+# The health choke point, also Lua Health.Modify. r3 = the health component,
+# f1 = delta, r5 = the source entity. comp+20 += delta, clamped to the max at +28;
+# respects the invulnerable byte +305 and the god-mode bytes 0x83496B27/3C/3D
+# (Verified in the generated code).
+[entrypoint.functions."0x8268BD90"]
+name = "HealthComp_Modify_8268BD90"
+
+# Starts a new game (GUI_SCREEN_FRONT_END_NEW_GAME, QC010_ChildhoodStart). Called
+# from FrontMenu_HandleCardEvent_826C9188 on BOY_SELECTED / GIRL_SELECTED with the
+# hero creature ("CreatureHeroChild" / "CreatureHeroFemaleChild") in r4 (Verified
+# in the generated code). The natural hook for the difficulty step.
+[entrypoint.functions."0x8237A0C8"]
+name = "FrontMenu_StartNewGame_8237A0C8"
+
+# Front-end card events. r3 = the front-end object, r4 = the event, hash at r4+4,
+# matched against the globals at 0x834A0000 - 20456 (BOY_ACTIVE) ... - 20428
+# (DIALOG_ACTIVE). BOY_ACTIVE / GIRL_ACTIVE / UNFREEZE set state +24 to 3 / 4 / 0;
+# the _SELECTED events call FrontMenu_StartNewGame_8237A0C8 (Verified in the
+# generated code).
+[entrypoint.functions."0x826C9188"]
+name = "FrontMenu_HandleCardEvent_826C9188"
+
+# Front-end UNFREEZE and DIALOG_ACTIVE handler. Registered for both events with the
+# front-end object as `this` (code at 0x826C6EB0 / 0x826C6ED0, the same way
+# FrontMenu_HandleCardEvent_826C9188 is registered). r3 = the front-end object, r4 = the
+# event, hash at +4. DIALOG_ACTIVE (-20428) sets +24 = 6. UNFREEZE (-20432), only while
+# +101 is set and +192 / +212 are clear, replays the card screen by state +104: 0 with
+# +108 == 2 -> choosecard slide 1 and FE_20 (the New Game start); 3 / 4 with +100 set ->
+# slide 6 / 7 and the destiny line (Speech_PlayByKey_82306098 returning to 0x826C9638 /
+# 0x826C96B0); 5 with +108 == 0 -> the load cards; then +24 = +108. With +101 clear it
+# goes to slide 8 instead. Read in the generated code (technical.md 19.2).
+[entrypoint.functions."0x826C9460"]
+name = "FrontMenu_HandleUnfreeze_826C9460"
+
+# Finds a GUI element by name. r3 = a name handle (it copies it, looks the element up with
+# ProcessAndProcessAndProcess1848_823F8A38(copy, 0, r4) and then destroys the handle with
+# DestructRefCounted_82214F08), r4 = the GUI root (on the front end *(front-end object + 20)).
+# Returns the element. Read in the generated code; the callers on the front end pass element
+# names such as choosecard (0x834A0000 - 20424) and go to a slide with Gui_GoToSlide_823F9140
+# (FrontMenu_HandleEvent at 0x826C863C, FrontMenu_HandleCardInput_826C72A8).
+[entrypoint.functions."0x823F8C30"]
+name = "Gui_FindElement_823F8C30"
+
+# Goes to a slide of a GUI element. r3 = the element (from Gui_FindElement_823F8C30), r4 = the
+# GUI root, r5 = the slide number. Calls ProcessAndProcessAndProcess2539_823F9040(r3, r4, r5),
+# then, when r4 is set, two vcalls on it (slot +36, then slot +60 of what that returns, with
+# r4 = the element, r5 = 0). The slide numbers its front-end callers pass match the choosecard
+# layer's slides (1 Intro ... 6 ChooseBoy, 7 ChooseGirl; technical.md 7). Read in the generated
+# code; the slide meaning is Inference from those callers.
+[entrypoint.functions."0x823F9140"]
+name = "Gui_GoToSlide_823F9140"
+
+# Sets a GUI element's text. r3 = the element, r4 = must be non-zero (the GUI), r5 = &a wide
+# string handle. The text object is *(*(element+4)); it sets +144, and when
+# WideString_NotEqual_822D6998(text+140, handle) says the text differs, RefCounted_Assign_822B85C8
+# makes text+140 hold the handle's string (taking a reference) and sets +138 and +136 (changed).
+# 155 callers; FrontMenu_SelectLoadCard_826C9008 sets the Continue screen's
+# loadgame.SaveGameDescription with it. Read in the generated code. The difficulty feature
+# overrides it for the slot label (docs/feature/difficulty_settings/technical.md 19.4).
+[entrypoint.functions."0x823F8268"]
+name = "GuiElement_SetText_823F8268"
+
+# Formats a wide string into a string handle. r3 = &handle, r4 = a UTF-16 format, r5... = the
+# arguments (saved to the stack for sub_82CAA2B8, a wide vsprintf into a 4096-character buffer, or a
+# bigger one from sub_82B39B48 when the format is longer). The result is a new 16-byte record from
+# Allocate_OrDbgBreak_8221F388, filled by WideString_Assign_82B39DD8 with refcount +12 = 1; the old
+# handle value is released (Release_RefCounted_821C67D8) and replaced. Read in the generated code;
+# that sub_82CAA2B8 is a vsprintf is Inference from the use.
+[entrypoint.functions."0x82B39260"]
+name = "WideString_Format_82B39260"
+
+# How an entity's faction regards another entity: 1 neutral, 2 ally, 4 enemy. r3 = the asking
+# entity's type-133 (faction) component (owner at +4, faction id at +20), r4 = the other entity.
+# Returns 1 when the other is null or its flag bit 0x40 at +144 is clear. Then it checks the
+# component's own lists: other in the set at +24 -> 2, at +36 -> 4, at +48 -> 1. Otherwise it
+# looks up the other's type-133 component and asks FactionManager_GetRelationship_821F8C60(the
+# manager at *(*(*(*(*(0x83496920)+12)+88)+4)+32), own faction, other's faction, 7). Last, when
+# the other isn't the owner, sub_82232748(...) is false and byte +12 is set, 4 and 2 swap. The Lua
+# Faction.IsMyEnemy / IsNeutral bindings (LuaFaction_IsMyEnemy_82540338, LuaFaction_IsNeutral_82540368)
+# test its result against 4 / 1. Read in the generated code (docs/feature/difficulty_settings/
+# technical.md 21).
+[entrypoint.functions."0x822040D0"]
+name = "Faction_GetRelationship_822040D0"
+
+# The faction manager's relationship between two factions. r3 = the manager, r4 = faction A,
+# r5 = faction B, r6 = 7 (from Faction_GetRelationship_822040D0, its only caller). Looks B up in
+# A's set at manager + (A + 23) * 12 -> 2 (ally; also when A == B), then in A's set at manager +
+# A * 12 -> 4 (enemy), else 1 (neutral). Read in the generated code for the ally and enemy
+# lookups; what r6 = 7 selects is Inference (not read).
+[entrypoint.functions."0x821F8C60"]
+name = "FactionManager_GetRelationship_821F8C60"
+
+# Lua Faction.IsMyEnemy (the name string at 0x820BDD38 is built right before this address in the
+# binding table). r3 = the faction component, r4 = the other entity; returns
+# Faction_GetRelationship_822040D0(r3, r4) == 4. Read in the generated code.
+[entrypoint.functions."0x82540338"]
+name = "LuaFaction_IsMyEnemy_82540338"
+
+# Lua Faction.IsNeutral (name string at 0x820BDD50). r3 = the faction component, r4 = the other
+# entity; returns Faction_GetRelationship_822040D0(r3, r4) == 1. Read in the generated code.
+[entrypoint.functions."0x82540368"]
+name = "LuaFaction_IsNeutral_82540368"
+
+# Selects a save card on the Continue screen. r3 = the front-end object, r4 = the
+# card index (clamped to 6). Moves the old and new cards' slides, plays a sound and
+# sets loadgame.SaveGameDescription from the string list at ~+120 (Verified in the
+# generated code).
+[entrypoint.functions."0x826C9008"]
+name = "FrontMenu_SelectLoadCard_826C9008"
+
+# --- Gold: Lua bindings (docs/feature/difficulty_settings/technical.md section 2) ---
+
+# Registers the Lua table Money: Get (0x830418B0, reads comp+12), Modify
+# (LuaMoney_Modify_8239EE98) and Set (LuaMoney_Set_8239EEA8). Verified from the
+# strings and binders in the generated code.
+[entrypoint.functions."0x8239EEE0"]
+name = "LuaMoney_Register_8239EEE0"
+
+# The native body of the Lua function Money.Modify: MoneyComp_Modify_8239E698(comp,
+# delta, r5 = 0, r6 = 1, r7 = 0) as a tail call (Verified in the generated code).
+[entrypoint.functions."0x8239EE98"]
+name = "LuaMoney_Modify_8239EE98"
+
+# The native body of the Lua function Money.Set: stores comp+12 and clamps it.
+# Bypasses MoneyComp_Modify_8239E698 (Verified in the generated code).
+[entrypoint.functions."0x8239EEA8"]
+name = "LuaMoney_Set_8239EEA8"
+
+# Lua glue for a Money method that takes one argument. r3 = the binding record (the
+# native body at +4), r4 = the entity, r5 = the argument. Finds the entity's type-81
+# (money) component and calls the body with (comp, r5). Every Lua Money.Modify
+# reaches MoneyComp_Modify_8239E698 from its return address 0x8239F998: guard fines,
+# blacksmith pay (Verified in the generated code and in game, 2026-11-22).
+[entrypoint.functions."0x8239F830"]
+name = "LuaMoney_CallMethod_8239F830"
+
+# --- Gold: native callers of MoneyComp_Modify_8239E698 (technical.md section 15.1) ---
+
+# Gives a quest's rewards: gold from quest+36 (MoneyComp_Modify_8239E698 with
+# r6 = 1), renown from +32, then items. Reached from the Lua QuestTracker.SetAsCompleted
+# and QuestTracker.GiveRewards bodies (Verified in the generated code).
+[entrypoint.functions."0x825FC180"]
+name = "Quest_GiveRewards_825FC180"
+
+# Registers the Lua table QuestTracker (SetAsCompleted, SetRewardMoney, GiveRewards,
+# ...). Verified from the strings and binders in the generated code.
+[entrypoint.functions."0x825FE168"]
+name = "LuaQuestTracker_Register_825FE168"
+
+# The native body of the Lua function QuestTracker.SetRewardMoney: sets quest+36,
+# the gold Quest_GiveRewards_825FC180 pays (Verified in the generated code).
+[entrypoint.functions."0x825FB298"]
+name = "LuaQuestTracker_SetRewardMoney_825FB298"
+
+# The native body of the Lua function QuestTracker.SetAsCompleted; reaches
+# Quest_GiveRewards_825FC180 (Verified as the binding and the call path).
+[entrypoint.functions."0x825F9748"]
+name = "LuaQuestTracker_SetAsCompleted_825F9748"
+
+# The native body of the Lua function QuestTracker.GiveRewards; reaches
+# Quest_GiveRewards_825FC180 (Verified as the binding and the call path).
+[entrypoint.functions."0x825FC878"]
+name = "LuaQuestTracker_GiveRewards_825FC878"
+
+# Pub games: pays the net result sub_82EE1DF0(obj+124) - obj+96 with r6 = 1, which can
+# be negative, then applies the "PurityBalancing" step ("MaxGoldForScalingFromGambling",
+# "MaxPurityModifierForGambling"). Verified in the generated code.
+[entrypoint.functions."0x825ABDC0"]
+name = "PubGame_PayResult_825ABDC0"
+
+# Marriage: reads "RenownBoostForMarrying" and "DowryForMarrying" from the spouse's
+# data and pays the dowry with r6 = 1. Its caller sub_82824C38 holds the marriage
+# strings (Verified in the generated code).
+[entrypoint.functions."0x8282AEB8"]
+name = "Marriage_PayDowry_8282AEB8"
+
+# Gives an item to an entity's inventory. When the item's definition has a
+# "MoneyComponent", it pays its "Money" value instead (MoneyComp_Modify_8239E698 with
+# r6 = the item's "SplitWithHenchmanIfGivenToHero"). Called from the inventory Lua
+# bindings (sub_8261AD88), the hero titles (sub_828E92D0) and sub_828EB1F0. Verified
+# for the money part; the item part and the exact Lua name are Inference.
+[entrypoint.functions."0x8261A738"]
+name = "Inventory_GiveItemOrMoney_8261A738"
+
+# Constructor of the gift/reward object (vtable 0x82002320), made by sub_8244FD18.
+# Reads "IsMoneyGift", "MoneyAmount" (+32), "GiftItem" (+28) and "IsRandomReward"
+# (Verified in the generated code).
+[entrypoint.functions."0x827ADBD8"]
+name = "GiftReward_Init_827ADBD8"
+
+# Gift/reward object method: pays MoneyAmount (+32) with r6 = 1, then gives GiftItem
+# (+28) to the recipient's type-13 component. Verified in the generated code; who
+# hands these out is not traced.
+[entrypoint.functions."0x827ADCF8"]
+name = "GiftReward_Give_827ADCF8"
+
+# Building income pickup update (vtable 0x820E0E10; "PickupDistance", "BuildingUID",
+# "BuildingIncome"). When player 1 is within +28, pays them the pickup entity's own
+# type-81 balance (r7 = 0), logs it on player 1's type-69 component (sub_828B21F0)
+# and removes the pickup. Verified in the generated code; the removal is Inference.
+[entrypoint.functions."0x828B46E8"]
+name = "BuildingIncomePickup_Update_828B46E8"
+
+# Orb gift, applying: adds gift+112 gold (r6 = 1), then the item, to an entity. Called
+# on receipt (sub_8238C488, "GUI_NET_RECEIVE_GOLD") and as the refund when a gift
+# fails (sub_8238D190, "GUI_ORB_GIFT_FAILED"). Verified in the generated code.
+[entrypoint.functions."0x8238D4A8"]
+name = "OrbGift_Apply_8238D4A8"
+
+# Network message handler: a 270-case switch on the message type, called from
+# sub_82317598 ("CECNetwork"). Case 43 sets byte +107 on the entity's type-91
+# (network) component, then applies msg+4 gold through MoneyComp_Modify_8239E698,
+# which with +107 set only adds and clamps (Verified in the generated code).
+[entrypoint.functions."0x8237DE18"]
+name = "Network_HandleMessage_8237DE18"
+
+# Co-op henchman wage: looks up "GoldEarnedPerMinute" in "HenchmanJobLevels" by
+# minutes played (obj+1060, "MinimumNumberOfMinutesPlayedToReachLevel"), builds up
+# fractions at obj+1064 and pays whole coins with r5 = 1, r6 = 1 (Verified in the
+# generated code).
+[entrypoint.functions."0x824A6FD8"]
+name = "Henchman_PayWage_824A6FD8"
+
+# Tattoo removal menu action ("TattooRemoval"): charges -"PriceOfTattooRemoval"
+# through MoneyComp_Modify_8239E698 (Verified in the generated code; the rest of the
+# menu handling is not read).
+[entrypoint.functions."0x82593950"]
+name = "TattooShop_RemoveTattoo_82593950"
+
+# Coach/ferry fare: charges the fare to player 1 only when the balance covers it.
+# Reached from the Lua travel bindings near "FastTravelToStop" / "TravelToStopInRegion"
+# and from sub_82837610. Verified for the charge; which Lua name pairs with which
+# pointer is Inference.
+[entrypoint.functions."0x82609B90"]
+name = "Travel_ChargeFare_82609B90"
+
+# End of co-op: moves all of player 2's gold (playerObj+112) to player 1 (+104) with
+# r5 = 1, r6 = 0, then sets player 2's to 0. Its caller sub_824130C0 looks like the
+# co-op teardown (Verified for the move; the caller's role is Inference).
+[entrypoint.functions."0x82413620"]
+name = "Coop_MoveGoldToPlayer1_82413620"
+
+# Drops network client(s) ("GUI_NET_DROPPED_CLIENT"): gives player 1 the co-op
+# partner's gold (sub_828BEEC0(playerObj), r6 = 0), then saves through
+# SaveManager_Save_824E8990. Called from the quit routine Game_QuitToFrontEnd_8233CAC8
+# with r4 = a 24-byte-entry list, and from sub_823211F0 / sub_82321268. Verified for
+# the gold and save calls; the list and the exact role are Inference.
+[entrypoint.functions."0x8230FEB0"]
+name = "Network_DropClient_8230FEB0"
+
+# --- Shops (technical.md sections 14 and 16.3) ---
+
+# Buys an item at a shop: -Shopkeeper_GetBuyPrice_827AF5A0 through
+# MoneyComp_Modify_8239E698 (return address 0x827AF9A4). Verified in the generated
+# code and in game (2026-11-22: -16 and -22 matched the menu prices).
+[entrypoint.functions."0x827AF850"]
+name = "Shopkeeper_BuyItem_827AF850"
+
+# Sells an item at a shop: +Shopkeeper_GetSellPrice_827AF6F8 through
+# MoneyComp_Modify_8239E698 (Verified in the generated code; not seen in game yet).
+[entrypoint.functions."0x827AFB58"]
+name = "Shopkeeper_SellItem_827AFB58"
+
+# An item's base price at a shop: the item's value x the village's wealth. In game a
+# value-25 item with wealth +4.9% gave 26.214 (Verified at runtime, 2026-11-22). How it
+# finds the wealth (sub_82455F20, sub_828E8858) is not read (Inference).
+[entrypoint.functions."0x828E7C58"]
+name = "Item_GetBaseValue_828E7C58"
+
+# Opinion factor for buy prices. r3 = the stock component (type 124), f1 = the
+# shopkeeper's Love, f2 = Fear (type-47 +44/+48). Returns 1.0 when
+# Ownership_OwnsProperty_828B0B38(player 1's type-69 component, *(r3+4)) is true
+# (the hero owns the shop). Otherwise 1 / (1 + stock+52 x max(Love,0)
+# + stock+48 x |min(Love,0)| + stock+56 x max(Fear,0)). Verified in the generated
+# code and in game (0.8725 at Love 0.2891, Fear 0.2953).
+[entrypoint.functions."0x828E8C80"]
+name = "Item_GetBuyOpinionFactor_828E8C80"
+
+# Opinion factor for sell prices, used by Item_GetSellPrice_828E8320. Same shape and
+# calls as Item_GetBuyOpinionFactor_828E8C80, including the owner check (Inference:
+# the body was not read line by line).
+[entrypoint.functions."0x828E8EC0"]
+name = "Item_GetSellOpinionFactor_828E8EC0"
+
+# --- Property (technical.md section 15.3; P = the property's type-67 component) ---
+
+# Property base value: int("BasicSalePrice" x (1 + P+112 x pct x 0.01)) + P+44 x P+116.
+# pct = +16 of the type-65 component reached through the type-66 weak handle at
+# comp66+12 (0 if none). P+44 x P+116 is the decoration value (0 in game). Verified in
+# the generated code and in game (2026-11-22, the Bowerstone Pie Stall).
+[entrypoint.functions."0x8274D1E0"]
+name = "Property_GetBaseValue_8274D1E0"
+
+# "TypePriceAdjustments" step of the buy price: sums "AdjustValue" x base over the
+# entries whose "BuildingType" bits match P+28. r3 = P, f1 = base (Verified in the
+# generated code).
+[entrypoint.functions."0x8274D4D0"]
+name = "Property_GetTypePriceAdjustment_8274D4D0"
+
+# "OpinionPriceAdjustments" step of the buy price: averages the five type-47 opinion
+# axes over the occupants (list at P+120) and the entities on the property's type-41
+# component, weights them and returns int(v x sum). r3 = P, f1 = v (Verified in the
+# generated code).
+[entrypoint.functions."0x8274D6D8"]
+name = "Property_GetOpinionPriceAdjustment_8274D6D8"
+
+# Property buy price: base + Property_GetTypePriceAdjustment_8274D4D0, x
+# "NotForSaleAdjustment" when P+128 is set, + Property_GetOpinionPriceAdjustment_8274D6D8,
+# x "PlayerKilledOccupantAdjustment" when byte P+81 is set, floored at
+# Property_GetSellPrice_8274DFD0 (Verified in the generated code).
+[entrypoint.functions."0x8274DD78"]
+name = "Property_GetBuyPrice_8274DD78"
+
+# Property sell price: int(Property_GetBaseValue_8274D1E0 x "SellingMultiplier").
+# Verified in the generated code and in game (2359 x 0.9 -> 2123).
+[entrypoint.functions."0x8274DFD0"]
+name = "Property_GetSellPrice_8274DFD0"
+
+# True when the owner's type-69 (ownership) component r3 owns the property entity r4.
+# Property buy and sell branch opposite ways on it; Item_GetBuyOpinionFactor_828E8C80
+# uses it for "the hero owns this shop". Verified in the generated code and in game
+# (an owned shop gave the 0.6 owner discount; after selling the stall it was gone).
+[entrypoint.functions."0x828B0B38"]
+name = "Ownership_OwnsProperty_828B0B38"
+
+# Buys a property. r3 = the buyer's type-69 component, r4 = the property entity. Does
+# nothing when Ownership_OwnsProperty_828B0B38 is true; otherwise creates a 68-byte
+# ownership record (sub_828AC940), stores the price at record+48 and charges -price
+# with r6 = 1. Also called from the real-estate GUI (sub_82598548). Verified in the
+# generated code.
+[entrypoint.functions."0x828AF6D0"]
+name = "Ownership_BuyProperty_828AF6D0"
+
+# Sells a property: only when Ownership_OwnsProperty_828B0B38 is true. Pays
+# +Property_GetSellPrice_8274DFD0 with r6 = 1 (return address 0x828B0438), then cleans
+# up. Called from the real-estate GUI (sub_825986E0). Verified in the generated code
+# and in game (+2123, 2026-11-22).
+[entrypoint.functions."0x828B01C8"]
+name = "Ownership_SellProperty_828B01C8"
+
+# Registers the Lua table PlayerProperties (PurchaseProperty, PurchasePropertyQuietly,
+# IsOwnedByPlayer, GetCurrentPropertyValue, ...). Verified from the strings and
+# binders in the generated code.
+[entrypoint.functions."0x828B4240"]
+name = "LuaPlayerProperties_Register_828B4240"
+
+# The native body of the Lua function PlayerProperties.PurchaseProperty: checks the
+# buyer is valid, then jumps to Ownership_BuyProperty_828AF6D0 (Verified in the
+# generated code).
+[entrypoint.functions."0x828AFB80"]
+name = "LuaPlayerProperties_PurchaseProperty_828AFB80"
+
+# The native body of the Lua function PlayerProperties.PurchasePropertyQuietly: the
+# same set-up as Ownership_BuyProperty_828AF6D0 and stores the price, but never
+# charges gold (Verified in the generated code).
+[entrypoint.functions."0x828AFBB8"]
+name = "LuaPlayerProperties_PurchasePropertyQuietly_828AFBB8"
+
+# Pays property rent that is due: comp+128 to the owner once the game tick passes
+# comp+132 (r7 = 1), then zeroes +128; also calls Ownership_UpdateIncome_828AECD0.
+# Verified in the generated code and in game (+131,076 from 0x828AEBAC on load).
+[entrypoint.functions."0x828AEA50"]
+name = "Ownership_PayDueRent_828AEA50"
+
+# Property rent and profits update ("RealEstateRentMedium", "RealEstateProfitsMedium",
+# "RealEstateGossip", "MONEY: "): pays income with r7 = 1. Verified in the generated
+# code and in game (+5,935 from 0x828AF2E4 about every 4 minutes).
+[entrypoint.functions."0x828AECD0"]
+name = "Ownership_UpdateIncome_828AECD0"
+
+# --- Combat (technical.md sections 1, 4 and 16.2) ---
+
+# Scales an outgoing hit: when the attacker has a type-33 (player) component at
+# level > 1, hit+56 x= Difficulty_GetMultiplier_823C92F0(0) (DamageCaused). Called
+# from sub_826A33A8. Verified in the generated code; the gate fires on the hero's hits
+# in game. It also reads "BerserkValues.DamageDealtMultiplier" and "KnockdownPoseHit"
+# (how they are used is not read).
+[entrypoint.functions."0x826A41C8"]
+name = "Combat_ScaleDamageDealt_826A41C8"
+
+# The hero's damage-taken factor from "Toughness", "BarkskinMultiplier" and
+# "BerserkValues.DamageTakenMultiplier", divided by Difficulty_GetMultiplier_823C92F0(1)
+# (DamageReceived) at level > 1; stored at entity+2164. Called from sub_8268DEF0.
+# Verified in the generated code; the gate fires on the hero in game.
+[entrypoint.functions."0x8249F298"]
+name = "Combat_GetDamageTakenFactor_8249F298"
+
+# Scales an XP award. r3 = the experience component, f1 = the amount, r5 = also apply
+# the collection multiplier (+52). For a positive amount whose owner has a type-33
+# component at level > 1: x Difficulty_GetMultiplier_823C92F0(2) (ExperienceReceived).
+# Returns the scaled amount in f1. Called from Experience_Add_8251C0A8 (Verified in the
+# generated code; the gate fires on XP pickups in game).
+[entrypoint.functions."0x8251CDD8"]
+name = "Experience_ScaleAward_8251CDD8"
+
+# Applies a hit: damage through HealthComp_Modify_8268BD90 (return address
+# 0x8268AF98), the vampiric heal ("VampiricSuckDamageMultiplier", 25% of the damage
+# for the Ghoul augment, return 0x8268B968), "GeniusSuckDamageMultiplier",
+# "RichCorruptionPerHit" and the "RichGoldPerHit" payout (0x8268B604). Verified in the
+# generated code and in game for damage and life-steal; the gold payout is untested.
+[entrypoint.functions."0x8268AB30"]
+name = "Combat_ApplyHit_8268AB30"
+
+# Registers the Lua table Experience: Get, GetTotalEarned, Modify
+# (LuaExperience_Modify_8251C8E0), Drain, SetCollectionMultiplier and the efficiency
+# calls. Verified from the strings and binders in the generated code.
+[entrypoint.functions."0x8251D958"]
+name = "LuaExperience_Register_8251D958"
+
+# The native body of the Lua function Experience.Modify(hero, type, amount, flag):
+# converts the int amount to a float and calls Experience_Add_8251C0A8 with r6 = 0,
+# r7 = flag, r8 = 1. Only qc060 (the Guild tutorial's 350 Will XP) calls it outside
+# debug code (Verified in the generated code and the scripts).
+[entrypoint.functions."0x8251C8E0"]
+name = "LuaExperience_Modify_8251C8E0"
+
+# Adds XP of one type to an experience component. r3 = the component, r4 = the type,
+# f1 = the amount, r6 = 1 on the co-op share recursion (skips the share), r7 = apply
+# the collection multiplier (+52), r8 = a flag. For positive amounts it shares with the
+# co-op partner (recursing with r6 = r7 = r8 = 1), then scales the amount through
+# Experience_ScaleAward_8251CDD8 (call at 0x8251C4B0). Verified for the calls;
+# the exact meaning of r8 is Inference.
+[entrypoint.functions."0x8251C0A8"]
+name = "Experience_Add_8251C0A8"

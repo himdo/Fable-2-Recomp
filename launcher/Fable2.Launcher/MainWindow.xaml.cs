@@ -1255,6 +1255,9 @@ public partial class MainWindow : Window
         AddPatchRow("Hero/Dog Texture Readback", "hero_dog_texture_readback",
             "CPU readback of the hero/dog texture resolve. Superseded by realtime morphing.",
             _advanced.HeroDogTextureReadback);
+        AddPatchRow("Hardcore Saving", "hardcore_saving",
+            "New Game: the Hardcore card starts with saving locked (save on quit only, no reloading). Y on the card changes it.",
+            _advanced.HardcoreSaving);
     }
 
     private void CollectPatches()
@@ -1275,6 +1278,7 @@ public partial class MainWindow : Window
                 case "disable_msaa": _advanced.DisableMsaa = value; break;
                 case "realtime_texture_morphing": _advanced.RealtimeTextureMorphing = value; break;
                 case "hero_dog_texture_readback": _advanced.HeroDogTextureReadback = value; break;
+                case "hardcore_saving": _advanced.HardcoreSaving = value; break;
             }
         }
     }

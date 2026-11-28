@@ -38,6 +38,7 @@
 #include <vector>
 
 #include "fable2_f5_lua.h"
+#include "gui_auto_chunk.h"
 
 namespace fable2::guilua {
 
@@ -338,6 +339,47 @@ inline void drain(PPCContext& ctx, uint8_t* base) {
   s.busy = false;
 }
 
+// A feature's one-shot chunk (gui_auto_chunk.h): runs on the state calling the hooked native
+// right now (r3), like drain, whether or not the console is in use. A state that doesn't
+// meet its `where` leaves it pending for the next one.
+inline void run_auto(PPCContext& ctx, uint8_t* base) {
+  AutoChunk& a = Auto();
+  State& s = S();
+  if (!a.pending.load(std::memory_order_relaxed) || s.busy) return;
+  const uint32_t L = ctx.r3.u32;
+  if (!valid_state(base, L)) return;
+  std::string where, code;
+  std::function<void(PPCContext&, uint8_t*, const std::string&)> done;
+  {
+    std::lock_guard<std::mutex> lock(a.mu);
+    if (!a.pending.load()) return;
+    where = a.where;
+    code = a.code;
+    done = a.done;
+  }
+  s.busy = true;
+  const PPCContext saved = ctx;
+  bool ok = false;
+  std::string r;
+  try {
+    r = run_chunk(ctx, base, L,
+                  "local __w_ok, __w = pcall(function() return " + where + " end)\n"
+                  "if not (__w_ok and __w) then return '__f2_wrong_state' end\n" + code, ok);
+  } catch (...) {
+    r = "error exception while running GUI Lua";
+  }
+  ctx = saved;
+  if (r != "ok __f2_wrong_state") {
+    {
+      std::lock_guard<std::mutex> lock(a.mu);
+      if (a.code == code) a.pending.store(false);  // a newer post stays pending
+    }
+    if (done) done(ctx, base, r);
+    ctx = saved;
+  }
+  s.busy = false;
+}
+
 inline void note_main_thread() { S().main_tid = std::this_thread::get_id(); }
 
 // Called by the console every frame (game thread).
@@ -434,6 +476,7 @@ extern "C" void ProcessAndProcessAndProcess53_82BB2528(PPCContext& ctx, uint8_t*
 // here when that thread is not the console's.
 extern "C" void ProcessAndHandleType3_82BB68D8(PPCContext& ctx, uint8_t* base) {
   auto& s = fable2::guilua::S();
+  fable2::guilua::run_auto(ctx, base);  // a feature's chunk (gui_auto_chunk.h)
   if (s.armed.load(std::memory_order_relaxed) && !s.busy) {
     fable2::guilua::note_state(base, ctx.r3.u32, true);
     if (!s.pending.empty()) fable2::guilua::drain(ctx, base);
@@ -446,6 +489,7 @@ extern "C" void ProcessAndHandleType3_82BB68D8(PPCContext& ctx, uint8_t* base) {
 // that keeps queued GUI commands moving.
 extern "C" void ProcessAndHandleType_82BB6CA0(PPCContext& ctx, uint8_t* base) {
   auto& s = fable2::guilua::S();
+  fable2::guilua::run_auto(ctx, base);  // a feature's chunk (gui_auto_chunk.h)
   if (s.armed.load(std::memory_order_relaxed) && !s.busy) {
     fable2::guilua::note_state(base, ctx.r3.u32, true);
     if (!s.pending.empty()) fable2::guilua::drain(ctx, base);
@@ -455,6 +499,7 @@ extern "C" void ProcessAndHandleType_82BB6CA0(PPCContext& ctx, uint8_t* base) {
 
 extern "C" void ProcessAndReadAndProcess_82BB7100(PPCContext& ctx, uint8_t* base) {
   auto& s = fable2::guilua::S();
+  fable2::guilua::run_auto(ctx, base);  // a feature's chunk (gui_auto_chunk.h)
   if (s.armed.load(std::memory_order_relaxed) && !s.busy) {
     fable2::guilua::note_state(base, ctx.r3.u32, true);
     if (!s.pending.empty()) fable2::guilua::drain(ctx, base);

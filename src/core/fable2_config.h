@@ -243,6 +243,10 @@ struct Values {
   bool faster_render_targets = true;
   // [patches] gpu_frame_sync: Keep the GPU at most one frame behind (SDK cvar gpu_sync_at_frame_start).
   bool gpu_frame_sync = true;
+  // [patches] hardcore_saving: the New Game Hardcore card's saving switch starts on (save on
+  // quit only; src/core/hotfunc/difficulty/Difficulty.cpp). Only new heroes; the choice is
+  // kept in the save as game level 5.
+  bool hardcore_saving = false;
   // [perf] - hot-function override tuning.
   // hotfunc_yield_every: NtYieldExecution batching factor for the hotfunc
   // overrides (see src/core/hotfunc/hotfunc_yield.h). Every Nth call does

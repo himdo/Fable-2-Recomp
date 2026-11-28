@@ -49,7 +49,7 @@ are hand-written readable C++ rewrites (see
 | `player/CallActivePlayerMethod_821A11E8.cpp` | **hand-tuned** (was nv (20)) |
 | `os_notifications/PollAndProcessOsNotifications_8229A9D8.cpp` | **hand-tuned** (was nv (10)) |
 | `os_notifications/DispatchOsNotifications_82185080.cpp` | **hand-tuned** (was nv (36)) |
-| `entity/InitializeGameEntity_8233CAC8.cpp` | **hand-tuned** (was nv (21)) |
+| `entity/Game_QuitToFrontEnd_8233CAC8.cpp` | **hand-tuned** (was nv (21)) |
 | `entity/ProcessGameStateUpdate_821C9008.cpp` | **hand-tuned** (was nv (34)) |
 | `yield/Yield_82CBD098.cpp` | nv (3) + batched yield |
 | `vblank/FrameLimiterWait_82242628.cpp` | **hand-tuned** (goto-free rewrite, volatile guest access; see below) |
@@ -92,7 +92,7 @@ decompiled guest-logic sketch in the header). Currently:
 - `refcount/ConstructRefCounted_8222CF18.cpp`
 - `frame/DispatchFrameCallback_821A6010.cpp`
 - `os_notifications/DispatchOsNotifications_82185080.cpp`
-- `entity/InitializeGameEntity_8233CAC8.cpp`
+- `entity/Game_QuitToFrontEnd_8233CAC8.cpp`
 - `subsystems/LazyInitSubsystemA_8217FD08.cpp`
 - `subsystems/LazyInitSubsystemB_822C6C60.cpp`
 - `subsystems/ResolveSubsystemReference_821F8760.cpp`

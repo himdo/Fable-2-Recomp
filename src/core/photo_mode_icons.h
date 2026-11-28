@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -95,23 +96,53 @@ struct Bank {
   bool Open(const std::filesystem::path& p) {
     std::ifstream f(p, std::ios::binary);
     if (!f) return false;
-    uint8_t h[17];
+    uint8_t h[9];
     if (!f.read(reinterpret_cast<char*>(h), sizeof(h))) return false;
     data_offset = be32(h);
-    const uint32_t csz = be32(h + 9), usz = be32(h + 13);
-    if (csz == 0 || csz > (64u << 20) || usz < 4 || usz > (64u << 20)) return false;
-    std::vector<uint8_t> comp(csz), idx(usz);
-    if (!f.read(reinterpret_cast<char*>(comp.data()), csz)) return false;
+    // The index is one zlib stream in chunks of {u32 compressed size, u32 size}: the GUI
+    // bank has a single chunk, the world banks (data/Globals/*_textures.bnk) continue it
+    // in 64 KB chunks up to the data offset.
+    std::vector<uint8_t> idx;
     zng_stream z{};
     if (zng_inflateInit(&z) != Z_OK) return false;
-    z.next_in = comp.data();
-    z.avail_in = csz;
-    z.next_out = idx.data();
-    z.avail_out = usz;
-    zng_inflate(&z, Z_SYNC_FLUSH);
-    const bool full = z.avail_out == 0;
+    bool ok = true;
+    for (bool first = true;; first = false) {
+      uint8_t c[8];
+      if (!first && uint64_t(f.tellg()) + 8 > data_offset) break;
+      if (!f.read(reinterpret_cast<char*>(c), sizeof(c))) {
+        ok = !first;
+        break;
+      }
+      const uint32_t csz = be32(c), usz = be32(c + 4);
+      if (csz == 0 || usz == 0) {
+        ok = !first;
+        break;
+      }
+      if (csz > (64u << 20) || usz > (64u << 20) || idx.size() + usz > (64u << 20)) {
+        ok = false;
+        break;
+      }
+      std::vector<uint8_t> comp(csz);
+      if (!f.read(reinterpret_cast<char*>(comp.data()), csz)) {
+        ok = false;
+        break;
+      }
+      const size_t at = idx.size();
+      idx.resize(at + usz);
+      z.next_in = comp.data();
+      z.avail_in = csz;
+      z.next_out = idx.data() + at;
+      z.avail_out = usz;
+      zng_inflate(&z, Z_SYNC_FLUSH);
+      if (z.avail_out != 0) {
+        ok = false;
+        break;
+      }
+      if (usz != 0x10000) break;  // a short (or single, larger) chunk ends the index
+    }
     zng_inflateEnd(&z);
-    if (!full) return false;
+    if (!ok || idx.size() < 4) return false;
+    const uint32_t usz = uint32_t(idx.size());
     const uint32_t n = be32(idx.data());
     size_t p4 = 4;
     entries.reserve(n);
@@ -380,6 +411,93 @@ inline int Load(const std::filesystem::path& root, std::string& log, const std::
   }
   if (!extra.empty())
     log += "\n  extra images: " + std::to_string(extra_loaded) + " of " + std::to_string(extra.size());
+  return loaded;
+}
+
+// A picture from one of the game's other texture banks, cropped and scaled down for an
+// overlay (the difficulty cards). Banks, under <root>/data:
+//   "mip0":  Globals/1024mip0_textures.bnk with the GUI header bank (the loading screens,
+//            art\gui\loadingscreens\*, 1024 x 1024; the scene is the top 1024 x 720);
+//   "world": Globals/globals_textures.bnk with Globals/globals_texture_headers.bnk (the
+//            quest pictures, art\gui\questscreenshots\*, 512 x 512).
+// Nothing is shipped: the pictures are read from the user's game data at startup.
+struct PictureSpec {
+  const char* key;     // the name FindExtra() knows it by
+  const char* bank;    // "mip0" or "world"
+  const char* entry;   // bank entry name, lower case
+  int x0, y0, x1, y1;  // crop, in source pixels
+  int out_w, out_h;    // size after scaling (box filter)
+  int corner = 0;      // rounded corners cut out (transparent), radius in output pixels
+};
+
+// Adds each picture to extras() (call after Load(), which clears them, and before
+// AddAllToAtlas()). Returns how many loaded; `log` gets a line per failure.
+inline int LoadPictures(const std::filesystem::path& root, const std::vector<PictureSpec>& specs, std::string& log) {
+  using detail::BankPair;
+  const auto data = root / "data";
+  auto pick = [](const std::filesystem::path& p) {
+    std::error_code ec;
+    const auto orig = std::filesystem::path(p.string() + ".orig");
+    return std::filesystem::exists(orig, ec) ? orig : p;
+  };
+  std::vector<BankPair> mip0(1), world(1);
+  bool mip0_tried = false, world_tried = false, mip0_ok = false, world_ok = false;
+  int loaded = 0;
+  for (const PictureSpec& s : specs) {
+    const bool is_mip0 = std::strcmp(s.bank, "mip0") == 0;
+    if (is_mip0 && !mip0_tried) {
+      mip0_tried = true;
+      mip0_ok = mip0[0].tex.Open(data / "Globals" / "1024mip0_textures.bnk") &&
+                mip0[0].hdr.Open(pick(data / "art" / "gui" / "gui_texture_headers.bnk"));
+    } else if (!is_mip0 && !world_tried) {
+      world_tried = true;
+      world_ok = world[0].tex.Open(data / "Globals" / "globals_textures.bnk") &&
+                 world[0].hdr.Open(data / "Globals" / "globals_texture_headers.bnk");
+    }
+    Extra e;
+    e.name = s.key;
+    Image full;
+    std::string why;
+    if (!(is_mip0 ? mip0_ok : world_ok)) {
+      why = std::string(" the ") + s.bank + " bank didn't open";
+    } else if (detail::LoadEntry(is_mip0 ? mip0 : world, s.entry, full, why)) {
+      const int x0 = std::clamp(s.x0, 0, full.w), x1 = std::clamp(s.x1, x0 + 1, full.w);
+      const int y0 = std::clamp(s.y0, 0, full.h), y1 = std::clamp(s.y1, y0 + 1, full.h);
+      const int cw = x1 - x0, ch = y1 - y0, ow = std::max(1, s.out_w), oh = std::max(1, s.out_h);
+      e.img.w = ow;
+      e.img.h = oh;
+      e.img.rgba.assign(size_t(ow) * oh * 4, 0);
+      for (int y = 0; y < oh; ++y) {
+        const int sy0 = y0 + y * ch / oh, sy1 = std::max(sy0 + 1, y0 + (y + 1) * ch / oh);
+        for (int x = 0; x < ow; ++x) {
+          const int sx0 = x0 + x * cw / ow, sx1 = std::max(sx0 + 1, x0 + (x + 1) * cw / ow);
+          uint32_t sum[4] = {0, 0, 0, 0}, n = 0;
+          for (int sy = sy0; sy < sy1; ++sy)
+            for (int sx = sx0; sx < sx1; ++sx, ++n)
+              for (int c = 0; c < 4; ++c) sum[c] += full.rgba[(size_t(sy) * full.w + sx) * 4 + c];
+          for (int c = 0; c < 4; ++c) e.img.rgba[(size_t(y) * ow + x) * 4 + c] = uint8_t(sum[c] / n);
+        }
+      }
+      // Rounded corners, so a plain AddImage lines up with a rounded frame (the runtime
+      // doesn't export ImDrawList::AddImageRounded).
+      const float r = float(s.corner);
+      for (int y = 0; y < oh && r > 0; ++y)
+        for (int x = 0; x < ow; ++x) {
+          const float cx = x + 0.5f < r ? r : (x + 0.5f > ow - r ? ow - r : x + 0.5f);
+          const float cy = y + 0.5f < r ? r : (y + 0.5f > oh - r ? oh - r : y + 0.5f);
+          const float dx = x + 0.5f - cx, dy = y + 0.5f - cy;
+          const float cover = std::clamp(r + 0.5f - std::sqrt(dx * dx + dy * dy), 0.0f, 1.0f);
+          uint8_t& alpha = e.img.rgba[(size_t(y) * ow + x) * 4 + 3];
+          alpha = uint8_t(alpha * cover);
+        }
+      e.img.loaded = true;
+      e.img.source = s.entry;
+      ++loaded;
+    }
+    if (!e.img.loaded) log += std::string("\n  picture ") + s.key + " not loaded:" + why;
+    extras().push_back(std::move(e));
+  }
+  log += "\n  pictures: " + std::to_string(loaded) + " of " + std::to_string(specs.size());
   return loaded;
 }
 

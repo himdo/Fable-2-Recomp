@@ -404,6 +404,7 @@ try
         UnlockWebsite = true,
         UnlockCe = false,
         SkipIntroVideos = true,
+        HardcoreSaving = true,
         HighTickRate = true,
         HigherHfTickRate = false,
         GuiEveryHfTick = false,
@@ -437,6 +438,7 @@ try
     Require(writtenAdv.Contains("mouse_aim_sens = 0.00125"), "mouse_aim_sens is not a TOML float");
     Require(!readBack.UnlockCe, "unlock_ce roundtrip failed");
     Require(readBack.SkipIntroVideos, "skip_intro_videos roundtrip failed");
+    Require(readBack.HardcoreSaving, "hardcore_saving roundtrip failed");
     Require(readBack.DisableMotionBlur, "disable_motion_blur roundtrip failed");
     Require(readBack.DisableMsaa, "disable_msaa roundtrip failed");
     Require(readBack.HighTickRate, "high_tick_rate roundtrip failed");
