@@ -339,6 +339,7 @@ public partial class MainWindow : Window
         _executableDirectory = File.Exists(Path.Combine(AppContext.BaseDirectory, "fable_2.exe"))
             ? AppContext.BaseDirectory : _gameDirectory;
         GamePathText.Text = _gameDirectory;
+        RefreshLocaleMenu();
         LauncherState.SaveGameDirectory(_gameDirectory);
         try
         {
@@ -353,6 +354,45 @@ public partial class MainWindow : Window
             StatusText.Text = exception.Message;
             ConfigStateText.Text = "Not ready to launch";
         }
+    }
+
+    private void MergeLocalesOpened(object sender, RoutedEventArgs e) => RefreshLocaleMenu();
+
+    private void RefreshLocaleMenu()
+    {
+        bool installed = _gameDirectory != null && BrazilianPortuguesePack.IsInstalled(_gameDirectory);
+        MergePortugueseItem.IsEnabled = !installed && _gameDirectory != null &&
+            File.Exists(Path.Combine(_gameDirectory, "data", "language", "cultures.txt"));
+        RemovePortugueseItem.Visibility = installed ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void PortuguesePackClicked(object sender, RoutedEventArgs e)
+    {
+        if (_extracting || _updating || _updated || _gameDirectory == null) return;
+        try
+        {
+            string message;
+            if (sender == RemovePortugueseItem)
+            {
+                BrazilianPortuguesePack.Remove(_gameDirectory);
+                message = "Brazilian Portuguese removed. The original language files have been restored.";
+            }
+            else
+            {
+                var compatibility = GameCompatibilityInspector.Inspect(_gameDirectory);
+                if (!compatibility.Supported) throw new InvalidOperationException(compatibility.Message);
+                var dialog = new OpenFileDialog { Title = "Choose Dio Carvalho's Fable II PT-BR pack", Filter = "Translation ZIP (*.zip)|*.zip" };
+                if (dialog.ShowDialog(this) != true) return;
+                BrazilianPortuguesePack.Install(_gameDirectory, dialog.FileName);
+                message = "Brazilian Portuguese merged. In the game, choose Language → Portuguese (Brazil).";
+            }
+            MessageBox.Show(this, message, "Merge Locales", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "PT-BR language pack", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally { RefreshLocaleMenu(); }
     }
 
     private void LoadConfiguration()
@@ -592,6 +632,12 @@ public partial class MainWindow : Window
     private void ExtractClicked(object sender, RoutedEventArgs e)
     {
         if (_extracting || _updating || _updated) return;
+        if (BrazilianPortuguesePack.IsInstalled(AppContext.BaseDirectory))
+        {
+            MessageBox.Show(this, "Remove the PT-BR pack before re-extracting into this folder.",
+                "PT-BR language pack", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
 
         var isoDialog = new OpenFileDialog
         {

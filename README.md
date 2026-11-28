@@ -69,6 +69,8 @@ discs with the shared [X360Extract](tools/x360extract/) library, so its output
 matches the `x360extract` tool byte for byte — making the launcher the simplest
 way to get the game files in place, with no separate extractor tool.
 
+**Brazilian Portuguese (optional, Windows).** After extracting the game, open **Merge Locales → Merge Brazilian Portuguese** in the launcher menu bar and select the local ZIP. Start the game and choose **Language → Portuguese (Brazil)**. Enable **Subtitles** for translated dialogue with the original English voices. To restore the original files, close the game and choose **Merge Locales → Remove Brazilian Portuguese**. Tested with GOTY USA/Europe and Dio Carvalho's Beta 0.9.1. [Get the translation from its author](https://github.com/diocarvalho/Fable2-PTBR-Project/releases)
+
 Packaged releases check GitHub for a newer release when the launcher opens and
 show an **Update to x.y.z** button. It downloads the release, checks it against
 the checksums GitHub and the release itself state, and replaces the program

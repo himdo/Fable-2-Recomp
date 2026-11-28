@@ -5,6 +5,10 @@ default.xex
 /nxeart
 /$SystemUpdate/
 /Gamefiles/
+# Local language-pack originals and installation state, next to default.xex.
+/.fable2-pt-br.json
+/.fable2-pt-br.lock
+/.fable2-pt-br-*.tmp
 
 # --- Build artifacts --------------------------------------------------------
 out
