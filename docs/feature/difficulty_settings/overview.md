@@ -1,12 +1,15 @@
 # Difficulty settings: overview
 
-**Status:** no PR yet · **Commits:** bd6846a, 4d14650 (probes), 891eab4 (names), c2215e2, 92583be (multipliers), bad29df (cards), on branch `feature/game-difficulty`, not on master · **Last checked against:** 7863041
+**Status:** feature complete, PR to master being opened (2026-11-28) · **Commits:** branch `feature/game-difficulty`, latest 9215604, not on master yet · **Last checked against:** master at the branch's merge base (0 behind on 2026-11-28)
 
-A new feature in progress: choosing a difficulty when starting a new game. Feature code is on `feature/game-difficulty`:
-- the multipliers (2026-11-22);
-- since 2026-11-24, the difficulty cards on New Game and with F8 in game, plus a level file per save slot for the Continue screen's label (technical.md section 19).
+Choosing a difficulty for each hero: Easy (the original game), Medium, Hard or Hardcore. All of it is on `feature/game-difficulty`:
+- **the multipliers** for gold earned, prices (shops and property), enemy damage, enemy health and XP (decision 6, technical.md 17-18 and 21);
+- **the difficulty cards** on New Game, after boy or girl, with the game's own pictures, B to go back, and Theresa's destiny line after the pick (19, 22);
+- **the level on the Continue screen's slot label**, e.g. "Hero 1 (Hard)" (19.4);
+- **Hardcore saving as a switch:** Hardcore+ saves on quit only (23);
+- **changing the level in game** from a Difficulty row in Pause > Options > Game (24). F8 opens the cards as a debug tool for any level (25).
 
-All of it is committed on that branch (bad29df is the latest), but there's no pull request yet. The addresses, function names and evidence are in [technical.md](technical.md).
+The addresses, function names and evidence are in [technical.md](technical.md).
 
 Progress so far:
 - **2026-11-15: the idea and a first research pass.** Read-only searches of the game's code and data.
@@ -17,6 +20,8 @@ Progress so far:
   - The prologue checked: its gold and the music box can't get stuck on any level.
   - The difficulty cards on New Game (after boy or girl) and with F8 in game.
   - The level saved per slot, and a first go at showing it on the Continue screen.
+- **2026-11-26/27: the cards finished, the slot label, enemy health and the card pictures** (technical.md 19.2, 19.4, 20-22).
+- **2026-11-28: Hardcore saving as a switch (Hardcore+), the Difficulty row in Options > Game, F8 as a debug tool, the clean-up** (23-25). Masochist parked for a later branch.
 
 Findings are marked as:
 - confirmed in the code: read in the repo or the game's compiled code
